@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { resend } from "../../lib/resend";
+import { sendSlackNotification } from "../../lib/slack";
 
 export const POST: APIRoute = async ({ request }) => {
   const formData = await request.formData();
@@ -20,23 +21,59 @@ export const POST: APIRoute = async ({ request }) => {
 
   const adminEmail = import.meta.env.ADMIN_EMAIL;
 
-  if (import.meta.env.RESEND_API_KEY && adminEmail) {
+  if (import.meta.env.RESEND_API_KEY) {
+    // Notification to admin (existing)
+    if (adminEmail) {
+      await resend.emails.send({
+        from: "Brave AI Community <noreply@ai-community.szczecin.pl>",
+        to: adminEmail,
+        subject: `Nowe zgłoszenie prelegenta: ${name}`,
+        html: `
+          <h2>Nowe zgłoszenie prelegenta</h2>
+          <p><strong>Imię i nazwisko:</strong> ${name}</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Temat prezentacji:</strong> ${topic}</p>
+          <p><strong>Bio:</strong> ${bio}</p>
+          ${linkedin ? `<p><strong>LinkedIn:</strong> ${linkedin}</p>` : ""}
+          ${github ? `<p><strong>GitHub:</strong> ${github}</p>` : ""}
+          ${website ? `<p><strong>Strona www:</strong> ${website}</p>` : ""}
+        `,
+      });
+    }
+
+    // Confirmation email to speaker
     await resend.emails.send({
-      from: "Brave AI Community <noreply@braveai.community>",
-      to: adminEmail,
-      subject: `Nowe zgłoszenie prelegenta: ${name}`,
+      from: "Brave AI Community <noreply@ai-community.szczecin.pl>",
+      to: email,
+      subject: "Dziękujemy za zgłoszenie — Brave AI Community Szczecin",
       html: `
-        <h2>Nowe zgłoszenie prelegenta</h2>
-        <p><strong>Imię i nazwisko:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Temat prezentacji:</strong> ${topic}</p>
-        <p><strong>Bio:</strong> ${bio}</p>
-        ${linkedin ? `<p><strong>LinkedIn:</strong> ${linkedin}</p>` : ""}
-        ${github ? `<p><strong>GitHub:</strong> ${github}</p>` : ""}
-        ${website ? `<p><strong>Strona www:</strong> ${website}</p>` : ""}
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #e0e0e0; background-color: #1a1a2e; padding: 32px; border-radius: 12px;">
+          <h1 style="color: #7c3aed; font-size: 24px;">Cześć, ${name}! 👋</h1>
+          <p style="font-size: 16px; line-height: 1.6;">
+            Dziękujemy za zgłoszenie się jako prelegent/ka na meetup <strong>Brave AI Community Szczecin</strong>.
+          </p>
+          <p style="font-size: 15px; line-height: 1.6;">
+            Otrzymaliśmy Twoje zgłoszenie z tematem: <strong>${topic}</strong>
+          </p>
+          <p style="font-size: 15px; line-height: 1.6;">
+            Nasz zespół przejrzy zgłoszenie i odezwie się w ciągu kilku dni z informacjami o kolejnych krokach.
+          </p>
+          <p style="font-size: 15px; line-height: 1.6;">
+            Tymczasem odwiedź naszą stronę: <a href="https://www.ai-community.szczecin.pl" style="color: #7c3aed;">ai-community.szczecin.pl</a>
+          </p>
+          <hr style="border: none; border-top: 1px solid #333; margin: 24px 0;" />
+          <p style="font-size: 12px; color: #888;">
+            Brave AI Community Szczecin · Wspierane przez <a href="https://www.brave.courses/" style="color: #7c3aed;">Brave Courses</a>
+          </p>
+        </div>
       `,
     });
   }
+
+  // Slack notification
+  await sendSlackNotification(
+    `🎤 Nowe zgłoszenie prelegenta!\n*${name}* (${email})\nTemat: ${topic}`
+  );
 
   return new Response(
     JSON.stringify({
