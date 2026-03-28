@@ -1,120 +1,145 @@
-<form id="speaker-signup-form" class="space-y-5 max-w-lg">
-  <div>
-    <label for="name" class="block text-sm font-medium mb-1">
-      Imię i nazwisko *
-    </label>
-    <input
-      type="text"
-      id="name"
-      name="name"
-      required
-      class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
-    />
-  </div>
-
-  <div>
-    <label for="email" class="block text-sm font-medium mb-1">Email *</label>
-    <input
-      type="email"
-      id="email"
-      name="email"
-      required
-      class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
-    />
-  </div>
-
-  <div>
-    <label for="topic" class="block text-sm font-medium mb-1">
-      Temat prezentacji *
-    </label>
-    <textarea
-      id="topic"
-      name="topic"
-      required
-      rows="3"
-      placeholder="O czym chciałbyś/chciałabyś opowiedzieć?"
-      class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple resize-y"
-    ></textarea>
-  </div>
-
-  <div>
-    <label for="bio" class="block text-sm font-medium mb-1">
-      Krótki bio *
-    </label>
-    <textarea
-      id="bio"
-      name="bio"
-      required
-      rows="3"
-      placeholder="Kilka zdań o sobie i swoim doświadczeniu"
-      class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple resize-y"
-    ></textarea>
-  </div>
-
-  <div>
-    <label class="block text-sm font-medium mb-1">Linki (opcjonalne)</label>
-    <div class="space-y-2">
+<div id="speaker-form-wrapper">
+  <form id="speaker-signup-form" class="space-y-5 max-w-lg">
+    <div>
+      <label for="name" class="block text-sm font-medium mb-1">
+        Imię i nazwisko *
+      </label>
       <input
-        type="url"
-        name="linkedin"
-        placeholder="LinkedIn URL"
-        class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
-      />
-      <input
-        type="url"
-        name="github"
-        placeholder="GitHub URL"
-        class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
-      />
-      <input
-        type="url"
-        name="website"
-        placeholder="Strona www"
+        type="text"
+        id="name"
+        name="name"
+        required
         class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
       />
     </div>
+
+    <div>
+      <label for="email" class="block text-sm font-medium mb-1">Email *</label>
+      <input
+        type="email"
+        id="email"
+        name="email"
+        required
+        class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+      />
+    </div>
+
+    <div>
+      <label for="topic" class="block text-sm font-medium mb-1">
+        Temat prezentacji *
+      </label>
+      <textarea
+        id="topic"
+        name="topic"
+        required
+        rows="3"
+        placeholder="O czym chciałbyś/chciałabyś opowiedzieć?"
+        class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple resize-y"
+      ></textarea>
+    </div>
+
+    <div>
+      <label for="bio" class="block text-sm font-medium mb-1">
+        Krótki bio *
+      </label>
+      <textarea
+        id="bio"
+        name="bio"
+        required
+        rows="3"
+        placeholder="Kilka zdań o sobie i swoim doświadczeniu"
+        class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple resize-y"
+      ></textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1">Linki (opcjonalne)</label>
+      <div class="space-y-2">
+        <input
+          type="url"
+          name="linkedin"
+          placeholder="LinkedIn URL"
+          class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+        />
+        <input
+          type="url"
+          name="github"
+          placeholder="GitHub URL"
+          class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+        />
+        <input
+          type="url"
+          name="website"
+          placeholder="Strona www"
+          class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+        />
+      </div>
+    </div>
+
+    <button
+      type="submit"
+      id="speaker-signup-btn"
+      class="bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-8 py-3 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      Wyślij zgłoszenie
+    </button>
+
+    <p id="speaker-signup-error" class="text-sm text-red-400 hidden"></p>
+  </form>
+
+  <div id="speaker-signup-success" class="hidden max-w-lg">
+    <div class="bg-green-900/30 border border-green-700/50 rounded-lg px-6 py-8 text-center">
+      <div class="text-3xl mb-3">&#10003;</div>
+      <h3 class="text-lg font-bold text-green-400 mb-2">Zgłoszenie wysłane!</h3>
+      <p class="text-text-secondary text-sm">
+        Dziękujemy za zgłoszenie. Odezwiemy się w ciągu kilku dni z informacjami o kolejnych krokach.
+        Sprawdź swoją skrzynkę — wysłaliśmy potwierdzenie.
+      </p>
+    </div>
   </div>
-
-  <button
-    type="submit"
-    class="bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-8 py-3 rounded-lg transition-colors text-sm"
-  >
-    Wyślij zgłoszenie
-  </button>
-
-  <p id="speaker-signup-message" class="text-sm hidden"></p>
-</form>
+</div>
 
 <script>
-  document.addEventListener("astro:page-load", () => {
-    const form = document.getElementById(
-      "speaker-signup-form"
-    ) as HTMLFormElement;
-    const message = document.getElementById(
-      "speaker-signup-message"
-    ) as HTMLElement;
+  const form = document.getElementById(
+    "speaker-signup-form"
+  ) as HTMLFormElement;
+  const btn = document.getElementById("speaker-signup-btn") as HTMLButtonElement;
+  const errorMsg = document.getElementById("speaker-signup-error") as HTMLElement;
+  const successBox = document.getElementById("speaker-signup-success") as HTMLElement;
 
-    form?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const formData = new FormData(form);
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-      try {
-        const res = await fetch("/api/speaker-signup", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
+    // Reset state
+    errorMsg.classList.add("hidden");
 
-        message.textContent = data.message || data.error;
-        message.className = `text-sm ${res.ok ? "text-green-400" : "text-red-400"}`;
-        message.classList.remove("hidden");
+    // Loading state
+    const originalText = btn.textContent;
+    btn.textContent = "Wysyłanie...";
+    btn.disabled = true;
 
-        if (res.ok) form.reset();
-      } catch {
-        message.textContent = "Wystąpił błąd. Spróbuj ponownie.";
-        message.className = "text-sm text-red-400";
-        message.classList.remove("hidden");
+    const formData = new FormData(form);
+
+    try {
+      const res = await fetch("/api/speaker-signup", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        form.classList.add("hidden");
+        successBox.classList.remove("hidden");
+      } else {
+        errorMsg.textContent = data.error || "Wystąpił błąd. Spróbuj ponownie.";
+        errorMsg.classList.remove("hidden");
       }
-    });
+    } catch {
+      errorMsg.textContent = "Wystąpił błąd. Spróbuj ponownie.";
+      errorMsg.classList.remove("hidden");
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
   });
 </script>

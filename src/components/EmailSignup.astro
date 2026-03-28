@@ -14,43 +14,63 @@
       />
       <button
         type="submit"
-        class="bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm"
+        id="email-signup-btn"
+        class="bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Zapisz się
       </button>
     </form>
-    <p id="signup-message" class="text-sm mt-3 hidden"></p>
+    <div id="signup-success" class="hidden mt-4 bg-green-900/30 border border-green-700/50 rounded-lg px-4 py-3">
+      <p class="text-green-400 text-sm font-medium" id="signup-success-text"></p>
+    </div>
+    <p id="signup-error" class="text-sm mt-3 text-red-400 hidden"></p>
   </div>
 </section>
 
 <script>
-  document.addEventListener("astro:page-load", () => {
-    const form = document.getElementById(
-      "email-signup-form"
-    ) as HTMLFormElement;
-    const message = document.getElementById("signup-message") as HTMLElement;
+  const form = document.getElementById(
+    "email-signup-form"
+  ) as HTMLFormElement;
+  const btn = document.getElementById("email-signup-btn") as HTMLButtonElement;
+  const successBox = document.getElementById("signup-success") as HTMLElement;
+  const successText = document.getElementById("signup-success-text") as HTMLElement;
+  const errorMsg = document.getElementById("signup-error") as HTMLElement;
 
-    form?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const formData = new FormData(form);
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-      try {
-        const res = await fetch("/api/newsletter-signup", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
+    // Reset state
+    successBox.classList.add("hidden");
+    errorMsg.classList.add("hidden");
 
-        message.textContent = data.message || data.error;
-        message.className = `text-sm mt-3 ${res.ok ? "text-green-400" : "text-red-400"}`;
-        message.classList.remove("hidden");
+    // Loading state
+    const originalText = btn.textContent;
+    btn.textContent = "Zapisywanie...";
+    btn.disabled = true;
 
-        if (res.ok) form.reset();
-      } catch {
-        message.textContent = "Wystąpił błąd. Spróbuj ponownie.";
-        message.className = "text-sm mt-3 text-red-400";
-        message.classList.remove("hidden");
+    const formData = new FormData(form);
+
+    try {
+      const res = await fetch("/api/newsletter-signup", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        successText.textContent = data.message;
+        successBox.classList.remove("hidden");
+        form.reset();
+      } else {
+        errorMsg.textContent = data.error || "Wystąpił błąd. Spróbuj ponownie.";
+        errorMsg.classList.remove("hidden");
       }
-    });
+    } catch {
+      errorMsg.textContent = "Wystąpił błąd. Spróbuj ponownie.";
+      errorMsg.classList.remove("hidden");
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
   });
 </script>
