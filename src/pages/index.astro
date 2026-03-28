@@ -1,17 +1,14 @@
 ---
-
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Navbar from "../components/Navbar.astro";
+import Footer from "../components/Footer.astro";
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<BaseLayout title="Strona glowna">
+  <Navbar slot="navbar" />
+  <div class="max-w-6xl mx-auto px-6 py-16">
+    <h1 class="text-4xl font-bold">Brave AI Community Szczecin</h1>
+    <p class="text-text-secondary mt-4">Strona w budowie...</p>
+  </div>
+  <Footer slot="footer" />
+</BaseLayout>
