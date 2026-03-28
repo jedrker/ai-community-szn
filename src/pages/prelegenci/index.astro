@@ -1,0 +1,34 @@
+---
+export const prerender = true;
+
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Navbar from "../../components/Navbar.astro";
+import Footer from "../../components/Footer.astro";
+import SpeakerCard from "../../components/SpeakerCard.astro";
+
+const speakers = await getCollection("speakers");
+---
+
+<BaseLayout title="Prelegenci">
+  <Navbar slot="navbar" />
+
+  <section class="max-w-6xl mx-auto px-6 py-12">
+    <h1 class="text-3xl font-bold mb-8">Prelegenci</h1>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      {
+        speakers.map((speaker) => (
+          <SpeakerCard
+            name={speaker.data.name}
+            role={speaker.data.role}
+            company={speaker.data.company}
+            photo={speaker.data.photo}
+            slug={speaker.id}
+          />
+        ))
+      }
+    </div>
+  </section>
+
+  <Footer slot="footer" />
+</BaseLayout>

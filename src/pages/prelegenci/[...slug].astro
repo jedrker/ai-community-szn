@@ -1,0 +1,102 @@
+---
+export const prerender = true;
+
+import { getCollection, render } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Navbar from "../../components/Navbar.astro";
+import Footer from "../../components/Footer.astro";
+
+export async function getStaticPaths() {
+  const speakers = await getCollection("speakers");
+  return speakers.map((speaker) => ({
+    params: { slug: speaker.id },
+    props: { speaker },
+  }));
+}
+
+const { speaker } = Astro.props;
+const { Content } = await render(speaker);
+
+const allEvents = await getCollection("events");
+const speakerEvents = allEvents
+  .filter((event) => event.data.speakers.includes(speaker.id))
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+const linkIcons: Record<string, string> = {
+  linkedin: "LinkedIn",
+  github: "GitHub",
+  twitter: "X (Twitter)",
+  website: "Strona www",
+};
+---
+
+<BaseLayout title={speaker.data.name}>
+  <Navbar slot="navbar" />
+
+  <article class="max-w-4xl mx-auto px-6 py-12">
+    <div class="flex flex-col sm:flex-row items-start gap-6 mb-8">
+      <img
+        src={speaker.data.photo}
+        alt={speaker.data.name}
+        class="w-28 h-28 rounded-full object-cover bg-surface-border"
+      />
+      <div>
+        <h1 class="text-3xl font-bold mb-1">{speaker.data.name}</h1>
+        <p class="text-text-secondary mb-4">
+          {speaker.data.role} · {speaker.data.company}
+        </p>
+        <div class="flex gap-3">
+          {
+            Object.entries(speaker.data.links)
+              .filter(([, url]) => url)
+              .map(([key, url]) => (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-sm text-brand-purple hover:text-brand-purple-light transition-colors"
+                >
+                  {linkIcons[key] || key}
+                </a>
+              ))
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="prose prose-invert max-w-none mb-12">
+      <Content />
+    </div>
+
+    {
+      speakerEvents.length > 0 && (
+        <section>
+          <h2 class="text-2xl font-bold mb-6">Wystąpienia</h2>
+          <ul class="space-y-3">
+            {speakerEvents.map((event) => (
+              <li>
+                <a
+                  href={`/wydarzenia/${event.id}`}
+                  class="flex items-center gap-3 bg-surface-secondary border border-surface-border rounded-lg p-4 hover:border-brand-purple/50 transition-colors"
+                >
+                  <span class="text-sm text-brand-purple whitespace-nowrap">
+                    {event.data.date.toLocaleDateString("pl-PL", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                  <span class="font-semibold text-white">
+                    {event.data.title}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+  </article>
+
+  <Footer slot="footer" />
+</BaseLayout>
