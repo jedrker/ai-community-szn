@@ -1,0 +1,29 @@
+---
+interface Props {
+  name: string;
+  role: string;
+  company: string;
+  photo: string;
+  slug: string;
+}
+
+const { name, role, company, photo, slug } = Astro.props;
+---
+
+<a
+  href={`/prelegenci/${slug}`}
+  class="flex items-center gap-4 bg-surface-secondary border border-surface-border rounded-lg p-4 hover:border-brand-purple/50 transition-colors"
+>
+  <img
+    src={photo}
+    alt={name}
+    class="w-14 h-14 rounded-full object-cover bg-surface-border"
+    loading="lazy"
+  />
+  <div>
+    <h3 class="font-semibold text-white">{name}</h3>
+    <p class="text-sm text-text-secondary">
+      {role} · {company}
+    </p>
+  </div>
+</a>

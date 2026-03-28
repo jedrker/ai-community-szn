@@ -1,0 +1,117 @@
+---
+export const prerender = true;
+
+import { getCollection, getEntry, render } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Navbar from "../../components/Navbar.astro";
+import Footer from "../../components/Footer.astro";
+import SpeakerCard from "../../components/SpeakerCard.astro";
+
+export async function getStaticPaths() {
+  const events = await getCollection("events");
+  return events.map((event) => ({
+    params: { slug: event.id },
+    props: { event },
+  }));
+}
+
+const { event } = Astro.props;
+const { Content } = await render(event);
+
+const formattedDate = event.data.date.toLocaleDateString("pl-PL", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+const speakers = await Promise.all(
+  event.data.speakers.map((id: string) => getEntry("speakers", id))
+);
+const validSpeakers = speakers.filter(Boolean);
+---
+
+<BaseLayout title={event.data.title}>
+  <Navbar slot="navbar" />
+
+  <article class="max-w-4xl mx-auto px-6 py-12">
+    <header class="mb-8">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="text-sm text-brand-purple">{formattedDate}</span>
+        <span class="text-sm text-text-secondary">· {event.data.time}</span>
+        <span class="text-sm text-text-secondary">
+          · {event.data.location}
+        </span>
+      </div>
+      <h1 class="text-4xl font-bold mb-4">{event.data.title}</h1>
+      {
+        event.data.status === "upcoming" && (
+          <a
+            href={event.data.lumaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-block bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-6 py-2.5 rounded-lg transition-colors"
+          >
+            Zapisz się na Luma →
+          </a>
+        )
+      }
+    </header>
+
+    <div class="prose prose-invert max-w-none mb-12">
+      <Content />
+    </div>
+
+    {
+      validSpeakers.length > 0 && (
+        <section class="mb-12">
+          <h2 class="text-2xl font-bold mb-6">Prelegenci</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {validSpeakers.map(
+              (speaker) =>
+                speaker && (
+                  <SpeakerCard
+                    name={speaker.data.name}
+                    role={speaker.data.role}
+                    company={speaker.data.company}
+                    photo={speaker.data.photo}
+                    slug={speaker.id}
+                  />
+                )
+            )}
+          </div>
+        </section>
+      )
+    }
+
+    {
+      event.data.photos.length > 0 && (
+        <section>
+          <h2 class="text-2xl font-bold mb-6">Galeria</h2>
+          <div id="photo-gallery" class="columns-2 md:columns-3 gap-3 space-y-3">
+            {event.data.photos.map((photo: string, i: number) => (
+              <a href={photo} class="glightbox block" data-gallery="event-photos">
+                <img
+                  src={photo}
+                  alt={`${event.data.title} — zdjęcie ${i + 1}`}
+                  class="w-full rounded-lg hover:opacity-80 transition-opacity"
+                  loading="lazy"
+                />
+              </a>
+            ))}
+          </div>
+        </section>
+      )
+    }
+  </article>
+
+  <Footer slot="footer" />
+</BaseLayout>
+
+<script>
+  import GLightbox from "glightbox";
+  import "glightbox/dist/css/glightbox.min.css";
+
+  document.addEventListener("astro:page-load", () => {
+    GLightbox({ selector: ".glightbox" });
+  });
+</script>
