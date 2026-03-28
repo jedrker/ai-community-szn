@@ -10,10 +10,12 @@ interface Props {
 const {
   title,
   description = "Brave AI Community Szczecin — spolecznosc AI w Szczecinie. Meetupy, prezentacje i networking.",
-  ogImage = "/og-default.png",
+  ogImage = "/images/og-image.png",
 } = Astro.props;
 
-const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? "https://braveai.community");
+const siteBase = Astro.site ?? "https://braveai.community";
+const canonicalUrl = new URL(Astro.url.pathname, siteBase);
+const ogImageUrl = new URL(ogImage, siteBase).href;
 ---
 
 <!doctype html>
@@ -34,7 +36,7 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? "https://braveai.
     <!-- Open Graph -->
     <meta property="og:title" content={`${title} | Brave AI Community Szczecin`} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content={ogImage} />
+    <meta property="og:image" content={ogImageUrl} />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="pl_PL" />
 

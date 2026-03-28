@@ -8,9 +8,16 @@ lumaEventId: "evt-IM2tiGIGMXcSE6h"
 description: "Pierwsze spotkanie Brave AI Community Szczecin — o praktycznych wdrożeniach AI"
 speakers:
   - aleksandra-zalewska
-  - bartosz-forczmanski
+  - bartosz-formanowski
   - piotr-gorajek
 cover: /images/covers/event-1.png
+materials:
+  - title: "Panic coding w czasach AI"
+    file: /presentation/panic-code-w-czasach-ai-aleksandra-zalewska.pdf
+    speaker: aleksandra-zalewska
+  - title: "AI w produkcie: Implementacje vs sens biznesowy"
+    file: /presentation/ai-w-produkcie-bartosz-formanowski.pdf
+    speaker: bartosz-formanowski
 photos:
   - /photos/events/meetup-1/IMG_5898.jpeg
   - /photos/events/meetup-1/IMG_5900.jpeg
