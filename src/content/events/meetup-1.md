@@ -11,7 +11,20 @@ speakers:
   - bartosz-forczmanski
   - piotr-gorajek
 cover: /images/covers/event-1.png
-photos: []
+photos:
+  - /photos/events/meetup-1/IMG_5898.jpeg
+  - /photos/events/meetup-1/IMG_5900.jpeg
+  - /photos/events/meetup-1/IMG_5909.jpeg
+  - /photos/events/meetup-1/IMG_5942.jpeg
+  - /photos/events/meetup-1/IMG_5963.jpeg
+  - /photos/events/meetup-1/IMG_6002.jpeg
+  - /photos/events/meetup-1/IMG_6012.jpeg
+  - /photos/events/meetup-1/IMG_6014.jpeg
+  - /photos/events/meetup-1/IMG_6027.jpeg
+  - /photos/events/meetup-1/IMG_6028.jpeg
+  - /photos/events/meetup-1/IMG_6043.jpeg
+  - /photos/events/meetup-1/IMG_6057.jpeg
+  - /photos/events/meetup-1/IMG_6081.jpeg
 partner:
   name: Tidio
   logo: /images/logo/Tidio-Logo-White 1.svg

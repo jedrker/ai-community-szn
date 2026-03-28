@@ -14,6 +14,15 @@ const events = defineCollection({
     speakers: z.array(z.string()).default([]),
     cover: z.string().optional(),
     photos: z.array(z.string()).default([]),
+    materials: z
+      .array(
+        z.object({
+          title: z.string(),
+          file: z.string(),
+          speaker: z.string().optional(),
+        })
+      )
+      .default([]),
     partner: z
       .object({
         name: z.string(),

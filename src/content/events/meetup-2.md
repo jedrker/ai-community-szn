@@ -11,6 +11,13 @@ speakers:
   - marcin-safranow
   - michal-kucharski
 cover: /images/covers/event-2.jpeg
+materials:
+  - title: "Zwiedzeni przez AI"
+    file: /presentation/panic-coding-krzysztof-korozej.pdf
+    speaker: krzysztof-korozej
+  - title: "Customer Support Reinforced: Jak AI wspiera, a nie zastępuje"
+    file: /presentation/cs-reinforced-michal-kucharski.pdf
+    speaker: michal-kucharski
 photos:
   - /photos/events/meetup-2/DSC03616.jpeg
   - /photos/events/meetup-2/DSC03621.jpeg
