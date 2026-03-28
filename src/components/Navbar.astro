@@ -13,7 +13,9 @@ const links = [
     <a href="/" class="text-lg font-bold text-white">
       BRAVE <span class="text-brand-purple">AI Community</span> Szczecin
     </a>
-    <div class="flex gap-6 text-sm">
+
+    <!-- Desktop nav -->
+    <div class="hidden md:flex gap-6 text-sm">
       {
         links.map((link) => (
           <a
@@ -30,5 +32,55 @@ const links = [
         ))
       }
     </div>
+
+    <!-- Mobile hamburger -->
+    <button
+      id="mobile-menu-toggle"
+      class="md:hidden text-text-secondary hover:text-white"
+      aria-label="Menu"
+    >
+      <svg
+        class="w-6 h-6"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M4 6h16M4 12h16M4 18h16"></path>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Mobile menu -->
+  <div id="mobile-menu" class="hidden md:hidden mt-4 pb-2 space-y-3">
+    {
+      links.map((link) => (
+        <a
+          href={link.href}
+          class:list={[
+            "block text-sm transition-colors hover:text-brand-purple",
+            currentPath.startsWith(link.href)
+              ? "text-brand-purple"
+              : "text-text-secondary",
+          ]}
+        >
+          {link.label}
+        </a>
+      ))
+    }
   </div>
 </nav>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    const toggle = document.getElementById("mobile-menu-toggle");
+    const menu = document.getElementById("mobile-menu");
+
+    toggle?.addEventListener("click", () => {
+      menu?.classList.toggle("hidden");
+    });
+  });
+</script>
