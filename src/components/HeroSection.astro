@@ -1,0 +1,58 @@
+---
+interface Props {
+  event?: {
+    title: string;
+    date: Date;
+    time: string;
+    location: string;
+    lumaUrl: string;
+  };
+}
+
+const { event } = Astro.props;
+
+const formattedDate = event
+  ? event.date.toLocaleDateString("pl-PL", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    })
+  : null;
+---
+
+<section
+  class="text-center py-20 px-6 bg-gradient-to-br from-surface-primary via-brand-purple/10 to-surface-primary"
+>
+  {
+    event ? (
+      <>
+        <p class="text-xs uppercase tracking-[3px] text-brand-purple mb-4">
+          Nadchodzące wydarzenie
+        </p>
+        <h1 class="text-4xl md:text-5xl font-bold text-white mb-3">
+          {event.title}
+        </h1>
+        <p class="text-text-secondary mb-8">
+          {formattedDate} · {event.time} · {event.location}
+        </p>
+        <a
+          href={event.lumaUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-block bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-8 py-3 rounded-lg transition-colors"
+        >
+          Zapisz się na Luma →
+        </a>
+      </>
+    ) : (
+      <>
+        <h1 class="text-4xl md:text-5xl font-bold text-white mb-3">
+          Brave AI Community Szczecin
+        </h1>
+        <p class="text-text-secondary mb-8">
+          Śledź nas, aby nie przegapić kolejnego meetupu
+        </p>
+      </>
+    )
+  }
+</section>

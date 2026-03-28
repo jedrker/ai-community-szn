@@ -1,14 +1,65 @@
 ---
+import { getCollection } from "astro:content";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
+import HeroSection from "../components/HeroSection.astro";
+import EventCard from "../components/EventCard.astro";
+
+const allEvents = await getCollection("events");
+const sortedEvents = allEvents.sort(
+  (a, b) => b.data.date.getTime() - a.data.date.getTime()
+);
+
+const upcomingEvent = sortedEvents.find((e) => e.data.status === "upcoming");
+const pastEvents = sortedEvents
+  .filter((e) => e.data.status === "past")
+  .slice(0, 4);
 ---
 
-<BaseLayout title="Strona glowna">
+<BaseLayout title="Strona główna">
   <Navbar slot="navbar" />
-  <div class="max-w-6xl mx-auto px-6 py-16">
-    <h1 class="text-4xl font-bold">Brave AI Community Szczecin</h1>
-    <p class="text-text-secondary mt-4">Strona w budowie...</p>
-  </div>
+
+  <HeroSection
+    event={
+      upcomingEvent
+        ? {
+            title: upcomingEvent.data.title,
+            date: upcomingEvent.data.date,
+            time: upcomingEvent.data.time,
+            location: upcomingEvent.data.location,
+            lumaUrl: upcomingEvent.data.lumaUrl,
+          }
+        : undefined
+    }
+  />
+
+  <section class="max-w-6xl mx-auto px-6 py-12">
+    <div class="flex items-center justify-between mb-8">
+      <h2 class="text-2xl font-bold">Ostatnie wydarzenia</h2>
+      <a
+        href="/wydarzenia"
+        class="text-sm text-brand-purple hover:text-brand-purple-light transition-colors"
+      >
+        Zobacz wszystkie →
+      </a>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {
+        pastEvents.map((event) => (
+          <EventCard
+            title={event.data.title}
+            date={event.data.date}
+            slug={event.id}
+            description={event.data.description}
+            speakerCount={event.data.speakers.length}
+            photoCount={event.data.photos.length}
+            status={event.data.status}
+          />
+        ))
+      }
+    </div>
+  </section>
+
   <Footer slot="footer" />
 </BaseLayout>

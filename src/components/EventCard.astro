@@ -1,0 +1,46 @@
+---
+interface Props {
+  title: string;
+  date: Date;
+  slug: string;
+  description: string;
+  speakerCount: number;
+  photoCount: number;
+  status: "upcoming" | "past";
+}
+
+const { title, date, slug, description, speakerCount, photoCount, status } =
+  Astro.props;
+
+const formattedDate = date.toLocaleDateString("pl-PL", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+---
+
+<a
+  href={`/wydarzenia/${slug}`}
+  class="block bg-surface-secondary border border-surface-border rounded-lg overflow-hidden hover:border-brand-purple/50 transition-colors"
+>
+  <div
+    class="h-32 bg-gradient-to-br from-surface-secondary to-brand-purple/20"
+  >
+  </div>
+  <div class="p-4">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-xs text-brand-purple">{formattedDate}</span>
+      {
+        status === "upcoming" && (
+          <span class="text-[10px] bg-brand-purple text-white px-2 py-0.5 rounded-full font-semibold uppercase">
+            Nadchodzące
+          </span>
+        )
+      }
+    </div>
+    <h3 class="text-base font-semibold text-white mb-1">{title}</h3>
+    <p class="text-xs text-text-secondary">
+      {speakerCount} prelegentów · {photoCount} zdjęć
+    </p>
+  </div>
+</a>
