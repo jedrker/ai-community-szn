@@ -140,3 +140,10 @@ vite.config.ts.timestamp-*
 
 # Superpowers brainstorm artifacts
 .superpowers/
+
+# Astro build output
+.astro/
+.vercel/
+
+# Subscriber data
+data/subscribers.json
