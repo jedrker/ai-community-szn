@@ -9,9 +9,18 @@ const events = defineCollection({
     time: z.string(),
     location: z.string(),
     lumaUrl: z.string().url(),
+    lumaEventId: z.string().optional(),
     description: z.string(),
     speakers: z.array(z.string()).default([]),
+    cover: z.string().optional(),
     photos: z.array(z.string()).default([]),
+    partner: z
+      .object({
+        name: z.string(),
+        logo: z.string(),
+        url: z.string().url(),
+      })
+      .optional(),
     status: z.enum(["upcoming", "past"]),
   }),
 });

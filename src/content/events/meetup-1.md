@@ -3,13 +3,19 @@ title: "AI: Obietnice i pułapki"
 date: 2026-02-04
 time: "17:00"
 location: "Hormon, Szczecin"
-lumaUrl: "https://luma.com/brave-ai-community-szczecin-1"
+lumaUrl: "https://luma.com/event/evt-IM2tiGIGMXcSE6h"
+lumaEventId: "evt-IM2tiGIGMXcSE6h"
 description: "Pierwsze spotkanie Brave AI Community Szczecin — o praktycznych wdrożeniach AI"
 speakers:
   - aleksandra-zalewska
   - bartosz-forczmanski
   - piotr-gorajek
+cover: /images/covers/event-1.png
 photos: []
+partner:
+  name: Tidio
+  logo: /images/logo/Tidio-Logo-White 1.svg
+  url: https://www.tidio.com/
 status: past
 ---
 

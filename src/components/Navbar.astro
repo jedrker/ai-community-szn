@@ -4,14 +4,15 @@ const currentPath = Astro.url.pathname;
 const links = [
   { href: "/wydarzenia", label: "Wydarzenia" },
   { href: "/prelegenci", label: "Prelegenci" },
-  { href: "/zglos-sie", label: "Zglos sie" },
+  { href: "/zglos-sie", label: "Zgłoś się" },
 ];
 ---
 
 <nav class="border-b border-surface-border px-6 py-4">
   <div class="max-w-6xl mx-auto flex items-center justify-between">
-    <a href="/" class="text-lg font-bold text-white">
-      BRAVE <span class="text-brand-purple">AI Community</span> Szczecin
+    <a href="/" class="flex items-center gap-2">
+      <img src="/images/logo/BRAVE-WHITE.svg" alt="BRAVE" class="h-6 md:h-7" />
+      <span class="text-[10px] md:text-xs text-white font-semibold leading-tight">AI Community<br/>Szczecin</span>
     </a>
 
     <!-- Desktop nav -->

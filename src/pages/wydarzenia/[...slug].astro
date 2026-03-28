@@ -33,6 +33,10 @@ const validSpeakers = speakers.filter(Boolean);
 <BaseLayout title={event.data.title}>
   <Navbar slot="navbar" />
 
+  {event.data.cover && (
+    <img src={event.data.cover} alt={event.data.title} class="w-full h-64 md:h-80 object-cover" />
+  )}
+
   <article class="max-w-4xl mx-auto px-6 py-12">
     <header class="mb-8">
       <div class="flex items-center gap-3 mb-4">
@@ -44,18 +48,36 @@ const validSpeakers = speakers.filter(Boolean);
       </div>
       <h1 class="text-4xl font-bold mb-4">{event.data.title}</h1>
       {
-        event.data.status === "upcoming" && (
+        event.data.lumaEventId && (
           <a
             href={event.data.lumaUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-block bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-6 py-2.5 rounded-lg transition-colors"
+            class="luma-checkout--button"
+            data-luma-action="checkout"
+            data-luma-event-id={event.data.lumaEventId}
           >
-            Zapisz się na Luma →
+            Zarejestruj się na wydarzenie
           </a>
         )
       }
     </header>
+
+    {event.data.partner && (
+      <div class="flex items-center gap-3 mb-8 text-sm text-text-secondary">
+        <span>Partner wydarzenia:</span>
+        <a
+          href={event.data.partner.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:opacity-80 transition-opacity"
+        >
+          <img
+            src={event.data.partner.logo}
+            alt={event.data.partner.name}
+            class="h-6"
+          />
+        </a>
+      </div>
+    )}
 
     <div class="prose prose-invert max-w-none mb-12">
       <Content />
@@ -88,8 +110,12 @@ const validSpeakers = speakers.filter(Boolean);
         <section>
           <h2 class="text-2xl font-bold mb-6">Galeria</h2>
           <div id="photo-gallery" class="columns-2 md:columns-3 gap-3 space-y-3">
-            {event.data.photos.map((photo: string, i: number) => (
-              <a href={photo} class="glightbox block" data-gallery="event-photos">
+            {event.data.photos.slice(0, 12).map((photo: string, i: number) => (
+              <a
+                href={photo}
+                class="gallery-thumb block"
+                data-photo-index={i}
+              >
                 <img
                   src={photo}
                   alt={`${event.data.title} — zdjęcie ${i + 1}`}
@@ -99,6 +125,20 @@ const validSpeakers = speakers.filter(Boolean);
               </a>
             ))}
           </div>
+          {event.data.photos.length > 12 && (
+            <div id="load-more-wrapper" class="text-center mt-8">
+              <button
+                id="load-more-photos"
+                class="bg-surface-secondary border border-surface-border hover:border-brand-purple/50 text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
+              >
+                Pokaż więcej ({event.data.photos.length - 12} pozostałych)
+              </button>
+            </div>
+          )}
+          <script is:inline define:vars={{ allPhotos: event.data.photos, eventTitle: event.data.title }}>
+            window.__galleryPhotos = allPhotos;
+            window.__galleryTitle = eventTitle;
+          </script>
         </section>
       )
     }
@@ -107,11 +147,72 @@ const validSpeakers = speakers.filter(Boolean);
   <Footer slot="footer" />
 </BaseLayout>
 
-<script>
-  import GLightbox from "glightbox";
-  import "glightbox/dist/css/glightbox.min.css";
+<script id="luma-checkout" src="https://embed.lu.ma/checkout-button.js"></script>
 
-  document.addEventListener("astro:page-load", () => {
-    GLightbox({ selector: ".glightbox" });
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/glightbox/dist/css/glightbox.min.css" />
+<script is:inline src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
+<script is:inline>
+  document.addEventListener("DOMContentLoaded", function () {
+    var photos = window.__galleryPhotos || [];
+    var title = window.__galleryTitle || "";
+    if (!photos.length) return;
+
+    var BATCH = 12;
+    var shown = BATCH;
+    var gallery = document.getElementById("photo-gallery");
+    var btn = document.getElementById("load-more-photos");
+    var wrapper = document.getElementById("load-more-wrapper");
+
+    // Build slides array with ALL photos for lightbox
+    var slides = photos.map(function (photo, i) {
+      return { href: photo, type: "image", alt: title + " — zdjęcie " + (i + 1) };
+    });
+
+    var lightbox = GLightbox({
+      elements: slides,
+      touchNavigation: true,
+      loop: true,
+    });
+
+    // Clicking a thumbnail opens lightbox at that index
+    gallery.addEventListener("click", function (e) {
+      var link = e.target.closest("a[data-photo-index]");
+      if (!link) return;
+      e.preventDefault();
+      var index = parseInt(link.dataset.photoIndex, 10);
+      lightbox.openAt(index);
+    });
+
+    // Load more thumbnails
+    function addBatch() {
+      var end = Math.min(shown + BATCH, photos.length);
+      for (var i = shown; i < end; i++) {
+        var a = document.createElement("a");
+        a.href = photos[i];
+        a.className = "gallery-thumb block";
+        a.dataset.photoIndex = i;
+        var img = document.createElement("img");
+        img.src = photos[i];
+        img.alt = title + " — zdjęcie " + (i + 1);
+        img.className = "w-full rounded-lg hover:opacity-80 transition-opacity";
+        img.loading = "lazy";
+        a.appendChild(img);
+        gallery.appendChild(a);
+      }
+      shown = end;
+
+      if (wrapper) {
+        var remaining = photos.length - shown;
+        if (remaining <= 0) {
+          wrapper.remove();
+        } else {
+          btn.textContent = "Pokaż więcej (" + remaining + " pozostałych)";
+        }
+      }
+    }
+
+    if (btn) {
+      btn.addEventListener("click", addBatch);
+    }
   });
 </script>

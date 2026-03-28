@@ -7,9 +7,10 @@ interface Props {
   speakerCount: number;
   photoCount: number;
   status: "upcoming" | "past";
+  cover?: string;
 }
 
-const { title, date, slug, description, speakerCount, photoCount, status } =
+const { title, date, slug, description, speakerCount, photoCount, status, cover } =
   Astro.props;
 
 const formattedDate = date.toLocaleDateString("pl-PL", {
@@ -23,10 +24,11 @@ const formattedDate = date.toLocaleDateString("pl-PL", {
   href={`/wydarzenia/${slug}`}
   class="block bg-surface-secondary border border-surface-border rounded-lg overflow-hidden hover:border-brand-purple/50 transition-colors"
 >
-  <div
-    class="h-32 bg-gradient-to-br from-surface-secondary to-brand-purple/20"
-  >
-  </div>
+  {cover ? (
+    <img src={cover} alt={title} class="h-40 w-full object-cover" loading="lazy" />
+  ) : (
+    <div class="h-40 bg-gradient-to-br from-surface-secondary to-brand-purple/20"></div>
+  )}
   <div class="p-4">
     <div class="flex items-center gap-2 mb-2">
       <span class="text-xs text-brand-purple">{formattedDate}</span>
