@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
 import HeroSection from "../components/HeroSection.astro";
 import EventCard from "../components/EventCard.astro";
+import EmailSignup from "../components/EmailSignup.astro";
 
 const allEvents = await getCollection("events");
 const sortedEvents = allEvents.sort(
@@ -60,6 +61,8 @@ const pastEvents = sortedEvents
       }
     </div>
   </section>
+
+  <EmailSignup />
 
   <Footer slot="footer" />
 </BaseLayout>

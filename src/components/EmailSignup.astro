@@ -1,0 +1,56 @@
+<section class="border-t border-surface-border py-16 px-6">
+  <div class="max-w-md mx-auto text-center">
+    <h2 class="text-xl font-bold mb-2">Nie przegap kolejnego meetupu!</h2>
+    <p class="text-text-secondary text-sm mb-6">
+      Zapisz się, a powiadomimy Cię o nowych wydarzeniach.
+    </p>
+    <form id="email-signup-form" class="flex gap-2">
+      <input
+        type="email"
+        name="email"
+        required
+        placeholder="twoj@email.pl"
+        class="flex-1 bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+      />
+      <button
+        type="submit"
+        class="bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm"
+      >
+        Zapisz się
+      </button>
+    </form>
+    <p id="signup-message" class="text-sm mt-3 hidden"></p>
+  </div>
+</section>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    const form = document.getElementById(
+      "email-signup-form"
+    ) as HTMLFormElement;
+    const message = document.getElementById("signup-message") as HTMLElement;
+
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+
+      try {
+        const res = await fetch("/api/newsletter-signup", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+
+        message.textContent = data.message || data.error;
+        message.className = `text-sm mt-3 ${res.ok ? "text-green-400" : "text-red-400"}`;
+        message.classList.remove("hidden");
+
+        if (res.ok) form.reset();
+      } catch {
+        message.textContent = "Wystąpił błąd. Spróbuj ponownie.";
+        message.className = "text-sm mt-3 text-red-400";
+        message.classList.remove("hidden");
+      }
+    });
+  });
+</script>
