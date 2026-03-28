@@ -1,0 +1,120 @@
+<form id="speaker-signup-form" class="space-y-5 max-w-lg">
+  <div>
+    <label for="name" class="block text-sm font-medium mb-1">
+      Imię i nazwisko *
+    </label>
+    <input
+      type="text"
+      id="name"
+      name="name"
+      required
+      class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+    />
+  </div>
+
+  <div>
+    <label for="email" class="block text-sm font-medium mb-1">Email *</label>
+    <input
+      type="email"
+      id="email"
+      name="email"
+      required
+      class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+    />
+  </div>
+
+  <div>
+    <label for="topic" class="block text-sm font-medium mb-1">
+      Temat prezentacji *
+    </label>
+    <textarea
+      id="topic"
+      name="topic"
+      required
+      rows="3"
+      placeholder="O czym chciałbyś/chciałabyś opowiedzieć?"
+      class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple resize-y"
+    ></textarea>
+  </div>
+
+  <div>
+    <label for="bio" class="block text-sm font-medium mb-1">
+      Krótki bio *
+    </label>
+    <textarea
+      id="bio"
+      name="bio"
+      required
+      rows="3"
+      placeholder="Kilka zdań o sobie i swoim doświadczeniu"
+      class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple resize-y"
+    ></textarea>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Linki (opcjonalne)</label>
+    <div class="space-y-2">
+      <input
+        type="url"
+        name="linkedin"
+        placeholder="LinkedIn URL"
+        class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+      />
+      <input
+        type="url"
+        name="github"
+        placeholder="GitHub URL"
+        class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+      />
+      <input
+        type="url"
+        name="website"
+        placeholder="Strona www"
+        class="w-full bg-surface-secondary border border-surface-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-text-secondary focus:outline-none focus:border-brand-purple"
+      />
+    </div>
+  </div>
+
+  <button
+    type="submit"
+    class="bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-8 py-3 rounded-lg transition-colors text-sm"
+  >
+    Wyślij zgłoszenie
+  </button>
+
+  <p id="speaker-signup-message" class="text-sm hidden"></p>
+</form>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    const form = document.getElementById(
+      "speaker-signup-form"
+    ) as HTMLFormElement;
+    const message = document.getElementById(
+      "speaker-signup-message"
+    ) as HTMLElement;
+
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+
+      try {
+        const res = await fetch("/api/speaker-signup", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+
+        message.textContent = data.message || data.error;
+        message.className = `text-sm ${res.ok ? "text-green-400" : "text-red-400"}`;
+        message.classList.remove("hidden");
+
+        if (res.ok) form.reset();
+      } catch {
+        message.textContent = "Wystąpił błąd. Spróbuj ponownie.";
+        message.className = "text-sm text-red-400";
+        message.classList.remove("hidden");
+      }
+    });
+  });
+</script>
