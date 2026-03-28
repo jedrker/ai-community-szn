@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"$HOME/.bun/bin:$PATH\")",
+      "Bash(bun run:*)",
+      "WebFetch(domain:luma.com)"
+    ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true
+  }
+}
