@@ -34,54 +34,152 @@ const links = [
       }
     </div>
 
-    <!-- Mobile hamburger -->
+    <!-- Mobile hamburger button -->
     <button
       id="mobile-menu-toggle"
-      class="md:hidden text-text-secondary hover:text-white"
+      class="md:hidden relative w-8 h-8 flex items-center justify-center text-text-secondary hover:text-white transition-colors"
       aria-label="Menu"
+      aria-expanded="false"
     >
-      <svg
-        class="w-6 h-6"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M4 6h16M4 12h16M4 18h16"></path>
+      <span class="hamburger-line hamburger-line-1"></span>
+      <span class="hamburger-line hamburger-line-2"></span>
+      <span class="hamburger-line hamburger-line-3"></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile drawer backdrop -->
+<div
+  id="drawer-backdrop"
+  class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300 md:hidden"
+  aria-hidden="true"
+></div>
+
+<!-- Mobile drawer -->
+<div
+  id="mobile-drawer"
+  class="fixed top-0 right-0 z-50 h-full w-[75vw] max-w-[320px] bg-surface-secondary border-l border-surface-border translate-x-full transition-transform duration-300 ease-out md:hidden"
+>
+  <!-- Drawer header -->
+  <div class="flex items-center justify-between px-6 py-4 border-b border-surface-border">
+    <a href="/" class="flex items-center gap-2">
+      <img src="/images/logo/BRAVE-WHITE.svg" alt="BRAVE" class="h-6" />
+      <span class="text-[10px] text-white font-semibold leading-tight">AI Community<br/>Szczecin</span>
+    </a>
+    <button
+      id="drawer-close"
+      class="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-white transition-colors"
+      aria-label="Zamknij menu"
+    >
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
       </svg>
     </button>
   </div>
 
-  <!-- Mobile menu -->
-  <div id="mobile-menu" class="hidden md:hidden mt-4 pb-2 space-y-3">
+  <!-- Drawer links -->
+  <div class="px-6 py-8 flex flex-col gap-2">
     {
-      links.map((link) => (
+      links.map((link, i) => (
         <a
           href={link.href}
           class:list={[
-            "block text-sm transition-colors hover:text-brand-purple",
+            "drawer-link group flex items-center gap-3 px-4 py-3 rounded-lg text-lg font-medium transition-all duration-200",
             currentPath.startsWith(link.href)
-              ? "text-brand-purple"
-              : "text-text-secondary",
+              ? "text-brand-purple bg-brand-purple/10"
+              : "text-text-secondary hover:text-white hover:bg-white/5",
           ]}
+          style={`--delay: ${i * 60}ms`}
         >
+          <span
+            class:list={[
+              "w-1 h-5 rounded-full transition-all duration-200",
+              currentPath.startsWith(link.href)
+                ? "bg-brand-purple"
+                : "bg-transparent group-hover:bg-brand-purple/40",
+            ]}
+          />
           {link.label}
         </a>
       ))
     }
   </div>
-</nav>
+
+  <!-- Drawer footer -->
+  <div class="absolute bottom-0 left-0 right-0 px-6 py-6 border-t border-surface-border">
+    <p class="text-xs text-text-secondary">Brave AI Community Szczecin</p>
+  </div>
+</div>
+
+<style>
+  /* Hamburger icon lines */
+  .hamburger-line {
+    position: absolute;
+    width: 20px;
+    height: 2px;
+    background-color: currentColor;
+    border-radius: 1px;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  .hamburger-line-1 { transform: translateY(-6px); }
+  .hamburger-line-2 { transform: translateY(0); }
+  .hamburger-line-3 { transform: translateY(6px); }
+
+  /* Hamburger → X animation */
+  .is-open .hamburger-line-1 { transform: rotate(45deg); }
+  .is-open .hamburger-line-2 { opacity: 0; }
+  .is-open .hamburger-line-3 { transform: rotate(-45deg); }
+
+  /* Drawer link staggered entrance */
+  .drawer-link {
+    opacity: 0;
+    transform: translateX(16px);
+    transition: opacity 0.3s ease, transform 0.3s ease, background-color 0.2s ease, color 0.2s ease;
+  }
+  .drawer-open .drawer-link {
+    opacity: 1;
+    transform: translateX(0);
+    transition-delay: var(--delay);
+  }
+</style>
 
 <script>
-  document.addEventListener("astro:page-load", () => {
-    const toggle = document.getElementById("mobile-menu-toggle");
-    const menu = document.getElementById("mobile-menu");
+  const toggle = document.getElementById("mobile-menu-toggle");
+  const drawer = document.getElementById("mobile-drawer");
+  const backdrop = document.getElementById("drawer-backdrop");
+  const closeBtn = document.getElementById("drawer-close");
 
-    toggle?.addEventListener("click", () => {
-      menu?.classList.toggle("hidden");
-    });
+  function openDrawer() {
+    toggle?.classList.add("is-open");
+    toggle?.setAttribute("aria-expanded", "true");
+    backdrop?.classList.remove("opacity-0", "pointer-events-none");
+    backdrop?.classList.add("opacity-100");
+    drawer?.classList.remove("translate-x-full");
+    drawer?.classList.add("translate-x-0", "drawer-open");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeDrawer() {
+    toggle?.classList.remove("is-open");
+    toggle?.setAttribute("aria-expanded", "false");
+    backdrop?.classList.add("opacity-0", "pointer-events-none");
+    backdrop?.classList.remove("opacity-100");
+    drawer?.classList.add("translate-x-full");
+    drawer?.classList.remove("translate-x-0", "drawer-open");
+    document.body.style.overflow = "";
+  }
+
+  toggle?.addEventListener("click", openDrawer);
+  closeBtn?.addEventListener("click", closeDrawer);
+  backdrop?.addEventListener("click", closeDrawer);
+
+  // Close on link click
+  drawer?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", closeDrawer);
+  });
+
+  // Close on Escape
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeDrawer();
   });
 </script>
