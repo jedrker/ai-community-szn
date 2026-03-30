@@ -150,20 +150,30 @@ const speakerNameMap = Object.fromEntries(
       event.data.photos.length > 0 && (
         <section>
           <h2 class="text-2xl font-bold mb-6">Galeria</h2>
-          <div id="photo-gallery" class="columns-2 md:columns-3 gap-3 space-y-3">
-            {event.data.photos.slice(0, 12).map((photo: string, i: number) => (
-              <a
-                href={photo}
-                class="gallery-thumb block"
-                data-photo-index={i}
-              >
-                <img
-                  src={photo}
-                  alt={`${event.data.title} — zdjęcie ${i + 1}`}
-                  class="w-full rounded-lg hover:opacity-80 transition-opacity"
-                  loading="lazy"
-                />
-              </a>
+          <div id="photo-gallery" class="grid grid-cols-2 md:grid-cols-3 gap-3 items-start">
+            {[0, 1, 2].map((col: number) => (
+              <div class={`gallery-col flex flex-col gap-3 ${col === 2 ? 'hidden md:flex' : ''}`}>
+                {event.data.photos
+                  .slice(0, 12)
+                  .filter((_: string, i: number) => i % 3 === col)
+                  .map((photo: string, _j: number) => {
+                    const origIndex = col + _j * 3;
+                    return (
+                      <a
+                        href={photo}
+                        class="gallery-thumb block"
+                        data-photo-index={origIndex}
+                      >
+                        <img
+                          src={photo}
+                          alt={`${event.data.title} — zdjęcie ${origIndex + 1}`}
+                          class="w-full rounded-lg hover:opacity-80 transition-opacity"
+                          loading="lazy"
+                        />
+                      </a>
+                    );
+                  })}
+              </div>
             ))}
           </div>
           {event.data.photos.length > 12 && (
@@ -225,6 +235,8 @@ const speakerNameMap = Object.fromEntries(
     });
 
     // Load more thumbnails
+    var columns = gallery.querySelectorAll(".gallery-col");
+
     function addBatch() {
       var end = Math.min(shown + BATCH, photos.length);
       for (var i = shown; i < end; i++) {
@@ -238,7 +250,8 @@ const speakerNameMap = Object.fromEntries(
         img.className = "w-full rounded-lg hover:opacity-80 transition-opacity";
         img.loading = "lazy";
         a.appendChild(img);
-        gallery.appendChild(a);
+        var colIndex = i % 3;
+        columns[colIndex].appendChild(a);
       }
       shown = end;
 
