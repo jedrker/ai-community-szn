@@ -38,6 +38,13 @@ const materialSpeakers = await Promise.all(
 const speakerNameMap = Object.fromEntries(
   materialSpeakers.filter(Boolean).map((s) => [s!.id, s!.data.name])
 );
+
+const partners =
+  event.data.partners.length > 0
+    ? event.data.partners
+    : event.data.partner
+      ? [event.data.partner]
+      : [];
 ---
 
 <BaseLayout title={event.data.title}>
@@ -71,21 +78,25 @@ const speakerNameMap = Object.fromEntries(
       }
     </header>
 
-    {event.data.partner && (
+    {partners.length > 0 && (
       <div class="flex items-center gap-3 mb-8 text-sm text-text-secondary">
-        <span>Partner wydarzenia:</span>
-        <a
-          href={event.data.partner.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="hover:opacity-80 transition-opacity"
-        >
-          <img
-            src={event.data.partner.logo}
-            alt={event.data.partner.name}
-            class="h-6"
-          />
-        </a>
+        <span>{partners.length > 1 ? "Partnerzy wydarzenia:" : "Partner wydarzenia:"}</span>
+        {
+          partners.map((partner) => (
+            <a
+              href={partner.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="hover:opacity-80 transition-opacity"
+            >
+              <img
+                src={partner.logo}
+                alt={partner.name}
+                class="h-6"
+              />
+            </a>
+          ))
+        }
       </div>
     )}
 

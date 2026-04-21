@@ -37,37 +37,47 @@ const pastEvents = sortedEvents
 
   <section class="max-w-5xl mx-auto px-6 py-16">
     <div class="bg-gradient-to-br from-brand-purple/10 via-surface-secondary to-brand-purple/5 border border-brand-purple/20 rounded-2xl p-8 md:p-12 text-center">
-      <p class="text-xs uppercase tracking-[3px] text-brand-purple mb-4">Meetup #3</p>
-      <h2 class="text-3xl md:text-4xl font-bold mb-4">Trzeci meetup w przygotowaniu</h2>
-      <p class="text-text-secondary max-w-2xl mx-auto mb-8 leading-relaxed">
-        Pracujemy nad programem kolejnego spotkania. Temat, prelegenci i miejsce – ogłosimy niebawem. Śledź nas, żeby nie przegapić zapisów.
-      </p>
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a
-          href="https://www.facebook.com/profile.php?id=61586808601675"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex items-center gap-2 bg-surface-secondary border border-surface-border hover:border-brand-purple/50 text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
-        >
-          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-          Facebook
-        </a>
-        <a
-          href="https://www.linkedin.com/groups/16794026/"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex items-center gap-2 bg-surface-secondary border border-surface-border hover:border-brand-purple/50 text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
-        >
-          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-          LinkedIn
-        </a>
-        <a
-          href="#email-signup-form"
-          class="inline-flex items-center gap-2 bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
-        >
-          Zapisz się do newslettera →
-        </a>
-      </div>
+      {
+        upcomingEvent ? (
+          <>
+            <p class="text-xs uppercase tracking-[3px] text-brand-purple mb-4">Nadchodzące wydarzenie</p>
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">{upcomingEvent.data.title}</h2>
+            <p class="text-text-secondary max-w-2xl mx-auto mb-8 leading-relaxed">
+              {upcomingEvent.data.description}
+            </p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <a
+                href={upcomingEvent.data.lumaUrl}
+                class="luma-checkout--button inline-flex items-center gap-2 bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
+                data-luma-action="checkout"
+                data-luma-event-id={upcomingEvent.data.lumaEventId}
+              >
+                Zarejestruj się na wydarzenie
+              </a>
+              <a
+                href="/wydarzenia"
+                class="inline-flex items-center gap-2 bg-surface-secondary border border-surface-border hover:border-brand-purple/50 text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
+              >
+                Zobacz szczegóły wydarzenia
+              </a>
+            </div>
+          </>
+        ) : (
+          <>
+            <p class="text-xs uppercase tracking-[3px] text-brand-purple mb-4">Kolejny meetup</p>
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">W przygotowaniu</h2>
+            <p class="text-text-secondary max-w-2xl mx-auto mb-8 leading-relaxed">
+              Pracujemy nad programem kolejnego spotkania. Śledź nas, żeby nie przegapić zapisów.
+            </p>
+            <a
+              href="#email-signup-form"
+              class="inline-flex items-center gap-2 bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
+            >
+              Zapisz się do newslettera →
+            </a>
+          </>
+        )
+      }
     </div>
   </section>
 
@@ -213,3 +223,5 @@ const pastEvents = sortedEvents
 
   <Footer slot="footer" />
 </BaseLayout>
+
+<script id="luma-checkout" src="https://embed.lu.ma/checkout-button.js"></script>

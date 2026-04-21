@@ -30,6 +30,15 @@ const events = defineCollection({
         url: z.string().url(),
       })
       .optional(),
+    partners: z
+      .array(
+        z.object({
+          name: z.string(),
+          logo: z.string(),
+          url: z.string().url(),
+        })
+      )
+      .default([]),
     status: z.enum(["upcoming", "past"]),
   }),
 });
