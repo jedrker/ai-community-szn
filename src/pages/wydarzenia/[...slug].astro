@@ -161,30 +161,20 @@ const partners =
       event.data.photos.length > 0 && (
         <section>
           <h2 class="text-2xl font-bold mb-6">Galeria</h2>
-          <div id="photo-gallery" class="grid grid-cols-2 md:grid-cols-3 gap-3 items-start">
-            {[0, 1, 2].map((col: number) => (
-              <div class={`gallery-col flex flex-col gap-3 ${col === 2 ? 'hidden md:flex' : ''}`}>
-                {event.data.photos
-                  .slice(0, 12)
-                  .filter((_: string, i: number) => i % 3 === col)
-                  .map((photo: string, _j: number) => {
-                    const origIndex = col + _j * 3;
-                    return (
-                      <a
-                        href={photo}
-                        class="gallery-thumb block"
-                        data-photo-index={origIndex}
-                      >
-                        <img
-                          src={photo}
-                          alt={`${event.data.title} — zdjęcie ${origIndex + 1}`}
-                          class="w-full rounded-lg hover:opacity-80 transition-opacity"
-                          loading="lazy"
-                        />
-                      </a>
-                    );
-                  })}
-              </div>
+          <div id="photo-gallery" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {event.data.photos.slice(0, 12).map((photo: string, i: number) => (
+              <a
+                href={photo}
+                class="gallery-thumb block aspect-[4/3] overflow-hidden rounded-lg"
+                data-photo-index={i}
+              >
+                <img
+                  src={photo}
+                  alt={`${event.data.title} — zdjęcie ${i + 1}`}
+                  class="w-full h-full object-cover hover:opacity-80 transition-opacity"
+                  loading="lazy"
+                />
+              </a>
             ))}
           </div>
           {event.data.photos.length > 12 && (
@@ -245,24 +235,20 @@ const partners =
       lightbox.openAt(index);
     });
 
-    // Load more thumbnails
-    var columns = gallery.querySelectorAll(".gallery-col");
-
     function addBatch() {
       var end = Math.min(shown + BATCH, photos.length);
       for (var i = shown; i < end; i++) {
         var a = document.createElement("a");
         a.href = photos[i];
-        a.className = "gallery-thumb block";
+        a.className = "gallery-thumb block aspect-[4/3] overflow-hidden rounded-lg";
         a.dataset.photoIndex = i;
         var img = document.createElement("img");
         img.src = photos[i];
         img.alt = title + " — zdjęcie " + (i + 1);
-        img.className = "w-full rounded-lg hover:opacity-80 transition-opacity";
+        img.className = "w-full h-full object-cover hover:opacity-80 transition-opacity";
         img.loading = "lazy";
         a.appendChild(img);
-        var colIndex = i % 3;
-        columns[colIndex].appendChild(a);
+        gallery.appendChild(a);
       }
       shown = end;
 

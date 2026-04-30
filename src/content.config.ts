@@ -56,6 +56,8 @@ const speakers = defineCollection({
         github: z.string().url().optional(),
         twitter: z.string().url().optional(),
         website: z.string().url().optional(),
+        instagram: z.string().url().optional(),
+        spotify: z.string().url().optional(),
       })
       .default({}),
   }),
