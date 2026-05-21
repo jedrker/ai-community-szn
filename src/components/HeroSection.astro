@@ -6,6 +6,7 @@ interface Props {
     time: string;
     location: string;
     lumaUrl: string;
+    lumaEventId?: string;
   };
 }
 
@@ -35,14 +36,27 @@ const formattedDate = event
         <p class="text-text-secondary mb-8">
           {formattedDate} · {event.time} · {event.location}
         </p>
-        <a
-          href={event.lumaUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-block bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-8 py-3 rounded-lg transition-colors"
-        >
-          Zapisz się na Luma →
-        </a>
+        {
+          event.lumaEventId ? (
+            <a
+              href={event.lumaUrl}
+              class="luma-checkout--button"
+              data-luma-action="checkout"
+              data-luma-event-id={event.lumaEventId}
+            >
+              Zarejestruj się na wydarzenie
+            </a>
+          ) : (
+            <a
+              href={event.lumaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-block bg-brand-purple hover:bg-brand-purple-dark text-white font-semibold px-8 py-3 rounded-lg transition-colors"
+            >
+              Zapisz się na Luma →
+            </a>
+          )
+        }
       </>
     ) : (
       <>

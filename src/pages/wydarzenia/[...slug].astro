@@ -100,7 +100,25 @@ const partners =
       </div>
     )}
 
-    <div class="prose prose-invert max-w-none mb-12">
+    {
+      event.data.status === "upcoming" && event.data.lumaEventId && (
+        <div class="mb-8 rounded-xl border border-brand-purple/30 bg-brand-purple/10 px-5 py-4">
+          <p class="text-sm font-semibold text-white mb-1">Rejestracja obowiązkowa</p>
+          <p class="text-sm text-text-secondary leading-relaxed">
+            Miejsca są limitowane —{" "}
+            <a
+              href={event.data.lumaUrl}
+              class="text-brand-purple-light hover:text-brand-purple transition-colors underline underline-offset-2"
+            >
+              zapisz się przez Luma
+            </a>
+            , żeby potwierdzić udział w wydarzeniu.
+          </p>
+        </div>
+      )
+    }
+
+    <div class="event-prose mb-12">
       <Content />
     </div>
 

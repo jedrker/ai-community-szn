@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @font-face {
   font-family: "Archivo";
@@ -35,4 +36,17 @@
   --color-text-primary: #f0f0f0;
   --color-text-secondary: #999999;
   --font-family-archivo: "Archivo", sans-serif;
+}
+
+@layer components {
+  .event-prose {
+    @apply prose prose-invert max-w-none;
+    @apply prose-headings:font-bold prose-headings:text-white prose-headings:tracking-tight;
+    @apply prose-h3:mt-10 prose-h3:mb-4 prose-h3:border-t prose-h3:border-surface-border prose-h3:pt-8 prose-h3:text-xl;
+    @apply prose-p:text-text-secondary prose-p:leading-relaxed;
+    @apply prose-strong:text-white prose-strong:font-semibold;
+    @apply prose-a:text-brand-purple-light prose-a:no-underline hover:prose-a:text-brand-purple prose-a:transition-colors;
+    @apply prose-li:text-text-secondary prose-ul:my-4 prose-li:marker:text-brand-purple;
+    @apply prose-em:text-text-secondary;
+  }
 }
