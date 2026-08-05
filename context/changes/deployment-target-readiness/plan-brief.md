@@ -89,8 +89,13 @@ observation gate that cannot be rushed.
   endpoint down with it.
 - **Accepted:** one-hour log retention means post-mortem evidence is gone before anyone looks; the
   runbook mitigation depends on a human remembering to open a log stream.
-- **Accepted:** functions run in `iad1`, spending transatlantic latency out of the 1-second guardrail.
-  This propagates — F-04 now measures from `iad1`, and that number is the tripwire's input.
+- ~~**Accepted:** functions run in `iad1`, spending transatlantic latency out of the 1-second guardrail.
+  This propagates — F-04 now measures from `iad1`, and that number is the tripwire's input.~~
+  **INVERTED 2026-08-06:** `regions: ["fra1"]` works on the **Hobby** plan — `infrastructure.md`'s claim
+  that region selection required Pro was a research error, disproven by a controlled comparison in
+  `region-probe.md`. F-04 measures from **Frankfurt**, and the latency leg of the tripwire is largely
+  defused. Caveat: production stays on `iad1` until the region key reaches `main` and rebuilds. Log
+  retention (~1 hour) is now the only genuine Hobby gap.
 - **Tested in Phase 2:** the assumption that Hobby ignores rather than rejects a `regions` key.
 - **Out of scope, unmitigated:** nothing runs between a commit and production, and nothing alerts
   anyone to a live failure.

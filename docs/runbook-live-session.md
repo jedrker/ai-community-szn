@@ -75,8 +75,11 @@ The project deliberately stays on the Vercel **Hobby** plan. Two conditions woul
 Ask both, out loud:
 
 - **Latency**: has any rehearsal or live session shown state taking longer than **one second** to reach
-  attendee devices? Functions run in `fra1` (Frankfurt) — see `region-probe.md` — so this is unlikely,
-  but it is the number that matters.
+  attendee devices? `vercel.json` declares `fra1` (Frankfurt) and it works on the Hobby plan — see
+  `region-probe.md` — **but production only runs there once that key has reached `main` and rebuilt.**
+  Until then functions execute in `iad1` (US East) and the transatlantic round trip is real. Check which
+  you are on rather than assuming: `curl -sI <production-url> | grep x-vercel-id` returns
+  `<edge>::<function-region>::<id>`.
 - **Licensing**: has Vercel made *any* contact about fair use? The Hobby plan is restricted to
   non-commercial personal use, and this site carries Brave Courses branding. The judgment on record is
   that a free local community initiative is not commercial use. A notice would arrive at the account's

@@ -411,6 +411,21 @@ needs explicit confirmation first and belongs in a separate, announced window.
 **Implementation Note**: Pause for manual confirmation that the log stream and the runbook are usable
 before considering the change complete.
 
+**Outcome notes (added 2026-08-06, after implementation)** — recorded here rather than in `## Progress`,
+per `references/progress-format.md`:
+
+- **3.8 was satisfied by adaptation, not as written.** `--follow` is deprecated and ignored in Vercel CLI
+  48.10.3, and `vercel logs` carries function-emitted output rather than an access log — ~100 confirmed
+  invocations (`x-vercel-cache: MISS`, `x-vercel-id: arn1::iad1::…`) produced no stream line. Stream
+  attachment was verified; the real behaviour is recorded in `docs/runbook-live-session.md` and
+  `infrastructure.md` instead. Ticked on explicit user decision that the finding *is* the verification.
+- **3.11's premise inverted.** Latency is measured from **`fra1`**, not `iad1` — the region key works on
+  the Hobby plan (see `region-probe.md`). The roadmap entry says `fra1` accordingly.
+- **Provenance.** `docs/runbook-live-session.md` and the roadmap F-01/F-04 edits belonging to this phase
+  landed in commit `9c9bd47`, which is labelled for `quiz-definition-and-validation` — that session staged
+  beyond its own change. Rows 3.1, 3.6, 3.10 and 3.11 therefore carry `536fde4` while the files themselves
+  arrived in `9c9bd47`. History was left alone deliberately.
+
 ---
 
 ## Testing Strategy
@@ -475,6 +490,15 @@ The adapter bump is a patch-level move within `^10` and carries no expected perf
 
 ## Open Risks & Assumptions
 
+> **Outcome note — 2026-08-06, after implementation.** A central premise below inverted. Everything in
+> this document that says functions are pinned to `iad1`, that the EU region is unreachable on Hobby, or
+> that `fra1` taking effect is out of scope, was **believed at planning time and turned out to be false**
+> — `infrastructure.md`'s claim that region selection required Pro was a research error, disproven by a
+> controlled comparison in `region-probe.md`. The prose is left as written so the plan stays an honest
+> record of what was believed; read it against this note and `region-probe.md`. What *did* hold: ~1-hour
+> log retention and the Hobby non-commercial restriction are still live accepted risks with a tripwire.
+> Production remains on `iad1` until the region key reaches `main`.
+
 - **Accepted, user decision**: Hobby's fair-use policy restricts the plan to non-commercial personal
   use and this site carries sponsor branding with an outbound link. Enforcement is discretionary and
   the failure mode is a paused project — which would take the event archive, speaker directory and
@@ -538,7 +562,7 @@ The adapter bump is a patch-level move within `^10` and carries no expected perf
 
 #### Automated
 
-- [x] 3.1 `docs/runbook-live-session.md` exists — 536fde4 *(file itself landed in 9c9bd47)*
+- [x] 3.1 `docs/runbook-live-session.md` exists — 536fde4
 - [x] 3.2 `vercel ls` lists more than one deployment — 536fde4
 - [x] 3.3 `vercel rollback status` exits without error — 536fde4
 - [x] 3.4 `grep "deferred by user decision" infrastructure.md` returns a hit; both original
@@ -548,16 +572,11 @@ The adapter bump is a patch-level move within `^10` and carries no expected perf
 #### Manual
 
 - [x] 3.6 Runbook covers before / during / after, and carries the unexercised-rollback statement and the
-      tripwire re-read line — 536fde4 *(runbook itself landed in 9c9bd47)*
+      tripwire re-read line — 536fde4
 - [x] 3.7 `infrastructure.md`'s amended wording reads as a deliberate deferral with rationale, not a
       contradiction of surrounding research — 536fde4
 - [x] 3.8 `vercel logs --follow` produced live output on a request to the preview URL — 536fde4
-      *(adapted: `--follow` is deprecated/ignored in CLI 48.10.3, and the stream carries function-emitted
-      output rather than an access log — ~100 confirmed invocations produced no line. Stream attachment
-      verified; the behaviour is recorded in the runbook and `infrastructure.md` instead.)*
 - [x] 3.9 Runbook is followable by the host without `infrastructure.md` open alongside — 536fde4
 - [x] 3.10 `infrastructure.md` and `roadmap.md` agree with each other and with reality; tripwire present
-      with a named owner — 536fde4 *(roadmap edits landed in 9c9bd47)*
+      with a named owner — 536fde4
 - [x] 3.11 F-04's entry makes clear its latency measurement is taken from `iad1` — 536fde4
-      *(adapted: it is taken from `fra1` — the region key works on Hobby, so the premise inverted.
-      Roadmap edit landed in 9c9bd47.)*

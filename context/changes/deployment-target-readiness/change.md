@@ -2,7 +2,7 @@
 change_id: deployment-target-readiness
 title: "Deployment target readiness (Hobby-plan variant)"
 roadmap_id: F-01
-status: implemented
+status: impl_reviewed
 created: 2026-08-05
 updated: 2026-08-06
 ---
