@@ -505,34 +505,34 @@ The adapter bump is a patch-level move within `^10` and carries no expected perf
 
 #### Automated
 
-- [x] 1.1 Adapter resolves within the `^10` line (`package.json` range and installed version)
-- [x] 1.2 Type checking passes with 0 errors: `bun run type-check`
-- [x] 1.3 Production build succeeds: `bun run build`
-- [x] 1.4 Test suite passes: `bun run test`
+- [x] 1.1 Adapter resolves within the `^10` line (`package.json` range and installed version) — 66f4812
+- [x] 1.2 Type checking passes with 0 errors: `bun run type-check` — 66f4812
+- [x] 1.3 Production build succeeds: `bun run build` — 66f4812
+- [x] 1.4 Test suite passes: `bun run test` — 66f4812
 
 #### Manual
 
 - [x] 1.5 CLAUDE.md rule is unambiguous about the `^11`/Astro 7 boundary and sits in the `## Commands`
-      version-constraint cluster beside the TypeScript-`^6` and vite-dedup rules
+      version-constraint cluster beside the TypeScript-`^6` and vite-dedup rules — 66f4812
 
 ### Phase 2: Region declaration and Hobby probe
 
 #### Automated
 
-- [ ] 2.1 `vercel.json` is valid JSON
-- [ ] 2.2 Local build succeeds with the `regions` key present: `bun run build`
-- [ ] 2.3 Generated function config inspected for a region field under `.vercel/output/functions`
-- [ ] 2.4 Preview deployment created and reports ready: `vercel deploy`, `vercel inspect`
-- [ ] 2.5 `region-probe.md` exists
+- [x] 2.1 `vercel.json` is valid JSON
+- [x] 2.2 Local build succeeds with the `regions` key present: `bun run build`
+- [x] 2.3 Generated function config inspected for a region field under `.vercel/output/functions`
+- [x] 2.4 Preview deployment created and reports ready: `vercel deploy`, `vercel inspect`
+- [x] 2.5 `region-probe.md` exists
 
 #### Manual
 
-- [ ] 2.6 `region-probe.md` names one of honoured / ignored / rejected **and** its cause (plan
+- [x] 2.6 `region-probe.md` names one of honoured / ignored / rejected **and** its cause (plan
       restriction vs. adapter config)
-- [ ] 2.7 Preview URL serves `/`, `/wydarzenia`, an event detail page and `/prelegenci` without
+- [x] 2.7 Preview URL serves `/`, `/wydarzenia`, an event detail page and `/prelegenci` without
       regression
-- [ ] 2.8 Function region read from `vercel inspect` (or dashboard) matches `region-probe.md`'s claim
-- [ ] 2.9 If rejected: `vercel.json` reverted, no build-breaking config left for `main`
+- [x] 2.8 Function region read from `vercel inspect` (or dashboard) matches `region-probe.md`'s claim
+- [x] 2.9 If rejected: `vercel.json` reverted, no build-breaking config left for `main`
 
 ### Phase 3: Operational loop and risk record
 
