@@ -38,6 +38,14 @@ Vite must stay deduplicated: `vite` is an explicit devDependency pinned to the s
 resolves. If a second copy ends up nested under `node_modules/astro/`, `astro check` fails with a
 `PluginOption` type mismatch on `@tailwindcss/vite`. The fix is `rm -rf node_modules && bun install`.
 
+**`zod` has the same constraint, for the same reason.** It is declared in `dependencies` at `^4.3.6`
+— the range `astro` itself declares — so the two deduplicate to a single hoisted `node_modules/zod`.
+Zod's types are nominal, so two copies produce schemas that do not match across the boundary. Check
+with `find node_modules -type d -name zod` (expect exactly one line); `bun pm ls zod` does **not**
+work — bun ignores the package argument and exits 0 regardless. Note the range only overlaps Astro's
+by coincidence of the current major: **when Astro takes a major bump, re-check that this range still
+matches what Astro resolves.**
+
 `@astrojs/vercel` must stay on the **`^10`** line. **v11 requires Astro 7**, so widening the range is a
 framework major disguised as an adapter bump — an Astro major is always a separate, deliberate change
 and is never bundled with feature work. Update in-range with `bun update @astrojs/vercel`; never
@@ -88,6 +96,37 @@ Event photos live at `public/photos/events/<event-slug>/` and are listed explici
 `photos` frontmatter array — they are not globbed from disk. Galleries use `glightbox` for the
 lightbox.
 
+## The quiz definition is NOT a content collection (`src/quiz/`)
+
+The LiveQuiz question set lives at `src/quiz/definition.ts` as a typed TypeScript literal validated
+by a Zod schema — deliberately *not* a third content collection, even though it is content and the
+section above says collections are the CMS. Do not "fix" this by moving it.
+
+Two reasons, both load-bearing:
+
+- **Audience.** Events and speakers are organizer-edited Markdown. The quiz is developer-authored
+  source (PRD FR-001 — avoiding a builder interface is the reason LiveQuiz is built rather than
+  rented), and `satisfies Quiz` on the literal means an authoring mistake is a red squiggle in the
+  editor rather than a runtime surprise.
+- **Portability.** `astro:content` does not resolve outside the Astro build — a bare `vitest run`
+  fails with `Cannot find package 'astro:content'`. This module is imported by tests today and by
+  serverless functions from S-02 onward, so it imports `zod` directly instead.
+  `src/quiz/portability.test.ts` fails the suite if anything under `src/quiz/` ever imports an
+  `astro:` specifier.
+
+Layout: `schema.ts` (discriminated union over five question kinds plus the domain invariants),
+`normalize.ts` (FR-011 answer folding), `definition.ts` (the 14 questions), `index.ts` (the accessors
+downstream slices import — never import `definition.ts` directly).
+
+`normalize.ts` carries a trap worth knowing: **`ł` and `Ł` need an explicit mapping.** Every other
+Polish diacritic decomposes under NFD and is removed by `\p{Diacritic}`, but `ł` is an atomic
+codepoint with no decomposition, so the idiomatic fold leaves it untouched — `"żółć łódź"` becomes
+`"zołc łodz"`.
+
+Scoring rules deliberately do **not** live here. `points` (a number, or `null` for an unscored
+question per FR-017) is the only scoring field; the speed weighting and the numeric-closeness curve
+belong to later roadmap slices.
+
 ## Styling
 
 Tailwind CSS 4, wired through **`@tailwindcss/vite`** in `astro.config.ts`'s `vite.plugins`.
@@ -120,14 +159,26 @@ request through `node:fs` — it works locally and fails in production.
 Handlers live one per file in `src/pages/api/`, exporting a named method (`export const POST:
 APIRoute`). They read `await request.formData()` — not JSON — and reply with a JSON body. User-facing
 `error`/`message` strings are Polish, since the client renders them directly. Validation is currently
-inline and minimal; prefer parsing request bodies with Zod, which the project already depends on via
-content collections.
+inline and minimal; prefer parsing request bodies with Zod, which is now a declared dependency (see
+Commands for the pinning constraint).
 
 ## Deployment
 
 `vercel.json` sets the Astro framework preset; Vercel builds and deploys on push to `main`. There is
-no CI, no staging environment, no pre-deploy gate, and no monitoring — nothing runs between a commit
-and production. Node floor is 22.12.0 (`.nvmrc`, `engines.node`).
+no CI, no staging environment, and no monitoring — essentially nothing runs between a commit and
+production. Node floor is 22.12.0 (`.nvmrc`, `engines.node`).
+
+The one exception is the **quiz definition gate**: `astro.config.ts` registers a
+`quiz-definition-gate` integration whose `astro:build:start` hook calls `assertQuizValid()`. A
+malformed quiz therefore fails `astro build`, and so fails the deploy — the previous good quiz stays
+live. It hooks the build rather than a `prebuild` script so it runs inside `astro build` itself,
+regardless of how the platform's build command is configured; do not move it. Because the config
+imports the accessor at module scope, `bun run type-check` and `bun run test` fail on a bad
+definition too.
+
+**A failed deploy is silent.** With no CI and no alerting, a blocked deploy is loud only in Vercel's
+dashboard — so a host who edits a question shortly before a session can believe a fix shipped when it
+did not. `docs/runbook-live-session.md` carries the pre-session check that closes this.
 
 ## Project context artifacts
 

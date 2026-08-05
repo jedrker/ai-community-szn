@@ -525,26 +525,26 @@ after this change.
 
 #### Automated
 
-- [x] 2.1 The real definition parses and all tests pass: `bun run test`
-- [x] 2.2 Type checking passes with zero errors: `bun run type-check`
-- [x] 2.3 Build succeeds: `bun run build`
+- [x] 2.1 The real definition parses and all tests pass: `bun run test` — ed84482
+- [x] 2.2 Type checking passes with zero errors: `bun run type-check` — ed84482
+- [x] 2.3 Build succeeds: `bun run build` — ed84482
 
 #### Manual
 
-- [x] 2.4 All 14 Polish questions read correctly against `idea-notes.md:41-56`
-- [x] 2.5 Drafted distractors are plausible but unambiguously wrong
-- [x] 2.6 Q2 reads as the gathering beat and does not look broken while unscored
+- [x] 2.4 All 14 Polish questions read correctly against `idea-notes.md:41-56` — ed84482
+- [x] 2.5 Drafted distractors are plausible but unambiguously wrong — ed84482
+- [x] 2.6 Q2 reads as the gathering beat and does not look broken while unscored — ed84482
 
 ### Phase 3: The build gate and the record of why
 
 #### Automated
 
-- [ ] 3.1 Build succeeds on the valid definition: `bun run build`
-- [ ] 3.2 Tests and types still pass: `bun run test`, `bun run type-check`
+- [x] 3.1 Build succeeds on the valid definition: `bun run build`
+- [x] 3.2 Tests and types still pass: `bun run test`, `bun run type-check`
 
 #### Manual
 
-- [ ] 3.3 A deliberately broken invariant fails `bun run build` with a question-identifying message
-- [ ] 3.4 The same break fails a Vercel preview deploy
-- [ ] 3.5 CLAUDE.md's new entries are accurate against the delivered code
-- [ ] 3.6 The host has a written "confirm the deploy went green" instruction (runbook, or recorded in F-01's plan)
+- [x] 3.3 A deliberately broken invariant fails `bun run build` with a question-identifying message
+- [ ] 3.4 The same break fails a Vercel preview deploy — SKIPPED for now by user decision (needs a broken commit pushed to a branch; verify before the first live session)
+- [x] 3.5 CLAUDE.md's new entries are accurate against the delivered code
+- [x] 3.6 The host has a written "confirm the deploy went green" instruction (runbook, or recorded in F-01's plan)
