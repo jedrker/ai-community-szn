@@ -519,40 +519,44 @@ The adapter bump is a patch-level move within `^10` and carries no expected perf
 
 #### Automated
 
-- [x] 2.1 `vercel.json` is valid JSON
-- [x] 2.2 Local build succeeds with the `regions` key present: `bun run build`
-- [x] 2.3 Generated function config inspected for a region field under `.vercel/output/functions`
-- [x] 2.4 Preview deployment created and reports ready: `vercel deploy`, `vercel inspect`
-- [x] 2.5 `region-probe.md` exists
+- [x] 2.1 `vercel.json` is valid JSON — fb7de2d
+- [x] 2.2 Local build succeeds with the `regions` key present: `bun run build` — fb7de2d
+- [x] 2.3 Generated function config inspected for a region field under `.vercel/output/functions` — fb7de2d
+- [x] 2.4 Preview deployment created and reports ready: `vercel deploy`, `vercel inspect` — fb7de2d
+- [x] 2.5 `region-probe.md` exists — fb7de2d
 
 #### Manual
 
 - [x] 2.6 `region-probe.md` names one of honoured / ignored / rejected **and** its cause (plan
-      restriction vs. adapter config)
+      restriction vs. adapter config) — fb7de2d
 - [x] 2.7 Preview URL serves `/`, `/wydarzenia`, an event detail page and `/prelegenci` without
-      regression
-- [x] 2.8 Function region read from `vercel inspect` (or dashboard) matches `region-probe.md`'s claim
-- [x] 2.9 If rejected: `vercel.json` reverted, no build-breaking config left for `main`
+      regression — fb7de2d
+- [x] 2.8 Function region read from `vercel inspect` (or dashboard) matches `region-probe.md`'s claim — fb7de2d
+- [x] 2.9 If rejected: `vercel.json` reverted, no build-breaking config left for `main` — fb7de2d
 
 ### Phase 3: Operational loop and risk record
 
 #### Automated
 
-- [ ] 3.1 `docs/runbook-live-session.md` exists
-- [ ] 3.2 `vercel ls` lists more than one deployment
-- [ ] 3.3 `vercel rollback status` exits without error
-- [ ] 3.4 `grep "deferred by user decision" infrastructure.md` returns a hit; both original
+- [x] 3.1 `docs/runbook-live-session.md` exists
+- [x] 3.2 `vercel ls` lists more than one deployment
+- [x] 3.3 `vercel rollback status` exits without error
+- [x] 3.4 `grep "deferred by user decision" infrastructure.md` returns a hit; both original
       `prerequisite` occurrences (`:37`, `:218`) revisited
-- [ ] 3.5 Repository checks still pass: `bun run type-check`, `bun run test`, `bun run build`
+- [x] 3.5 Repository checks still pass: `bun run type-check`, `bun run test`, `bun run build`
 
 #### Manual
 
-- [ ] 3.6 Runbook covers before / during / after, and carries the unexercised-rollback statement and the
+- [x] 3.6 Runbook covers before / during / after, and carries the unexercised-rollback statement and the
       tripwire re-read line
-- [ ] 3.7 `infrastructure.md`'s amended wording reads as a deliberate deferral with rationale, not a
+- [x] 3.7 `infrastructure.md`'s amended wording reads as a deliberate deferral with rationale, not a
       contradiction of surrounding research
-- [ ] 3.8 `vercel logs --follow` produced live output on a request to the preview URL
-- [ ] 3.9 Runbook is followable by the host without `infrastructure.md` open alongside
-- [ ] 3.10 `infrastructure.md` and `roadmap.md` agree with each other and with reality; tripwire present
+- [x] 3.8 `vercel logs --follow` produced live output on a request to the preview URL
+      *(adapted: `--follow` is deprecated/ignored in CLI 48.10.3, and the stream carries function-emitted
+      output rather than an access log — ~100 confirmed invocations produced no line. Stream attachment
+      verified; the behaviour is recorded in the runbook and `infrastructure.md` instead.)*
+- [x] 3.9 Runbook is followable by the host without `infrastructure.md` open alongside
+- [x] 3.10 `infrastructure.md` and `roadmap.md` agree with each other and with reality; tripwire present
       with a named owner
-- [ ] 3.11 F-04's entry makes clear its latency measurement is taken from `iad1`
+- [x] 3.11 F-04's entry makes clear its latency measurement is taken from `iad1`
+      *(adapted: it is taken from `fra1` — the region key works on Hobby, so the premise inverted.)*

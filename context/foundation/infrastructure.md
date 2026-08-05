@@ -36,6 +36,37 @@ Two conditions attach to this recommendation, both from the cross-check rather t
    also unlocks EU region selection and longer log retention, both of which this project needs.
    Cost-neutrality was released during shaping, so this is affordable — but it is now a prerequisite,
    not an optimization.
+
+   > **AMENDED 2026-08-06 — Pro upgrade deferred by user decision.** The project stays on **Hobby**. The
+   > user's judgment on record: although the site carries Brave Courses branding, it is a free local
+   > community initiative rather than a commercial project. Recorded in
+   > `context/changes/deployment-target-readiness/change.md`; the licensing exposure is accepted with a
+   > tripwire (below).
+   >
+   > **Two claims in this document turned out to be factually wrong**, and the deferral is not the reason
+   > — they were wrong when written. Both were disproven empirically in F-01 Phase 2; evidence in
+   > `context/changes/deployment-target-readiness/region-probe.md`:
+   >
+   > - **"Pro unlocks EU region selection"** — no. A Hobby deployment carrying
+   >   `regions: ["fra1"]` in `vercel.json` reports `λ _render … [fra1]` under `vercel inspect`. `iad1`
+   >   was the *default*, not a plan-enforced ceiling. The EU region is already in place on Hobby (see
+   >   §Getting Started step 1).
+   > - **"Preview URLs are publicly reachable by default"** (§Operational Story) — not for this project.
+   >   Vercel Authentication is enabled; anonymous requests to a preview get a `302` to
+   >   `vercel.com/sso-api`. This *improves* the PRD's unprotected-host-view concern for previews,
+   >   though production remains unprotected.
+   >
+   > What remains genuinely Pro-only for this project is **log retention** (~1 hour on Hobby). That is
+   > handled operationally by `docs/runbook-live-session.md`, which has the host tail logs live rather
+   > than retrieve them afterwards.
+   >
+   > **Tripwire — revisit Pro if either fires.** Owner: the repository owner (account holder). Re-read as
+   > a line item in the runbook's pre-session checklist, because a tripwire nobody is scheduled to check
+   > is not a tripwire.
+   > 1. **Latency**: a rehearsal or live session shows state reaching attendee devices in more than one
+   >    second. Now much less likely — functions run in Frankfurt, so the transatlantic round trip that
+   >    motivated this is gone.
+   > 2. **Licensing**: Vercel makes any contact about fair use.
 2. **Do not attempt realtime on Vercel itself.** Its native WebSocket support is public beta and caps
    connection duration below the length of one quiz. Details in the cross-check.
 
@@ -148,9 +179,12 @@ Kept on the shortlist as the escape hatch from managed-realtime pricing.
    Redis. Astro is absent from Vercel's WebSocket recipes and has no adapter-level upgrade API. Going
    Vercel-native for realtime is not viable, which is why the external provider is a requirement rather
    than a preference.
-5. **Hobby is single-region (`iad1`, US East)** with region selection reserved for Pro and above.
-   Serving Szczecin participants from Virginia spends a meaningful slice of the one-second budget on
-   transatlantic round-trips.
+5. ~~**Hobby is single-region (`iad1`, US East)** with region selection reserved for Pro and above.~~
+   **DISPROVEN 2026-08-06.** `iad1` is the *default*, not a plan-enforced ceiling: a Hobby deployment
+   with `regions: ["fra1"]` in `vercel.json` reports `λ _render … [fra1]`, while production built before
+   the key existed reports `iad1` via `x-vercel-id`. Evidence and method in
+   `context/changes/deployment-target-readiness/region-probe.md`. The transatlantic-latency concern this
+   raised is real but already addressed, and did not require a paid plan.
 
 ### Pre-Mortem — How This Could Fail
 
@@ -189,10 +223,15 @@ about realtime and concurrency, while the platform underneath was never modelled
 ## Operational Story
 
 - **Preview deploys**: Vercel creates a preview deployment automatically for every branch and pull
-  request, at a generated URL, with no configuration. Preview URLs are publicly reachable by default —
+  request, at a generated URL, with no configuration. ~~Preview URLs are publicly reachable by default —
   acceptable here since the site holds no private data, but note a preview of the quiz host view would
   also be publicly reachable, which compounds the "no host-view protection" decision recorded in the
-  PRD. Fork PRs do not receive environment variables.
+  PRD.~~ **CORRECTED 2026-08-06:** not for this project — Vercel Authentication is enabled, so anonymous
+  requests to a preview URL return `302` to `vercel.com/sso-api` and no function executes. A preview of
+  the quiz host view would therefore **not** be publicly reachable, which *reduces* rather than compounds
+  the PRD's host-view concern; production remains unprotected. Practical consequence: verifying that a
+  preview renders needs a logged-in browser — an anonymous `curl` only ever sees the redirect. Fork PRs
+  do not receive environment variables.
 - **Secrets**: environment variables live in Vercel's per-environment store (Production / Preview /
   Development), set with `vercel env add <NAME> <environment>` or in project settings; `.env.example`
   documents the required set (`RESEND_API_KEY`, `ADMIN_EMAIL`, `RESEND_AUDIENCE_ID`,
@@ -206,25 +245,34 @@ about realtime and concurrency, while the platform underneath was never modelled
   triggered by pushing to `main`. An agent may deploy previews, read logs, and inspect deployments
   unattended. Rotating the Resend or Ably keys, changing the plan or domain, and deleting the project
   stay human-only.
-- **Logs**: `vercel logs <deployment-url> --follow` for runtime logs, `vercel inspect` for deployment
-  metadata. **Retention is one hour on Hobby** — longer on Pro, though the current figure should be
-  confirmed against Vercel's limits page rather than assumed. There is no alerting; nothing notifies
-  anyone of a failure.
+- **Logs**: ~~`vercel logs <deployment-url> --follow`~~ → **`vercel logs <deployment-url>`** for runtime
+  logs (streaming is the default; **`--follow` is deprecated and ignored** as of CLI 48.10.3, which prints
+  a notice saying so), `vercel inspect` for deployment metadata. **Retention is one hour on Hobby** —
+  longer on Pro, though the current figure should be confirmed against Vercel's limits page rather than
+  assumed. There is no alerting; nothing notifies anyone of a failure.
+
+  **Verified 2026-08-06 (F-01), and it changes what this buys you**: the stream carries what functions
+  *emit* — console output and errors — **not an access log**. ~100 requests to on-demand routes produced
+  zero stream output while `x-vercel-cache: MISS` and `x-vercel-id: arn1::iad1::…` confirmed the function
+  executed. So a quiet stream is the normal state, not a health signal, and "tail logs during the event"
+  only helps if the code logs deliberately. F-02 onward should instrument session start, join, answer
+  submission and purge; otherwise the host watches an empty terminal. Detail in
+  `docs/runbook-live-session.md` §Before the session.
 
 ## Risk Register
 
 | Risk | Source | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| Hobby plan's non-commercial restriction breached by sponsor branding; project paused | Devil's advocate | M | H | Upgrade to Pro ($20/seat/mo) before the first live session. Treat as a prerequisite, not an optimization |
-| US-East region adds transatlantic latency against the 1s propagation guardrail | Devil's advocate | H | M | On Pro, set the function region to `fra1` (Frankfurt), the closest option to Szczecin. Measure actual propagation before relying on it |
+| Hobby plan's non-commercial restriction breached by sponsor branding; project paused | Devil's advocate | M | H | **AMENDED 2026-08-06:** accepted risk — staying on Hobby by user decision (free local community initiative). Tripwire: any Vercel contact about fair use. Owner: account holder, re-read in `docs/runbook-live-session.md` |
+| US-East region adds transatlantic latency against the 1s propagation guardrail | Devil's advocate | H | M | **RESOLVED 2026-08-06:** `regions: ["fra1"]` in `vercel.json` — and it works on **Hobby**, contrary to this document's original claim (`region-probe.md`). Still measure actual propagation in F-04; production only moves to `fra1` once the key reaches `main` |
 | Agent follows Vercel's stale Astro docs and reintroduces `output: 'hybrid'` or `/serverless` | Devil's advocate | M | M | Already covered by the CLAUDE.md project guide, which pins the correct rendering model. Prefer Astro's own adapter docs over Vercel's framework page |
 | Adapter update silently pulls an Astro major (`@astrojs/vercel` v11 → Astro 7) | Research finding | M | M | Pin `@astrojs/vercel` to the `^10` line. Treat Astro 7 as a separate, deliberate change — never bundled with feature work |
-| One-hour log retention destroys evidence after a failed live event | Unknown unknowns | H | M | Pro raises retention. For an event, tail logs live during the session rather than relying on retrieval afterwards |
+| One-hour log retention destroys evidence after a failed live event | Unknown unknowns | H | M | **AMENDED 2026-08-06:** accepted — staying on Hobby, so retention stays ~1 hour. This is now the *only* genuine Hobby gap. Mitigated operationally: `docs/runbook-live-session.md` has the host open `vercel logs --follow` before the session and capture it immediately afterwards |
 | Ably presence join-storm is O(N²): 150 participants entering one presence channel ≈ 22.5k messages | Research finding | M | L | Still ~135k messages/year against a 6M/month free allowance. Avoid presence for the leaderboard; use broadcast for state and presence only if genuinely needed |
 | Ably free tier ceiling is 200 peak connections — 150 participants leaves ~25% headroom | Research finding | L | H | Fine for the drafted quiz. A room of 200+ requires a paid plan; check expected attendance before each event |
-| No monitoring: a platform or realtime failure is discovered by attendees | Pre-mortem | H | H | Out of scope here, but the PRD names the live event as the blast radius. At minimum, have the host load the attendee view on a second device before starting |
+| No monitoring: a platform or realtime failure is discovered by attendees | Pre-mortem | H | H | Out of scope here, but the PRD names the live event as the blast radius. At minimum, have the host load the attendee view on a second device before starting — **now a checklist item in `docs/runbook-live-session.md` (2026-08-06)** rather than an aspiration |
 | No CI gate between commit and production | Pre-mortem | H | M | `bun run test` and `bun run type-check` now exist locally; wiring them into CI is the infrastructure lesson's job |
-| Moving the repo into a GitHub org silently breaks the Hobby deploy pipeline | Unknown unknowns | L | M | Pro removes the restriction; if staying on Hobby, keep the repo under a personal account |
+| Moving the repo into a GitHub org silently breaks the Hobby deploy pipeline | Unknown unknowns | L | M | **LIVE CONSTRAINT as of 2026-08-06** — the project is staying on Hobby, so keep the repo under a personal account (`jedrker/ai-community-szn`). Restated in `docs/runbook-live-session.md` §Standing constraints |
 | Supabase Realtime chosen later out of familiarity, hitting the 100 msg/sec ceiling mid-session | Unknown unknowns | M | H | Recorded here explicitly. If switching to Supabase, budget for Pro and verify the fan-out rate limit against a 150-client broadcast first |
 
 ## Getting Started
@@ -233,9 +281,22 @@ The project is already deployed on Vercel, so these are the deltas — not a fir
 validated against the versions actually pinned in this repo (Astro 6.4.8, `@astrojs/vercel` 10.0.x),
 not against general platform tutorials.
 
-1. **Upgrade the Vercel team to Pro** and set the function region to `fra1`. This resolves the
-   licensing risk, the EU latency risk, and the log-retention risk in one step. Do this before any
-   LiveQuiz work, because it changes the deployment target's constraints.
+1. ~~**Upgrade the Vercel team to Pro** and set the function region to `fra1`.~~
+   **DONE DIFFERENTLY — F-01, 2026-08-06.** The plan stays **Hobby**; the region was set anyway, because
+   it turned out not to require Pro. Current state:
+
+   - `vercel.json` declares `regions: ["fra1"]`, and a Hobby preview deployment confirmed the function
+     runs in Frankfurt (`vercel inspect` → `λ _render … [fra1]`). Method and evidence:
+     `context/changes/deployment-target-readiness/region-probe.md`.
+   - **Production is still `iad1` until that key reaches `main`** — the key only affects builds made
+     after it exists. Do not record a pre-merge latency figure as the project's baseline.
+   - The **licensing risk is accepted**, not resolved (user decision: free local community initiative).
+   - The **log-retention risk is accepted**, not resolved (~1 hour on Hobby) and mitigated operationally
+     by `docs/runbook-live-session.md`.
+   - Tripwire for revisiting Pro: see the amendment under §Recommendation.
+
+   So of the three risks this step claimed to resolve "in one step", one was resolved for free, and two
+   are live accepted risks. Do not treat the Pro upgrade as a prerequisite for LiveQuiz work.
 
 2. **Keep the adapter on the v10 line.** `@astrojs/vercel@^10` is correct for Astro 6; v11 requires
    Astro 7. Do not run a blind `bun update @astrojs/vercel`. The in-range update to 10.0.8 is safe:
