@@ -538,25 +538,26 @@ The adapter bump is a patch-level move within `^10` and carries no expected perf
 
 #### Automated
 
-- [x] 3.1 `docs/runbook-live-session.md` exists
-- [x] 3.2 `vercel ls` lists more than one deployment
-- [x] 3.3 `vercel rollback status` exits without error
+- [x] 3.1 `docs/runbook-live-session.md` exists — 536fde4 *(file itself landed in 9c9bd47)*
+- [x] 3.2 `vercel ls` lists more than one deployment — 536fde4
+- [x] 3.3 `vercel rollback status` exits without error — 536fde4
 - [x] 3.4 `grep "deferred by user decision" infrastructure.md` returns a hit; both original
-      `prerequisite` occurrences (`:37`, `:218`) revisited
-- [x] 3.5 Repository checks still pass: `bun run type-check`, `bun run test`, `bun run build`
+      `prerequisite` occurrences (`:37`, `:218`) revisited — 536fde4
+- [x] 3.5 Repository checks still pass: `bun run type-check`, `bun run test`, `bun run build` — 536fde4
 
 #### Manual
 
 - [x] 3.6 Runbook covers before / during / after, and carries the unexercised-rollback statement and the
-      tripwire re-read line
+      tripwire re-read line — 536fde4 *(runbook itself landed in 9c9bd47)*
 - [x] 3.7 `infrastructure.md`'s amended wording reads as a deliberate deferral with rationale, not a
-      contradiction of surrounding research
-- [x] 3.8 `vercel logs --follow` produced live output on a request to the preview URL
+      contradiction of surrounding research — 536fde4
+- [x] 3.8 `vercel logs --follow` produced live output on a request to the preview URL — 536fde4
       *(adapted: `--follow` is deprecated/ignored in CLI 48.10.3, and the stream carries function-emitted
       output rather than an access log — ~100 confirmed invocations produced no line. Stream attachment
       verified; the behaviour is recorded in the runbook and `infrastructure.md` instead.)*
-- [x] 3.9 Runbook is followable by the host without `infrastructure.md` open alongside
+- [x] 3.9 Runbook is followable by the host without `infrastructure.md` open alongside — 536fde4
 - [x] 3.10 `infrastructure.md` and `roadmap.md` agree with each other and with reality; tripwire present
-      with a named owner
-- [x] 3.11 F-04's entry makes clear its latency measurement is taken from `iad1`
-      *(adapted: it is taken from `fra1` — the region key works on Hobby, so the premise inverted.)*
+      with a named owner — 536fde4 *(roadmap edits landed in 9c9bd47)*
+- [x] 3.11 F-04's entry makes clear its latency measurement is taken from `iad1` — 536fde4
+      *(adapted: it is taken from `fra1` — the region key works on Hobby, so the premise inverted.
+      Roadmap edit landed in 9c9bd47.)*
