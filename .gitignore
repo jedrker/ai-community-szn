@@ -144,6 +144,3 @@ vite.config.ts.timestamp-*
 # Astro build output
 .astro/
 .vercel/
-
-# Subscriber data
-data/subscribers.json

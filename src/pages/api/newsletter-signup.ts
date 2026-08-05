@@ -1,36 +1,33 @@
 import type { APIRoute } from "astro";
-import { addSubscriber } from "../../lib/subscribers";
+import { addSubscriber, isValidEmail, normalizeEmail } from "../../lib/newsletter";
 import { resend } from "../../lib/resend";
 
 export const POST: APIRoute = async ({ request }) => {
   const formData = await request.formData();
-  const email = formData.get("email")?.toString().trim();
+  const email = normalizeEmail(formData.get("email")?.toString() ?? "");
 
-  if (!email || !email.includes("@")) {
+  if (!isValidEmail(email)) {
     return new Response(
       JSON.stringify({ error: "Podaj prawidłowy adres email" }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  const isNew = await addSubscriber(email);
+  let result: Awaited<ReturnType<typeof addSubscriber>>;
+  try {
+    result = await addSubscriber(email);
+  } catch (err) {
+    console.error("Newsletter signup failed:", err);
+    return new Response(
+      JSON.stringify({
+        error: "Nie udało się zapisać. Spróbuj ponownie za chwilę.",
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
-  if (isNew && import.meta.env.RESEND_API_KEY) {
-    const audienceId = import.meta.env.RESEND_AUDIENCE_ID;
-
-    // Add contact to Resend Audience
-    if (audienceId) {
-      try {
-        await resend.contacts.create({
-          email,
-          audienceId,
-        });
-      } catch (err) {
-        console.error("Failed to add contact to Resend Audience:", err);
-      }
-    }
-
-    // Send welcome email
+  if (result === "subscribed") {
+    // Send welcome email. A failure here must not undo the signup.
     try {
       await resend.emails.send({
         from: "Brave AI Community <noreply@ai-community.szczecin.pl>",
@@ -71,9 +68,10 @@ export const POST: APIRoute = async ({ request }) => {
 
   return new Response(
     JSON.stringify({
-      message: isNew
-        ? "Zapisano! Sprawdź swoją skrzynkę."
-        : "Ten email jest już zapisany.",
+      message:
+        result === "subscribed"
+          ? "Zapisano! Sprawdź swoją skrzynkę."
+          : "Ten email jest już zapisany.",
     }),
     { status: 200, headers: { "Content-Type": "application/json" } }
   );
