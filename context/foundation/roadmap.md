@@ -3,7 +3,7 @@ project: "LiveQuiz"
 version: 3
 status: draft
 created: 2026-08-05
-updated: 2026-08-05
+updated: 2026-08-06
 prd_version: 1
 main_goal: quality
 top_blocker: decisions
@@ -46,7 +46,7 @@ an attendee is scoring on their own device.
 
 | ID    | Change ID                             | Outcome (user can …)                                                                  | Prerequisites | PRD refs                                                                  | Status   |
 | ----- | ------------------------------------- | ------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------- | -------- |
-| F-01  | `deployment-target-readiness`         | (foundation) the deployment target may legally and physically host a live session      | —             | Success Criteria guardrail (1s fan-out), Constraints (released cost constraint) | ready    |
+| F-01  | `deployment-target-readiness`         | (foundation) the deployment target may legally and physically host a live session      | —             | Success Criteria guardrail (1s fan-out), Constraints (released cost constraint) | done     |
 | F-02  | `session-state-and-realtime-spine`    | (foundation) one session's state is server-authoritative and reaches devices in under 1s | F-01        | Success Criteria guardrails (1s fan-out, 150 concurrent), Open Question 7  | proposed |
 | F-03  | `session-end-and-data-purge`          | (foundation) a session can be ended and its attendee data is gone afterwards           | F-02          | Success Criteria guardrail (retention), Access Control Changes            | proposed |
 | F-04  | `room-scale-rehearsal-harness`        | (foundation) the spine can be driven by ~150 simulated devices and measured            | F-02          | Success Criteria guardrails (1s fan-out, 150 concurrent)                  | proposed |
@@ -163,7 +163,7 @@ and do NOT re-scaffold them.
   done without being done: the function region, and pinning the adapter to its current major so a
   routine update cannot drag in a framework major alongside feature work. Verify both against the
   deployed project rather than the repository.
-- **Status:** ready
+- **Status:** done
 
 ### F-02: Session state and realtime fan-out spine
 
@@ -563,3 +563,11 @@ and do NOT re-scaffold them.
 
 (Empty on first generation. `/10x-archive` appends here — and flips that item's `Status` to `done` —
 when a change whose `Change ID` matches a roadmap item is archived.)
+
+- **F-01: (foundation) the deployment target is a known quantity before realtime work rides on it: the
+  adapter cannot silently pull an Astro major, functions run in the EU region closest to the room, and
+  the logs/rollback loop F-04 depends on has been exercised.** — Archived 2026-08-06 →
+  `context/archive/2026-08-05-deployment-target-readiness/`. Lesson: two `infrastructure.md` claims were
+  wrong and only a probe caught them — `fra1` needs no Pro plan, and preview URLs are SSO-protected, not
+  public. `vercel logs` streams function-emitted output, not an access log, so the one-hour-retention
+  mitigation is worthless unless F-02 onward instruments deliberately.
