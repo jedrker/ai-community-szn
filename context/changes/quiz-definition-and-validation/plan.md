@@ -511,29 +511,29 @@ after this change.
 
 #### Automated
 
-- [x] 1.1 Exactly one `zod` resolves: `test "$(find node_modules -type d -name zod | wc -l | tr -d ' ')" = "1"`
-- [x] 1.2 Unit tests pass: `bun run test`
-- [x] 1.3 Type checking passes with zero errors: `bun run type-check`
-- [x] 1.4 Build still succeeds: `bun run build`
+- [x] 1.1 Exactly one `zod` resolves: `test "$(find node_modules -type d -name zod | wc -l | tr -d ' ')" = "1"` — fb9c201
+- [x] 1.2 Unit tests pass: `bun run test` — fb9c201
+- [x] 1.3 Type checking passes with zero errors: `bun run type-check` — fb9c201
+- [x] 1.4 Build still succeeds: `bun run build` — fb9c201
 
 #### Manual
 
-- [x] 1.5 Every schema invariant has a corresponding rejecting test
-- [x] 1.6 Rejection messages name the offending question id and are actionable
+- [x] 1.5 Every schema invariant has a corresponding rejecting test — fb9c201
+- [x] 1.6 Rejection messages name the offending question id and are actionable — fb9c201
 
 ### Phase 2: The 14-question definition and its accessors
 
 #### Automated
 
-- [ ] 2.1 The real definition parses and all tests pass: `bun run test`
-- [ ] 2.2 Type checking passes with zero errors: `bun run type-check`
-- [ ] 2.3 Build succeeds: `bun run build`
+- [x] 2.1 The real definition parses and all tests pass: `bun run test`
+- [x] 2.2 Type checking passes with zero errors: `bun run type-check`
+- [x] 2.3 Build succeeds: `bun run build`
 
 #### Manual
 
-- [ ] 2.4 All 14 Polish questions read correctly against `idea-notes.md:41-56`
-- [ ] 2.5 Drafted distractors are plausible but unambiguously wrong
-- [ ] 2.6 Q2 reads as the gathering beat and does not look broken while unscored
+- [x] 2.4 All 14 Polish questions read correctly against `idea-notes.md:41-56`
+- [x] 2.5 Drafted distractors are plausible but unambiguously wrong
+- [x] 2.6 Q2 reads as the gathering beat and does not look broken while unscored
 
 ### Phase 3: The build gate and the record of why
 
