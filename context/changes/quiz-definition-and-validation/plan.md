@@ -549,6 +549,6 @@ after this change.
 #### Manual
 
 - [x] 3.3 A deliberately broken invariant fails `bun run build` with a question-identifying message — 9c9bd47
-- [ ] 3.4 The same break fails a Vercel preview deploy — SKIPPED for now by user decision (needs a broken commit pushed to a branch; verify before the first live session)
+- [x] 3.4 The same break fails a Vercel preview deploy — confirmed by the user; not observed in the implementing session
 - [x] 3.5 CLAUDE.md's new entries are accurate against the delivered code — 9c9bd47 (the §Deployment entry described the gate as an `astro:build:start` integration when it actually fires at config load; corrected under impl-review F1, so the claim holds as of the F1 fix rather than at first sign-off)
 - [x] 3.6 The host has a written "confirm the deploy went green" instruction (runbook, or recorded in F-01's plan) — 9c9bd47
