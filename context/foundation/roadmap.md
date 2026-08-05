@@ -50,7 +50,7 @@ an attendee is scoring on their own device.
 | F-02  | `session-state-and-realtime-spine`    | (foundation) one session's state is server-authoritative and reaches devices in under 1s | F-01        | Success Criteria guardrails (1s fan-out, 150 concurrent), Open Question 7  | proposed |
 | F-03  | `session-end-and-data-purge`          | (foundation) a session can be ended and its attendee data is gone afterwards           | F-02          | Success Criteria guardrail (retention), Access Control Changes            | proposed |
 | F-04  | `room-scale-rehearsal-harness`        | (foundation) the spine can be driven by ~150 simulated devices and measured            | F-02          | Success Criteria guardrails (1s fan-out, 150 concurrent)                  | proposed |
-| S-01  | `quiz-definition-and-validation`      | Organizer can author the whole quiz in a file and have it rejected if malformed        | —             | FR-001, FR-017                                                            | ready    |
+| S-01  | `quiz-definition-and-validation`      | Organizer can author the whole quiz in a file and have it rejected if malformed        | —             | FR-001, FR-017                                                            | done     |
 | S-02  | `join-and-follow-host`                | Attendee can join a started session by name and see the host's current question        | S-01, F-02    | US-01, US-02, FR-002, FR-003, FR-007, FR-008                              | proposed |
 | S-03  | `answer-choice-question-and-reveal`   | Attendee can answer a choice question and see if they were right and what they scored  | S-02          | US-01, US-02, FR-004, FR-010, FR-016, FR-019                              | proposed |
 | S-04  | `host-participation-and-distribution` | Host can show the room how many have answered, then the distribution at reveal         | S-03          | US-02, FR-005                                                             | proposed |
@@ -284,7 +284,7 @@ and do NOT re-scaffold them.
   14-question quiz actually uses. FR-001's accepted operational risk stands: only a developer can
   correct a question, including minutes before showtime. The project already validates content at its
   boundary with schemas and has a test runner, so this slice has somewhere to land.
-- **Status:** ready
+- **Status:** done
 
 ### S-02: Attendee joins a live session and follows the host
 
@@ -571,3 +571,12 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   wrong and only a probe caught them — `fra1` needs no Pro plan, and preview URLs are SSO-protected, not
   public. `vercel logs` streams function-emitted output, not an access log, so the one-hour-retention
   mitigation is worthless unless F-02 onward instruments deliberately.
+- **S-01: Organizer can define the whole quiz — questions, types, accepted answers, true values,
+  scoring flags — in a file authored alongside the project's source, and a malformed or incomplete
+  definition is rejected loudly rather than discovered on stage.** — Archived 2026-08-06 →
+  `context/archive/2026-08-05-quiz-definition-and-validation/`. Lesson: the impl-review caught a gate
+  whose documented mechanism was not its operating one — the `astro:build:start` hook was dead code
+  because the config's static import parses at module scope, and CLAUDE.md, the commit message and a
+  docstring all described the hook. It surfaced only by breaking an invariant and reading the real
+  failure output, not by re-reading the reasoning. S-02 onward: `src/quiz/index.ts` is the import site
+  (`quiz`, `getQuestionById`, `normalizePolish`, the types) — never `definition.ts`.
