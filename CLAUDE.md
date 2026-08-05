@@ -168,13 +168,13 @@ Commands for the pinning constraint).
 no CI, no staging environment, and no monitoring — essentially nothing runs between a commit and
 production. Node floor is 22.12.0 (`.nvmrc`, `engines.node`).
 
-The one exception is the **quiz definition gate**: `astro.config.ts` registers a
-`quiz-definition-gate` integration whose `astro:build:start` hook calls `assertQuizValid()`. A
-malformed quiz therefore fails `astro build`, and so fails the deploy — the previous good quiz stays
-live. It hooks the build rather than a `prebuild` script so it runs inside `astro build` itself,
-regardless of how the platform's build command is configured; do not move it. Because the config
-imports the accessor at module scope, `bun run type-check` and `bun run test` fail on a bad
-definition too.
+The one exception is the **quiz definition gate**: `astro.config.ts` calls `assertQuizValid()` at top
+level. Config load runs before anything else, so a malformed quiz fails `astro build` and therefore
+fails the deploy — the previous good quiz stays live. It is *not* an `astro:build:start` integration:
+Astro closes its Vite module runner before that hook fires, so a project file cannot be imported
+there. Config load is also wider — `bun run dev`, `bun run type-check` and `bun run test` all fail on
+a bad definition too. Do not move this into a `prebuild` script (the platform's build command is
+configurable) and do not delete the `assertQuizValid` import as unused — it *is* the gate.
 
 **A failed deploy is silent.** With no CI and no alerting, a blocked deploy is loud only in Vercel's
 dashboard — so a host who edits a question shortly before a session can believe a fix shipped when it

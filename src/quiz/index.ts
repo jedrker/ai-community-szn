@@ -49,8 +49,10 @@ function parseOrThrow(raw: unknown): Quiz {
 export const quiz: Quiz = parseOrThrow(quizDefinition);
 
 /**
- * Entry point for the build-time gate. Re-parses so the gate has an explicit
- * call site rather than relying on import side effects surviving bundling.
+ * Entry point for the build-time gate in `astro.config.ts`. Importing this
+ * module already parses (see `quiz` above), so an invalid definition throws at
+ * import — this exists to make the gate a visible, greppable call rather than an
+ * invisible side effect of an import that looks unused.
  */
 export function assertQuizValid(): void {
   parseOrThrow(quizDefinition);

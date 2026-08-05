@@ -312,6 +312,10 @@ request path.
 
 Re-export the schema's inferred types from here too, so consumers have one import site.
 
+*Amended under impl-review F3:* `normalizePolish` is also re-exported from here. Not in the original
+contract — recorded so S-05, which is the slice that actually needs it for FR-011 matching, does not
+read it as undocumented drift.
+
 #### 3. Definition test
 
 **File**: `src/quiz/definition.test.ts`
@@ -539,12 +543,12 @@ after this change.
 
 #### Automated
 
-- [x] 3.1 Build succeeds on the valid definition: `bun run build`
-- [x] 3.2 Tests and types still pass: `bun run test`, `bun run type-check`
+- [x] 3.1 Build succeeds on the valid definition: `bun run build` — 9c9bd47
+- [x] 3.2 Tests and types still pass: `bun run test`, `bun run type-check` — 9c9bd47
 
 #### Manual
 
-- [x] 3.3 A deliberately broken invariant fails `bun run build` with a question-identifying message
+- [x] 3.3 A deliberately broken invariant fails `bun run build` with a question-identifying message — 9c9bd47
 - [ ] 3.4 The same break fails a Vercel preview deploy — SKIPPED for now by user decision (needs a broken commit pushed to a branch; verify before the first live session)
-- [x] 3.5 CLAUDE.md's new entries are accurate against the delivered code
-- [x] 3.6 The host has a written "confirm the deploy went green" instruction (runbook, or recorded in F-01's plan)
+- [x] 3.5 CLAUDE.md's new entries are accurate against the delivered code — 9c9bd47 (the §Deployment entry described the gate as an `astro:build:start` integration when it actually fires at config load; corrected under impl-review F1, so the claim holds as of the F1 fix rather than at first sign-off)
+- [x] 3.6 The host has a written "confirm the deploy went green" instruction (runbook, or recorded in F-01's plan) — 9c9bd47

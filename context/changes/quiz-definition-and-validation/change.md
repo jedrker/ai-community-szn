@@ -2,7 +2,7 @@
 change_id: quiz-definition-and-validation
 title: "Quiz definition authored in the repository"
 roadmap_id: S-01
-status: implementing
+status: impl_reviewed
 created: 2026-08-05
 updated: 2026-08-06
 ---
