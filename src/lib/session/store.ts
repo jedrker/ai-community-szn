@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 
-import { SESSION_KEY } from "./keys";
+import { registeredKeys, SESSION_KEY } from "./keys";
 import { logSessionEvent } from "./log";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
 
@@ -93,7 +93,7 @@ export type CreateResult =
  * Returns { 1, storedVersion } when applied, { 0, currentVersion } when rejected,
  * and { -1, 0 } when there is no session to write over.
  */
-const COMPARE_AND_SET = `
+const VERSION_GUARD = `
 local raw = redis.call('GET', KEYS[1])
 if not raw then
   return { -1, 0 }
@@ -105,10 +105,63 @@ local expected = tonumber(ARGV[1])
 if tonumber(current.version) ~= expected then
   return { 0, tonumber(current.version) }
 end
+`;
 
+const COMPARE_AND_SET =
+  VERSION_GUARD +
+  `
 local next = cjson.decode(ARGV[2])
 redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
 return { 1, tonumber(next.version) }
+`;
+
+/**
+ * End: the same guard, plus every other registered key moved onto the short
+ * lifetime (roadmap F-03).
+ *
+ * The loop is not an oversight. `DEL` accepts a key list but **`EXPIRE` takes
+ * exactly one key**, so re-arming N keys means N `EXPIRE` calls — which is fine,
+ * because they happen inside one `EVAL` and therefore one round trip. The round
+ * trip is the expense, not the command count inside it. Doing this as N separate
+ * `EXPIRE` requests from TypeScript is what would be wrong: any one of them can
+ * fail on its own and leave a key holding attendee data on the four-hour
+ * lifetime, with a success response already on the wire.
+ *
+ * `EXISTS` before `EXPIRE` so a key that was never written does not make the
+ * count misleading; `EXPIRE` on a missing key is harmless but silent.
+ *
+ * KEYS[1] = session key, KEYS[2..n] = the other registered keys
+ * ARGV[1] = expected version, ARGV[2] = ended state JSON, ARGV[3] = ended ttl
+ */
+const COMPARE_AND_END =
+  VERSION_GUARD +
+  `
+local next = cjson.decode(ARGV[2])
+redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
+
+for i = 2, #KEYS do
+  if redis.call('EXISTS', KEYS[i]) == 1 then
+    redis.call('EXPIRE', KEYS[i], tonumber(ARGV[3]))
+  end
+end
+
+return { 1, tonumber(next.version) }
+`;
+
+/**
+ * Purge: remove every registered key, in one call (roadmap F-03).
+ *
+ * `DEL` does take a key list, so this is a single command over `unpack(KEYS)`
+ * rather than a loop. It returns how many keys actually existed, which is what
+ * lets the caller distinguish "purged a live session" from "there was nothing
+ * there" — the second is a normal outcome for residue cleanup, not an error.
+ *
+ * Deliberately unguarded by version: `purge` is the escape hatch, and the
+ * confirmation check that protects it lives at the route, where it can produce a
+ * proper rejection rather than a silent no-op.
+ */
+const PURGE_ALL = `
+return redis.call('DEL', unpack(KEYS))
 `;
 
 /**
@@ -329,4 +382,113 @@ export async function writeSession(
     questionId: next.currentQuestionId,
   });
   return { outcome: "applied", state: next };
+}
+
+/**
+ * Ends the session (roadmap F-03).
+ *
+ * Same contract as `writeSession` — same guard, same outcome union, same
+ * caller-states-the-version discipline — with one addition: every other
+ * registered key is moved onto `ENDED_TTL_SECONDS` in the same `EVAL`, so the
+ * whole namespace expires together rather than the document expiring while the
+ * data beside it sits on the four-hour lifetime.
+ *
+ * This is deliberately a *shortened* lifetime, not a deletion. A device that
+ * reloads in the minutes after the host closes the segment should still find the
+ * final standings. `purgeSession` is the immediate path for a host who wants the
+ * room's data gone now.
+ */
+export async function endSession(
+  expectedVersion: number,
+  next: SessionState
+): Promise<WriteResult> {
+  const redis = client();
+  if (!redis) return unconfigured();
+
+  const validated = parseSessionState(next);
+  if (!validated.ok) {
+    return { outcome: "failed", reason: validated.problems.join("; ") };
+  }
+
+  if (next.phase !== "ended") {
+    return { outcome: "failed", reason: `endSession requires phase "ended", got "${next.phase}"` };
+  }
+
+  if (next.version !== expectedVersion + 1) {
+    return {
+      outcome: "failed",
+      reason: `next.version must be expectedVersion + 1 (got ${next.version}, expected ${expectedVersion + 1})`,
+    };
+  }
+
+  // Session key first — the script re-arms KEYS[2..n], and treats KEYS[1] as the
+  // document it is writing.
+  const keys = [SESSION_KEY, ...registeredKeys().filter((key) => key !== SESSION_KEY)];
+
+  let result: [number, number] | null;
+  try {
+    result = await redis.eval<[string, string, string], [number, number]>(
+      COMPARE_AND_END,
+      keys,
+      [String(expectedVersion), JSON.stringify(next), String(ENDED_TTL_SECONDS)]
+    );
+  } catch (err) {
+    return { outcome: "failed", reason: describe(err) };
+  }
+
+  const status = Number(result?.[0]);
+
+  if (status === -1) {
+    return { outcome: "failed", reason: "no session exists to end" };
+  }
+
+  if (status === 0) {
+    const current = Number(result?.[1]);
+    logSessionEvent("session.action.stale", { version: current });
+    return { outcome: "stale", version: current };
+  }
+
+  logSessionEvent("session.ended", { version: next.version, phase: next.phase });
+  return { outcome: "applied", state: next };
+}
+
+export type PurgeResult =
+  | { outcome: "purged"; keysRemoved: number }
+  | { outcome: "unconfigured"; reason: string }
+  | { outcome: "failed"; reason: string };
+
+/**
+ * Removes every registered key (roadmap F-03).
+ *
+ * `keysRemoved === 0` is a normal outcome, not a failure: purging when nothing is
+ * there is exactly what residue cleanup looks like, and reporting it as an error
+ * would train a host to ignore the one verb whose errors matter.
+ *
+ * One `EVAL` because a partial purge is the failure mode that matters here —
+ * deleting three of four keys and returning success leaves attendee data behind
+ * with nothing on the wire to say so.
+ */
+export async function purgeSession(): Promise<PurgeResult> {
+  const redis = client();
+  if (!redis) return unconfigured();
+
+  const keys = registeredKeys();
+
+  // Guard against a registry emptied by a bad refactor: `DEL` with no keys is a
+  // Lua error, and `keys.test.ts` asserts the registry is non-empty for the same
+  // reason. Fail loudly rather than reporting a vacuous success.
+  if (keys.length === 0) {
+    return { outcome: "failed", reason: "the key registry is empty — nothing would be purged" };
+  }
+
+  let removed: unknown;
+  try {
+    removed = await redis.eval<[], number>(PURGE_ALL, keys, []);
+  } catch (err) {
+    return { outcome: "failed", reason: describe(err) };
+  }
+
+  const keysRemoved = Number(removed) || 0;
+  logSessionEvent("session.purged", { keysRemoved });
+  return { outcome: "purged", keysRemoved };
 }

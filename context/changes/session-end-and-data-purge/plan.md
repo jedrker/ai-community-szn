@@ -799,31 +799,31 @@ that moment; it is not the first answer.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass, including the new registry test: `bun run test`
-- [x] 2.2 Type checking passes with the index signature removed: `bun run type-check`
-- [x] 2.3 The registry test's fixture case proves the detector fires on an unregistered namespaced literal: `bun run test`
-- [x] 2.4 The `@ts-expect-error` case proves a `displayName` field on `logSessionEvent` is rejected: `bun run type-check`
+- [x] 2.1 Unit tests pass, including the new registry test: `bun run test` — 10c281e
+- [x] 2.2 Type checking passes with the index signature removed: `bun run type-check` — 10c281e
+- [x] 2.3 The registry test's fixture case proves the detector fires on an unregistered namespaced literal: `bun run test` — 10c281e
+- [x] 2.4 The `@ts-expect-error` case proves a `displayName` field on `logSessionEvent` is rejected: `bun run type-check` — 10c281e
 
 #### Manual
 
-- [x] 2.5 The registry docstring states its textual-gate limitation rather than implying completeness
-- [x] 2.6 `SESSION_KEY` still resolves for existing importers, so no call site outside `store.ts` changed
+- [x] 2.5 The registry docstring states its textual-gate limitation rather than implying completeness — 10c281e
+- [x] 2.6 `SESSION_KEY` still resolves for existing importers, so no call site outside `store.ts` changed — 10c281e
 
 ### Phase 3: The `ended` phase, and the end and purge verbs
 
 #### Automated
 
-- [ ] 3.1 Unit and route tests pass: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 `store.test.ts`'s single-`eval` assertion covers the two new scripts
-- [ ] 3.4 A build succeeds with the new phase in the schema: `bun run build`
+- [x] 3.1 Unit and route tests pass: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 `store.test.ts`'s single-`eval` assertion covers the two new scripts
+- [x] 3.4 A build succeeds with the new phase in the schema: `bun run build`
 
 #### Manual
 
-- [ ] 3.5 `end` from `question-open` is refused with a message naming the reason; after `reveal` it succeeds
-- [ ] 3.6 After `end`, the session key's remaining TTL is observably ~10 minutes, not ~4 hours
-- [ ] 3.7 After `purge`, `GET /api/quiz/state` reports no session
-- [ ] 3.8 A replayed `end` request is refused the second time rather than silently re-ending
+- [x] 3.5 `end` from `question-open` is refused with a message naming the reason; after `reveal` it succeeds
+- [x] 3.6 After `end`, the session key's remaining TTL is observably ~10 minutes, not ~4 hours
+- [x] 3.7 After `purge`, `GET /api/quiz/state` reports no session
+- [x] 3.8 A replayed `end` request is refused the second time rather than silently re-ending
 
 ### Phase 4: Prove the namespace is empty
 

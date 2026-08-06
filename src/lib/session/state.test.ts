@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { quiz } from "../../quiz/index";
 import {
+  endedSessionState,
   initialSessionState,
   nextQuestionId,
   parseSessionState,
@@ -111,5 +112,76 @@ describe("parseSessionState", () => {
     const result = parseSessionState("not a session at all");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.problems.length).toBeGreaterThan(0);
+  });
+});
+
+describe("endedSessionState", () => {
+  const revealed = {
+    version: 7,
+    phase: "question-revealed" as const,
+    currentQuestionId: quiz.questions[0]!.id,
+    startedAt: NOW,
+    updatedAt: NOW + 5_000,
+  };
+
+  it("bumps the version, so the terminal snapshot is newer than anything devices hold", () => {
+    // Not cosmetic. Clients drop any snapshot whose version is not strictly greater
+    // than the one they already have, so a terminal state at the same version would
+    // be discarded by every device and the closing screen would never appear.
+    expect(endedSessionState(revealed, NOW + 9_000).version).toBe(8);
+  });
+
+  it("clears the current question", () => {
+    expect(endedSessionState(revealed, NOW + 9_000).currentQuestionId).toBeNull();
+  });
+
+  it("preserves startedAt and stamps updatedAt", () => {
+    const ended = endedSessionState(revealed, NOW + 9_000);
+    expect(ended.startedAt).toBe(NOW);
+    expect(ended.updatedAt).toBe(NOW + 9_000);
+  });
+
+  it("produces a document that satisfies its own schema", () => {
+    expect(sessionStateSchema.safeParse(endedSessionState(revealed, NOW + 9_000)).success).toBe(
+      true
+    );
+  });
+
+  it("can end a session that never left the lobby", () => {
+    const lobby = initialSessionState(NOW);
+    const ended = endedSessionState(lobby, NOW + 100);
+
+    expect(ended.phase).toBe("ended");
+    expect(sessionStateSchema.safeParse(ended).success).toBe(true);
+  });
+});
+
+describe("the ended phase invariant", () => {
+  const ended = {
+    version: 8,
+    phase: "ended" as const,
+    currentQuestionId: null,
+    startedAt: NOW,
+    updatedAt: NOW + 9_000,
+  };
+
+  it("accepts an ended session with no open question", () => {
+    expect(parseSessionState(ended).ok).toBe(true);
+  });
+
+  it("rejects an ended session that still carries a question", () => {
+    // The rule is stated as two explicit phase sets. Written as "not lobby implies a
+    // question", `ended` would have fallen through and demanded one.
+    const result = parseSessionState({ ...ended, currentQuestionId: quiz.questions[0]!.id });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.problems.join(" ")).toContain("ended");
+    }
+  });
+
+  it("still requires a question for the phases that have one", () => {
+    expect(parseSessionState({ ...ended, phase: "question-open" }).ok).toBe(false);
+    expect(parseSessionState({ ...ended, phase: "question-revealed" }).ok).toBe(false);
   });
 });

@@ -21,9 +21,12 @@ export const POST: APIRoute = async ({ request }) => {
   if (!authorizeHost(secret).ok) return toResponse(unauthorized());
 
   const outcome = await applyHostAction((current, now) => {
-    if (current.phase === "lobby") {
-      // Signalled as a no-op with the unchanged state; the route below turns the
-      // lobby case into an explicit rejection so the host gets told why.
+    if (current.phase === "lobby" || current.phase === "ended") {
+      // Signalled as a no-op with the unchanged state; the route below turns both
+      // into an explicit rejection so the host gets told why. `ended` needs its own
+      // mention: it carries no `currentQuestionId`, so falling through would build a
+      // `question-revealed` state with a null question that the schema rejects — a
+      // 503 where the honest answer is "the session is over".
       return null;
     }
 
@@ -40,16 +43,20 @@ export const POST: APIRoute = async ({ request }) => {
 
   // Distinguish "nothing to reveal" from "already revealed": both are no-ops in
   // the store, but only the first is a mistake worth telling the host about.
-  if (
-    outcome.status === 200 &&
-    "applied" in outcome.body &&
-    outcome.body.applied === false &&
-    outcome.body.state.phase === "lobby"
-  ) {
-    return toResponse({
-      status: 409,
-      body: { error: "Żadne pytanie nie jest otwarte — nie ma czego pokazać." },
-    });
+  if (outcome.status === 200 && "applied" in outcome.body && outcome.body.applied === false) {
+    if (outcome.body.state.phase === "lobby") {
+      return toResponse({
+        status: 409,
+        body: { error: "Żadne pytanie nie jest otwarte — nie ma czego pokazać." },
+      });
+    }
+
+    if (outcome.body.state.phase === "ended") {
+      return toResponse({
+        status: 409,
+        body: { error: "Sesja została zakończona — nie ma czego pokazać." },
+      });
+    }
   }
 
   return toResponse(outcome);

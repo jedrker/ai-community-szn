@@ -1,6 +1,6 @@
 import { logSessionEvent } from "./log";
 import { publishSnapshot } from "./realtime";
-import { readSession, writeSession } from "./store";
+import { readSession, writeSession, type WriteResult } from "./store";
 import { type SessionState } from "./state";
 
 /**
@@ -79,6 +79,47 @@ export async function extractSecret(request: Request): Promise<string | null> {
   }
 }
 
+/**
+ * Reads the secret **and** the confirmation version in a single body read
+ * (roadmap F-03).
+ *
+ * `extractSecret` consumes `request.formData()` when no header is present, and a
+ * request body can only be read once — so a destructive route that called it and
+ * then tried to read the version would find an empty body. The three flow verbs
+ * keep using `extractSecret`; `end` and `purge` use this.
+ *
+ * `confirmVersion` is the caller's statement of which session it believes it is
+ * ending. It is the whole safety mechanism: `start`, `advance` and `reveal` are
+ * safe on stage precisely *because* a replayed request is a harmless no-op, and
+ * `end` has to be safe for the opposite reason — a replayed request must be
+ * refused. That inversion only works if the caller has to name a version it could
+ * only have learned by reading current state.
+ */
+export async function extractHostFields(
+  request: Request
+): Promise<{ secret: string | null; confirmVersion: number | null }> {
+  const header = request.headers.get(HOST_SECRET_HEADER);
+
+  let form: FormData | null = null;
+  try {
+    form = await request.formData();
+  } catch {
+    // No form body — a header-only caller. Not an error by itself; a missing
+    // confirmation is reported by the route as a 409, not swallowed here.
+    form = null;
+  }
+
+  const field = form?.get("secret");
+  const secret = header ?? (typeof field === "string" ? field : null);
+
+  const rawVersion = form?.get("version");
+  const parsed = typeof rawVersion === "string" ? Number(rawVersion) : NaN;
+  const confirmVersion =
+    Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+
+  return { secret, confirmVersion };
+}
+
 export function authorizeHost(secret: string | null): { ok: boolean } {
   if (secretMatches(secret)) return { ok: true };
 
@@ -102,7 +143,17 @@ export function unauthorized(): HostActionOutcome {
  */
 export async function applyHostAction(
   nextFrom: (current: SessionState, now: number) => SessionState | null,
-  now: number
+  now: number,
+  /**
+   * How the computed state is committed. Defaults to the ordinary
+   * compare-and-set; `end` passes `endSession`, which applies the same guard and
+   * additionally moves the whole namespace onto the short lifetime.
+   *
+   * Injected rather than branched on a flag so the error mapping below — five
+   * outcomes, each with its own Polish message and status — exists once for every
+   * verb that writes.
+   */
+  write: (expectedVersion: number, next: SessionState) => Promise<WriteResult> = writeSession
 ): Promise<HostActionOutcome> {
   const current = await readSession();
 
@@ -134,7 +185,7 @@ export async function applyHostAction(
     };
   }
 
-  const written = await writeSession(current.state.version, next);
+  const written = await write(current.state.version, next);
 
   if (written.outcome === "unconfigured") {
     return { status: 503, body: { error: MESSAGES.unconfigured } };

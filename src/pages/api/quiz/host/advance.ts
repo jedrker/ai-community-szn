@@ -22,6 +22,13 @@ export const POST: APIRoute = async ({ request }) => {
   if (!authorizeHost(secret).ok) return toResponse(unauthorized());
 
   const outcome = await applyHostAction((current, now) => {
+    // An ended session has `currentQuestionId: null`, exactly like the lobby — so
+    // without this guard `nextQuestionId(null)` would return question 1 and advance
+    // would REOPEN a quiz the host had closed, on a document already living on the
+    // short ended lifetime. The two questionless phases mean opposite things and
+    // must not share the lobby's transition.
+    if (current.phase === "ended") return null;
+
     const next = nextQuestionId(current.currentQuestionId);
     if (next === null) return null;
 

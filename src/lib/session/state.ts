@@ -24,9 +24,28 @@ import { getQuestionById, quiz } from "../../quiz/index";
  * question, and the drafted quiz's opening two questions are written for that
  * beat. A session that jumped straight to question 1 on start would remove it.
  */
-export const SESSION_PHASES = ["lobby", "question-open", "question-revealed"] as const;
+export const SESSION_PHASES = [
+  "lobby",
+  "question-open",
+  "question-revealed",
+  /**
+   * The segment is over (roadmap F-03).
+   *
+   * A real phase rather than the absence of a session, because a device must be able
+   * to tell "the quiz has finished" from "the quiz has not started" — otherwise the
+   * closing beat is indistinguishable from a broken screen, at the exact moment the
+   * segment is meant to land.
+   *
+   * A session in this phase is living on `ENDED_TTL_SECONDS`, not the four-hour
+   * lifetime, so this state is short-lived by construction.
+   */
+  "ended",
+] as const;
 
 export type SessionPhase = (typeof SESSION_PHASES)[number];
+
+/** The phases that have no open question. Everything else must have one. */
+const QUESTIONLESS_PHASES: readonly SessionPhase[] = ["lobby", "ended"];
 
 export const sessionStateSchema = z
   .object({
@@ -59,15 +78,21 @@ export const sessionStateSchema = z
       });
     }
 
-    if (state.phase === "lobby" && state.currentQuestionId !== null) {
+    // Stated as two explicit sets rather than "lobby vs everything else". The
+    // inverted form worked while `lobby` was the only questionless phase, and would
+    // have silently demanded an open question from `ended` — a fourth phase must not
+    // fall through a rule written for three.
+    const questionless = QUESTIONLESS_PHASES.includes(state.phase);
+
+    if (questionless && state.currentQuestionId !== null) {
       ctx.addIssue({
         code: "custom",
         path: ["currentQuestionId"],
-        message: 'W fazie "lobby" żadne pytanie nie może być otwarte.',
+        message: `W fazie "${state.phase}" żadne pytanie nie może być otwarte.`,
       });
     }
 
-    if (state.phase !== "lobby" && state.currentQuestionId === null) {
+    if (!questionless && state.currentQuestionId === null) {
       ctx.addIssue({
         code: "custom",
         path: ["currentQuestionId"],
@@ -104,6 +129,23 @@ export function nextQuestionId(currentQuestionId: string | null): string | null 
   if (index === -1) return null;
 
   return quiz.questions[index + 1]?.id ?? null;
+}
+
+/**
+ * The terminal document (roadmap F-03).
+ *
+ * Clears `currentQuestionId`, which is a consequence worth stating: the closing
+ * snapshot does not name the last question. That is deliberate — the ended screen is
+ * about the session, not about whatever happened to be on screen when it stopped.
+ */
+export function endedSessionState(current: SessionState, now: number): SessionState {
+  return {
+    version: current.version + 1,
+    phase: "ended",
+    currentQuestionId: null,
+    startedAt: current.startedAt,
+    updatedAt: now,
+  };
 }
 
 /** Parses a document read back from the store. Never throws. */
