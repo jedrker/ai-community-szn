@@ -705,18 +705,18 @@ warns about from the other direction, and it is why the TTL is short.
 
 #### Automated
 
-- [x] 1.1 Dependencies install cleanly: `bun install`
-- [x] 1.2 Exactly one copy of zod remains: `find node_modules -type d -name zod` prints one line
-- [x] 1.3 Types pass: `bun run type-check`
-- [x] 1.4 Existing suite still passes: `bun run test`
-- [x] 1.5 Build still passes, quiz gate included: `bun run build`
-- [ ] 1.6 Probe round-trips both vendors and confirms `EVAL` executes: `bun scripts/probe-spine-config.ts`
+- [x] 1.1 Dependencies install cleanly: `bun install` — 08cceae
+- [x] 1.2 Exactly one copy of zod remains: `find node_modules -type d -name zod` prints one line — 08cceae
+- [x] 1.3 Types pass: `bun run type-check` — 08cceae
+- [x] 1.4 Existing suite still passes: `bun run test` — 08cceae
+- [x] 1.5 Build still passes, quiz gate included: `bun run build` — 08cceae
+- [x] 1.6 Probe round-trips both vendors and confirms `EVAL` executes: `bun scripts/probe-spine-config.ts`
 
 #### Manual
 
-- [ ] 1.7 Upstash database exists in an EU region and is linked to the Vercel project
-- [ ] 1.8 Every new variable present in Production and Preview; `LIVEQUIZ_HARNESS` in Preview only
-- [ ] 1.9 `.env.example` variable names match what the probe found, not what docs predicted
+- [x] 1.7 Upstash database exists in an EU region and is linked to the Vercel project
+- [x] 1.8 Every new variable present in Production and Preview; `LIVEQUIZ_HARNESS` in Preview only
+- [x] 1.9 `.env.example` variable names match what the probe found, not what docs predicted
 
 ### Phase 2: The session state module
 

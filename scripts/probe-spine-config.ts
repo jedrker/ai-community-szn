@@ -56,14 +56,16 @@ function resolveUpstashCredentials(): { url: string; token: string } | null {
     (pair) => env(pair.url) && env(pair.token)
   );
 
-  for (const pair of UPSTASH_NAME_PAIRS) {
-    const has = Boolean(env(pair.url) && env(pair.token));
-    record(
-      has,
-      `env ${pair.url} / ${pair.token}`,
-      has ? "present" : "absent"
-    );
-  }
+  // Exactly one pair is the correct state — .env.example says "do not set both" — so the
+  // check is on the count, not on each pair. Recording a per-pair finding would make the
+  // unused name pair a FAIL and the probe could never exit 0 on a correct setup.
+  record(
+    present.length === 1,
+    "exactly one Upstash name pair is set",
+    present.length === 0
+      ? "neither pair is set"
+      : present.map((pair) => `${pair.url} / ${pair.token}`).join(" and ")
+  );
 
   if (present.length === 0) {
     console.log(
