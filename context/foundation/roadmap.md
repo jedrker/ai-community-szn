@@ -48,7 +48,7 @@ an attendee is scoring on their own device.
 | ----- | ------------------------------------- | ------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------- | -------- |
 | F-01  | `deployment-target-readiness`         | (foundation) the deployment target may legally and physically host a live session      | —             | Success Criteria guardrail (1s fan-out), Constraints (released cost constraint) | done     |
 | F-02  | `session-state-and-realtime-spine`    | (foundation) one session's state is server-authoritative and reaches devices in under 1s | F-01        | Success Criteria guardrails (1s fan-out, 150 concurrent), Open Question 7  | done     |
-| F-03  | `session-end-and-data-purge`          | (foundation) a session can be ended and its attendee data is gone afterwards           | F-02          | Success Criteria guardrail (retention), Access Control Changes            | proposed |
+| F-03  | `session-end-and-data-purge`          | (foundation) a session can be ended and its attendee data is gone afterwards           | F-02          | Success Criteria guardrail (retention), Access Control Changes            | done     |
 | F-04  | `room-scale-rehearsal-harness`        | (foundation) the spine can be driven by ~150 simulated devices and measured            | F-02          | Success Criteria guardrails (1s fan-out, 150 concurrent)                  | proposed |
 | S-01  | `quiz-definition-and-validation`      | Organizer can author the whole quiz in a file and have it rejected if malformed        | —             | FR-001, FR-017                                                            | done     |
 | S-02  | `join-and-follow-host`                | Attendee can join a started session by name and see the host's current question        | S-01, F-02    | US-01, US-02, FR-002, FR-003, FR-007, FR-008                              | proposed |
@@ -216,12 +216,19 @@ and do NOT re-scaffold them.
     guardrail holds by default even if the host never ends the session — which is a realistic stage
     scenario. This foundation therefore shrinks to setting the right lifetimes plus an explicit
     end-now path for a host who wants the room's data gone immediately.
+    **Delivered as both (2026-08-06):** `end` shortens every registered key to ~10 minutes so a
+    reload can still show the final standings, and `purge` deletes immediately for a host who does
+    not want that window.
+  - **The "shrinks to" framing was wrong, and the probe is what showed it.** The reasoning above
+    considered only Redis. Ably receives the entire session state on every host action and retains it
+    for ~2 minutes regardless of the persistence setting, and the log stream is covered by no TTL at
+    all — three surfaces, not one.
 - **Risk:** Cheap while the store is young and expensive once four question mechanics write to it, so
   it is sequenced with the spine rather than after the features. Its own failure mode is a purge firing
   on a session the host did not mean to end, wiping a live leaderboard mid-segment. Note that a
   code rollback does not revert anything already held in the realtime provider — purge must not be
   something rollback is expected to undo.
-- **Status:** proposed
+- **Status:** done
 
 ### F-04: Room-scale rehearsal harness
 
@@ -237,6 +244,11 @@ and do NOT re-scaffold them.
 - **Prerequisites:** F-02
 - **Parallel with:** F-03, S-02
 - **Blockers:** —
+- **Teardown (added 2026-08-06, F-03):** repeated rehearsal runs now have a sanctioned reset —
+  `POST /api/quiz/host/purge` removes every registered key, so runs do not accumulate state.
+  `scripts/check-purge-residue.ts` confirms the namespace is empty and **refuses to run while any
+  session document exists**, which doubles as a pre-rehearsal check. Note the purge route requires
+  the session's current version as confirmation, so a harness driving it must read state first.
 - **Unknowns:**
   - Is a rehearsal against production acceptable, or must it run against a preview deployment? ~~Preview
     URLs are publicly reachable~~ and fork builds get no environment variables, both of which constrain
@@ -453,7 +465,7 @@ and do NOT re-scaffold them.
 | F-01       | `deployment-target-readiness`         | Make the deployment target session-ready: plan, EU region, adapter | yes                   | Run `/10x-plan deployment-target-readiness`. Paid step is human-only |
 | S-01       | `quiz-definition-and-validation`      | Author the quiz as a validated in-repo definition                  | yes                   | Run `/10x-plan quiz-definition-and-validation`                |
 | F-02       | `session-state-and-realtime-spine`    | Server-authoritative session state with sub-second fan-out         | no                    | Needs F-01 only — no blocking unknown left. Name claim must be atomic |
-| F-03       | `session-end-and-data-purge`          | End a session and purge attendee names and answers                 | no                    | Needs F-02                                                    |
+| F-03       | `session-end-and-data-purge`          | End a session and purge attendee names and answers                 | done                  | **Delivered 2026-08-06.** S-02/S-03/S-07 must read `context/changes/session-end-and-data-purge/retention-contract.md` before adding any key or snapshot field |
 | F-04       | `room-scale-rehearsal-harness`        | Drive ~150 simulated devices through a session and measure         | no                    | Needs F-02                                                    |
 | S-02       | `join-and-follow-host`                | Join a session by display name and follow the host's question      | no                    | Needs S-01 + F-02. Settles the client-interactivity approach   |
 | S-03       | `answer-choice-question-and-reveal`   | Answer a choice question and see result and points at reveal       | no                    | North star. Needs S-02                                        |

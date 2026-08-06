@@ -8,7 +8,8 @@ you have to be watching.
 Read this before the session, not during it.
 
 > Status note (updated 2026-08-06): the **session spine** exists as of roadmap F-02 — server-held state,
-> sub-second fan-out, and the host verbs `start` / `advance` / `reveal`. The **live loop does not**:
+> sub-second fan-out, and the host verbs `start` / `advance` / `reveal` — plus, as of F-03, `end` and
+> `purge`, so a session can now be closed and its data removed on demand. The **live loop does not**:
 > nobody can join yet, nothing is answered, nothing is scored (S-02 onward). So "the session" still means
 > the existing site for now — event archive, speaker directory, newsletter endpoint — plus a spine you can
 > drive but not yet play. The log-tailing and second-device steps apply either way.
@@ -124,6 +125,8 @@ raise it before the event rather than after.
   | `session.publish.failed` | state is committed but did **not** reach devices | repeat the action; it re-broadcasts and is safe to retry |
   | `session.unconfigured` | an environment variable is missing | the session cannot run; check `vercel env ls` |
   | `session.read.invalid` | stored state does not match the quiz definition | a deploy changed the quiz mid-session — roll back |
+  | `session.ended` | the segment is closed; every key is now on the ~10-minute lifetime | nothing, if you meant it. **If you did not, act within ten minutes** — after that the session is gone and cannot be resumed |
+  | `session.purged` | every key was deleted | nothing, if you meant it. This one is not recoverable at all — there is no undo and `vercel rollback` does not reach it |
 
   `version` should only ever climb, and it climbs by exactly one per applied action. Two `applied` lines
   at the same version, or a version that goes backwards, means something is wrong with the store and is
@@ -140,9 +143,38 @@ raise it before the event rather than after.
 
 ## After the session
 
+**End the session.** This is the closing beat, and it is deliberate — there is no automatic end.
+Ending writes a terminal state that every connected device renders, and moves the room's data onto a
+**~10-minute lifetime** instead of the four-hour one. That window exists so an attendee who reloads
+right after the finish still sees the final standings.
+
+Two things about it are worth knowing before you press it:
+
+- **`end` is refused while a question is open.** Reveal first. That guard exists so the one
+  irreversible verb cannot fire mid-question.
+- **It asks for the session's current version as confirmation.** Every other host verb is safe to
+  double-tap because a repeat is a harmless no-op; `end` is safe for the opposite reason — a repeated
+  or stale request is *refused*. If you get a message about the confirmation not matching, refresh
+  the view rather than retrying blind.
+
+**Reach for `purge` when ten minutes is too long, or when a session has to be abandoned.** It removes
+everything immediately. Unlike `end` it has **no phase guard** — that is deliberate, because
+abandoning a session mid-question (a room being evacuated, a segment going wrong) is exactly the case
+`end` refuses. There is no undo, and `vercel rollback` does not reach it.
+
+**If you do nothing at all, the data still goes.** An abandoned session expires on its own within
+four hours. The guardrail holds whether or not anyone remembers to press anything — which is the
+realistic stage outcome and why it was built that way.
+
 **Capture the log stream immediately.** The one-hour retention window starts when each line is emitted,
 not when the session ends. Copy anything relevant out of the terminal before closing it — once it is
 gone, it is gone, and `vercel logs` will not bring it back.
+
+> **The log stream is not covered by any of this.** Purging the store does not touch what was already
+> written to `vercel logs`, and neither does a rollback. That is why session log lines carry versions
+> and phases but never attendee names — the code is prevented from writing them at all
+> (`LogFields` is a closed type, so a display name in a log call is a compile error). If you are
+> copying log output somewhere for a post-mortem, it is safe on that count by construction.
 
 ## If something breaks
 

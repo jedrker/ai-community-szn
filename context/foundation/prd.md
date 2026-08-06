@@ -115,6 +115,28 @@ during an event.
 - The interface is in Polish, consistent with the existing site and the drafted quiz content.
 - No attendee's display name or submitted answer remains in operator-accessible storage after the
   session that collected it has ended.
+  > **Delivered with two recorded deviations (F-03, 2026-08-06).** Both are stated here rather than
+  > by rewording the guardrail, because the value of the entry is that the gap stays visible.
+  >
+  > *Deviation 1 — a deliberate ten-minute window.* Ending a session shortens every key's lifetime
+  > to ~10 minutes rather than deleting immediately, so a device that reloads right after the
+  > closing beat still finds the final standings. On a strict reading of the sentence above that is
+  > a deviation, not a satisfaction. Counter-argument considered: "the guardrail says *after it has
+  > ended*, and ten minutes is after." Resolution: kept, because the alternative — a leaderboard
+  > that vanishes the instant the host clicks — damages the moment the segment is built toward,
+  > and the window is bounded, self-expiring and escapable. A host who wants the room's data gone
+  > immediately has an explicit purge that deletes on the spot. Accepted cost: for those minutes
+  > the guardrail is satisfied by an expiry rather than by a deletion.
+  >
+  > *Deviation 2 — an involuntary ~2-minute floor at the realtime provider.* Session state is
+  > published to Ably on every host action, and Ably retains messages for roughly two minutes for
+  > connection recovery regardless of the persistence setting (measured, not assumed —
+  > `context/changes/session-end-and-data-purge/ably-retention-probe.md`). Message persistence *is*
+  > disabled for the namespace; this floor cannot be reduced further by configuration. From S-02,
+  > when snapshots begin carrying display names, that window applies to them. Unlike deviation 1
+  > this was not chosen, and the only way to remove it is to keep names out of published snapshots
+  > entirely — a decision handed to S-02 in
+  > `context/changes/session-end-and-data-purge/retention-contract.md`.
 - Every capability the existing site provides today continues to work unchanged: event browsing,
   speaker profiles, both signup forms, and the practice of publishing content by committing Markdown.
 

@@ -110,6 +110,15 @@ zero. If it does, that is not a footnote — it becomes a constraint on what S-0
 and Phase 1's criteria require it to land in the retention contract rather than only in a risk
 register nobody reads while writing a join flow.
 
+**Reconciled 2026-08-06 (criterion 1.8): the floor is ~120 seconds and it is non-zero.** Message
+persistence is off for the `livequiz` namespace — measured, gone by 135s and still present at 60s —
+but Ably's connection-recovery buffer is retained regardless of that setting and no configuration
+removes it. So the conditional phrasing above was the right call: the unconditional version ("nothing
+identifying was ever retained by Ably") would have been false. The escalation the criterion
+anticipated has happened: the constraint is now rule 3 of `retention-contract.md`, the open decision
+it forces is handed explicitly to S-02, and both deviations are recorded against the guardrail in
+`prd.md`.
+
 **Verified by:** the residue check in Phase 4, run against the real Upstash database, showing an
 empty `livequiz:` namespace after a session that seeded it; the Ably probe artifact from Phase 1
 showing the measured retention window; and `bun run test` failing on a deliberately unregistered key.
@@ -790,10 +799,10 @@ that moment; it is not the first answer.
 #### Manual
 
 - [ ] 1.4 The channel rule for `livequiz:*` is confirmed in the Ably dashboard with persistence disabled
-- [ ] 1.5 Two probe runs at different waits are recorded with both figures, narrowing the window to a bounded range
-- [ ] 1.6 Any irreducible residual window is recorded in `infrastructure.md`'s risk register with an owner
-- [ ] 1.7 A non-zero floor is carried into Phase 5's retention contract as a constraint on what S-02 may publish
-- [ ] 1.8 The Desired End State's Ably clause is reconciled against the measured figure
+- [x] 1.5 Two probe runs at different waits are recorded with both figures, narrowing the window to a bounded range
+- [x] 1.6 Any irreducible residual window is recorded in `infrastructure.md`'s risk register with an owner
+- [x] 1.7 A non-zero floor is carried into Phase 5's retention contract as a constraint on what S-02 may publish
+- [x] 1.8 The Desired End State's Ably clause is reconciled against the measured figure
 
 ### Phase 2: Key registry, second lifetime, and the log constraint
 
@@ -829,28 +838,28 @@ that moment; it is not the first answer.
 
 #### Automated
 
-- [x] 4.1 The residue check passes against the real store: `bun scripts/check-purge-residue.ts`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 Full suite passes: `bun run test`
+- [x] 4.1 The residue check passes against the real store: `bun scripts/check-purge-residue.ts` — 6224f18
+- [x] 4.2 Type checking passes: `bun run type-check` — 6224f18
+- [x] 4.3 Full suite passes: `bun run test` — 6224f18
 
 #### Manual
 
-- [x] 4.4 A second device reaches the `ended` phase after `end` on a preview deployment
-- [x] 4.5 After `purge`, the second device distinguishes a purged session from a disconnection
-- [x] 4.6 `purge-verification.md` records the real-store run, including the surviving decoy and why
-- [x] 4.7 `/quiz/spine-check` still 404s on production
+- [x] 4.4 A second device reaches the `ended` phase after `end` on a preview deployment — 6224f18
+- [x] 4.5 After `purge`, the second device distinguishes a purged session from a disconnection — 6224f18
+- [x] 4.6 `purge-verification.md` records the real-store run, including the surviving decoy and why — 6224f18
+- [x] 4.7 `/quiz/spine-check` still 404s on production — 6224f18
 
 ### Phase 5: The retention contract and the operational documents
 
 #### Automated
 
-- [ ] 5.1 Full suite passes: `bun run test`
-- [ ] 5.2 Type checking passes: `bun run type-check`
-- [ ] 5.3 Build succeeds: `bun run build`
+- [x] 5.1 Full suite passes: `bun run test`
+- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.3 Build succeeds: `bun run build`
 
 #### Manual
 
-- [ ] 5.4 `retention-contract.md` fits on a page and points at the plan rather than duplicating it
-- [ ] 5.5 The runbook's status note no longer describes a spine without an ending
-- [ ] 5.6 `prd.md` carries the ten-minute window as a visible, reasoned deviation
-- [ ] 5.7 A reader of `CLAUDE.md` alone would not invent an unregistered key
+- [x] 5.4 `retention-contract.md` fits on a page and points at the plan rather than duplicating it
+- [x] 5.5 The runbook's status note no longer describes a spine without an ending
+- [x] 5.6 `prd.md` carries the ten-minute window as a visible, reasoned deviation
+- [x] 5.7 A reader of `CLAUDE.md` alone would not invent an unregistered key

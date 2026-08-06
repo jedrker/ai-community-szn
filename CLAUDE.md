@@ -154,6 +154,30 @@ Named exports, no default exports. Secrets come from `import.meta.env` and are d
 **There is no database and no writable filesystem.** Never persist anything that must outlive a
 request through `node:fs` — it works locally and fails in production.
 
+## LiveQuiz session data — two rules that break the build
+
+The session lives in Upstash Redis under the `livequiz:` namespace, and the PRD carries a retention
+guardrail: nothing about who played survives the session. Two mechanisms enforce it, and both are
+easy to defeat by accident.
+
+**Every `livequiz:`-prefixed name is declared in `src/lib/session/keys.ts`.** Nowhere else.
+`end` re-arms the registered set to a short lifetime and `purge` deletes it, so a key created
+outside the registry is reached by neither and sits holding attendee data with nothing to say so.
+`keys.test.ts` fails the suite on a namespaced string literal anywhere but that module. It catches
+literals, not runtime-assembled names — `scripts/check-purge-residue.ts` covers the rest, against
+the real store.
+
+**Never pass a display name or an answer to `logSessionEvent`.** `LogFields` is a closed type, so
+`{ displayName }` is a compile error — and that closure *is* the enforcement, not a comment
+alongside one. Do not restore the index signature or add a catch-all field; add the specific field
+you need. Logs are retained ~1 hour and are covered by no TTL, no purge and no rollback, so anything
+written there outlives the session document by design.
+
+Before adding any key or any field to a published snapshot, read
+`context/changes/session-end-and-data-purge/retention-contract.md`. It also records the one
+constraint that is not enforceable in code: Ably retains published snapshots for ~2 minutes and that
+floor cannot be configured away.
+
 ## API route conventions
 
 Handlers live one per file in `src/pages/api/`, exporting a named method (`export const POST:
