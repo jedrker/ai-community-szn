@@ -469,10 +469,11 @@ including `version`; assert missing configuration is a typed failure rather than
 - All tests pass: `bun run test`
 - Types pass: `bun run type-check`
 - Build passes: `bun run build`
-- No route under the new API directory exports `prerender`: `grep -r "prerender" src/pages/api/quiz/`
-  finds nothing
-- `ABLY_API_KEY` is not referenced outside `src/lib/session/realtime.ts`:
-  `grep -rn "ABLY_API_KEY" src/`
+- No route under the new API directory *exports* `prerender` (comments may name the convention):
+  `grep -rnE "^[[:space:]]*export[[:space:]]+const[[:space:]]+prerender" src/pages/api/quiz/` finds nothing
+- `ABLY_API_KEY` is *read* only in `src/lib/session/realtime.ts` (comments and
+  `vi.stubEnv` in tests may name it):
+  `grep -rnE "(import\.meta|process)\.env\.ABLY_API_KEY" src/` returns exactly one line
 
 #### Manual Verification:
 
@@ -548,6 +549,13 @@ snapshot rather than being compared across unsynchronised clocks.
 
 The host pane sends the secret with each action — acceptable only because the harness never runs in
 production.
+
+**Astro's origin check applies to these POSTs.** Discovered in Phase 3: a POST that reads
+`request.formData()` is rejected with `403 Cross-site POST form submissions are forbidden` before the
+handler runs unless the `Origin` header matches. The harness's same-origin `fetch` satisfies this
+automatically, so it needs no special handling — but it is effectively a second layer of host
+protection, and anyone testing these routes with `curl` must pass `-H "Origin: <base-url>"` or they
+will read a 403 as a broken endpoint.
 
 #### 3. Latency record
 
@@ -725,36 +733,36 @@ warns about from the other direction, and it is why the TTL is short.
 
 #### Automated
 
-- [x] 2.1 New and existing tests pass: `bun run test`
-- [x] 2.2 Types pass: `bun run type-check`
-- [x] 2.3 Build passes: `bun run build`
-- [x] 2.4 No `astro:` import under the new directory (import-scoped grep + portability.test.ts)
+- [x] 2.1 New and existing tests pass: `bun run test` — dd32352
+- [x] 2.2 Types pass: `bun run type-check` — dd32352
+- [x] 2.3 Build passes: `bun run build` — dd32352
+- [x] 2.4 No `astro:` import under the new directory (import-scoped grep + portability.test.ts) — dd32352
 
 #### Manual
 
-- [x] 2.5 Two concurrent writes at the same version produce one `applied` and one `stale`
-- [x] 2.6 The key's TTL is observably re-armed after a write
+- [x] 2.5 Two concurrent writes at the same version produce one `applied` and one `stale` — dd32352
+- [x] 2.6 The key's TTL is observably re-armed after a write — dd32352
 - [ ] 2.7 A session event line appears in `vercel logs` in the expected structured form (format verified locally in p2; deployed half deferred to Phase 3 — no route calls the store until then)
 
 ### Phase 3: The Ably spine and host actions
 
 #### Automated
 
-- [ ] 3.1 All tests pass: `bun run test`
-- [ ] 3.2 Types pass: `bun run type-check`
-- [ ] 3.3 Build passes: `bun run build`
-- [ ] 3.4 No route under `src/pages/api/quiz/` exports `prerender`
-- [ ] 3.5 `ABLY_API_KEY` is referenced only in `src/lib/session/realtime.ts`
+- [x] 3.1 All tests pass: `bun run test`
+- [x] 3.2 Types pass: `bun run type-check`
+- [x] 3.3 Build passes: `bun run build`
+- [x] 3.4 No route under `src/pages/api/quiz/` exports `prerender` (export-scoped grep)
+- [x] 3.5 `ABLY_API_KEY` is read only in `src/lib/session/realtime.ts` (env-read-scoped grep: 1 line)
 
 #### Manual
 
-- [ ] 3.6 `GET /api/quiz/token` returns a token request containing no API key
-- [ ] 3.7 `GET /api/quiz/state` returns the current snapshot mid-session, and null-state before one exists
-- [ ] 3.8 A host action without the secret is rejected with `401`
-- [ ] 3.9 A host action with the secret mutates Upstash and is observable on the Ably channel
-- [ ] 3.10 `start` leaves the session in `lobby`; the first `advance` opens question 1
-- [ ] 3.11 A double-fired `advance` moves the room one question and reports "already applied"
-- [ ] 3.12 With Upstash credentials broken, a host action returns a readable Polish error and logs the cause
+- [x] 3.6 `GET /api/quiz/token` returns a token request containing no API key
+- [x] 3.7 `GET /api/quiz/state` returns the current snapshot mid-session, and null-state before one exists
+- [x] 3.8 A host action without the secret is rejected with `401`
+- [ ] 3.9 A host action with the secret mutates Upstash and is observable on the Ably channel (Upstash half verified in p3 via the state endpoint; Ably half deferred to Phase 4, where a real browser subscribes)
+- [x] 3.10 `start` leaves the session in `lobby`; the first `advance` opens question 1
+- [x] 3.11 A double-fired `advance` moves the room one question and reports "already applied"
+- [ ] 3.12 With Upstash credentials broken, a host action returns a readable Polish error and logs the cause (deferred to Phase 4)
 
 ### Phase 4: Dev-only harness and the fan-out proof
 
