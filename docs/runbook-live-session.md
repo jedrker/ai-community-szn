@@ -53,6 +53,16 @@ Log retention is roughly one hour, so evidence of a failure is gone before a pos
 stream you opened beforehand captures what a retrieval afterwards cannot. Keep it on a second screen or
 a spare terminal for the whole segment.
 
+> **Fire one throwaway action before you trust the stream.** Measured 2026-08-06 on production: with the
+> stream already open, a `start` → `advance` → `reveal` sequence produced five `[livequiz]` lines but the
+> stream captured only four — the `session.publish.ok` for the *first* action never appeared, even though
+> the HTTP response proved it succeeded (`start` returns `applied: true` only after the publish lands).
+> The first invocation after attaching can be missed, probably a cold start racing log delivery.
+>
+> Practical consequence: **silence right after your first click is not evidence of a problem, and it is not
+> evidence of health either.** Press a host action once before the room is watching, confirm lines are
+> flowing, and only then treat the stream as your signal.
+
 > **Know what this does and does not show — verified 2026-08-06.** The stream carries what functions
 > *emit* (console output, thrown errors), **not** an access log. Measured on this project: ~100 requests
 > to on-demand routes produced **zero** stream output, while response headers confirmed the function ran

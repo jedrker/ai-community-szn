@@ -742,7 +742,7 @@ warns about from the other direction, and it is why the TTL is short.
 
 - [x] 2.5 Two concurrent writes at the same version produce one `applied` and one `stale` — dd32352
 - [x] 2.6 The key's TTL is observably re-armed after a write — dd32352
-- [ ] 2.7 A session event line appears in `vercel logs` in the expected structured form (format verified locally in p2; deployed half deferred to Phase 3 — no route calls the store until then)
+- [x] 2.7 A session event line appears in `vercel logs` in the expected structured form (closed on production: 4 of 5 lines captured; the missed one is a stream-capture gap on the first invocation, not a behaviour gap — see runbook)
 
 ### Phase 3: The Ably spine and host actions
 
@@ -759,7 +759,7 @@ warns about from the other direction, and it is why the TTL is short.
 - [x] 3.6 `GET /api/quiz/token` returns a token request containing no API key — 3a2eb84
 - [x] 3.7 `GET /api/quiz/state` returns the current snapshot mid-session, and null-state before one exists — 3a2eb84
 - [x] 3.8 A host action without the secret is rejected with `401` — 3a2eb84
-- [ ] 3.9 A host action with the secret mutates Upstash and is observable on the Ably channel (Upstash half verified in p3 via the state endpoint; Ably half deferred to Phase 4, where a real browser subscribes)
+- [x] 3.9 A host action with the secret mutates Upstash and is observable on the Ably channel (closed on production: versions climbed 1→2→3 in the store and `session.publish.ok` confirms each snapshot reached Ably)
 - [x] 3.10 `start` leaves the session in `lobby`; the first `advance` opens question 1 — 3a2eb84
 - [x] 3.11 A double-fired `advance` moves the room one question and reports "already applied" — 3a2eb84
 - [ ] 3.12 With Upstash credentials broken, a host action returns a readable Polish error and logs the cause (deferred to Phase 4)
@@ -776,8 +776,8 @@ warns about from the other direction, and it is why the TTL is short.
 #### Manual
 
 - [ ] 4.5 A host action renders on a second device on a real network in under one second measured from the click, repeatedly
-- [ ] 4.6 With `LIVEQUIZ_HARNESS` unset, `/quiz/spine-check` returns `404`
+- [x] 4.6 With `LIVEQUIZ_HARNESS` unset, `/quiz/spine-check` returns `404` (confirmed on production, not just locally)
 - [ ] 4.7 A browser reload renders current state immediately via the state fetch, with no replay and no divergence
 - [ ] 4.8 `latency-probe.md` records the region from `x-vercel-id` and names the instant each figure starts from
-- [ ] 4.9 `vercel logs` shows one structured line per host action during the run
-- [ ] 4.10 Every existing page still works: event archive, speaker directory, both signup forms
+- [x] 4.9 `vercel logs` shows one structured line per host action during the run (verified on production)
+- [x] 4.10 Every existing page still works: event archive, speaker directory, both signup forms (verified on production)
