@@ -768,10 +768,10 @@ warns about from the other direction, and it is why the TTL is short.
 
 #### Automated
 
-- [x] 4.1 All tests pass: `bun run test`
-- [x] 4.2 Types pass: `bun run type-check`
-- [x] 4.3 Build passes: `bun run build`
-- [x] 4.4 The harness page is gated: `grep -n "isHarnessEnabled" src/pages/quiz/spine-check.astro`
+- [x] 4.1 All tests pass: `bun run test` — 2320862
+- [x] 4.2 Types pass: `bun run type-check` — 2320862
+- [x] 4.3 Build passes: `bun run build` — 2320862
+- [x] 4.4 The harness page is gated: `grep -n "isHarnessEnabled" src/pages/quiz/spine-check.astro` — 2320862
 
 #### Manual
 
