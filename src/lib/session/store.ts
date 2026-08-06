@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 
+import { SESSION_KEY } from "./keys";
 import { logSessionEvent } from "./log";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
 
@@ -14,8 +15,12 @@ import { initialSessionState, parseSessionState, type SessionState } from "./sta
  * come from.
  */
 
-/** The only key. F-03's explicit purge is `DEL` on this. */
-export const SESSION_KEY = "livequiz:session";
+/**
+ * Re-exported so every importer since F-02 keeps working unchanged. The name is
+ * now declared in `keys.ts` alongside every other namespaced name — see that
+ * module for why the registry exists and what `keys.test.ts` enforces about it.
+ */
+export { SESSION_KEY };
 
 /**
  * Four hours, re-armed on every accepted write.
@@ -27,6 +32,22 @@ export const SESSION_KEY = "livequiz:session";
  * guardrail hold by default rather than depending on F-03 shipping.
  */
 export const SESSION_TTL_SECONDS = 4 * 60 * 60;
+
+/**
+ * Ten minutes, armed by `end` in place of the four-hour lifetime.
+ *
+ * The window exists for one reason: a device that reloads just after the host
+ * closes the segment should still find the final standings rather than an empty
+ * screen. Ten minutes covers a reload, a photo of the leaderboard, and the walk
+ * back to a seat.
+ *
+ * It is also, deliberately, data retained after a session has ended — which on a
+ * strict reading of the PRD's retention guardrail is a deviation rather than a
+ * satisfaction. That is a considered tradeoff, recorded as such in `prd.md`, and
+ * it is why `purge` exists as an immediate escape hatch for a host who wants the
+ * room's data gone now rather than in ten minutes.
+ */
+export const ENDED_TTL_SECONDS = 10 * 60;
 
 export type ReadResult =
   | { outcome: "ok"; state: SessionState | null }

@@ -33,6 +33,19 @@ export const SESSION_EVENTS = [
   "session.auth.rejected",
   "session.read.invalid",
   "session.unconfigured",
+  /**
+   * The host closed the segment. The session document survives on the short
+   * `ENDED_TTL_SECONDS` lifetime rather than the four-hour one, so this line is
+   * the start of a ten-minute clock, not the end of the data.
+   */
+  "session.ended",
+  /**
+   * Every registered key was deleted. This is the only event in the vocabulary
+   * that reports something irreversible, which is why it is distinct from
+   * `session.ended` rather than folded into it — a host reading the stream needs
+   * to be able to tell "the segment is over" from "the room's data is gone".
+   */
+  "session.purged",
 ] as const;
 
 export type SessionEvent = (typeof SESSION_EVENTS)[number];
@@ -40,6 +53,22 @@ export type SessionEvent = (typeof SESSION_EVENTS)[number];
 /** Grep for this to see the whole session in a log stream. */
 export const LOG_PREFIX = "[livequiz]";
 
+/**
+ * **A closed set, and the closure is the enforcement.**
+ *
+ * This carried an `[key: string]: unknown` index signature until F-03. With it,
+ * the "never log a display name" rule below was a comment — `{ displayName }`
+ * type-checked fine, and the first slice to log a join by name would have shipped
+ * without a murmur from the compiler. Removing it makes that a type error.
+ *
+ * So: widening this back — by restoring the index signature, by adding a
+ * catch-all field, or by casting at a call site — silently reopens the surface
+ * this closes. If a slice needs a field that is not here, add *that field*, and
+ * think about whether it can carry attendee data before you do.
+ *
+ * `keys.test.ts` guards the store's namespace the same way. This is the log's
+ * equivalent, enforced by the type system rather than by a test.
+ */
 type LogFields = {
   /** The session version the event concerns, when it has one. */
   version?: number;
@@ -49,7 +78,8 @@ type LogFields = {
   ms?: number;
   /** Failure detail. Never a credential — see the redaction note below. */
   reason?: string;
-  [key: string]: unknown;
+  /** How many registered keys a purge removed. A count, never their contents. */
+  keysRemoved?: number;
 };
 
 /**

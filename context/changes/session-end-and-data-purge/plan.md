@@ -783,9 +783,9 @@ that moment; it is not the first answer.
 
 #### Automated
 
-- [x] 1.1 The probe runs clean against the configured project: `bun scripts/probe-ably-retention.ts`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 Existing suite still passes: `bun run test`
+- [x] 1.1 The probe runs clean against the configured project: `bun scripts/probe-ably-retention.ts` — 025bd1e
+- [x] 1.2 Type checking passes: `bun run type-check` — 025bd1e
+- [x] 1.3 Existing suite still passes: `bun run test` — 025bd1e
 
 #### Manual
 
@@ -799,15 +799,15 @@ that moment; it is not the first answer.
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass, including the new registry test: `bun run test`
-- [ ] 2.2 Type checking passes with the index signature removed: `bun run type-check`
-- [ ] 2.3 The registry test's fixture case proves the detector fires on an unregistered namespaced literal: `bun run test`
-- [ ] 2.4 The `@ts-expect-error` case proves a `displayName` field on `logSessionEvent` is rejected: `bun run type-check`
+- [x] 2.1 Unit tests pass, including the new registry test: `bun run test`
+- [x] 2.2 Type checking passes with the index signature removed: `bun run type-check`
+- [x] 2.3 The registry test's fixture case proves the detector fires on an unregistered namespaced literal: `bun run test`
+- [x] 2.4 The `@ts-expect-error` case proves a `displayName` field on `logSessionEvent` is rejected: `bun run type-check`
 
 #### Manual
 
-- [ ] 2.5 The registry docstring states its textual-gate limitation rather than implying completeness
-- [ ] 2.6 `SESSION_KEY` still resolves for existing importers, so no call site outside `store.ts` changed
+- [x] 2.5 The registry docstring states its textual-gate limitation rather than implying completeness
+- [x] 2.6 `SESSION_KEY` still resolves for existing importers, so no call site outside `store.ts` changed
 
 ### Phase 3: The `ended` phase, and the end and purge verbs
 

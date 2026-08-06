@@ -1,5 +1,6 @@
 import { Rest } from "ably";
 
+import { SESSION_CHANNEL } from "./keys";
 import { logSessionEvent } from "./log";
 import type { SessionState } from "./state";
 
@@ -22,12 +23,19 @@ import type { SessionState } from "./state";
  */
 
 /**
- * The one channel. Named here and nowhere else.
+ * The one channel.
  *
  * PRD §Non-Goals settles that there is one session, one quiz, one room, so a
  * per-session channel name would be ceremony around a constant.
+ *
+ * Declared in `keys.ts` and re-exported here, so every importer since F-02 keeps
+ * working. It sits in the registry despite not being a purgeable store key
+ * because the invariant `keys.test.ts` enforces is "one module owns every
+ * namespaced name" — an invariant with an exemption list is one that rots. It is
+ * also genuinely namespaced: Ably's namespace is the segment before the first
+ * colon, so the retention rule measured in F-03's probe keys off this prefix.
  */
-export const SESSION_CHANNEL = "livequiz:session";
+export { SESSION_CHANNEL };
 
 /** The message name every snapshot is published under. */
 export const SNAPSHOT_EVENT = "snapshot";
