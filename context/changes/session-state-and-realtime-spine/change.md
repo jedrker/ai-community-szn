@@ -2,7 +2,7 @@
 change_id: session-state-and-realtime-spine
 title: "Session state and realtime fan-out spine"
 roadmap_id: F-02
-status: implementing
+status: implemented
 created: 2026-08-06
 updated: 2026-08-06
 ---
@@ -45,6 +45,24 @@ any user-facing session behaviour:
 - `plan.md` — implementation contract
 - `plan-brief.md` — compressed handoff
 - `reviews/plan-review.md` — plan review, all 7 findings triaged and fixed
+- `spine-contract.md` — what S-02 onward may and may not rely on
+- `latency-probe.md` — measurement method and reference points; **figures still pending**
+
+## Close-out state (2026-08-06)
+
+35 of 38 Progress criteria met. Outstanding, and deliberately not approximated:
+
+- **4.5 / 4.7** — the two-device fan-out and reload checks. The preview is deployed and ready.
+- **4.8** — `latency-probe.md`'s measurement table. Method and reference points are fixed; no figure
+  has been taken, because F-04's baseline and F-01's latency tripwire both depend on this number
+  being measured from the host's click in a confirmed `fra1` deployment.
+
+What *is* verified on production: the atomic version guard (two racing writes → one applied, one
+`already-applied`, room moved exactly one question), `session.publish.ok` per action, structured logs
+in `vercel logs`, `/quiz/spine-check` returning 404, and every existing page and form unaffected.
+
+**3.12** was skipped by decision — the broken-credential path is covered by unit tests rather than a
+live env change.
 
 ## Links
 

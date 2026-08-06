@@ -742,7 +742,7 @@ warns about from the other direction, and it is why the TTL is short.
 
 - [x] 2.5 Two concurrent writes at the same version produce one `applied` and one `stale` — dd32352
 - [x] 2.6 The key's TTL is observably re-armed after a write — dd32352
-- [x] 2.7 A session event line appears in `vercel logs` in the expected structured form (closed on production: 4 of 5 lines captured; the missed one is a stream-capture gap on the first invocation, not a behaviour gap — see runbook)
+- [x] 2.7 A session event line appears in `vercel logs` in the expected structured form (closed on production: 4 of 5 lines captured; the missed one is a stream-capture gap on the first invocation, not a behaviour gap — see runbook) — 25b7ca8
 
 ### Phase 3: The Ably spine and host actions
 
@@ -759,10 +759,10 @@ warns about from the other direction, and it is why the TTL is short.
 - [x] 3.6 `GET /api/quiz/token` returns a token request containing no API key — 3a2eb84
 - [x] 3.7 `GET /api/quiz/state` returns the current snapshot mid-session, and null-state before one exists — 3a2eb84
 - [x] 3.8 A host action without the secret is rejected with `401` — 3a2eb84
-- [x] 3.9 A host action with the secret mutates Upstash and is observable on the Ably channel (closed on production: versions climbed 1→2→3 in the store and `session.publish.ok` confirms each snapshot reached Ably)
+- [x] 3.9 A host action with the secret mutates Upstash and is observable on the Ably channel (closed on production: versions climbed 1→2→3 in the store and `session.publish.ok` confirms each snapshot reached Ably) — 25b7ca8
 - [x] 3.10 `start` leaves the session in `lobby`; the first `advance` opens question 1 — 3a2eb84
 - [x] 3.11 A double-fired `advance` moves the room one question and reports "already applied" — 3a2eb84
-- [ ] 3.12 With Upstash credentials broken, a host action returns a readable Polish error and logs the cause (deferred to Phase 4)
+- [x] 3.12 With Upstash credentials broken, a host action returns a readable Polish error and logs the cause — **SKIPPED by decision 2026-08-06.** Live confirmation would mean removing `KV_REST_API_TOKEN` from Preview, redeploying and restoring it; the path is covered by unit tests instead (`store.test.ts`: a transport failure returns `failed` rather than throwing; `host.test.ts`: it surfaces as 503 with a Polish message). Not verified against a live broken credential.
 
 ### Phase 4: Dev-only harness and the fan-out proof
 
@@ -775,9 +775,9 @@ warns about from the other direction, and it is why the TTL is short.
 
 #### Manual
 
-- [ ] 4.5 A host action renders on a second device on a real network in under one second measured from the click, repeatedly
-- [x] 4.6 With `LIVEQUIZ_HARNESS` unset, `/quiz/spine-check` returns `404` (confirmed on production, not just locally)
-- [ ] 4.7 A browser reload renders current state immediately via the state fetch, with no replay and no divergence
-- [ ] 4.8 `latency-probe.md` records the region from `x-vercel-id` and names the instant each figure starts from
-- [x] 4.9 `vercel logs` shows one structured line per host action during the run (verified on production)
-- [x] 4.10 Every existing page still works: event archive, speaker directory, both signup forms (verified on production)
+- [ ] 4.5 A host action renders on a second device on a real network in under one second measured from the click, repeatedly — **OUTSTANDING at close-out (2026-08-06).** Needs the harness on two devices; the preview is deployed and ready. Everything upstream is verified on production (atomic store write, `session.publish.ok`, structured logs); the unmeasured part is the last hop to a real device.
+- [x] 4.6 With `LIVEQUIZ_HARNESS` unset, `/quiz/spine-check` returns `404` (confirmed on production, not just locally) — 25b7ca8
+- [ ] 4.7 A browser reload renders current state immediately via the state fetch, with no replay and no divergence — **OUTSTANDING at close-out (2026-08-06).** Needs the harness on two devices; the preview is deployed and ready. Everything upstream is verified on production (atomic store write, `session.publish.ok`, structured logs); the unmeasured part is the last hop to a real device.
+- [ ] 4.8 `latency-probe.md` records the region from `x-vercel-id` and names the instant each figure starts from — **partially done.** Method, reference points and the cross-device clock limitation are written; the measurement table is still `_pending_`. Deliberately not filled with an approximation: a figure recorded against the wrong reference is worse than no figure (plan review F4), and F-04 builds its baseline on this one.
+- [x] 4.9 `vercel logs` shows one structured line per host action during the run (verified on production) — 25b7ca8
+- [x] 4.10 Every existing page still works: event archive, speaker directory, both signup forms (verified on production) — 25b7ca8
