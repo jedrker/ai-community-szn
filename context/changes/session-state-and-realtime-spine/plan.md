@@ -341,7 +341,10 @@ state cannot be written pointing at an unknown question id. Assert that the writ
 - New and existing tests pass: `bun run test`
 - Types pass: `bun run type-check`
 - Build passes: `bun run build`
-- No `astro:` specifier under the new directory: `grep -r "astro:" src/lib/session/` finds nothing
+- No `astro:` *import* under the new directory (comments may name the constraint, and
+  `portability.test.ts` must contain the string it searches for):
+  `grep -rnE "(from|import)[[:space:]]*\(?[[:space:]]*['\"]astro:" src/lib/session/` finds nothing.
+  `src/lib/session/portability.test.ts` is the enforcing check.
 
 #### Manual Verification:
 
@@ -710,28 +713,28 @@ warns about from the other direction, and it is why the TTL is short.
 - [x] 1.3 Types pass: `bun run type-check` — 08cceae
 - [x] 1.4 Existing suite still passes: `bun run test` — 08cceae
 - [x] 1.5 Build still passes, quiz gate included: `bun run build` — 08cceae
-- [x] 1.6 Probe round-trips both vendors and confirms `EVAL` executes: `bun scripts/probe-spine-config.ts`
+- [x] 1.6 Probe round-trips both vendors and confirms `EVAL` executes: `bun scripts/probe-spine-config.ts` — 32b1ed7
 
 #### Manual
 
-- [x] 1.7 Upstash database exists in an EU region and is linked to the Vercel project
-- [x] 1.8 Every new variable present in Production and Preview; `LIVEQUIZ_HARNESS` in Preview only
-- [x] 1.9 `.env.example` variable names match what the probe found, not what docs predicted
+- [x] 1.7 Upstash database exists in an EU region and is linked to the Vercel project — 32b1ed7
+- [x] 1.8 Every new variable present in Production and Preview; `LIVEQUIZ_HARNESS` in Preview only — 32b1ed7
+- [x] 1.9 `.env.example` variable names match what the probe found, not what docs predicted — 32b1ed7
 
 ### Phase 2: The session state module
 
 #### Automated
 
-- [ ] 2.1 New and existing tests pass: `bun run test`
-- [ ] 2.2 Types pass: `bun run type-check`
-- [ ] 2.3 Build passes: `bun run build`
-- [ ] 2.4 No `astro:` specifier under the new directory: `grep -r "astro:" src/lib/session/`
+- [x] 2.1 New and existing tests pass: `bun run test`
+- [x] 2.2 Types pass: `bun run type-check`
+- [x] 2.3 Build passes: `bun run build`
+- [x] 2.4 No `astro:` import under the new directory (import-scoped grep + portability.test.ts)
 
 #### Manual
 
-- [ ] 2.5 Two concurrent writes at the same version produce one `applied` and one `stale`
-- [ ] 2.6 The key's TTL is observably re-armed after a write
-- [ ] 2.7 A session event line appears in `vercel logs` in the expected structured form
+- [x] 2.5 Two concurrent writes at the same version produce one `applied` and one `stale`
+- [x] 2.6 The key's TTL is observably re-armed after a write
+- [ ] 2.7 A session event line appears in `vercel logs` in the expected structured form (format verified locally in p2; deployed half deferred to Phase 3 — no route calls the store until then)
 
 ### Phase 3: The Ably spine and host actions
 
