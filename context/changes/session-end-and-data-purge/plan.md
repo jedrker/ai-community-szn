@@ -813,32 +813,32 @@ that moment; it is not the first answer.
 
 #### Automated
 
-- [x] 3.1 Unit and route tests pass: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 `store.test.ts`'s single-`eval` assertion covers the two new scripts
-- [x] 3.4 A build succeeds with the new phase in the schema: `bun run build`
+- [x] 3.1 Unit and route tests pass: `bun run test` — e957151
+- [x] 3.2 Type checking passes: `bun run type-check` — e957151
+- [x] 3.3 `store.test.ts`'s single-`eval` assertion covers the two new scripts — e957151
+- [x] 3.4 A build succeeds with the new phase in the schema: `bun run build` — e957151
 
 #### Manual
 
-- [x] 3.5 `end` from `question-open` is refused with a message naming the reason; after `reveal` it succeeds
-- [x] 3.6 After `end`, the session key's remaining TTL is observably ~10 minutes, not ~4 hours
-- [x] 3.7 After `purge`, `GET /api/quiz/state` reports no session
-- [x] 3.8 A replayed `end` request is refused the second time rather than silently re-ending
+- [x] 3.5 `end` from `question-open` is refused with a message naming the reason; after `reveal` it succeeds — e957151
+- [x] 3.6 After `end`, the session key's remaining TTL is observably ~10 minutes, not ~4 hours — e957151
+- [x] 3.7 After `purge`, `GET /api/quiz/state` reports no session — e957151
+- [x] 3.8 A replayed `end` request is refused the second time rather than silently re-ending — e957151
 
 ### Phase 4: Prove the namespace is empty
 
 #### Automated
 
-- [ ] 4.1 The residue check passes against the real store: `bun scripts/check-purge-residue.ts`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 Full suite passes: `bun run test`
+- [x] 4.1 The residue check passes against the real store: `bun scripts/check-purge-residue.ts`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 Full suite passes: `bun run test`
 
 #### Manual
 
-- [ ] 4.4 A second device reaches the `ended` phase after `end` on a preview deployment
-- [ ] 4.5 After `purge`, the second device distinguishes a purged session from a disconnection
-- [ ] 4.6 `purge-verification.md` records the real-store run, including the surviving decoy and why
-- [ ] 4.7 `/quiz/spine-check` still 404s on production
+- [x] 4.4 A second device reaches the `ended` phase after `end` on a preview deployment
+- [x] 4.5 After `purge`, the second device distinguishes a purged session from a disconnection
+- [x] 4.6 `purge-verification.md` records the real-store run, including the surviving decoy and why
+- [x] 4.7 `/quiz/spine-check` still 404s on production
 
 ### Phase 5: The retention contract and the operational documents
 

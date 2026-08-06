@@ -46,6 +46,12 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
             font-size: .8rem; margin: .5rem 0 0; }
       .big { font-size: 1.6rem; color: #34d399; margin: .25rem 0; }
       .bad { color: #f87171; }
+      /* Set apart from the flow verbs so a mis-click is unlikely — these are the
+         only two actions on this page that cannot be undone. */
+      .danger { margin-top: 1rem; padding-top: .75rem; border-top: 1px dashed #4b2b3a; }
+      .danger .muted { margin-bottom: .5rem; }
+      .danger-button { background: #9f1239; }
+      .ended { color: #fbbf24; font-weight: 600; }
       .muted { color: #9ca3af; font-size: .8rem; }
       table { width: 100%; border-collapse: collapse; font-size: .8rem; }
       td { padding: .2rem 0; border-bottom: 1px solid #2f2f45; }
@@ -64,6 +70,17 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         <button data-action="start">start</button>
         <button data-action="advance">advance</button>
         <button data-action="reveal">reveal</button>
+
+        <div class="danger">
+          <div class="muted">
+            Irreversible (F-03). Both send the current version as confirmation, so a
+            stale click is refused rather than applied. <code>end</code> is refused
+            while a question is open; <code>purge</code> deliberately is not — it is
+            the escape hatch for exactly that case.
+          </div>
+          <button data-action="end" data-confirm class="danger-button">end</button>
+          <button data-action="purge" data-confirm class="danger-button">purge</button>
+        </div>
         <div class="muted">Round trip (click → HTTP response)</div>
         <div class="big" id="rtt">—</div>
         <div class="muted">End to end (click → snapshot rendered here)</div>
@@ -155,7 +172,11 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         write("applied", appliedCount);
         write("source", source);
         write("version", state ? state.version : "— (no session)");
-        write("phase", state ? state.phase : "—");
+        write("phase", state ? state.phase : "— (purged or never started)");
+        // The whole reason `ended` is a phase rather than an absent session: a device
+        // must be able to tell "the quiz finished" from "the quiz never started" and
+        // from "my connection died". Three different states, three different renders.
+        el("phase").className = state?.phase === "ended" ? "ended" : "";
         write("question", state && state.currentQuestionId ? state.currentQuestionId : "—");
         write("state", JSON.stringify(state, null, 2));
 
@@ -193,7 +214,27 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         });
       }
 
-      async function fire(action: string): Promise<void> {
+      async function fire(action: string, needsConfirm: boolean): Promise<void> {
+        /**
+         * The confirmation the destructive routes demand: the version this device
+         * believes is current, which it can only know from having applied a snapshot.
+         * Omitted when there is no session — `purge` accepts that and reports
+         * "nothing to purge", which is how residue cleanup is reached.
+         */
+        let body: FormData | undefined;
+        if (needsConfirm) {
+          if (current) {
+            body = new FormData();
+            body.set("version", String(current.version));
+          }
+
+          const what =
+            action === "purge"
+              ? "Usunąć wszystkie dane sesji teraz? Tego nie można cofnąć."
+              : "Zakończyć sesję?";
+          if (!window.confirm(what)) return;
+        }
+
         buttons().forEach((button) => { button.disabled = true; });
 
         // The headline figure starts HERE — at the click, before the request — not
@@ -208,18 +249,27 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
           const response = await fetch(`/api/quiz/host/${action}`, {
             method: "POST",
             headers: { [config.secretHeader]: config.hostSecret },
+            body,
           });
           write("rtt", `${Math.round(performance.now() - clickedAt)} ms`);
 
-          const body = (await response.json()) as { state?: Snapshot };
+          const payload = (await response.json()) as { state?: Snapshot };
           write(
             "log",
-            `${action} → ${response.status} ${JSON.stringify(body).slice(0, 300)}`
+            `${action} → ${response.status} ${JSON.stringify(payload).slice(0, 300)}`
           );
 
           // Render the authoritative response too, so the host pane is correct even
           // if the broadcast is what failed.
-          if (body.state) apply(body.state, "http");
+          if (payload.state) apply(payload.state, "http");
+
+          // `purge` leaves nothing behind, so there is no state in its response to
+          // apply. Re-prime from the server instead, which is what a real device
+          // reloading after a purge would see.
+          if (action === "purge" && response.ok) {
+            current = null;
+            await primeFromServer();
+          }
         } catch (err) {
           write("log", `${action} → request failed: ${err}`);
           pendingClickAt = null;
@@ -230,7 +280,7 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
 
       buttons().forEach((button) => {
         button.addEventListener("click", () => {
-          void fire(button.dataset.action ?? "");
+          void fire(button.dataset.action ?? "", button.hasAttribute("data-confirm"));
         });
       });
 
