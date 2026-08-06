@@ -131,12 +131,12 @@ during an event.
   > *Deviation 2 — an involuntary ~2-minute floor at the realtime provider.* Session state is
   > published to Ably on every host action, and Ably retains messages for roughly two minutes for
   > connection recovery regardless of the persistence setting (measured, not assumed —
-  > `context/changes/session-end-and-data-purge/ably-retention-probe.md`). Message persistence *is*
+  > `context/archive/2026-08-06-session-end-and-data-purge/ably-retention-probe.md`). Message persistence *is*
   > disabled for the namespace; this floor cannot be reduced further by configuration. From S-02,
   > when snapshots begin carrying display names, that window applies to them. Unlike deviation 1
   > this was not chosen, and the only way to remove it is to keep names out of published snapshots
   > entirely — a decision handed to S-02 in
-  > `context/changes/session-end-and-data-purge/retention-contract.md`.
+  > `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md`.
 - Every capability the existing site provides today continues to work unchanged: event browsing,
   speaker profiles, both signup forms, and the practice of publishing content by committing Markdown.
 

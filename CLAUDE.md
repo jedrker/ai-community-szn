@@ -174,7 +174,7 @@ you need. Logs are retained ~1 hour and are covered by no TTL, no purge and no r
 written there outlives the session document by design.
 
 Before adding any key or any field to a published snapshot, read
-`context/changes/session-end-and-data-purge/retention-contract.md`. It also records the one
+`context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md`. It also records the one
 constraint that is not enforceable in code: Ably retains published snapshots for ~2 minutes and that
 floor cannot be configured away.
 

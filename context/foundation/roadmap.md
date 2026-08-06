@@ -465,7 +465,7 @@ and do NOT re-scaffold them.
 | F-01       | `deployment-target-readiness`         | Make the deployment target session-ready: plan, EU region, adapter | yes                   | Run `/10x-plan deployment-target-readiness`. Paid step is human-only |
 | S-01       | `quiz-definition-and-validation`      | Author the quiz as a validated in-repo definition                  | yes                   | Run `/10x-plan quiz-definition-and-validation`                |
 | F-02       | `session-state-and-realtime-spine`    | Server-authoritative session state with sub-second fan-out         | no                    | Needs F-01 only — no blocking unknown left. Name claim must be atomic |
-| F-03       | `session-end-and-data-purge`          | End a session and purge attendee names and answers                 | done                  | **Delivered 2026-08-06.** S-02/S-03/S-07 must read `context/changes/session-end-and-data-purge/retention-contract.md` before adding any key or snapshot field |
+| F-03       | `session-end-and-data-purge`          | End a session and purge attendee names and answers                 | done                  | **Delivered 2026-08-06.** S-02/S-03/S-07 must read `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md` before adding any key or snapshot field |
 | F-04       | `room-scale-rehearsal-harness`        | Drive ~150 simulated devices through a session and measure         | no                    | Needs F-02                                                    |
 | S-02       | `join-and-follow-host`                | Join a session by display name and follow the host's question      | no                    | Needs S-01 + F-02. Settles the client-interactivity approach   |
 | S-03       | `answer-choice-question-and-reveal`   | Answer a choice question and see result and points at reveal       | no                    | North star. Needs S-02                                        |
@@ -574,6 +574,29 @@ and do NOT re-scaffold them.
 
 (Empty on first generation. `/10x-archive` appends here — and flips that item's `Status` to `done` —
 when a change whose `Change ID` matches a roadmap item is archived.)
+
+- **F-03: (foundation) a session can be explicitly ended, and afterwards no attendee display name or
+  submitted answer remains in operator-accessible storage.** — Archived 2026-08-06 →
+  `context/archive/2026-08-06-session-end-and-data-purge/`. **Delivered with two recorded deviations
+  from the guardrail's wording, both now in `prd.md`:** ending shortens lifetimes to ~10 minutes
+  rather than deleting (deliberate, so a reload still shows the final standings; `purge` is the
+  immediate escape hatch), and Ably retains published snapshots for **~120s irreducibly** — measured,
+  not assumed. **S-02, S-03 and S-07 must read
+  `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md` before adding any key
+  or snapshot field.**
+  Lessons: (1) The roadmap's own framing — that this "shrinks to setting the right lifetimes plus an
+  end-now path" — was wrong, and only a probe showed it: that reasoning considered Redis alone, while
+  Ably and the log stream are two further surfaces neither TTL nor rollback reaches. (2) The purge
+  ordering is counter-intuitive and was caught in plan review: publishing before writing broadcasts at
+  the *existing* version, which every client drops as not-newer — the closing screen silently never
+  changes and it looks like a dead network. Write first so the version bumps. (3) An `ended` phase
+  carries a null `currentQuestionId` exactly like the lobby, so `advance` would have reopened question
+  1 on a closed session; a fourth phase must not inherit a rule written for three. (4) **The impl
+  review's critical find is the one to remember**: `end` validated its confirmation against its own
+  read, then delegated to a helper that re-read and wrote against *that* version — a read-then-write
+  across round trips wrapping a store guard that never saw the confirmed value. Every one of 243 tests
+  passed, and a full live run passed, because both were sequential. Prose asserted the property in
+  three places. Ten lines away, `purge` did it correctly.
 
 - **F-02: (foundation) one live session's state is held server-authoritatively in a short-TTL store
   outside the request lifecycle, and a state change made by the host reaches every connected device
