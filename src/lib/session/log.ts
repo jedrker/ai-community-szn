@@ -23,6 +23,14 @@ export const SESSION_EVENTS = [
   "session.action.stale",
   "session.publish.ok",
   "session.publish.failed",
+  /**
+   * A host action was attempted with a wrong or missing secret. Kept distinct from
+   * `session.action.stale` deliberately: stale is a benign race the runbook tells
+   * the host to ignore, and folding an unauthorized attempt into it would hide the
+   * only security-relevant signal this system emits behind the one event nobody
+   * looks at.
+   */
+  "session.auth.rejected",
   "session.read.invalid",
   "session.unconfigured",
 ] as const;

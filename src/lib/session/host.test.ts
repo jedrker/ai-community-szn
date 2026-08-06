@@ -71,6 +71,25 @@ describe("authorizeHost", () => {
     expect(authorizeHost("wrong").ok).toBe(false);
   });
 
+  /**
+   * The distinction matters operationally: the runbook tells the host that
+   * `session.action.stale` is a benign double-tap race and can be ignored. Logging
+   * an unauthorized attempt under that name would hide the only security-relevant
+   * signal behind the one event nobody looks at.
+   */
+  it("logs a rejection as session.auth.rejected, not as a stale action", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    authorizeHost("wrong");
+
+    const line = log.mock.calls.map(([first]) => String(first)).join("\n");
+    expect(line).toContain("session.auth.rejected");
+    expect(line).not.toContain("session.action.stale");
+    // And never the secret itself, in either direction.
+    expect(line).not.toContain(SECRET);
+    expect(line).not.toContain("wrong");
+  });
+
   it("rejects a missing secret", () => {
     expect(authorizeHost(null).ok).toBe(false);
   });

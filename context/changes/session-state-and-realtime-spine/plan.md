@@ -314,9 +314,14 @@ only what the function emits and the runbook already promises the host these lin
 
 **Contract**: A `logSessionEvent(event, fields)` writing one `console.log` line of JSON with a stable
 prefix, an event name, and the session version. It never throws and never awaits. Event names are a
-closed set defined here so S-02, S-03 and F-03 extend the same vocabulary rather than inventing one:
-session created, host action applied, host action rejected as stale, publish succeeded, publish
-failed.
+closed set defined here so S-02, S-03 and F-03 extend the same vocabulary rather than inventing one.
+
+**As shipped, the set is eight** — the five this plan first named (`session.created`,
+`session.action.applied`, `session.action.stale`, `session.publish.ok`, `session.publish.failed`) plus
+three the implementation needed: `session.read.invalid` and `session.unconfigured` for the two failure
+modes `store.ts` distinguishes, and `session.auth.rejected`, added in impl-review triage because folding
+an unauthorized host action into `session.action.stale` hid the only security-relevant signal behind the
+one event the runbook tells the host to ignore. `log.ts` is the source of truth; extend it there.
 
 #### 4. Tests
 

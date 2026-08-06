@@ -83,8 +83,8 @@ export function authorizeHost(secret: string | null): { ok: boolean } {
   if (secretMatches(secret)) return { ok: true };
 
   // Logged so a host tailing the stream sees rejected attempts. No secret
-  // material in the log line.
-  logSessionEvent("session.action.stale", { reason: "host secret rejected" });
+  // material in the log line — neither the expected value nor what was offered.
+  logSessionEvent("session.auth.rejected", { reason: "host secret did not match" });
   return { ok: false };
 }
 

@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | Session key, TTL, `readSession` / `writeSession` / `createSession` | `src/lib/session/store.ts` | Phase 2 §2 |
 | State schema, phases, `nextQuestionId` | `src/lib/session/state.ts` | Phase 2 §1 |
-| Log event vocabulary (closed set — extend it, don't invent a second one) | `src/lib/session/log.ts` | Phase 2 §3 |
+| Log event vocabulary (eight events; closed set — extend it there, don't invent a second one) | `src/lib/session/log.ts` | Phase 2 §3 |
 | Channel name, subscribe-only token, snapshot publish | `src/lib/session/realtime.ts` | Phase 3 §1 |
 | Host secret check, version bump, write-then-publish, outcome shapes | `src/lib/session/host.ts` | Phase 3 §3 |
 | Routes | `src/pages/api/quiz/` | Phase 3 §2–4 |

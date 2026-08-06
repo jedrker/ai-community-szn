@@ -165,6 +165,25 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * The store holds JSON strings, but `@upstash/redis` deserializes them for you —
+ * `automaticDeserialization` defaults to `true`. Depending on that default
+ * silently would mean every read failing as "invalid state" if it ever changed, or
+ * if a future client were constructed with it off. Accept either shape instead,
+ * matching what `createSession` already does with the value its Lua script
+ * returns.
+ */
+function asDocument(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // Leave it as a string — the schema parse below reports it properly rather
+    // than this function inventing an error message.
+    return raw;
+  }
+}
+
 /** The current session, or `ok` with `null` when none exists. */
 export async function readSession(): Promise<ReadResult> {
   const redis = client();
@@ -179,7 +198,7 @@ export async function readSession(): Promise<ReadResult> {
 
   if (raw === null || raw === undefined) return { outcome: "ok", state: null };
 
-  const parsed = parseSessionState(raw);
+  const parsed = parseSessionState(asDocument(raw));
   if (!parsed.ok) {
     logSessionEvent("session.read.invalid", { reason: parsed.problems.join("; ") });
     return { outcome: "invalid", problems: parsed.problems };
@@ -211,9 +230,7 @@ export async function createSession(now: number): Promise<CreateResult> {
   }
 
   const created = Number(result?.[0]) === 1;
-  const parsed = parseSessionState(
-    typeof result?.[1] === "string" ? JSON.parse(result[1]) : result?.[1]
-  );
+  const parsed = parseSessionState(asDocument(result?.[1]));
 
   if (!parsed.ok) {
     logSessionEvent("session.read.invalid", { reason: parsed.problems.join("; ") });

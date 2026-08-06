@@ -101,6 +101,27 @@ describe("readSession", () => {
     });
   });
 
+  /**
+   * `@upstash/redis` deserializes JSON by default, so an object is the normal
+   * shape — but depending on that default silently would break every read if it
+   * changed, or if a client were ever constructed with it off.
+   */
+  it("accepts a raw JSON string as well as a deserialized object", async () => {
+    redisMock.get.mockResolvedValue(JSON.stringify(firstQuestionOpen));
+
+    await expect(readSession()).resolves.toEqual({
+      outcome: "ok",
+      state: firstQuestionOpen,
+    });
+  });
+
+  it("reports a string that is not JSON as invalid, rather than throwing", async () => {
+    redisMock.get.mockResolvedValue("definitely not json");
+
+    const result = await readSession();
+    expect(result.outcome).toBe("invalid");
+  });
+
   it("reports an invalid document instead of returning it", async () => {
     redisMock.get.mockResolvedValue({ ...firstQuestionOpen, phase: "nonsense" });
 

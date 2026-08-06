@@ -2,7 +2,7 @@
 change_id: session-state-and-realtime-spine
 title: "Session state and realtime fan-out spine"
 roadmap_id: F-02
-status: implemented
+status: impl_reviewed
 created: 2026-08-06
 updated: 2026-08-06
 ---
@@ -47,6 +47,7 @@ any user-facing session behaviour:
 - `reviews/plan-review.md` — plan review, all 7 findings triaged and fixed
 - `spine-contract.md` — what S-02 onward may and may not rely on
 - `latency-probe.md` — measurement method and reference points; **figures still pending**
+- `reviews/impl-review.md` — implementation review (3 warnings, 2 observations)
 
 ## Close-out state (2026-08-06)
 

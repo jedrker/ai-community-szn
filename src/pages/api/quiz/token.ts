@@ -11,6 +11,16 @@ import { createTokenRequest } from "../../../lib/session/realtime";
  * subscribe, so an attendee holding one cannot publish a forged snapshot. That is
  * what makes it safe to leave unauthenticated, and it is the whole reason the
  * browser never sees `ABLY_API_KEY` (infrastructure.md §Getting Started step 3).
+ *
+ * **Accepted risk — do not "fix" this with a throttle without reading first.**
+ * Open and unthrottled means the provider's 200-peak-connection free ceiling can
+ * be exhausted deliberately, locking real attendees out mid-session. Recorded in
+ * `infrastructure.md`'s risk register (F-02 impl review, 2026-08-06) with a
+ * tripwire, and accepted on the same reasoning as the PRD's unprotected host
+ * view: the room is trusted for the length of one session. An IP-keyed limit was
+ * rejected because a venue network puts many attendees behind one address, so it
+ * would block legitimate joins and threaten the 30-second join target — the
+ * tension FR-018 already names for the per-device player cap.
  */
 export const GET: APIRoute = async () => {
   const result = await createTokenRequest();

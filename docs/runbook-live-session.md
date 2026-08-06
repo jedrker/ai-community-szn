@@ -120,6 +120,7 @@ raise it before the event rather than after.
   | `session.action.applied` | the room moved | nothing — this is the happy path |
   | `session.publish.ok` | the snapshot reached Ably | nothing |
   | `session.action.stale` | two actions raced; the second was a no-op | nothing, unless you did not double-tap — then something else is driving the session |
+  | `session.auth.rejected` | someone tried a host action with a wrong or missing secret | **if it was not you mis-clicking, someone else has the control URL.** One line is noise; a stream of them during a session means stop and rotate `LIVEQUIZ_HOST_SECRET` |
   | `session.publish.failed` | state is committed but did **not** reach devices | repeat the action; it re-broadcasts and is safe to retry |
   | `session.unconfigured` | an environment variable is missing | the session cannot run; check `vercel env ls` |
   | `session.read.invalid` | stored state does not match the quiz definition | a deploy changed the quiz mid-session — roll back |
@@ -129,6 +130,11 @@ raise it before the event rather than after.
   worth stopping for.
 - **If attendees report a problem**: check the second device first. If it reproduces there, it is a real
   failure; if not, it is that attendee's network or handset.
+- **If several attendees cannot connect while your own device works fine**, suspect the realtime
+  connection ceiling rather than their networks. The free tier allows 200 peak connections and the token
+  endpoint is open by design, so the ceiling can be reached by more devices than you expected — or
+  deliberately. Check peak connections in the Ably dashboard. There is no in-session remedy; note it and
+  raise the plan question afterwards (accepted risk, recorded in `infrastructure.md`).
 - **Do not deploy during a session.** A push to `main` goes straight to production with nothing in
   between.
 
