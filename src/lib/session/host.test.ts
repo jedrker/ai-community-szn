@@ -236,3 +236,51 @@ describe("applyHostAction", () => {
     expect(publishSnapshotMock).not.toHaveBeenCalled();
   });
 });
+
+describe("applyHostAction with a caller-confirmed version", () => {
+  /**
+   * The race the impl review caught (F1). A route that validates a confirmation
+   * against its own read and then calls `applyHostAction` has performed a
+   * read-then-write across two round trips: the check ran against the route's read,
+   * the write against this function's later one. Anything that moved the session in
+   * between would be committed without ever having been confirmed — the guard would
+   * look like it held while authorizing a state the host never saw.
+   *
+   * That is precisely what the spine contract's rule 3 forbids, and it is why `end`
+   * passes its confirmed version through instead of trusting the re-read.
+   */
+  it("refuses when the session moved since the caller confirmed it", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(4) });
+
+    const outcome = await applyHostAction(openFirstQuestion, NOW, writeSessionMock, 3);
+
+    expect(outcome.status).toBe(200);
+    expect(outcome.body).toMatchObject({ applied: false, note: "already-applied" });
+    // Nothing was committed against a version the caller never saw.
+    expect(writeSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("proceeds when the confirmed version still matches", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(3) });
+    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(4) });
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+
+    const outcome = await applyHostAction(openFirstQuestion, NOW, writeSessionMock, 3);
+
+    expect(outcome.status).toBe(200);
+    expect(writeSessionMock).toHaveBeenCalledWith(3, expect.objectContaining({ version: 4 }));
+  });
+
+  it("leaves the flow verbs unguarded — a replayed advance stays a harmless no-op", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(9) });
+    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(10) });
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+
+    // No confirmed version supplied: start/advance/reveal are safe precisely
+    // BECAUSE a repeat is idempotent, and must not inherit end's stricter guard.
+    const outcome = await applyHostAction(openFirstQuestion, NOW, writeSessionMock);
+
+    expect(outcome.status).toBe(200);
+    expect(writeSessionMock).toHaveBeenCalled();
+  });
+});

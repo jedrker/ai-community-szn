@@ -7,6 +7,69 @@
 **Question:** after a purge, is the `livequiz:` namespace actually empty — or does it merely
 *intend* to be?
 
+## Phase 3 — the guard matrix, verified live (2026-08-06)
+
+Recorded here after the implementation review noted that Phase 3's manual criteria (3.5–3.8) were
+checked with no durable evidence beyond a commit-message sentence — the weakest record of the three
+phases that produced one, despite covering the riskiest code.
+
+**Host verbs driven against a local dev server**, real Upstash, real Ably:
+
+| Step | Result |
+| --- | --- |
+| `advance` → opens Q1 | `200` `{version:2, phase:"question-open", currentQuestionId:"smieszne-slowo-ai"}` |
+| `end` while question **open** | `409` "Pytanie jest wciąż otwarte. Pokaż wyniki, zanim zakończysz sesję…" |
+| `reveal` | `200` `{version:3, phase:"question-revealed"}` |
+| `end` with **no** confirmation | `409` "Zakończenie sesji wymaga potwierdzenia. Podaj aktualną wersję sesji (3)." |
+| `end` with **wrong** confirmation (1) | `409` "…(podano 1, aktualna wersja to 3)." |
+| `end` with correct confirmation | `200` `{version:4, phase:"ended", currentQuestionId:null}` |
+| `end` **replayed** identically | `200` `{applied:false, note:"already-ended"}` |
+| `purge` with no confirmation | `409` "Usunięcie danych wymaga potwierdzenia…(4)." |
+| `purge` with correct confirmation | `200` `{purged:true, keysRemoved:1}` |
+| `GET /api/quiz/state` after purge | `{"state":null}` |
+| `purge` again, empty namespace | `200` `{purged:true, keysRemoved:0, note:"nothing-to-purge"}` |
+
+**TTL after `end` (criterion 3.6), read directly from Upstash:**
+
+```
+ttl = 581s (9.7 min)   — the four-hour lifetime would be 14400s
+verdict: SHORT lifetime — correct
+document: {"version":4,"phase":"ended","currentQuestionId":null,…}
+```
+
+**Log lines emitted, in order** — this is the write → publish → delete ordering, observed rather than
+argued:
+
+```
+[livequiz] {"event":"session.action.applied","version":2,"phase":"question-open",…}
+[livequiz] {"event":"session.ended","version":3,"phase":"ended"}
+[livequiz] {"event":"session.publish.ok","version":3,"phase":"ended"}
+[livequiz] {"event":"session.purged","keysRemoved":1}
+```
+
+**Lua executed against the real store on throwaway keys**, because every other assertion about these
+scripts is against a mock — and F-02's post-mortem records that a JS-side guard "passes every mocked
+test and drops a host action on stage":
+
+```
+  ok   COMPARE_AND_END applies — [1,2]
+  ok   document moved to the short lifetime — ttl=600s
+  ok   SIDE key re-armed by the loop (was 14400) — ttl=600s
+  ok   COMPARE_AND_END rejects a stale version — [0,2]
+  ok   PURGE_ALL unpack(KEYS) deletes both — removed=2
+  ok   PURGE_ALL on an empty namespace returns 0, not an error — removed=0
+  ok   nothing survives
+```
+
+The `EXPIRE` loop and `unpack(KEYS)` are the two constructs a mock cannot exercise, and both work.
+
+> **What this evidence did NOT catch.** The implementation review later found (F1) that `end`'s
+> confirmation guard did not bind the write it authorized: the route validated against its own read,
+> then `applyHostAction` re-read and wrote against *that* version. Every row above still passes,
+> because the defect only appears under concurrency and each step here was sequential. Worth
+> recording as a limit of live single-operator testing — it demonstrates the happy path faithfully
+> and says nothing about races.
+
 ## Why this exists rather than a unit test
 
 `store.test.ts` already asserts that `purgeSession` issues exactly one `DEL` over

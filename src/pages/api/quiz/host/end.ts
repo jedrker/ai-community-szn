@@ -110,10 +110,15 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
+  // `confirmVersion` is passed through, not merely checked above. `applyHostAction`
+  // performs its own read, so without this the write would be guarded by that later
+  // read rather than by the version the host actually confirmed — and anything that
+  // moved the session in between would be ended unconfirmed.
   const outcome = await applyHostAction(
     (state, now) => endedSessionState(state, now),
     Date.now(),
-    endSession
+    endSession,
+    confirmVersion
   );
 
   return toResponse(outcome);

@@ -2,7 +2,7 @@
 change_id: session-end-and-data-purge
 title: "Session end and data purge"
 roadmap_id: F-03
-status: implementing
+status: impl_reviewed
 created: 2026-08-06
 updated: 2026-08-06
 ---

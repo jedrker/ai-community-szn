@@ -153,7 +153,25 @@ export async function applyHostAction(
    * outcomes, each with its own Polish message and status — exists once for every
    * verb that writes.
    */
-  write: (expectedVersion: number, next: SessionState) => Promise<WriteResult> = writeSession
+  write: (expectedVersion: number, next: SessionState) => Promise<WriteResult> = writeSession,
+  /**
+   * The version the *caller* already validated against, when it validated one.
+   *
+   * Without this, a route that checks a confirmation and then calls this helper
+   * has performed a read-then-write across two round trips: the check ran against
+   * the route's read, and the write below would run against this function's own,
+   * later read. Anything that moved the session in between would be committed
+   * without ever having been confirmed — the guard would appear to hold while
+   * authorizing a state the host never saw.
+   *
+   * That is the exact pattern the spine contract's rule 3 forbids ("No
+   * read-then-write on the store"), and it is why `end` passes its confirmed
+   * version through rather than trusting the re-read.
+   *
+   * Omitted by the three flow verbs, which have nothing to confirm — a replayed
+   * `advance` is a harmless no-op by design.
+   */
+  expectedVersion?: number
 ): Promise<HostActionOutcome> {
   const current = await readSession();
 
@@ -169,6 +187,18 @@ export async function applyHostAction(
   }
   if (current.state === null) {
     return { status: 409, body: { error: MESSAGES.noSession } };
+  }
+
+  // The session moved between the caller's check and this read. Refuse rather
+  // than commit something the caller never confirmed — reported as `stale`,
+  // which the host already reads as "already applied, you are not where you
+  // thought you were", so this needs no new vocabulary at the control view.
+  if (expectedVersion !== undefined && expectedVersion !== current.state.version) {
+    logSessionEvent("session.action.stale", { version: current.state.version });
+    return {
+      status: 200,
+      body: { state: current.state, applied: false, note: "already-applied" },
+    };
   }
 
   const next = nextFrom(current.state, now);

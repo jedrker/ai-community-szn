@@ -92,8 +92,3 @@ export const SESSION_CHANNEL = `${SESSION_NAMESPACE}session`;
 export function registeredKeys(): string[] {
   return REGISTERED_KEYS.map((key) => key.name);
 }
-
-/** The registry with its documentation, for anything that wants to explain itself. */
-export function registeredKeyDetails(): readonly RegisteredKey[] {
-  return REGISTERED_KEYS;
-}

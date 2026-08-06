@@ -311,6 +311,14 @@ no-names-in-logs rule a compile error. No new endpoint, no new verb.
 code rather than of everyone's memory. Every key a slice needs is declared here with its purpose, and
 the purge operates on the declared set.
 
+**Addendum (2026-08-06, as built):** the registry also holds **`SESSION_CHANNEL`**, the Ably channel
+name, which this contract did not anticipate. Not scope creep — forced by the enforcement test as
+specified below. `realtime.ts:30` declared `"livequiz:session"` as a literal, so "no namespaced
+literal outside `keys.ts`" left a choice between moving the name and maintaining an exemption list;
+an invariant with an exemption list is the kind that rots. It is also genuinely namespaced: Ably's
+namespace is the segment before the first colon, so the retention rule measured in Phase 1 keys off
+the same prefix. `realtime.ts` re-exports it, so no importer changed.
+
 **Contract**: Exports a namespace prefix constant, a registry of declared keys (today: the session
 document alone, which `store.ts` re-exports as `SESSION_KEY` so existing importers do not change),
 and an accessor returning every registered key name. The registry entry carries the key's name and a
@@ -485,6 +493,22 @@ future reader does not "restore consistency" by removing them:
 If the intermediate write is rejected as stale, the purge is refused rather than forced — a stale
 version means someone else is driving the session, which is precisely when a wipe should not proceed
 unattended.
+
+#### 4b. The flow verbs must not treat an ended session as a lobby
+
+**Addendum (2026-08-06, as built).** Not anticipated by this plan and discovered while writing the
+transition.
+
+**File**: `src/pages/api/quiz/host/advance.ts`, `reveal.ts`
+
+**Intent**: An ended session carries `currentQuestionId: null` — identical to the lobby — so
+`nextQuestionId(null)` returns question 1. Without a guard, `advance` on a closed session **reopens
+question 1** on a document already living on the short ended lifetime. `reveal` fails less loudly but
+still wrongly: it would build a `question-revealed` state with a null question, which the schema
+rejects, surfacing as a 503 where the honest answer is "the session is over".
+
+**Contract**: Both transitions return `null` (a no-op) when `phase === "ended"`. `reveal`'s route
+additionally turns that no-op into a 409 with a Polish message, alongside the existing lobby case.
 
 #### 5. Route tests
 

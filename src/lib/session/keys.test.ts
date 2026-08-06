@@ -30,6 +30,12 @@ import { registeredKeys, SESSION_KEY, SESSION_NAMESPACE } from "./keys";
 
 const SESSION_DIR = fileURLToPath(new URL(".", import.meta.url));
 const API_DIR = fileURLToPath(new URL("../../pages/api/quiz", import.meta.url));
+/**
+ * Astro pages are scanned too, and not for completeness' sake: frontmatter runs
+ * server-side and can reach the store, so a key literal there would be as real as one
+ * in a `.ts` module — and would have been invisible to a `.ts`-only scan.
+ */
+const PAGES_DIR = fileURLToPath(new URL("../../pages/quiz", import.meta.url));
 
 /** `keys.ts` is the registry, so it is the one file allowed to spell the prefix out. */
 const REGISTRY_FILE = "keys.ts";
@@ -81,7 +87,11 @@ function sourceFiles(): { label: string; path: string }[] {
     .filter((name) => !name.endsWith(".test.ts"))
     .map((name) => ({ label: `src/pages/api/quiz/${name}`, path: join(API_DIR, name) }));
 
-  return [...sessionFiles, ...apiFiles];
+  const pageFiles = readdirSync(PAGES_DIR, { recursive: true, encoding: "utf8" })
+    .filter((name) => name.endsWith(".astro"))
+    .map((name) => ({ label: `src/pages/quiz/${name}`, path: join(PAGES_DIR, name) }));
+
+  return [...sessionFiles, ...apiFiles, ...pageFiles];
 }
 
 describe("every namespaced name is declared in keys.ts", () => {

@@ -451,6 +451,16 @@ describe("end", () => {
     });
   });
 
+  it("passes the confirmed version through to the write, not the re-read one", async () => {
+    sessionIs(revealed);
+    applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+
+    await call(end, { version: revealed.version });
+
+    const [, , , expectedVersion] = applyHostActionMock.mock.calls[0]!;
+    expect(expectedVersion).toBe(revealed.version);
+  });
+
   it("reports an already-ended session as a no-op rather than an error", async () => {
     sessionIs(ended);
 
