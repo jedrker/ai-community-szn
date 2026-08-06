@@ -799,10 +799,10 @@ that moment; it is not the first answer.
 #### Manual
 
 - [ ] 1.4 The channel rule for `livequiz:*` is confirmed in the Ably dashboard with persistence disabled
-- [x] 1.5 Two probe runs at different waits are recorded with both figures, narrowing the window to a bounded range
-- [x] 1.6 Any irreducible residual window is recorded in `infrastructure.md`'s risk register with an owner
-- [x] 1.7 A non-zero floor is carried into Phase 5's retention contract as a constraint on what S-02 may publish
-- [x] 1.8 The Desired End State's Ably clause is reconciled against the measured figure
+- [x] 1.5 Two probe runs at different waits are recorded with both figures, narrowing the window to a bounded range — 816a8e6
+- [x] 1.6 Any irreducible residual window is recorded in `infrastructure.md`'s risk register with an owner — 816a8e6
+- [x] 1.7 A non-zero floor is carried into Phase 5's retention contract as a constraint on what S-02 may publish — 816a8e6
+- [x] 1.8 The Desired End State's Ably clause is reconciled against the measured figure — 816a8e6
 
 ### Phase 2: Key registry, second lifetime, and the log constraint
 
@@ -853,13 +853,13 @@ that moment; it is not the first answer.
 
 #### Automated
 
-- [x] 5.1 Full suite passes: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
-- [x] 5.3 Build succeeds: `bun run build`
+- [x] 5.1 Full suite passes: `bun run test` — 816a8e6
+- [x] 5.2 Type checking passes: `bun run type-check` — 816a8e6
+- [x] 5.3 Build succeeds: `bun run build` — 816a8e6
 
 #### Manual
 
-- [x] 5.4 `retention-contract.md` fits on a page and points at the plan rather than duplicating it
-- [x] 5.5 The runbook's status note no longer describes a spine without an ending
-- [x] 5.6 `prd.md` carries the ten-minute window as a visible, reasoned deviation
-- [x] 5.7 A reader of `CLAUDE.md` alone would not invent an unregistered key
+- [x] 5.4 `retention-contract.md` fits on a page and points at the plan rather than duplicating it — 816a8e6
+- [x] 5.5 The runbook's status note no longer describes a spine without an ending — 816a8e6
+- [x] 5.6 `prd.md` carries the ten-minute window as a visible, reasoned deviation — 816a8e6
+- [x] 5.7 A reader of `CLAUDE.md` alone would not invent an unregistered key — 816a8e6
