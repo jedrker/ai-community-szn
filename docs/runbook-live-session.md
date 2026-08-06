@@ -7,9 +7,11 @@ you have to be watching.
 
 Read this before the session, not during it.
 
-> Status note: LiveQuiz is not built yet (roadmap F-02 onward). Until it exists, "the session" means the
-> existing site — the event archive, speaker directory, and newsletter endpoint. The log-tailing and
-> second-device steps apply either way and are worth practising before they matter.
+> Status note (updated 2026-08-06): the **session spine** exists as of roadmap F-02 — server-held state,
+> sub-second fan-out, and the host verbs `start` / `advance` / `reveal`. The **live loop does not**:
+> nobody can join yet, nothing is answered, nothing is scored (S-02 onward). So "the session" still means
+> the existing site for now — event archive, speaker directory, newsletter endpoint — plus a spine you can
+> drive but not yet play. The log-tailing and second-device steps apply either way.
 
 ## Before the session
 
@@ -92,6 +94,29 @@ raise it before the event rather than after.
 
 - **Watch the log stream**, not the dashboard. The stream is the only place a runtime error appears in
   time to act on.
+
+  **What a healthy line looks like** (F-02 onward — grep for `[livequiz]`):
+
+  ```
+  [livequiz] {"event":"session.created","version":1,"phase":"lobby"}
+  [livequiz] {"event":"session.action.applied","version":2,"phase":"question-open","questionId":"smieszne-slowo-ai"}
+  [livequiz] {"event":"session.publish.ok","version":2,"phase":"question-open"}
+  ```
+
+  One line per mutation, one JSON object, `version` always present. The events worth reacting to:
+
+  | Event | Means | What to do |
+  | --- | --- | --- |
+  | `session.action.applied` | the room moved | nothing — this is the happy path |
+  | `session.publish.ok` | the snapshot reached Ably | nothing |
+  | `session.action.stale` | two actions raced; the second was a no-op | nothing, unless you did not double-tap — then something else is driving the session |
+  | `session.publish.failed` | state is committed but did **not** reach devices | repeat the action; it re-broadcasts and is safe to retry |
+  | `session.unconfigured` | an environment variable is missing | the session cannot run; check `vercel env ls` |
+  | `session.read.invalid` | stored state does not match the quiz definition | a deploy changed the quiz mid-session — roll back |
+
+  `version` should only ever climb, and it climbs by exactly one per applied action. Two `applied` lines
+  at the same version, or a version that goes backwards, means something is wrong with the store and is
+  worth stopping for.
 - **If attendees report a problem**: check the second device first. If it reproduces there, it is a real
   failure; if not, it is that attendee's network or handset.
 - **Do not deploy during a session.** A push to `main` goes straight to production with nothing in

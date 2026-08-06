@@ -1,0 +1,240 @@
+---
+import { isHarnessEnabled } from "../../lib/session/harness";
+import { HOST_SECRET_HEADER } from "../../lib/session/host";
+import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
+
+/**
+ * The dev-only spine harness (roadmap F-02, Phase 4).
+ *
+ * Throwaway by design. It exists to prove the spine moves state end to end before
+ * S-02 depends on it, and to give F-04 something to point simulated devices at.
+ * S-02 owns the real attendee view, and Open Roadmap Question 2 — how the two
+ * interactive views get their client behaviour — is still S-02's to answer. The
+ * plain `<script>` below is a preliminary answer for a throwaway surface only:
+ * no UI-framework integration is installed and none may be added here.
+ *
+ * On demand — no `prerender` export. 404s unless `LIVEQUIZ_HARNESS` is set, which
+ * it is in Preview and local development but deliberately not in Production.
+ */
+
+if (!isHarnessEnabled()) {
+  return new Response(null, { status: 404 });
+}
+
+// The harness sends the host secret from the browser. Acceptable ONLY because
+// this page cannot exist in production — see `harness.ts`.
+const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
+---
+
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LiveQuiz — spine check</title>
+    <style>
+      :root { color-scheme: dark; font-family: ui-monospace, monospace; }
+      body { margin: 0; background: #12121c; color: #e8e8f0; padding: 1rem; }
+      h1 { font-size: 1rem; color: #a78bfa; margin: 0 0 .75rem; }
+      .panes { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+      @media (min-width: 720px) { .panes { grid-template-columns: 1fr 1fr; } }
+      section { background: #1c1c2b; border: 1px solid #2f2f45; border-radius: .5rem; padding: 1rem; }
+      h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: #9ca3af; margin: 0 0 .75rem; }
+      button { font: inherit; background: #7c3aed; color: white; border: 0; border-radius: .375rem;
+               padding: .6rem 1rem; margin: 0 .4rem .4rem 0; cursor: pointer; }
+      button:disabled { opacity: .5; cursor: default; }
+      pre { background: #0e0e17; padding: .6rem; border-radius: .375rem; overflow-x: auto;
+            font-size: .8rem; margin: .5rem 0 0; }
+      .big { font-size: 1.6rem; color: #34d399; margin: .25rem 0; }
+      .bad { color: #f87171; }
+      .muted { color: #9ca3af; font-size: .8rem; }
+      table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+      td { padding: .2rem 0; border-bottom: 1px solid #2f2f45; }
+      td:first-child { color: #9ca3af; width: 45%; }
+    </style>
+  </head>
+  <body>
+    <h1>LiveQuiz spine check — F-02</h1>
+    <p class="muted">
+      Dev-only. Not reachable in production. Open this on a second device to watch fan-out.
+    </p>
+
+    <div class="panes">
+      <section>
+        <h2>Host</h2>
+        <button data-action="start">start</button>
+        <button data-action="advance">advance</button>
+        <button data-action="reveal">reveal</button>
+        <div class="muted">Round trip (click → HTTP response)</div>
+        <div class="big" id="rtt">—</div>
+        <div class="muted">End to end (click → snapshot rendered here)</div>
+        <div class="big" id="e2e">—</div>
+        <div class="muted">
+          Both measured on this device's clock, so no cross-device skew. The second
+          device confirms arrival and agreement, not its own absolute delta.
+        </div>
+        <pre id="log">ready</pre>
+      </section>
+
+      <section>
+        <h2>Device</h2>
+        <table>
+          <tr><td>connection</td><td id="conn">connecting…</td></tr>
+          <tr><td>version</td><td id="version">—</td></tr>
+          <tr><td>phase</td><td id="phase">—</td></tr>
+          <tr><td>question</td><td id="question">—</td></tr>
+          <tr><td>source of last apply</td><td id="source">—</td></tr>
+          <tr><td>snapshots applied</td><td id="applied">0</td></tr>
+          <tr><td>snapshots dropped (not newer)</td><td id="dropped">0</td></tr>
+        </table>
+        <pre id="state">waiting for state…</pre>
+      </section>
+    </div>
+
+    <script
+      define:vars={{
+        hostSecret,
+        secretHeader: HOST_SECRET_HEADER,
+        channelName: SESSION_CHANNEL,
+        snapshotEvent: SNAPSHOT_EVENT,
+      }}
+    >
+      window.__spineCheck = { hostSecret, secretHeader, channelName, snapshotEvent };
+    </script>
+
+    <script>
+      import * as Ably from "ably";
+
+      type HarnessConfig = {
+        hostSecret: string;
+        secretHeader: string;
+        channelName: string;
+        snapshotEvent: string;
+      };
+
+      type Snapshot = {
+        version: number;
+        phase: string;
+        currentQuestionId: string | null;
+      } | null;
+
+      const config = (window as unknown as { __spineCheck: HarnessConfig })
+        .__spineCheck;
+
+      const el = (id: string): HTMLElement => {
+        const node = document.getElementById(id);
+        if (!node) throw new Error(`missing #${id}`);
+        return node;
+      };
+      const write = (id: string, value: unknown): void => {
+        el(id).textContent = String(value);
+      };
+      const buttons = (): HTMLButtonElement[] =>
+        Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-action]"));
+
+      /**
+       * The client's single reconciliation rule: apply whichever snapshot carries
+       * the higher version, drop anything not newer. It is what makes the state
+       * fetch and the subscription safe to race, and it is why a device that
+       * missed a message recovers on the next one.
+       */
+      let current: Snapshot = null;
+      let appliedCount = 0;
+      let droppedCount = 0;
+      /** Set by a host click; consumed by the first snapshot that arrives after it. */
+      let pendingClickAt: number | null = null;
+
+      function apply(state: Snapshot, source: "fetch" | "ably" | "http"): boolean {
+        if (state && current && state.version <= current.version) {
+          droppedCount += 1;
+          write("dropped", droppedCount);
+          return false;
+        }
+
+        current = state;
+        appliedCount += 1;
+        write("applied", appliedCount);
+        write("source", source);
+        write("version", state ? state.version : "— (no session)");
+        write("phase", state ? state.phase : "—");
+        write("question", state && state.currentQuestionId ? state.currentQuestionId : "—");
+        write("state", JSON.stringify(state, null, 2));
+
+        if (pendingClickAt !== null && source === "ably") {
+          write("e2e", `${Math.round(performance.now() - pendingClickAt)} ms`);
+          pendingClickAt = null;
+        }
+        return true;
+      }
+
+      // Fetch before subscribing: this is what makes a reload render current state
+      // immediately instead of waiting for the host's next action.
+      async function primeFromServer(): Promise<void> {
+        try {
+          const response = await fetch("/api/quiz/state");
+          const body = (await response.json()) as { state?: Snapshot };
+          apply(body.state ?? null, "fetch");
+        } catch (err) {
+          write("state", `state fetch failed: ${err}`);
+        }
+      }
+
+      async function connect(): Promise<void> {
+        // authUrl, never a key: the browser gets a short-lived subscribe-only token.
+        const client = new Ably.Realtime({ authUrl: "/api/quiz/token" });
+
+        client.connection.on((change) => {
+          write("conn", change.current);
+          el("conn").className = change.current === "connected" ? "" : "bad";
+        });
+
+        const channel = client.channels.get(config.channelName);
+        await channel.subscribe(config.snapshotEvent, (message) => {
+          apply(message.data as Snapshot, "ably");
+        });
+      }
+
+      async function fire(action: string): Promise<void> {
+        buttons().forEach((button) => { button.disabled = true; });
+
+        // The headline figure starts HERE — at the click, before the request — not
+        // at the response. The guardrail is "within 1 second of the host acting",
+        // and anchoring at the response would omit the endpoint round trip, the
+        // store EVAL and the publish: most of the server-side budget.
+        const clickedAt = performance.now();
+        pendingClickAt = clickedAt;
+        write("e2e", "waiting…");
+
+        try {
+          const response = await fetch(`/api/quiz/host/${action}`, {
+            method: "POST",
+            headers: { [config.secretHeader]: config.hostSecret },
+          });
+          write("rtt", `${Math.round(performance.now() - clickedAt)} ms`);
+
+          const body = (await response.json()) as { state?: Snapshot };
+          write(
+            "log",
+            `${action} → ${response.status} ${JSON.stringify(body).slice(0, 300)}`
+          );
+
+          // Render the authoritative response too, so the host pane is correct even
+          // if the broadcast is what failed.
+          if (body.state) apply(body.state, "http");
+        } catch (err) {
+          write("log", `${action} → request failed: ${err}`);
+          pendingClickAt = null;
+        } finally {
+          buttons().forEach((button) => { button.disabled = false; });
+        }
+      }
+
+      buttons().forEach((button) => {
+        button.addEventListener("click", () => {
+          void fire(button.dataset.action ?? "");
+        });
+      });
+
+      primeFromServer().then(connect);
+    </script>
+  </body>
+</html>

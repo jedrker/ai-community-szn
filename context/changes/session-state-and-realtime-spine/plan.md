@@ -748,30 +748,30 @@ warns about from the other direction, and it is why the TTL is short.
 
 #### Automated
 
-- [x] 3.1 All tests pass: `bun run test`
-- [x] 3.2 Types pass: `bun run type-check`
-- [x] 3.3 Build passes: `bun run build`
-- [x] 3.4 No route under `src/pages/api/quiz/` exports `prerender` (export-scoped grep)
-- [x] 3.5 `ABLY_API_KEY` is read only in `src/lib/session/realtime.ts` (env-read-scoped grep: 1 line)
+- [x] 3.1 All tests pass: `bun run test` — 3a2eb84
+- [x] 3.2 Types pass: `bun run type-check` — 3a2eb84
+- [x] 3.3 Build passes: `bun run build` — 3a2eb84
+- [x] 3.4 No route under `src/pages/api/quiz/` exports `prerender` (export-scoped grep) — 3a2eb84
+- [x] 3.5 `ABLY_API_KEY` is read only in `src/lib/session/realtime.ts` (env-read-scoped grep: 1 line) — 3a2eb84
 
 #### Manual
 
-- [x] 3.6 `GET /api/quiz/token` returns a token request containing no API key
-- [x] 3.7 `GET /api/quiz/state` returns the current snapshot mid-session, and null-state before one exists
-- [x] 3.8 A host action without the secret is rejected with `401`
+- [x] 3.6 `GET /api/quiz/token` returns a token request containing no API key — 3a2eb84
+- [x] 3.7 `GET /api/quiz/state` returns the current snapshot mid-session, and null-state before one exists — 3a2eb84
+- [x] 3.8 A host action without the secret is rejected with `401` — 3a2eb84
 - [ ] 3.9 A host action with the secret mutates Upstash and is observable on the Ably channel (Upstash half verified in p3 via the state endpoint; Ably half deferred to Phase 4, where a real browser subscribes)
-- [x] 3.10 `start` leaves the session in `lobby`; the first `advance` opens question 1
-- [x] 3.11 A double-fired `advance` moves the room one question and reports "already applied"
+- [x] 3.10 `start` leaves the session in `lobby`; the first `advance` opens question 1 — 3a2eb84
+- [x] 3.11 A double-fired `advance` moves the room one question and reports "already applied" — 3a2eb84
 - [ ] 3.12 With Upstash credentials broken, a host action returns a readable Polish error and logs the cause (deferred to Phase 4)
 
 ### Phase 4: Dev-only harness and the fan-out proof
 
 #### Automated
 
-- [ ] 4.1 All tests pass: `bun run test`
-- [ ] 4.2 Types pass: `bun run type-check`
-- [ ] 4.3 Build passes: `bun run build`
-- [ ] 4.4 The harness page is gated: `grep -n "isHarnessEnabled" src/pages/quiz/spine-check.astro`
+- [x] 4.1 All tests pass: `bun run test`
+- [x] 4.2 Types pass: `bun run type-check`
+- [x] 4.3 Build passes: `bun run build`
+- [x] 4.4 The harness page is gated: `grep -n "isHarnessEnabled" src/pages/quiz/spine-check.astro`
 
 #### Manual
 
