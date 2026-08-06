@@ -47,7 +47,7 @@ an attendee is scoring on their own device.
 | ID    | Change ID                             | Outcome (user can …)                                                                  | Prerequisites | PRD refs                                                                  | Status   |
 | ----- | ------------------------------------- | ------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------- | -------- |
 | F-01  | `deployment-target-readiness`         | (foundation) the deployment target may legally and physically host a live session      | —             | Success Criteria guardrail (1s fan-out), Constraints (released cost constraint) | done     |
-| F-02  | `session-state-and-realtime-spine`    | (foundation) one session's state is server-authoritative and reaches devices in under 1s | F-01        | Success Criteria guardrails (1s fan-out, 150 concurrent), Open Question 7  | proposed |
+| F-02  | `session-state-and-realtime-spine`    | (foundation) one session's state is server-authoritative and reaches devices in under 1s | F-01        | Success Criteria guardrails (1s fan-out, 150 concurrent), Open Question 7  | done     |
 | F-03  | `session-end-and-data-purge`          | (foundation) a session can be ended and its attendee data is gone afterwards           | F-02          | Success Criteria guardrail (retention), Access Control Changes            | proposed |
 | F-04  | `room-scale-rehearsal-harness`        | (foundation) the spine can be driven by ~150 simulated devices and measured            | F-02          | Success Criteria guardrails (1s fan-out, 150 concurrent)                  | proposed |
 | S-01  | `quiz-definition-and-validation`      | Organizer can author the whole quiz in a file and have it rejected if malformed        | —             | FR-001, FR-017                                                            | done     |
@@ -195,8 +195,7 @@ and do NOT re-scaffold them.
   the store or two attendees get the same name and the leaderboard stops being unambiguous — the
   guarantee FR-008 exists to provide. The token endpoint must follow the existing `src/lib/slack.ts`
   pattern: missing configuration fails clearly instead of throwing into a request path.
-- **Status:** proposed — no blocking unknown remains after the store decision; the only remaining gate
-  is F-01 landing first, so this is the next item to plan once it does.
+- **Status:** done
 
 ### F-03: Session end and data purge
 
@@ -564,6 +563,24 @@ and do NOT re-scaffold them.
 (Empty on first generation. `/10x-archive` appends here — and flips that item's `Status` to `done` —
 when a change whose `Change ID` matches a roadmap item is archived.)
 
+- **F-02: (foundation) one live session's state is held server-authoritatively in a short-TTL store
+  outside the request lifecycle, and a state change made by the host reaches every connected device
+  within a second — with devices receiving a short-lived token from the project's own endpoint rather
+  than any provider key.** — Archived 2026-08-06 →
+  `context/archive/2026-08-06-session-state-and-realtime-spine/`. **Delivered with one caveat: the
+  one-second guardrail is not yet measured.** Everything upstream of the last hop is verified on
+  production — the version guard serialises concurrent writes (two racing advances gave one `applied`,
+  one `already-applied`, room moved exactly one question), `session.publish.ok` per action, structured
+  logs in `vercel logs`. The two-device figure is **F-04's to take** (plan criteria 4.5/4.7/4.8 remain
+  open; method and reference points are fixed in the archived `latency-probe.md`).
+  Lessons: (1) F-01's probe-don't-trust rule paid twice — the Marketplace injects `KV_REST_API_*`, not
+  the documented `UPSTASH_REDIS_REST_*`, and `cjson` needed its own probe before the one-key design
+  could rely on it. (2) Read-modify-write over Upstash's HTTP interface is three round trips with no
+  isolation, so the compare-and-set must live in a Lua `EVAL`; a JS guard passes every mocked test and
+  drops a host action on stage. (3) An open token endpoint is safe against forgery but not against
+  connection-ceiling exhaustion — accepted with a tripwire in `infrastructure.md`. (4) `vercel logs`
+  dropped the first action's line even though the response proved it succeeded, so the host must fire a
+  throwaway action before trusting the stream.
 - **F-01: (foundation) the deployment target is a known quantity before realtime work rides on it: the
   adapter cannot silently pull an Astro major, functions run in the EU region closest to the room, and
   the logs/rollback loop F-04 depends on has been exercised.** — Archived 2026-08-06 →

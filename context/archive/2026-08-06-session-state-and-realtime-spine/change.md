@@ -2,9 +2,10 @@
 change_id: session-state-and-realtime-spine
 title: "Session state and realtime fan-out spine"
 roadmap_id: F-02
-status: impl_reviewed
+status: archived
 created: 2026-08-06
 updated: 2026-08-06
+archived_at: 2026-08-06T08:46:50Z
 ---
 
 # Session state and realtime fan-out spine
