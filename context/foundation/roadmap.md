@@ -3,7 +3,7 @@ project: "LiveQuiz"
 version: 3
 status: draft
 created: 2026-08-05
-updated: 2026-08-06
+updated: 2026-08-07
 prd_version: 1
 main_goal: quality
 top_blocker: decisions
@@ -49,7 +49,7 @@ an attendee is scoring on their own device.
 | F-01  | `deployment-target-readiness`         | (foundation) the deployment target may legally and physically host a live session      | —             | Success Criteria guardrail (1s fan-out), Constraints (released cost constraint) | done     |
 | F-02  | `session-state-and-realtime-spine`    | (foundation) one session's state is server-authoritative and reaches devices in under 1s | F-01        | Success Criteria guardrails (1s fan-out, 150 concurrent), Open Question 7  | done     |
 | F-03  | `session-end-and-data-purge`          | (foundation) a session can be ended and its attendee data is gone afterwards           | F-02          | Success Criteria guardrail (retention), Access Control Changes            | done     |
-| F-04  | `room-scale-rehearsal-harness`        | (foundation) the spine can be driven by ~150 simulated devices and measured            | F-02          | Success Criteria guardrails (1s fan-out, 150 concurrent)                  | proposed |
+| F-04  | `room-scale-rehearsal-harness`        | (foundation) the spine can be driven by ~150 simulated devices and measured            | F-02          | Success Criteria guardrails (1s fan-out, 150 concurrent)                  | done     |
 | S-01  | `quiz-definition-and-validation`      | Organizer can author the whole quiz in a file and have it rejected if malformed        | —             | FR-001, FR-017                                                            | done     |
 | S-02  | `join-and-follow-host`                | Attendee can join a started session by name and see the host's current question        | S-01, F-02    | US-01, US-02, FR-002, FR-003, FR-007, FR-008                              | proposed |
 | S-03  | `answer-choice-question-and-reveal`   | Attendee can answer a choice question and see if they were right and what they scored  | S-02          | US-01, US-02, FR-004, FR-010, FR-016, FR-019                              | proposed |
@@ -274,7 +274,7 @@ and do NOT re-scaffold them.
   it drives the spine and reports latency and loss; it does not grow into a performance-testing suite.
   One documented trap belongs here: a naive presence-based design makes joining cost on the order of
   N² messages, so the harness should measure the broadcast path the product actually uses.
-- **Status:** proposed
+- **Status:** done
 
 ## Slices
 
@@ -574,6 +574,39 @@ and do NOT re-scaffold them.
 
 (Empty on first generation. `/10x-archive` appends here — and flips that item's `Status` to `done` —
 when a change whose `Change ID` matches a roadmap item is archived.)
+
+- **F-04: (foundation) roughly 150 simulated devices can be driven through a session against the real
+  spine, with fan-out latency and answer loss observed rather than assumed.** — Archived 2026-08-07 →
+  `context/archive/2026-08-06-room-scale-rehearsal-harness/`. **The guardrail holds:** end-to-end p95
+  spans **111–592 ms across seven N=150 runs** from `fra1` against a 1000 ms budget, 150/150 connected
+  every time, and every connected device received every published version — zero lost snapshots. F-01's
+  latency tripwire has not fired, and Ably's 200-connection ceiling was never strained. **Two halves of
+  the guardrail remain unmeasured by construction:** "no lost answers" needs answers (S-03 onward), and
+  arrival is measured at the client library rather than at a painted phone screen (S-02's cost).
+  Lessons: (1) **The impl review's critical find was mine, and it is the one to remember**: one
+  observation — an N=150 run whose log stream delivered 1 line of 150 and went silent — was written up in
+  mechanism language ("the burst kills the stream"), graded H/H in `infrastructure.md` under the heading
+  "measured, not inferred", and propagated into the runbook and this change's report. Three controlled
+  tests then failed to reproduce it: 150 requests emitting nothing left the tail working, 150 log lines
+  delivered 127 of 150 and left it working, a full rehearsal delivered 135 of 150 and left it working.
+  What survives is ~10–15% line loss under a burst plus an unexplained intermittent stall. **A single
+  observation described as a mechanism reads exactly like a finding**, and this project's own "probe,
+  don't trust" rule is the argument for probing twice before writing a foundation document. The
+  superseded text is quoted in the report rather than deleted. (2) **A baseline is a range or it is
+  wrong.** 356 ms was recorded as "the worst of three runs" and was superseded twice within hours;
+  seven runs span over 5× with the system unchanged. Two unquantified candidates, and one cuts against
+  the lower-bound framing: 150 subscribers share one event loop, so the harness may *overstate* the
+  tail. (3) **A fix can be dead code in the runtime it ships to.** The chosen answer to an interrupted
+  run was a SIGINT handler; measured on bun 1.3.14, `process.on` never fires for SIGINT, SIGTERM, SIGHUP
+  or SIGUSR2. Dead code was worse than none — it would make interrupts look safe — so it was replaced
+  with `--purge-stale`, an opt-in recovery path, verified by SIGKILLing a live run. (4) Two criteria
+  could not be verified by observing a *successful* run at all: counting the join burst needed the token
+  endpoint instrumented, and the miss-accounting path needed fault injection, because every run until
+  then was 150/150. (5) The spend alert the roadmap required is **not configurable** — Upstash Budget is
+  pay-as-you-go only and Vercel Spend Management excludes Marketplace integrations, so arming it would
+  mean paying in order to be warned about paying. Replaced by a command-counter tripwire (200K per run
+  against a 513 → 4102 baseline), whose delta is **two orders of magnitude above what the code accounts
+  for and still unexplained** — worth resolving before S-02 adds the first real attendee writes.
 
 - **F-03: (foundation) a session can be explicitly ended, and afterwards no attendee display name or
   submitted answer remains in operator-accessible storage.** — Archived 2026-08-06 →

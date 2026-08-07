@@ -1,10 +1,10 @@
 ---
 change_id: room-scale-rehearsal-harness
 title: Room scale rehearsal harness
-status: impl_reviewed
+status: archived
 created: 2026-08-06
 updated: 2026-08-07
-archived_at: null
+archived_at: 2026-08-07T19:37:34Z
 ---
 
 ## Notes
