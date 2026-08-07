@@ -40,6 +40,7 @@
  *
  * Run: bun scripts/rehearse-room.ts --base=https://<production-url> [--clients=150]
  *        [--kill-after-start=<n>]   fault injection — see `killAfterStart`
+ *        [--purge-stale]            clear a session left by an interrupted run
  */
 
 import { Realtime } from "ably";
@@ -86,6 +87,14 @@ type Config = {
    * the path this exercises is the one most likely to run at a real event.
    */
   killAfterStart: number;
+  /**
+   * Clear a pre-existing session instead of refusing (default: refuse).
+   *
+   * The recovery path for a run that was killed. Opt-in, because the pre-flight refusal
+   * is not a nuisance check — it is the only thing standing between this script and a
+   * real session, since there is no rehearsal-only key to distinguish them.
+   */
+  purgeStale: boolean;
 };
 
 /**
@@ -113,6 +122,15 @@ const ARRIVAL_TIMEOUT_MS = 5_000;
 
 /** Default room size — the PRD guardrail's number. See `change.md`. */
 const DEFAULT_CLIENTS = 150;
+
+/**
+ * Deadline on the two host-side HTTP calls.
+ *
+ * Generous against the slowest cold start observed (~2 s) and still far short of a
+ * hang. The failure this bounds is not a slow figure but a stranded session: without a
+ * deadline, a request that never returns skips teardown entirely.
+ */
+const HOST_REQUEST_TIMEOUT_MS = 15_000;
 
 type Finding = { ok: boolean; label: string; detail: string };
 
@@ -248,7 +266,17 @@ function resolveConfig(): Config | null {
     return null;
   }
 
-  return { baseUrl, hostSecret, redisUrl, redisToken, clients, killAfterStart };
+  const purgeStale = process.argv.includes("--purge-stale");
+  if (purgeStale) {
+    record(
+      true,
+      "--purge-stale",
+      "a pre-existing session will be purged rather than refused — only pass this when " +
+        "you know no real session is running"
+    );
+  }
+
+  return { baseUrl, hostSecret, redisUrl, redisToken, clients, killAfterStart, purgeStale };
 }
 
 /**
@@ -263,7 +291,7 @@ function resolveConfig(): Config | null {
  * against, so "nothing is here" is what stands in for "this rehearsal cannot collide
  * with a real session".
  */
-async function preflight(redis: Redis): Promise<boolean> {
+async function preflight(config: Config, redis: Redis): Promise<boolean> {
   const existing = await redis.get(MIRRORED_SESSION_KEY);
 
   if (existing === null) {
@@ -279,13 +307,43 @@ async function preflight(redis: Redis): Promise<boolean> {
     /* leave it as unreadable — the refusal does not depend on parsing it */
   }
 
+  // The recovery path. An interrupted run *does* strand a session: `finally` covers a
+  // thrown error but not a kill, and signals cannot be caught here — measured on bun
+  // 1.3.14, `process.on` never fires for SIGINT/SIGTERM/SIGHUP/SIGUSR2, so a handler
+  // would be dead code that made interrupts *look* safe. The stranded document then
+  // holds the four-hour `SESSION_TTL_SECONDS` and refuses every later run for a reason
+  // unrelated to a real session. This flag is the deliberate, opt-in way out; refusal
+  // stays the default precisely because the gate is also the isolation mechanism.
+  if (config.purgeStale) {
+    note(
+      "stale session cleared",
+      `--purge-stale was passed and a session in phase "${phase}" existed — purging it ` +
+        "before rehearsing. This is only correct because you know no real session is running"
+    );
+    await teardown(config);
+
+    if ((await redis.get(MIRRORED_SESSION_KEY)) !== null) {
+      console.log(
+        " FAIL  --purge-stale did not clear the session\n\n" +
+          "  → The purge route reported success or failure above. Clear it by hand before\n" +
+          "    rehearsing; this script will not drive a namespace it could not empty.\n"
+      );
+      return false;
+    }
+
+    record(true, "stale session purged — safe to rehearse", `${MIRRORED_SESSION_KEY} is absent`);
+    return true;
+  }
+
   console.log(
     ` FAIL  a session already exists (phase: ${phase})\n\n` +
       "  → This script drives host actions against the live namespace and purges it\n" +
       "    afterwards. Refusing to run while ANY session document exists, including a\n" +
       "    lobby waiting for a room and an ended session still inside its retention\n" +
       "    window.\n\n" +
-      "    Wait for the TTL, or purge deliberately through the host route first.\n"
+      "    Wait for the TTL, or purge deliberately through the host route first.\n\n" +
+      "    If this is residue from a run you interrupted — a kill cannot be caught, so an\n" +
+      "    interrupted run leaves the session behind — re-run with --purge-stale.\n"
   );
   return false;
 }
@@ -364,6 +422,11 @@ async function hostAction(
       method: "POST",
       headers,
       body: form,
+      // A stalled request would otherwise hang the run forever with 150 Ably
+      // connections held against a 200-connection ceiling, never reaching teardown.
+      // The catch below already treats a failed request as a first-class outcome, so
+      // a deadline is all that was missing.
+      signal: AbortSignal.timeout(HOST_REQUEST_TIMEOUT_MS),
     });
   } catch (err) {
     return {
@@ -433,6 +496,9 @@ async function readState(
   try {
     const response = await fetch(`${config.baseUrl}/api/quiz/state`, {
       headers: { "Cache-Control": "no-store" },
+      // Teardown depends on this read, so a stall here would strand a live session on
+      // production rather than merely delaying a figure.
+      signal: AbortSignal.timeout(HOST_REQUEST_TIMEOUT_MS),
     });
     const body = (await response.json()) as { state?: { version?: unknown } | null };
     const version =
@@ -581,6 +647,11 @@ async function connectDevice(config: Config, index: number): Promise<Device> {
     device.connected = true;
   } catch (err) {
     device.failure = err instanceof Error ? err.message : String(err);
+    // Close it, or Ably keeps re-fetching `authUrl` and re-attempting the socket for
+    // the rest of the run. In a partially failed pool — the case this harness exists to
+    // report — those retries consume peak connections and token requests *while the
+    // figures are being taken*, perturbing two of the things being measured.
+    device.client?.close();
   }
 
   return device;
@@ -830,6 +901,30 @@ async function runRehearsal(config: Config, devices: Device[]): Promise<boolean>
   const counted = measurements.filter((measurement) => !measurement.discarded);
   const withArrivals = counted.filter((measurement) => measurement.deltas.length > 0);
 
+  /**
+   * An action that reached nobody must fail the run, not vanish from the statistic.
+   *
+   * `worstP95` below is a max over `withArrivals`, so without this an action with zero
+   * arrivals contributes nothing and nothing else objects: a run where `advance`
+   * reached no device and the other three actions were fine would print `Verdict: PASS`
+   * and exit 0. The all-actions-empty case was already caught; this is the per-action
+   * case, which is the one that would actually happen.
+   */
+  for (const measurement of counted) {
+    if (measurement.deltas.length > 0) continue;
+    // An action the store declined published nothing, so there was never a snapshot to
+    // wait for — that is reported as a note below, not as a lost broadcast.
+    if (measurement.outcome.note !== null || measurement.outcome.applied !== true) continue;
+
+    record(
+      false,
+      `no device received ${measurement.label}`,
+      `${measurement.connected} device(s) were connected and none received the ` +
+        `published version — this is a total fan-out failure for one action, and it is ` +
+        `excluded from the p95 by construction`
+    );
+  }
+
   const stale = counted.filter((measurement) => measurement.outcome.note !== null);
   for (const measurement of stale) {
     note(
@@ -912,7 +1007,7 @@ async function main(): Promise<void> {
 
   const redis = new Redis({ url: config.redisUrl, token: config.redisToken });
 
-  if (!(await preflight(redis))) process.exit(1);
+  if (!(await preflight(config, redis))) process.exit(1);
 
   const devices = await connectPool(config);
   let verdict = false;
@@ -922,8 +1017,12 @@ async function main(): Promise<void> {
   } finally {
     // Always, including after a thrown request. A rehearsal that leaves state behind
     // blocks the next one on a pre-flight refusal that means nothing.
-    await teardown(config);
-    await closePool(devices);
+    // `closePool` gets its own `finally` so a thrown teardown cannot strand 150 sockets.
+    try {
+      await teardown(config);
+    } finally {
+      await closePool(devices);
+    }
   }
 
   const failed = findings.filter((finding) => !finding.ok);

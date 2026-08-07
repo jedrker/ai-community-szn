@@ -85,53 +85,75 @@ submissions that no slice has built yet (S-03 onward). **The rehearsal exercises
 fan-out only, so its command cost is not comparable to the estimate the threshold came from.** Recheck
 the threshold once answers write to the store.
 
-## The log stream dies under the load it exists to observe
+## The log stream drops lines under a burst, and can stall silently
+
+> **Corrected 2026-08-07 during impl review (finding F1).** This section previously claimed the join
+> burst *kills* the stream, generalised from a single observation and graded H/H on that basis. Three
+> controlled tests did not reproduce it. The corrected account is below; the original claim is quoted at
+> the end of this section so the mistake stays visible rather than edited out of history.
 
 Criterion 2.4 asked for 150 token requests to be visible in the deployment logs. `token.ts` was
-instrumented for exactly that (`session.token.issued`). **The instrumentation works and the criterion
-still cannot be met — because the join burst destroys the channel meant to observe it.**
+instrumented for exactly that (`session.token.issued`), and the instrumentation works. What the stream
+does with 150 lines in one second is the problem.
 
-What was measured, on production, deployment `dpl_AVtWhKUdppv9NRPyWheChNg8RN5T`:
+Measured on production, deployment `dpl_AVtWhKUdppv9NRPyWheChNg8RN5T`:
 
 | Test | Result |
 | --- | --- |
-| 14 requests at 20-second intervals over 4.5 min | **14 of 14** lines delivered — the stream is stable at low rate and does not expire on a timer |
-| N=5 rehearsal, quiet stream | **5 of 5** token lines, plus every host-action line. Each device fetches its own token; the harness does exercise the endpoint per device |
-| N=150 rehearsal | **1 of ~150** token lines. 12 host-action lines from the same run arrived, then the stream went permanently silent — a subsequent N=5 run added nothing to it |
+| 14 requests at 20-second intervals over 4.5 min | **14 of 14** lines delivered — stable at low rate, and the stream does **not** expire on a timer |
+| N=5 rehearsal, quiet stream | **5 of 5** token lines plus every host-action line — each device does fetch its own token |
+| 150 concurrent requests to `/api/quiz/state`, which emits nothing on success | **0** lines, stream still delivering afterwards — **request volume alone is not the cause** |
+| 150 concurrent requests to `/api/quiz/token` (150 lines) | **127 of 150** delivered, stream still delivering afterwards |
+| N=150 rehearsal, fresh stream | **135 of 150** token lines + 13 host-action lines, stream still delivering afterwards |
+| N=150 rehearsal, on two earlier occasions | **1 of ~150**, then the feed went silent and stayed silent — **not reproduced in three later attempts** |
 
-So the sequence is: burst → the feed delivers a fraction → the feed stops for good. **`vercel logs` keeps
-printing `waiting for new logs...` the whole time.** A dead stream and a quiet system are the same
-observation.
+### What is established, and what is not
 
-This cost real time in this session: three consecutive runs measured zero token lines and the obvious
-reading was "the clients never call the endpoint". They do — proven at N=5. The instrument had died,
-and it had died in a way that looks exactly like a working instrument.
+**Established:** a burst costs **roughly 10–15% of log lines** — reproduced twice, at 127/150 and
+135/150. So a 150-device join burst cannot be *counted* in the log stream even with the endpoint
+instrumented, but it is visible in it.
 
-### Why this outlives F-04
+**Established:** the stream can **stop delivering and stay stopped**, while `vercel logs` keeps printing
+`waiting for new logs...`. Observed twice. **Cause unknown** — it is not the timer (14/14 over 4.5 min),
+not request volume (150 silent requests left it working), and not line volume alone (150 lines left it
+working). Whether the fault is in the CLI or server-side is not known.
 
-`docs/runbook-live-session.md` §Before the session tells the host to tail these logs during the
-segment, and F-01 established that this stream is the project's **only** visibility — there is no CI, no
-alerting, no error tracking. The failure mode now measured is that the tail **dies silently under
-precisely the event that opens a real session**: ~150 devices joining at once. For the rest of the
-segment the host watches a terminal that cannot report anything, and reads its silence as calm.
+**Not established, and previously asserted here as measured:** that the join burst is the cause, that the
+stall is permanent, or that the effect is reproducible.
 
-Consequences that belong outside this change:
+### What still holds regardless of the cause
 
-- The runbook's live-tail step needs a re-attach instruction and a way to tell a live stream from a
-  dead one (fire a throwaway request and confirm its line appears).
-- `infrastructure.md`'s risk register should carry this: the mitigation it credits for "a failure is
-  discovered by attendees" is the log tail, and the tail is now known to fail first under load.
-- Open Roadmap Question 3 was **partially discharged** on the grounds that the operational minimum —
-  tailing logs plus a second device — existed. The log half of that minimum is weaker than recorded,
-  which strengthens the case for real alerting rather than closing it.
+The operational conclusion does not depend on the mechanism, which is why it survives the correction:
+
+- **A stalled stream and a quiet system are the same observation.** This cost real time in this session —
+  three consecutive runs measured zero token lines and the obvious reading was "the clients never call
+  the endpoint". They do. The instrument had stalled, in a way that looks exactly like a working one.
+- **So prove the stream is alive rather than trusting its silence**: fire a throwaway request and confirm
+  its line appears. Re-attach if not; a fresh attach on the same deployment works immediately.
+- **The second device stays the reliable half** of the operational minimum. The tail is for diagnosis
+  after something is known to be wrong, not for detecting that it is.
+
+Open Roadmap Question 3 was partially discharged on the grounds that this operational minimum existed.
+The log half is **less dependable than recorded** — intermittently, by an unidentified fault, rather than
+predictably under load. That is a weaker argument for alerting than the original claim made, and still an
+argument for it.
+
+> **Superseded text, kept deliberately:** *"So the sequence is: burst → the feed delivers a fraction →
+> the feed stops for good… The failure mode now measured is that the tail dies silently under precisely
+> the event that opens a real session."* One run, stated as a mechanism, propagated into
+> `infrastructure.md` as an H/H row headed "measured, not inferred" and into the runbook. The lesson is
+> not about logs: **a single observation described in mechanism language reads exactly like a finding**,
+> and this project's own history (F-01's "probe, don't trust") is the argument for probing twice before
+> writing a foundation document.
 
 ### How 2.4 is settled
 
 Verified by an amended method, recorded rather than quietly substituted: **per-device token issuance is
-proven at N=5 (5/5, one line per device)**, and the N=150 run's connection result (150/150 connected,
-each holding the lobby snapshot) is only reachable if 150 tokens were minted, since an Ably client with
-no token does not connect. Counting all 150 in the log stream is not achievable on this platform, and
-the reason is now measured rather than assumed.
+proven at N=5 (5/5, one line per device)** and corroborated at scale — an N=150 run delivered **135 of
+150** token lines, which is only possible if ~150 requests were made. The connection result (150/150
+connected, each holding the lobby snapshot) is independently unreachable without 150 minted tokens, since
+an Ably client with no token does not connect. **Counting exactly 150 is not achievable**, because the
+stream drops 10–15% of lines under a burst.
 
 ## Load run
 

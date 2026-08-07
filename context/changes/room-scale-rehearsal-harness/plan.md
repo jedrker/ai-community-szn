@@ -248,14 +248,17 @@ snapshot" — they have different causes and different fixes.
 > (`--kill-after-start=<n>`), because every run until then was 150/150 and the miss-accounting path had
 > never executed.
 >
-> **Amendment to 2.4 (same date), and it is a finding, not a technicality.** With `token.ts`
-> instrumented, the count still cannot be taken: a 150-device burst **kills the log stream**. Measured
-> on production — 14 requests at 20-second spacing delivered 14 of 14 lines, an N=5 run delivered 5 of
-> 5, and the N=150 run delivered **1**, after which the feed went permanently silent while the CLI kept
-> printing `waiting for new logs...`. So 2.4's log half is met by proving per-device issuance at N=5
-> and reasoning that 150/150 connected clients required 150 minted tokens. The larger consequence is
-> the runbook's, not this criterion's: the live tail is the project's only visibility and it fails first
-> under the event that opens a session. See `rehearsal-report.md`.
+> **Amendment to 2.4 (same date), corrected 2026-08-07 by impl review.** With `token.ts` instrumented,
+> an exact count still cannot be taken: a 150-device burst costs **~10–15% of log lines** (127/150 and
+> 135/150 measured). So 2.4's log half is met by proving per-device issuance at N=5 (5/5) and
+> corroborating at scale (135 of 150 lines, which requires ~150 requests). Two independent supports:
+> 150/150 connected clients are unreachable without 150 minted tokens.
+>
+> **This note previously claimed the burst *kills* the stream.** It does not — that was generalised from
+> one observation and did not reproduce in three later tests. The stream did stall permanently on two
+> occasions, cause unidentified. The operational consequence is unchanged and is the runbook's: silence
+> in the tail is not evidence of health. See `rehearsal-report.md` §The log stream drops lines under a
+> burst.
 
 **Contract**: Per measured action report end-to-end p95 (the verdict statistic), median and max;
 round-trip time; clients connected out of N; clients that received the version. Verdict is

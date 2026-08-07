@@ -110,23 +110,28 @@ a spare terminal for the whole segment.
 >   points that matter — session start, join, answer submission, purge — or the host will spend the
 >   session watching an empty terminal. Treat that as a requirement on those slices, not a nicety.
 
-> **The stream dies under the join burst — measured 2026-08-07 (F-04), and this is the most important
-> thing on this page about logs.** It does not expire on a timer: 14 requests at 20-second spacing
-> delivered 14 of 14 lines. But a burst kills it. An N=150 rehearsal delivered **1** token line of ~150,
-> and then the feed went permanently silent — a later rehearsal added nothing to it — while `vercel logs`
-> kept printing `waiting for new logs...` the whole time.
+> **The stream loses lines under a burst, and can stall without saying so — measured 2026-08-07 (F-04).
+> This is the most important thing on this page about logs.**
 >
-> **A dead stream and a quiet system look identical.** ~150 phones joining when you show the QR code is
-> exactly the burst that kills it, so the stream is least trustworthy from the moment the session opens.
+> - It does **not** expire on a timer: 14 requests at 20-second spacing delivered 14 of 14 lines.
+> - A burst costs **roughly 10–15% of lines**: a 150-device join delivered 127 and 135 of 150 on two
+>   measurements. So the stream shows you a join burst but cannot be counted through one.
+> - On two occasions it **stalled permanently** — no further lines, ever — while `vercel logs` kept
+>   printing `waiting for new logs...`. Three later attempts did not reproduce it and **the cause is not
+>   known**. Treat it as intermittent, not as something you can predict or avoid.
+>
+> **A stalled stream and a quiet system look identical.** That is the part that matters, and it holds
+> whatever the cause turns out to be.
 >
 > What to do:
-> - **After the room has joined, prove the stream is alive** before relying on it:
->   `curl -s -o /dev/null <production-url>/api/quiz/token` and confirm a `session.token.issued` line
->   appears. No line means the stream is dead, not that nothing is happening.
-> - **Re-attach when it dies.** `Ctrl-C` and run `vercel logs <production-deployment-url>` again. A fresh
->   attach on the same deployment works immediately — verified.
-> - **Do not treat the tail as your failure detector.** The second device (step 3) is the reliable half of
->   this checklist. The stream is for diagnosis after something is already known to be wrong.
+> - **Prove the stream is alive rather than trusting its silence**, once after the room has joined and
+>   again if you have seen nothing for a while: `curl -s -o /dev/null <production-url>/api/quiz/token` and
+>   confirm a `session.token.issued` line appears. No line means the stream is stalled, not that nothing
+>   is happening.
+> - **Re-attach when it stalls.** `Ctrl-C` and run `vercel logs <production-deployment-url>` again. A
+>   fresh attach on the same deployment works immediately — verified.
+> - **Do not treat the tail as your failure detector.** The second device (step 3) is the dependable half
+>   of this checklist. The stream is for diagnosing something already known to be wrong.
 
 **3. Load the site on a second device.**
 
