@@ -39,6 +39,7 @@
  * session document at all means abort. Teardown is the shipped `purge` route.
  *
  * Run: bun scripts/rehearse-room.ts --base=https://<production-url> [--clients=150]
+ *        [--kill-after-start=<n>]   fault injection — see `killAfterStart`
  */
 
 import { Realtime } from "ably";
@@ -75,6 +76,16 @@ type Config = {
   redisUrl: string;
   redisToken: string;
   clients: number;
+  /**
+   * How many connected devices to kill after the warm-up (0 = none).
+   *
+   * Fault injection, because every clean run leaves the miss-accounting path
+   * unexecuted: 150/150 received proves the happy path and says nothing about
+   * whether a device that goes away is *reported* or silently excluded from the
+   * denominator. A phone locking its screen mid-segment is the ordinary case, so
+   * the path this exercises is the one most likely to run at a real event.
+   */
+  killAfterStart: number;
 };
 
 /**
@@ -211,7 +222,22 @@ function resolveConfig(): Config | null {
     );
   }
 
-  if (!baseUrl || !hostSecret || !redisUrl || !redisToken || !clientsValid) {
+  const rawKill = arg("kill-after-start");
+  const killAfterStart = rawKill === undefined ? 0 : Number(rawKill);
+  const killValid =
+    Number.isInteger(killAfterStart) && killAfterStart >= 0 && killAfterStart <= clients;
+
+  if (rawKill !== undefined) {
+    record(
+      killValid,
+      "fault injection: clients killed after start",
+      killValid
+        ? `${killAfterStart} of ${clients} — expect them as misses, not as a shifted p95`
+        : `"${rawKill}" is not an integer in 0..${clients}`
+    );
+  }
+
+  if (!baseUrl || !hostSecret || !redisUrl || !redisToken || !clientsValid || !killValid) {
     console.log(
       "\n  → Pull credentials locally (`vercel env pull`) or export them by hand, and\n" +
         "    name the target: bun scripts/rehearse-room.ts --base=https://<production-url>\n\n" +
@@ -222,7 +248,7 @@ function resolveConfig(): Config | null {
     return null;
   }
 
-  return { baseUrl, hostSecret, redisUrl, redisToken, clients };
+  return { baseUrl, hostSecret, redisUrl, redisToken, clients, killAfterStart };
 }
 
 /**
@@ -485,6 +511,14 @@ type Device = {
   /** version → the instant it arrived, on this process's clock. */
   arrivals: Map<number, number>;
   droppedNotNewer: number;
+  /**
+   * Killed deliberately by `--kill-after-start`.
+   *
+   * Tracked separately from a plain miss on purpose: an injected fault and a real
+   * failure must not read the same in the output, or the flag would train whoever
+   * runs this to shrug at exactly the number they should be alarmed by.
+   */
+  killed: boolean;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -505,6 +539,7 @@ async function connectDevice(config: Config, index: number): Promise<Device> {
     heldVersion: 0,
     arrivals: new Map(),
     droppedNotNewer: 0,
+    killed: false,
   };
 
   try {
@@ -608,10 +643,39 @@ async function closePool(devices: Device[]): Promise<void> {
   if (devices.length > 0) await sleep(250);
 }
 
+/**
+ * Kills the first N connected devices after the warm-up, simulating phones that
+ * lock or drop off the venue network mid-segment.
+ *
+ * They stay `connected: true` deliberately. They *were* connected and they are
+ * part of the room, so leaving them in the denominator is what makes the loss
+ * visible as `received 147/150`; flipping the flag would shrink the denominator
+ * and report a perfect run over a room that lost three devices — the silent
+ * exclusion this whole flag exists to rule out.
+ */
+function killDevices(config: Config, devices: Device[]): void {
+  if (config.killAfterStart === 0) return;
+
+  const victims = devices.filter((device) => device.connected).slice(0, config.killAfterStart);
+  for (const device of victims) {
+    device.client?.close();
+    device.killed = true;
+  }
+
+  note(
+    "fault injection",
+    `killed ${victims.length} connected device(s) after the warm-up — they must appear as ` +
+      "misses below, and the p95 of the remainder must stay comparable to a clean run"
+  );
+}
+
 /** Waits until every connected device holds `version`, or the timeout expires. */
 async function awaitArrivals(devices: Device[], version: number): Promise<void> {
   const deadline = performance.now() + ARRIVAL_TIMEOUT_MS;
-  const connected = devices.filter((device) => device.connected);
+  // Killed devices are excluded from the *wait* but not from the counts below:
+  // waiting on a device we deliberately closed would burn the full timeout on
+  // every action and prove nothing. If one arrives anyway, it is still counted.
+  const connected = devices.filter((device) => device.connected && !device.killed);
 
   while (performance.now() < deadline) {
     if (connected.every((device) => device.arrivals.has(version))) return;
@@ -751,6 +815,8 @@ async function runRehearsal(config: Config, devices: Device[]): Promise<boolean>
     );
   }
 
+  killDevices(config, devices);
+
   const measurements: Measurement[] = [warmUp];
 
   // Two questions' worth of the real rhythm: open, reveal, open, reveal.
@@ -770,6 +836,29 @@ async function runRehearsal(config: Config, devices: Device[]): Promise<boolean>
       `${measurement.label} was not a measured action`,
       `the store reported "${measurement.outcome.note}" — nothing was published, so it ` +
         "contributes no figures"
+    );
+  }
+
+  // The check that makes the fault injection worth having. Eyeballing "received
+  // 147/150" would pass a run in which the killed devices were quietly dropped
+  // from the denominator instead; this asserts the arithmetic.
+  const killed = devices.filter((device) => device.killed);
+  if (killed.length > 0) {
+    const perAction = counted.map((measurement) => ({
+      label: measurement.label,
+      missing: measurement.connected - measurement.received,
+    }));
+    const allAccounted = perAction.every((entry) => entry.missing >= killed.length);
+
+    record(
+      allAccounted,
+      "killed devices are reported as misses",
+      allAccounted
+        ? `${killed.length} killed; every measured action reports at least that many ` +
+            `missing out of ${counted[0]?.connected ?? 0} still counted as connected`
+        : `${killed.length} killed, but some action reported fewer misses — ` +
+            perAction.map((entry) => `${entry.label}: ${entry.missing}`).join(", ") +
+            ". They are being excluded from the denominator rather than counted as lost."
     );
   }
 

@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { logSessionEvent } from "../../../lib/session/log";
 import { createTokenRequest } from "../../../lib/session/realtime";
 
 /**
@@ -40,6 +41,10 @@ export const GET: APIRoute = async () => {
       { status: 503, headers: { "Content-Type": "application/json" } }
     );
   }
+
+  // The only evidence this hop ran. Without it a join burst is invisible in the
+  // stream — see `session.token.issued` in `log.ts` for why that mattered.
+  logSessionEvent("session.token.issued");
 
   return new Response(JSON.stringify(result.tokenRequest), {
     status: 200,

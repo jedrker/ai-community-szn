@@ -46,6 +46,21 @@ export const SESSION_EVENTS = [
    * to be able to tell "the segment is over" from "the room's data is gone".
    */
   "session.purged",
+  /**
+   * A subscribe-only token was minted for a device (F-04, criterion 2.4).
+   *
+   * Exists because the token endpoint was the one hop with no evidence it ran.
+   * `vercel logs` prints a request line only for invocations that *emit*
+   * something, and `token.ts` spoke only on its failure paths — so a rehearsal
+   * where 150 devices each fetched a token produced zero token lines, and a
+   * rehearsal where none of them did would have looked identical.
+   *
+   * One line per joining device, so a room of 150 writes 150 of these. That is
+   * the point: counting them is how the join burst is observed. It carries no
+   * fields — there is nothing about *which* device to say, and the endpoint is
+   * unauthenticated anyway, so there is nothing it could truthfully claim.
+   */
+  "session.token.issued",
 ] as const;
 
 export type SessionEvent = (typeof SESSION_EVENTS)[number];

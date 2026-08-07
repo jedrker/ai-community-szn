@@ -51,6 +51,20 @@ describe("logSessionEvent", () => {
     expect(SESSION_EVENTS).toContain("session.purged");
   });
 
+  it("carries F-04's token event, and it takes no fields", () => {
+    expect(SESSION_EVENTS).toContain("session.token.issued");
+
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    logSessionEvent("session.token.issued");
+
+    // Asserted as an exact object: the token endpoint is unauthenticated and one
+    // line is emitted per joining device, so this is the event most likely to be
+    // "improved" later with something identifying. It has nothing to add.
+    expect(JSON.parse(spy.mock.calls[0]![0].slice(LOG_PREFIX.length + 1))).toEqual({
+      event: "session.token.issued",
+    });
+  });
+
   /**
    * **This is the enforcement, and it is load-bearing in both directions.**
    *
