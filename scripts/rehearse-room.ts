@@ -21,10 +21,10 @@
  *
  * This script *is* the host (it holds `LIVEQUIZ_HOST_SECRET` locally, never in a
  * browser — which is what keeps the "the harness never runs in production" invariant in
- * `src/lib/session/harness.ts` intact) and it *is* the room (N Ably subscribers, from
- * Phase 2). Because the click instant and every arrival instant are read from the same
- * clock, clock skew is structurally absent rather than corrected for. That resolves the
- * open question `latency-probe.md` handed this slice: **one process, one clock.**
+ * `src/lib/session/harness.ts` intact) and it *is* the room (N Ably subscribers).
+ * Because the click instant and every arrival instant are read from the same clock,
+ * clock skew is structurally absent rather than corrected for. That resolves the open
+ * question `latency-probe.md` handed this slice: **one process, one clock.**
  *
  * The honest cost, which belongs in any report of these figures: one machine on one
  * network is a **lower bound** on what a room of phones will see, not a simulation of
@@ -38,9 +38,10 @@
  * the pre-flight refusal proven in `scripts/check-purge-residue.ts`: any existing
  * session document at all means abort. Teardown is the shipped `purge` route.
  *
- * Run: bun scripts/rehearse-room.ts --base=https://<production-url>
+ * Run: bun scripts/rehearse-room.ts --base=https://<production-url> [--clients=150]
  */
 
+import { Realtime } from "ably";
 import { Redis } from "@upstash/redis";
 
 import { SESSION_CHANNEL, SESSION_KEY } from "../src/lib/session/keys";
@@ -73,7 +74,34 @@ type Config = {
   hostSecret: string;
   redisUrl: string;
   redisToken: string;
+  clients: number;
 };
+
+/**
+ * The PRD guardrail, in milliseconds: "every attendee's screen reflects the host's
+ * current question or reveal within 1 second of the host acting".
+ */
+const BUDGET_MS = 1000;
+
+/**
+ * How long a client is given to reach `connected` and attach.
+ *
+ * Generous, because 150 clients joining at once is a burst against a deliberately
+ * unthrottled token endpoint and queueing there is part of what is being measured — a
+ * tight timeout would convert legitimate slow joins into "never connected" and blame
+ * the platform for the harness's impatience.
+ */
+const CONNECT_TIMEOUT_MS = 30_000;
+
+/**
+ * How long arrivals for one action are waited for before the remaining clients are
+ * called misses. Five times the budget: anything that has not landed by then has failed
+ * the guardrail so thoroughly that its exact figure would not change the verdict.
+ */
+const ARRIVAL_TIMEOUT_MS = 5_000;
+
+/** Default room size — the PRD guardrail's number. See `change.md`. */
+const DEFAULT_CLIENTS = 150;
 
 type Finding = { ok: boolean; label: string; detail: string };
 
@@ -162,7 +190,28 @@ function resolveConfig(): Config | null {
     redisUrl && redisToken ? "present" : "absent"
   );
 
-  if (!baseUrl || !hostSecret || !redisUrl || !redisToken) {
+  const rawClients = arg("clients");
+  const clients = rawClients === undefined ? DEFAULT_CLIENTS : Number(rawClients);
+  const clientsValid = Number.isInteger(clients) && clients >= 0;
+
+  record(
+    clientsValid,
+    "simulated device count",
+    clientsValid
+      ? `${clients}${rawClients === undefined ? " (default)" : ""}`
+      : `"${rawClients}" is not a non-negative integer`
+  );
+
+  if (clientsValid && clients > 150) {
+    note(
+      "device count",
+      `${clients} — the provider's free ceiling is 200 peak connections, so this run ` +
+        "leaves little headroom and will report a shortfall if anything else is holding " +
+        "connections"
+    );
+  }
+
+  if (!baseUrl || !hostSecret || !redisUrl || !redisToken || !clientsValid) {
     console.log(
       "\n  → Pull credentials locally (`vercel env pull`) or export them by hand, and\n" +
         "    name the target: bun scripts/rehearse-room.ts --base=https://<production-url>\n\n" +
@@ -173,7 +222,7 @@ function resolveConfig(): Config | null {
     return null;
   }
 
-  return { baseUrl, hostSecret, redisUrl, redisToken };
+  return { baseUrl, hostSecret, redisUrl, redisToken, clients };
 }
 
 /**
@@ -415,25 +464,351 @@ async function teardown(config: Config): Promise<void> {
   );
 }
 
-/** The three flow verbs, in the order a host presses them. No body — the secret is a header. */
-async function driveFlow(config: Config): Promise<void> {
-  for (const verb of ["start", "advance", "reveal"] as const) {
-    const outcome = await hostAction(config, verb);
+/**
+ * One simulated attendee device.
+ *
+ * `heldVersion` and the drop below are not bookkeeping — they are the client rule from
+ * `spine-contract.md`, applied exactly as a real device applies it: *take a snapshot
+ * only if its version is strictly greater than the one held*. Without it a republish
+ * (which `start` performs on an existing session, and which a host retrying a failed
+ * publish performs deliberately) would be counted as a fresh arrival and would flatter
+ * every figure downstream of it.
+ */
+type Device = {
+  index: number;
+  client: Realtime | null;
+  /** Reached `connected` and attached to the channel. */
+  connected: boolean;
+  /** Why it did not, when it did not. Distinct from "connected but never received". */
+  failure: string | null;
+  heldVersion: number;
+  /** version → the instant it arrived, on this process's clock. */
+  arrivals: Map<number, number>;
+  droppedNotNewer: number;
+};
 
-    record(
-      outcome.status === 200 && outcome.applied === true,
-      `host action: ${verb}`,
-      describeOutcome(outcome)
-    );
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-    if (outcome.region && outcome.region !== "fra1") {
-      note(
-        "function region",
-        `${outcome.region} — not fra1. A figure from this deployment measures the wrong ` +
-          "region and must not be recorded as the baseline (roadmap F-04)"
+/**
+ * Stands up one client the way a phone does: `authUrl` pointed at the project's own
+ * token endpoint, so the run exercises that endpoint under a join burst rather than
+ * short-circuiting it with an API key this process happens to have.
+ */
+async function connectDevice(config: Config, index: number): Promise<Device> {
+  const device: Device = {
+    index,
+    client: null,
+    connected: false,
+    failure: null,
+    heldVersion: 0,
+    arrivals: new Map(),
+    droppedNotNewer: 0,
+  };
+
+  try {
+    const client = new Realtime({ authUrl: `${config.baseUrl}/api/quiz/token` });
+    device.client = client;
+
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`did not connect within ${CONNECT_TIMEOUT_MS} ms`)),
+        CONNECT_TIMEOUT_MS
       );
+      client.connection.once("connected", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      client.connection.once("failed", (change) => {
+        clearTimeout(timer);
+        reject(new Error(change.reason?.message ?? "connection failed"));
+      });
+    });
+
+    const channel = client.channels.get(MIRRORED_SESSION_CHANNEL);
+    await channel.subscribe(MIRRORED_SNAPSHOT_EVENT, (message) => {
+      // Read the clock first, before any parsing, so the figure is arrival time and
+      // not arrival time plus this handler.
+      const at = performance.now();
+      const version = (message.data as { version?: unknown } | null)?.version;
+      if (typeof version !== "number") return;
+
+      if (version <= device.heldVersion) {
+        device.droppedNotNewer += 1;
+        return;
+      }
+
+      device.heldVersion = version;
+      device.arrivals.set(version, at);
+    });
+
+    device.connected = true;
+  } catch (err) {
+    device.failure = err instanceof Error ? err.message : String(err);
+  }
+
+  return device;
+}
+
+/**
+ * The join burst. All at once rather than staggered, because that is the shape of a
+ * real room: 150 phones open the page when the host puts the QR code on screen.
+ *
+ * A connection failure is a first-class result, not an error to swallow — "only 120 of
+ * 150 connected" is the most important thing this harness can return, and averaging
+ * latency over the 120 that made it while saying nothing about the 30 that did not
+ * would report a healthy number for a broken room.
+ */
+async function connectPool(config: Config): Promise<Device[]> {
+  if (config.clients === 0) {
+    note("device pool", "0 clients — driving the session only, nothing will be measured");
+    return [];
+  }
+
+  const startedAt = performance.now();
+  const devices = await Promise.all(
+    Array.from({ length: config.clients }, (_, index) => connectDevice(config, index))
+  );
+  const elapsed = Math.round(performance.now() - startedAt);
+
+  const connected = devices.filter((device) => device.connected);
+  record(
+    connected.length === config.clients,
+    "device pool connected",
+    `${connected.length}/${config.clients} in ${elapsed} ms`
+  );
+
+  const failures = devices.filter((device) => !device.connected);
+  if (failures.length > 0) {
+    // Grouped by reason: 30 identical messages is one fact, and printing it 30 times
+    // buries the one client that failed differently.
+    const byReason = new Map<string, number>();
+    for (const device of failures) {
+      const reason = device.failure ?? "unknown";
+      byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
+    }
+    for (const [reason, count] of byReason) {
+      note("connection failure", `${count}× ${reason}`);
+    }
+    note(
+      "where to look first",
+      "if there are no provider-side errors here, suspect this machine before the " +
+        "platform — file descriptors and one network path are the plausible bottleneck"
+    );
+  }
+
+  return devices;
+}
+
+async function closePool(devices: Device[]): Promise<void> {
+  for (const device of devices) device.client?.close();
+  // Give the sockets a moment to close before the process exits, so the provider's
+  // peak-connection count settles before the next run starts.
+  if (devices.length > 0) await sleep(250);
+}
+
+/** Waits until every connected device holds `version`, or the timeout expires. */
+async function awaitArrivals(devices: Device[], version: number): Promise<void> {
+  const deadline = performance.now() + ARRIVAL_TIMEOUT_MS;
+  const connected = devices.filter((device) => device.connected);
+
+  while (performance.now() < deadline) {
+    if (connected.every((device) => device.arrivals.has(version))) return;
+    // In-process polling of local state. Note that no device polls
+    // `/api/quiz/state` — the design is push, and a harness that polled would
+    // measure a different system than the one being shipped.
+    await sleep(10);
+  }
+}
+
+/** Nearest-rank, on an already-sorted ascending array. */
+function percentile(sorted: number[], fraction: number): number {
+  if (sorted.length === 0) return Number.NaN;
+  const rank = Math.max(1, Math.ceil(fraction * sorted.length));
+  return sorted[rank - 1] ?? Number.NaN;
+}
+
+type Measurement = {
+  label: string;
+  outcome: ActionOutcome;
+  /** Discarded figures are still taken and still printed — just not counted. */
+  discarded: boolean;
+  /** End-to-end deltas in ms, click → snapshot arrival, ascending. */
+  deltas: number[];
+  received: number;
+  connected: number;
+};
+
+/**
+ * Fires one host action and collects what the room saw.
+ *
+ * The end-to-end anchor is `outcome.clickedAt`, taken inside `hostAction` *before* the
+ * request leaves. Arrivals can and do land before the HTTP response returns, which is
+ * why each device records arrivals keyed by version as they happen rather than being
+ * asked for one after the fact.
+ */
+async function measureAction(
+  config: Config,
+  verb: HostVerb,
+  devices: Device[],
+  options: { discarded?: boolean; label?: string } = {}
+): Promise<Measurement> {
+  const discarded = options.discarded ?? false;
+  const label = options.label ?? verb;
+  const outcome = await hostAction(config, verb);
+
+  const applied = outcome.status === 200 && outcome.applied === true;
+  record(applied, `host action: ${label}`, describeOutcome(outcome));
+
+  if (outcome.region && outcome.region !== "fra1") {
+    note(
+      "function region",
+      `${outcome.region} — not fra1. A figure from this deployment measures the wrong ` +
+        "region and must not be recorded as the baseline (roadmap F-04)"
+    );
+  }
+
+  const connected = devices.filter((device) => device.connected);
+  const deltas: number[] = [];
+
+  // An action the store declined published nothing, so there is no version to wait for
+  // and no arrival to measure. Counting it would report fan-out for a snapshot that
+  // never went out.
+  if (applied && outcome.version !== null) {
+    await awaitArrivals(devices, outcome.version);
+
+    for (const device of connected) {
+      const at = device.arrivals.get(outcome.version);
+      if (at !== undefined) deltas.push(at - outcome.clickedAt);
     }
   }
+
+  deltas.sort((a, b) => a - b);
+
+  return {
+    label,
+    outcome,
+    discarded,
+    deltas,
+    received: deltas.length,
+    connected: connected.length,
+  };
+}
+
+function reportMeasurement(measurement: Measurement, total: number): void {
+  const { deltas, outcome } = measurement;
+  const prefix = measurement.discarded ? "  [discarded] " : "  ";
+  const version = outcome.version === null ? "—" : `v${outcome.version}`;
+
+  if (deltas.length === 0) {
+    console.log(
+      `${prefix}${measurement.label.padEnd(9)} ${version.padEnd(4)} ` +
+        `no arrivals — ${measurement.connected}/${total} connected, 0 received`
+    );
+    return;
+  }
+
+  const p95 = Math.round(percentile(deltas, 0.95));
+  const median = Math.round(percentile(deltas, 0.5));
+  const max = Math.round(deltas[deltas.length - 1] ?? Number.NaN);
+
+  console.log(
+    `${prefix}${measurement.label.padEnd(9)} ${version.padEnd(4)} ` +
+      `e2e p95 ${String(p95).padStart(5)} ms   median ${String(median).padStart(5)} ms   ` +
+      `max ${String(max).padStart(5)} ms   rtt ${String(Math.round(outcome.roundTripMs)).padStart(5)} ms   ` +
+      `received ${measurement.received}/${measurement.connected} connected of ${total}`
+  );
+}
+
+/**
+ * The run: connect, warm up, measure, report.
+ *
+ * **The ordering is the design.** Clients connect *before* `start`, so the lobby
+ * snapshot reaches them over the channel they are already subscribed to. That gives the
+ * barrier the plan asks for — every client is connected and holding the lobby snapshot
+ * before the first measured action — without a single `/api/quiz/state` fetch per
+ * device. `start` doubles as the warm-up: it is the first action, so it pays the
+ * function's cold start, which is not fan-out cost. Its figures are taken and printed
+ * but explicitly discarded, because a silently dropped sample is indistinguishable from
+ * a flattering one.
+ */
+async function runRehearsal(config: Config, devices: Device[]): Promise<boolean> {
+  const warmUp = await measureAction(config, "start", devices, {
+    discarded: true,
+    label: "start",
+  });
+
+  if (devices.length > 0) {
+    const holding = devices.filter(
+      (device) => device.connected && warmUp.outcome.version !== null &&
+        device.arrivals.has(warmUp.outcome.version)
+    ).length;
+    record(
+      holding === warmUp.connected && warmUp.connected > 0,
+      "barrier: every connected device holds the lobby snapshot",
+      `${holding}/${warmUp.connected} connected device(s)`
+    );
+  }
+
+  const measurements: Measurement[] = [warmUp];
+
+  // Two questions' worth of the real rhythm: open, reveal, open, reveal.
+  for (const verb of ["advance", "reveal", "advance", "reveal"] as const) {
+    measurements.push(await measureAction(config, verb, devices));
+  }
+
+  console.log("\nPer-action figures (end to end = click → snapshot arrival, one clock):\n");
+  for (const measurement of measurements) reportMeasurement(measurement, config.clients);
+
+  const counted = measurements.filter((measurement) => !measurement.discarded);
+  const withArrivals = counted.filter((measurement) => measurement.deltas.length > 0);
+
+  const stale = counted.filter((measurement) => measurement.outcome.note !== null);
+  for (const measurement of stale) {
+    note(
+      `${measurement.label} was not a measured action`,
+      `the store reported "${measurement.outcome.note}" — nothing was published, so it ` +
+        "contributes no figures"
+    );
+  }
+
+  const droppedNotNewer = devices.reduce((sum, device) => sum + device.droppedNotNewer, 0);
+  if (droppedNotNewer > 0) {
+    note(
+      "snapshots dropped by the client rule",
+      `${droppedNotNewer} — not newer than the version already held, exactly as a real ` +
+        "device drops them"
+    );
+  }
+
+  if (config.clients === 0) {
+    console.log("\nVerdict: not measured — the run had no simulated devices.\n");
+    return true;
+  }
+
+  if (withArrivals.length === 0) {
+    console.log(
+      `\nVerdict: FAILED — no measured action reached a single device. ` +
+        "Nothing here is a latency figure; find out why before reading anything else.\n"
+    );
+    return false;
+  }
+
+  const worstP95 = Math.max(
+    ...withArrivals.map((measurement) => percentile(measurement.deltas, 0.95))
+  );
+  const passed = worstP95 < BUDGET_MS;
+
+  console.log(
+    `\nVerdict: ${passed ? "PASS" : "FAIL"} — worst end-to-end p95 across measured ` +
+      `actions is ${Math.round(worstP95)} ms against a ${BUDGET_MS} ms budget.\n\n` +
+      "  This is a LOWER BOUND. One process on one network is not a room of phones:\n" +
+      "  if it fails here, real devices are worse; if it passes, that is not proof the\n" +
+      "  venue network passes.\n"
+  );
+
+  return passed;
 }
 
 async function main(): Promise<void> {
@@ -450,23 +825,28 @@ async function main(): Promise<void> {
 
   if (!(await preflight(redis))) process.exit(1);
 
+  const devices = await connectPool(config);
+  let verdict = false;
+
   try {
-    await driveFlow(config);
+    verdict = await runRehearsal(config, devices);
   } finally {
     // Always, including after a thrown request. A rehearsal that leaves state behind
     // blocks the next one on a pre-flight refusal that means nothing.
     await teardown(config);
+    await closePool(devices);
   }
 
   const failed = findings.filter((finding) => !finding.ok);
-  console.log(`\n${findings.length - failed.length}/${findings.length} checks passed.\n`);
+  console.log(`${findings.length - failed.length}/${findings.length} checks passed.\n`);
 
   if (failed.length > 0) {
     console.log("Failed checks:");
     for (const finding of failed) console.log(`  - ${finding.label}`);
     console.log("");
-    process.exit(1);
   }
+
+  if (failed.length > 0 || !verdict) process.exit(1);
 
   console.log(
     "Confirm the namespace is empty: bun scripts/check-purge-residue.ts\n\n" +
