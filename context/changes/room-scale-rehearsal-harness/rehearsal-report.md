@@ -133,16 +133,58 @@ each holding the lobby snapshot) is only reachable if 150 tokens were minted, si
 no token does not connect. Counting all 150 in the log stream is not achievable on this platform, and
 the reason is now measured rather than assumed.
 
-## Load run — pending
+## Load run
 
-To be filled by the N=150 run (plan phase 3, step 2). Must record: deployment URL, function region read
-from `x-vercel-id` (a region other than `fra1` invalidates the run as a baseline and is reported as
-such, not footnoted), client count, machine and network, the raw harness output, and the commands-counter
-delta against the 513 baseline above.
+### Conditions
 
-One honest limit belongs in that section, not as a footnote: **one process on one network is a lower
-bound on a room of phones, not a simulation of one.** If it fails here, real devices are worse; if it
-passes, that is not proof the venue network passes.
+| | |
+| --- | --- |
+| Date | 2026-08-07 |
+| Target | `https://ai-community-szn.vercel.app` (production) |
+| Deployments | `dpl_3hqnxVbBZYiDKYRb9fJmHUGcNv9K`, then `dpl_AVtWhKUdppv9NRPyWheChNg8RN5T` (the token-log deploy) |
+| **Function region** | **`fra1`** — read from `x-vercel-id: arn1::fra1::…`, and reported by the harness on every one of the ~30 host actions taken across all runs. The first segment (`arn1`, Stockholm) is the *edge* that accepted the request; the second is where the function ran. F-01's region key is therefore live in production and this run is valid as a baseline. |
+| Clients | 150 Ably subscribers, each authenticating through `/api/quiz/token` |
+| Driver | one `bun` process, Apple M2 Pro (Darwin arm64), residential Wi-Fi, Szczecin |
+| Clock | one process, one clock — click instant and every arrival instant read from the same `performance.now()`, so skew is structurally absent rather than corrected |
+
+### Figures
+
+Three N=150 runs were taken. **All three are reported, and the recorded baseline is the worst of
+them** — a baseline picked as the best run is a claim about a good day, not about the system.
+
+| Run | Connect | Worst measured p95 | Median range | Max | Received |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 150/150 in 1468 ms | **111 ms** | 82–107 ms | 124 ms | 150/150 on every action |
+| 2 | 150/150 in 1753 ms | **188 ms** | 171–184 ms | 188 ms | 150/150 on every action |
+| 3 | 150/150 in 973 ms | **356 ms** | 107–320 ms | 384 ms | 150/150 on every action |
+
+**Recorded baseline: end-to-end p95 = 356 ms against a 1000 ms budget, at 150 concurrent devices, from
+`fra1`.** Zero lost snapshots across all three runs: every connected device received every published
+version. Warm-up (`start`) discarded in each run as cold-start cost, and printed anyway.
+
+Runs 2 and 3 were made while tailing logs, i.e. with the burst competing against log delivery; run 1 was
+not. That is the most likely reason run 3 is three times run 1 and it is a reason to keep 356 ms rather
+than explain it away.
+
+### What this does not measure
+
+**One process on one network is a lower bound on a room of phones, not a simulation of one.** If it
+failed here, real devices would be worse; that it passes is not proof the venue network passes. Three
+specific gaps:
+
+- **150 sockets from one NIC on one Wi-Fi link** share a path a real room does not share. The number
+  understates per-device variance and cannot show head-of-line blocking on a saturated venue AP.
+- **No attendee writes.** Nothing submits an answer, because no slice builds that yet (S-03 onward), so
+  the store's write path at room scale is untested and the commands-per-session estimate remains
+  unvalidated.
+- **Nothing renders.** Arrival is measured at the moment the snapshot reaches the client library, not
+  when a phone paints it. Device rendering is S-02's cost and is not in these figures.
+
+### Commands counter
+
+Read after the load runs: **4102 / 500,000** for the month, against 513 before them. See the section
+above — the delta is far below the 200K tripwire but two orders of magnitude above what the code
+accounts for, and still unexplained.
 
 ## Prior runs against production
 

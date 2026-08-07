@@ -465,14 +465,14 @@ change removes a script, a report and a runbook section.
 
 #### Automated
 
-- [ ] 3.1 Type checking passes: `bun run type-check`
-- [ ] 3.2 Full suite passes: `bun run test`
-- [ ] 3.3 `check-purge-residue.ts` reports an empty namespace after the final run
+- [x] 3.1 Type checking passes: `bun run type-check` — b9bb539
+- [x] 3.2 Full suite passes: `bun run test` — b9bb539
+- [x] 3.3 `check-purge-residue.ts` reports an empty namespace after the final run — b9bb539
 
 #### Manual
 
 - [x] 3.4 Spend alert confirmed and recorded with its threshold before the load run — see phase 3 note
-- [ ] 3.5 Function region observed as `fra1` from `x-vercel-id`
-- [ ] 3.6 `latency-probe.md` Measurements table holds real rows; no `_pending_` remains
-- [ ] 3.7 Guardrail verdict stated, including whether F-01's tripwire fired
-- [ ] 3.8 Runbook section is followable by someone who did not write the harness
+- [x] 3.5 Function region observed as `fra1` from `x-vercel-id` — 15a1ac0
+- [x] 3.6 `latency-probe.md` Measurements table holds real rows; no `_pending_` remains — b9bb539
+- [x] 3.7 Guardrail verdict stated, including whether F-01's tripwire fired — b9bb539
+- [x] 3.8 Runbook section is followable by someone who did not write the harness — b9bb539

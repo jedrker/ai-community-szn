@@ -14,6 +14,40 @@ Read this before the session, not during it.
 > the existing site for now — event archive, speaker directory, newsletter endpoint — plus a spine you can
 > drive but not yet play. The log-tailing and second-device steps apply either way.
 
+## The day before — rehearse the room
+
+Optional, and worth it before an event where the quiz actually runs. This drives production with
+simulated devices and measures what the room will see. **Not on event day with attendees present:** it
+starts and advances a real session on production.
+
+```bash
+bun scripts/rehearse-room.ts --base=https://<production-url> --clients=150
+```
+
+It needs `LIVEQUIZ_HOST_SECRET` and the `KV_REST_API_*` pair in the environment — `vercel env pull`, or
+export them by hand. It refuses to start if it cannot see them, and names which one is missing.
+
+What to expect, and how to read it:
+
+- **It refuses to run while a session exists**, naming the phase (`a session already exists (phase:
+  lobby)`). That is the safety gate, not a bug — it exists so a rehearsal can never trample a live
+  segment. If it fires unexpectedly, someone or something left a session open; clear it with `purge`
+  before rehearsing.
+- **It purges when it finishes**, including after a failure, so runs do not accumulate state. Confirm
+  with `bun scripts/check-purge-residue.ts` — note that script refuses to run while a session document
+  exists, which makes it a pre-rehearsal check as well as a post-run one.
+- **The verdict is end-to-end p95 against a 1000 ms budget**, and the exit code follows it. The
+  reference figure to compare against is **356 ms at 150 clients from `fra1`**
+  (`context/changes/room-scale-rehearsal-harness/rehearsal-report.md`).
+- **`received X/Y connected of N` is the line to read**, not just the p95. A device that connected and
+  then missed a snapshot is a loss the percentile cannot show you.
+- **Rehearse from a machine on a network you can describe.** The figure is a lower bound: one process on
+  one Wi-Fi link is not 150 phones on a venue AP.
+
+To check that losses are reported rather than swallowed, add `--kill-after-start=3`: three devices are
+disconnected after the warm-up and every action should then read `received (N-3)/N` with the p95 of the
+remainder unchanged.
+
 ## Before the session
 
 **1. Confirm what is actually in production.**
@@ -76,6 +110,24 @@ a spare terminal for the whole segment.
 >   points that matter — session start, join, answer submission, purge — or the host will spend the
 >   session watching an empty terminal. Treat that as a requirement on those slices, not a nicety.
 
+> **The stream dies under the join burst — measured 2026-08-07 (F-04), and this is the most important
+> thing on this page about logs.** It does not expire on a timer: 14 requests at 20-second spacing
+> delivered 14 of 14 lines. But a burst kills it. An N=150 rehearsal delivered **1** token line of ~150,
+> and then the feed went permanently silent — a later rehearsal added nothing to it — while `vercel logs`
+> kept printing `waiting for new logs...` the whole time.
+>
+> **A dead stream and a quiet system look identical.** ~150 phones joining when you show the QR code is
+> exactly the burst that kills it, so the stream is least trustworthy from the moment the session opens.
+>
+> What to do:
+> - **After the room has joined, prove the stream is alive** before relying on it:
+>   `curl -s -o /dev/null <production-url>/api/quiz/token` and confirm a `session.token.issued` line
+>   appears. No line means the stream is dead, not that nothing is happening.
+> - **Re-attach when it dies.** `Ctrl-C` and run `vercel logs <production-deployment-url>` again. A fresh
+>   attach on the same deployment works immediately — verified.
+> - **Do not treat the tail as your failure detector.** The second device (step 3) is the reliable half of
+>   this checklist. The stream is for diagnosis after something is already known to be wrong.
+
 **3. Load the site on a second device.**
 
 Open the attendee-facing view on a phone that is *not* the host machine, on the venue network if
@@ -88,11 +140,12 @@ The project deliberately stays on the Vercel **Hobby** plan. Two conditions woul
 Ask both, out loud:
 
 - **Latency**: has any rehearsal or live session shown state taking longer than **one second** to reach
-  attendee devices? `vercel.json` declares `fra1` (Frankfurt) and it works on the Hobby plan — see
-  `region-probe.md` — **but production only runs there once that key has reached `main` and rebuilt.**
-  Until then functions execute in `iad1` (US East) and the transatlantic round trip is real. Check which
-  you are on rather than assuming: `curl -sI <production-url> | grep x-vercel-id` returns
-  `<edge>::<function-region>::<id>`.
+  attendee devices? **Measured 2026-08-07 (F-04): no — end-to-end p95 was 356 ms at 150 simulated
+  devices from `fra1`, the worst of three runs.** Production now genuinely runs in Frankfurt: that key
+  has reached `main`. Still check rather than assume, because a region regression would invalidate the
+  figure: `curl -sI <production-url> | grep x-vercel-id` returns `<edge>::<function-region>::<id>` and
+  the middle segment must read `fra1`. Note the measured figure is a **lower bound** — one machine on
+  one network — so a real room can be worse; that is what the second device is for.
 - **Licensing**: has Vercel made *any* contact about fair use? The Hobby plan is restricted to
   non-commercial personal use, and this site carries Brave Courses branding. The judgment on record is
   that a free local community initiative is not commercial use. A notice would arrive at the account's
