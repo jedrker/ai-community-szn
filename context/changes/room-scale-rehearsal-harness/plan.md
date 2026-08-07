@@ -405,9 +405,9 @@ change removes a script, a report and a runbook section.
 
 #### Automated
 
-- [x] 1.1 Type checking passes: `bun run type-check`
-- [x] 1.2 Existing suite still passes: `bun run test`
-- [x] 1.3 Script refuses to run with credentials absent
+- [x] 1.1 Type checking passes: `bun run type-check` — c82cb4d
+- [x] 1.2 Existing suite still passes: `bun run test` — c82cb4d
+- [x] 1.3 Script refuses to run with credentials absent — c82cb4d
 
 #### Manual
 
@@ -420,8 +420,8 @@ change removes a script, a report and a runbook section.
 
 #### Automated
 
-- [ ] 2.1 Type checking passes: `bun run type-check`
-- [ ] 2.2 Existing suite still passes: `bun run test`
+- [x] 2.1 Type checking passes: `bun run type-check` — 629fe2f
+- [x] 2.2 Existing suite still passes: `bun run test` — 629fe2f
 - [ ] 2.3 N=1 run prints a verdict and non-zero connected count
 
 #### Manual
