@@ -72,10 +72,9 @@ number, not after.
 
 | Date | Deployment | Function region (from `x-vercel-id`) | Action | End to end (click → render) | Round trip (click → response) | Client device / network |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2026-08-07 | `dpl_3hqnx…` | `fra1` (`arn1::fra1::…`) | advance / reveal ×4, run 1 | p95 **111 ms**, median 82–107, max 124 | 99–127 ms | 150 simulated clients, one `bun` process, Apple M2 Pro, residential Wi-Fi (Szczecin) |
-| 2026-08-07 | `dpl_AVtWh…` | `fra1` (`arn1::fra1::…`) | advance / reveal ×4, run 2 | p95 **188 ms**, median 171–184, max 188 | 166–181 ms | as above, while tailing `vercel logs` |
-| 2026-08-07 | `dpl_AVtWh…` | `fra1` (`arn1::fra1::…`) | advance / reveal ×4, run 3 | p95 **356 ms**, median 107–320, max 384 | 99–316 ms | as above, while tailing `vercel logs` |
-| 2026-08-07 | `dpl_AVtWh…` | `fra1` (`arn1::fra1::…`) | advance / reveal ×4, 20 clients, 3 killed after warm-up | p95 122–189 ms | 96–187 ms | fault-injection run: `received 17/20` per action, p95 of the remainder unchanged |
+| 2026-08-07 | `dpl_3hqnx…` | `fra1` (`arn1::fra1::…`) | advance / reveal ×4, 150 clients | p95 **111 ms**, median 82–107, max 124 | 99–127 ms | 150 simulated clients, one `bun` process, Apple M2 Pro, residential Wi-Fi (Szczecin) |
+| 2026-08-07 | `dpl_AVtWh…` | `fra1` (`arn1::fra1::…`) | advance / reveal ×4, 150 clients, ×6 runs | p95 **188 / 356 / 480 / 536 / 551 / 592 ms** — worst 592 | 96–316 ms | as above; some runs while tailing `vercel logs`. **Seven runs total span 111–592 ms with the system unchanged — read the range, not any single row** |
+| 2026-08-07 | `dpl_AVtWh…` | `fra1` (`arn1::fra1::…`) | advance / reveal ×4, 20 clients, 3 killed after warm-up | slowest arrival 122–189 ms | 96–187 ms | fault-injection run: `received 17/20` per action, figures of the remainder unchanged. **n=17, so this is the slowest sample, not a percentile** |
 
 The `start` action is excluded from every row: it is the warm-up that pays the function's cold start
 (183–626 ms observed), which is not fan-out cost. It is taken and printed by the harness, then
@@ -92,8 +91,10 @@ The PRD requires that every attendee's screen reflects the host's current questi
 within **1 second** of the host acting, at **150 concurrent devices, with no lost answers and no
 divergence between devices**. Measured on production, from `fra1`:
 
-- **End-to-end p95 = 356 ms**, the worst of three N=150 runs, against a 1000 ms budget — under by
-  a factor of ~2.8. The best run read 111 ms.
+- **End-to-end p95 spans 111–592 ms across seven N=150 runs**, against a 1000 ms budget — the worst
+  run is under by ~1.7×. Recorded as a range because the single figure first written here (356 ms)
+  was superseded twice within hours; **over 5× run-to-run spread with the system unchanged is itself
+  the result**, and a future run reading 500 ms is normal variance rather than a regression.
 - **150/150 devices connected** on every run, and **every connected device received every
   published version**. No lost snapshots, so no divergence: all 150 held the same version at the
   same moment, which is the property the guardrail is really about.
@@ -102,10 +103,12 @@ divergence between devices**. Measured on production, from `fra1`:
 
 Two qualifications, neither of which changes the verdict:
 
-1. **This is a lower bound, not a room.** One process, one NIC, one Wi-Fi path. The figure would
-   have to be ~3× worse on real devices before the guardrail is in question — but nothing here
-   proves a venue network cannot be that much worse. The measurement to take at a real event is
-   the host's own second device (`docs/runbook-live-session.md`).
+1. **This is a lower bound, not a room** — with one caveat pointing the other way. One process, one
+   NIC, one Wi-Fi path, so a real room can be worse and nothing here bounds how much. But 150
+   subscribers also share one event loop, so the last handler runs after 149 deserialisations; that
+   component *overstates* the tail relative to independent phones. Both effects are unquantified. The
+   measurement to take at a real event is the host's own second device
+   (`docs/runbook-live-session.md`).
 2. **The write half is untested.** "No lost answers" cannot be verified yet: nothing submits an
    answer until S-03. What is verified is the fan-out half — no lost *snapshots*.
 

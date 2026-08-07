@@ -45,8 +45,26 @@ What to expect, and how to read it:
   one Wi-Fi link is not 150 phones on a venue AP.
 
 To check that losses are reported rather than swallowed, add `--kill-after-start=3`: three devices are
-disconnected after the warm-up and every action should then read `received (N-3)/N` with the p95 of the
-remainder unchanged.
+disconnected after the warm-up and every action should then read `received (N-3)/N` with the figures of
+the remainder unchanged.
+
+If a run was killed rather than finishing, it will have left a session behind — a kill cannot be caught,
+so teardown does not run. The next run's pre-flight then refuses for a reason unrelated to a real
+session. Clear it with `--purge-stale`, which purges instead of refusing. **Only pass it when you know
+no real session is running** — that refusal is the only thing separating this script from a live room.
+
+**Read the store's command counter before and after the run.** This is the tripwire standing in for the
+spend alert the roadmap asked for, which cannot be configured on the free tier
+(`context/changes/room-scale-rehearsal-harness/rehearsal-report.md` records why). In the Upstash console,
+reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `commands` for the month:
+
+- One rehearsal should cost on the order of **20 commands** — minting a token touches no store key, and
+  a host action is one `get` plus one `EVAL`.
+- **Above ~200K attributable to a single run, stop and look.** That is the signature of a polling design
+  replacing the push design, which is cheap in money and expensive in architecture.
+- Recorded readings so far: 513 before the first load run, 4102 after seven of them. That delta is
+  larger than the code accounts for and is **still unexplained** — if you see the counter rising while
+  nothing is running, that is a finding worth chasing.
 
 ## Before the session
 

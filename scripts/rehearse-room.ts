@@ -50,23 +50,10 @@ import { SESSION_CHANNEL, SESSION_KEY } from "../src/lib/session/keys";
 import { SNAPSHOT_EVENT } from "../src/lib/session/realtime";
 
 /**
- * Mirrored from `src/lib/session/keys.ts` and `realtime.ts` rather than used straight
- * from the import, following `scripts/check-purge-residue.ts`: scripts run under bare
- * `bun`, where `import.meta.env` is unpopulated, so a script that depends on a `src/`
- * module depends on that module never acquiring an env-reading import. The mirror is
- * what this script runs on; the assertion below is what stops it drifting.
- *
- * The assertion is the one thing in here worth asserting at all. If the registry
- * renames the key or the channel, a script running on a stale mirror would subscribe to
- * a dead channel and report a comfortable zero arrivals — a silent pass that reads as a
- * measurement. It must fail loudly instead.
+ * Mirrored from `src/lib/session/host.ts` — not a namespaced name, so not in the
+ * registry. Kept local rather than imported because `host.ts` reads `import.meta.env`,
+ * which is unpopulated under bare `bun`.
  */
-const NAMESPACE = "livequiz:";
-const MIRRORED_SESSION_KEY = `${NAMESPACE}session`;
-const MIRRORED_SESSION_CHANNEL = `${NAMESPACE}session`;
-const MIRRORED_SNAPSHOT_EVENT = "snapshot";
-
-/** Mirrored from `src/lib/session/host.ts`. Not a namespaced name, so not in the registry. */
 const HOST_SECRET_HEADER = "x-livequiz-host-secret";
 
 type HostVerb = "start" | "advance" | "reveal" | "purge";
@@ -132,6 +119,15 @@ const DEFAULT_CLIENTS = 150;
  */
 const HOST_REQUEST_TIMEOUT_MS = 15_000;
 
+/**
+ * Below this many arrivals, the reported tail is labelled `max*` rather than `p95`.
+ *
+ * Nearest rank puts the 95th percentile at `ceil(0.95n)`, which equals `n` for all
+ * n <= 20 — so a five-client run's "p95" is its single slowest sample. Calling that a
+ * percentile is how a smoke test's figure ends up in a table beside room-scale ones.
+ */
+const MIN_TAIL_SAMPLES = 21;
+
 type Finding = { ok: boolean; label: string; detail: string };
 
 const findings: Finding[] = [];
@@ -156,39 +152,6 @@ function arg(name: string): string | undefined {
   const prefix = `--${name}=`;
   const found = process.argv.slice(2).find((entry) => entry.startsWith(prefix));
   return found?.slice(prefix.length) || undefined;
-}
-
-/**
- * Fails the run before anything is touched if the mirrored constants have drifted from
- * the registry. See the mirror's docstring for why silence here would be worse than a
- * crash.
- */
-function assertMirrorsMatchRegistry(): void {
-  const drifted: string[] = [];
-
-  if (MIRRORED_SESSION_KEY !== SESSION_KEY) {
-    drifted.push(`session key: script has "${MIRRORED_SESSION_KEY}", keys.ts has "${SESSION_KEY}"`);
-  }
-  if (MIRRORED_SESSION_CHANNEL !== SESSION_CHANNEL) {
-    drifted.push(
-      `channel: script has "${MIRRORED_SESSION_CHANNEL}", keys.ts has "${SESSION_CHANNEL}"`
-    );
-  }
-  if (MIRRORED_SNAPSHOT_EVENT !== SNAPSHOT_EVENT) {
-    drifted.push(
-      `snapshot event: script has "${MIRRORED_SNAPSHOT_EVENT}", realtime.ts has "${SNAPSHOT_EVENT}"`
-    );
-  }
-
-  if (drifted.length > 0) {
-    console.error(
-      "\nThe harness's mirrored constants no longer match the registry:\n" +
-        drifted.map((entry) => `  - ${entry}`).join("\n") +
-        "\n\nRefusing to run. A stale mirror measures the wrong channel and reports zero\n" +
-        "arrivals, which looks like a fan-out failure rather than a broken script.\n"
-    );
-    process.exit(1);
-  }
 }
 
 function resolveConfig(): Config | null {
@@ -292,10 +255,10 @@ function resolveConfig(): Config | null {
  * with a real session".
  */
 async function preflight(config: Config, redis: Redis): Promise<boolean> {
-  const existing = await redis.get(MIRRORED_SESSION_KEY);
+  const existing = await redis.get(SESSION_KEY);
 
   if (existing === null) {
-    record(true, "no live session — safe to rehearse", `${MIRRORED_SESSION_KEY} is absent`);
+    record(true, "no live session — safe to rehearse", `${SESSION_KEY} is absent`);
     return true;
   }
 
@@ -322,7 +285,7 @@ async function preflight(config: Config, redis: Redis): Promise<boolean> {
     );
     await teardown(config);
 
-    if ((await redis.get(MIRRORED_SESSION_KEY)) !== null) {
+    if ((await redis.get(SESSION_KEY)) !== null) {
       console.log(
         " FAIL  --purge-stale did not clear the session\n\n" +
           "  → The purge route reported success or failure above. Clear it by hand before\n" +
@@ -331,7 +294,7 @@ async function preflight(config: Config, redis: Redis): Promise<boolean> {
       return false;
     }
 
-    record(true, "stale session purged — safe to rehearse", `${MIRRORED_SESSION_KEY} is absent`);
+    record(true, "stale session purged — safe to rehearse", `${SESSION_KEY} is absent`);
     return true;
   }
 
@@ -549,6 +512,21 @@ async function teardown(config: Config): Promise<void> {
     return;
   }
 
+  // 502 means the keys *were* deleted and only the closing broadcast failed
+  // (`src/pages/api/quiz/host/purge.ts`). Failing the check on that reports residue left
+  // behind when the opposite happened, and exits non-zero on a successful teardown.
+  if (outcome.status === 502) {
+    record(true, "teardown: purge", `${describeOutcome(outcome)} — keys removed`);
+    note(
+      "teardown broadcast",
+      "the purge deleted every registered key but its closing publish failed, so a " +
+        "client still holding the old snapshot will not see the session close. Harmless " +
+        "for a rehearsal; on a live session it means the room's screens go stale rather " +
+        "than closing"
+    );
+    return;
+  }
+
   record(
     outcome.status === 200,
     "teardown: purge",
@@ -627,8 +605,8 @@ async function connectDevice(config: Config, index: number): Promise<Device> {
       });
     });
 
-    const channel = client.channels.get(MIRRORED_SESSION_CHANNEL);
-    await channel.subscribe(MIRRORED_SNAPSHOT_EVENT, (message) => {
+    const channel = client.channels.get(SESSION_CHANNEL);
+    await channel.subscribe(SNAPSHOT_EVENT, (message) => {
       // Read the clock first, before any parsing, so the figure is arrival time and
       // not arrival time plus this handler.
       const at = performance.now();
@@ -848,11 +826,18 @@ function reportMeasurement(measurement: Measurement, total: number): void {
   const median = Math.round(percentile(deltas, 0.5));
   const max = Math.round(deltas[deltas.length - 1] ?? Number.NaN);
 
+  // Nearest rank puts p95 at `ceil(0.95n)`, which is `n` for every n <= 20 — so below
+  // that the "p95" is literally the max, and printing both as if they were two figures
+  // invites a small smoke run's number into a table of room-scale ones. Label it for
+  // what it is instead.
+  const tailLabel = deltas.length >= MIN_TAIL_SAMPLES ? "p95" : "max*";
+
   console.log(
     `${prefix}${measurement.label.padEnd(9)} ${version.padEnd(4)} ` +
-      `e2e p95 ${String(p95).padStart(5)} ms   median ${String(median).padStart(5)} ms   ` +
+      `e2e ${tailLabel} ${String(p95).padStart(5)} ms   median ${String(median).padStart(5)} ms   ` +
       `max ${String(max).padStart(5)} ms   rtt ${String(Math.round(outcome.roundTripMs)).padStart(5)} ms   ` +
-      `received ${measurement.received}/${measurement.connected} connected of ${total}`
+      `received ${measurement.received}/${measurement.connected} connected of ${total}` +
+      `   n=${deltas.length}`
   );
 }
 
@@ -939,20 +924,42 @@ async function runRehearsal(config: Config, devices: Device[]): Promise<boolean>
   // from the denominator instead; this asserts the arithmetic.
   const killed = devices.filter((device) => device.killed);
   if (killed.length > 0) {
-    const perAction = counted.map((measurement) => ({
-      label: measurement.label,
-      missing: measurement.connected - measurement.received,
-    }));
-    const allAccounted = perAction.every((entry) => entry.missing >= killed.length);
+    const perAction = counted.map((measurement) => {
+      // A killed device can still deliver a message buffered before `close()` took
+      // effect, and `awaitArrivals` counts it when it does. So the expected miss floor
+      // is the killed count *minus* however many of them actually arrived — otherwise
+      // one late message fails the run with a message accusing the code of shrinking
+      // the denominator, which is the opposite of what happened.
+      const lateArrivals =
+        measurement.outcome.version === null
+          ? 0
+          : killed.filter((device) => device.arrivals.has(measurement.outcome.version!)).length;
+
+      return {
+        label: measurement.label,
+        missing: measurement.connected - measurement.received,
+        expected: killed.length - lateArrivals,
+        lateArrivals,
+      };
+    });
+
+    const allAccounted = perAction.every((entry) => entry.missing >= entry.expected);
+    const totalLate = perAction.reduce((sum, entry) => sum + entry.lateArrivals, 0);
 
     record(
       allAccounted,
       "killed devices are reported as misses",
       allAccounted
         ? `${killed.length} killed; every measured action reports at least that many ` +
-            `missing out of ${counted[0]?.connected ?? 0} still counted as connected`
-        : `${killed.length} killed, but some action reported fewer misses — ` +
-            perAction.map((entry) => `${entry.label}: ${entry.missing}`).join(", ") +
+            `missing out of ${counted[0]?.connected ?? 0} still counted as connected` +
+            (totalLate > 0
+              ? ` (${totalLate} buffered arrival(s) from killed devices counted, and ` +
+                "subtracted from the expected floor)"
+              : "")
+        : `${killed.length} killed, but some action reported fewer misses than expected — ` +
+            perAction
+              .map((entry) => `${entry.label}: ${entry.missing} missing vs ${entry.expected} expected`)
+              .join(", ") +
             ". They are being excluded from the denominator rather than counted as lost."
     );
   }
@@ -983,13 +990,18 @@ async function runRehearsal(config: Config, devices: Device[]): Promise<boolean>
     ...withArrivals.map((measurement) => percentile(measurement.deltas, 0.95))
   );
   const passed = worstP95 < BUDGET_MS;
+  const smallestSample = Math.min(...withArrivals.map((m) => m.deltas.length));
+  const tailName = smallestSample >= MIN_TAIL_SAMPLES ? "p95" : "slowest arrival";
 
   console.log(
-    `\nVerdict: ${passed ? "PASS" : "FAIL"} — worst end-to-end p95 across measured ` +
+    `\nVerdict: ${passed ? "PASS" : "FAIL"} — worst end-to-end ${tailName} across measured ` +
       `actions is ${Math.round(worstP95)} ms against a ${BUDGET_MS} ms budget.\n\n` +
       "  This is a LOWER BOUND. One process on one network is not a room of phones:\n" +
       "  if it fails here, real devices are worse; if it passes, that is not proof the\n" +
-      "  venue network passes.\n"
+      "  venue network passes.\n\n" +
+      "  ONE RUN IS NOT A BASELINE. Run-to-run spread has been measured at over 5x on\n" +
+      "  this figure, so a single number recorded from a single run will be wrong within\n" +
+      "  hours. Record a range across several runs — see rehearsal-report.md.\n"
   );
 
   return passed;
@@ -997,8 +1009,6 @@ async function runRehearsal(config: Config, devices: Device[]): Promise<boolean>
 
 async function main(): Promise<void> {
   console.log("\nRoom-scale rehearsal harness (F-04).\n");
-
-  assertMirrorsMatchRegistry();
 
   const config = resolveConfig();
   if (!config) process.exit(1);

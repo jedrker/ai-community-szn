@@ -1,6 +1,6 @@
 # Rehearsal report — room-scale rehearsal harness (F-04)
 
-> Status: prerequisite recorded, load run pending.
+> Status: load runs complete, guardrail verdict recorded, corrected 2026-08-07 by impl review.
 > The headline figure and the conditions it was taken under belong in this file. The method it follows
 > lives in `context/archive/2026-08-06-session-state-and-realtime-spine/latency-probe.md`, and the
 > baseline row is written back there once the load run happens (plan phase 3, step 3).
@@ -48,7 +48,8 @@ confirms that nothing has been quietly consuming commands between runs.
 
 - **No automatic notification.** If a future slice introduces polling and nobody reads the counter,
   nothing announces it. The check is procedural, so it is only as reliable as the runbook entry that
-  carries it.
+  carries it — which now exists: `docs/runbook-live-session.md` §The day before, added 2026-08-07 after
+  impl review found this sentence promising a runbook entry that had never been written.
 - **Free-tier exhaustion is still unalarmed.** Crossing 500K commands in a month is an Upstash email,
   not something this project controls.
 - Revisit if the database ever moves to pay-as-you-go — at that point the Budget field appears and the
@@ -171,22 +172,38 @@ stream drops 10–15% of lines under a burst.
 
 ### Figures
 
-Three N=150 runs were taken. **All three are reported, and the recorded baseline is the worst of
-them** — a baseline picked as the best run is a claim about a good day, not about the system.
+> **Corrected 2026-08-07 during impl review (finding F6).** This section first recorded a single figure
+> — 356 ms, "the worst of three runs". Four further N=150 runs the same day produced 480, 536, 551 and
+> **592 ms**, so the single figure was wrong twice within hours of being written. A baseline is now
+> recorded as a **range with its run count**.
 
-| Run | Connect | Worst measured p95 | Median range | Max | Received |
-| --- | --- | --- | --- | --- | --- |
-| 1 | 150/150 in 1468 ms | **111 ms** | 82–107 ms | 124 ms | 150/150 on every action |
-| 2 | 150/150 in 1753 ms | **188 ms** | 171–184 ms | 188 ms | 150/150 on every action |
-| 3 | 150/150 in 973 ms | **356 ms** | 107–320 ms | 384 ms | 150/150 on every action |
+Seven N=150 runs were taken. Every one connected 150/150 and **every connected device received every
+published version — zero lost snapshots across all seven.** Warm-up (`start`) is discarded in each run
+as cold-start cost, and printed anyway.
 
-**Recorded baseline: end-to-end p95 = 356 ms against a 1000 ms budget, at 150 concurrent devices, from
-`fra1`.** Zero lost snapshots across all three runs: every connected device received every published
-version. Warm-up (`start`) discarded in each run as cold-start cost, and printed anyway.
+| Run | Connect | Worst measured p95 | Note |
+| --- | --- | --- | --- |
+| 1 | 150/150 in 1468 ms | **111 ms** | quiet stream |
+| 2 | 150/150 in 1753 ms | **188 ms** | while tailing logs |
+| 3 | 150/150 in 973 ms | **356 ms** | while tailing logs |
+| 4 | 150/150 in 2791 ms | **536 ms** | while tailing logs |
+| 5 | 150/150 | **551 ms** | during impl-review triage |
+| 6 | 150/150 | **592 ms** | during impl-review triage |
+| 7 | 150/150 | **480 ms** | after the F2–F5 fixes |
 
-Runs 2 and 3 were made while tailing logs, i.e. with the burst competing against log delivery; run 1 was
-not. That is the most likely reason run 3 is three times run 1 and it is a reason to keep 356 ms rather
-than explain it away.
+**Recorded baseline: end-to-end p95 spans 111–592 ms across seven N=150 runs from `fra1`, worst
+observed 592 ms against a 1000 ms budget.** The guardrail holds on the worst run, with ~1.7× headroom.
+
+**The spread is the finding, not the mean.** Over 5× between best and worst, with no change to the
+system between runs — the deployment, region and client count were identical for runs 4–7. Two
+candidates, neither investigated: local network conditions (one residential Wi-Fi uplink carrying 150
+sockets), and harness self-contention (150 subscribers on one event loop, so the last handler runs after
+149 deserialisations). The second would mean the harness *overstates* the tail, which cuts against the
+lower-bound framing for p95 specifically. Worth resolving before anyone treats a single figure from this
+harness as a regression signal.
+
+Practical consequence for F-01's tripwire: **compare against the range and the worst, not against a
+point.** A future run reading 500 ms is inside normal variance here, not a regression.
 
 ### What this does not measure
 
