@@ -411,10 +411,10 @@ change removes a script, a report and a runbook section.
 
 #### Manual
 
-- [ ] 1.4 N=0 run completes start → advance → reveal → purge against production
-- [ ] 1.5 `check-purge-residue.ts` reports an empty namespace afterwards
-- [ ] 1.6 Pre-flight refuses on a seeded session document and names the phase
-- [ ] 1.7 Omitting `Origin` reproduces the documented 403
+- [x] 1.4 N=0 run completes start → advance → reveal → purge against production — 1e80480
+- [x] 1.5 `check-purge-residue.ts` reports an empty namespace afterwards — 1e80480
+- [x] 1.6 Pre-flight refuses on a seeded session document and names the phase — 1e80480
+- [x] 1.7 Omitting `Origin` reproduces the documented 403 — 1e80480
 
 ### Phase 2: Measurement at scale
 
@@ -422,7 +422,7 @@ change removes a script, a report and a runbook section.
 
 - [x] 2.1 Type checking passes: `bun run type-check` — 629fe2f
 - [x] 2.2 Existing suite still passes: `bun run test` — 629fe2f
-- [ ] 2.3 N=1 run prints a verdict and non-zero connected count
+- [x] 2.3 N=1 run prints a verdict and non-zero connected count — 1e80480
 
 #### Manual
 
