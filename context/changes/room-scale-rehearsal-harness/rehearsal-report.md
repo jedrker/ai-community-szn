@@ -54,6 +54,37 @@ confirms that nothing has been quietly consuming commands between runs.
 - Revisit if the database ever moves to pay-as-you-go — at that point the Budget field appears and the
   $30 threshold becomes armable for real.
 
+## Commands-counter delta — and an unexplained one
+
+| | |
+| --- | --- |
+| Before the load runs (2026-08-07) | **513** / 500,000 |
+| After three runs — 150, 12, 20 clients (2026-08-07) | **4102** / 500,000 |
+| Delta | **+3589** |
+
+Nowhere near the 200K tripwire, so the load runs do **not** indicate a polling design. But the
+delta does not match the design either, and that is worth stating rather than filing as background.
+
+**Expected cost, counted from the code:** minting a token does not touch the store at all
+(`realtime.ts` holds no Redis import — the token is an Ably concern), and a host action is a `get`
+plus a single `EVAL`. Six actions plus one `readState` and one `purge` puts a run on the order of
+**20 commands**, so three runs should be **~60**. The observed delta is **two orders of magnitude
+above that**, and 182 clients connected across the three runs works out at ~20 commands per client —
+a suspicious shape, given nothing per-client is supposed to reach the store.
+
+**Unresolved.** Candidate explanations, none verified: the console counts something broader than
+application commands (integration health checks, metrics); something outside these runs is issuing
+commands continuously; or the per-client path touches the store somewhere this reading of the code
+missed. The cheap diagnostic is to **read the counter twice with no rehearsal in between** — a rising
+figure during idle means something is running unprompted, which is a finding in its own right and
+larger than F-04.
+
+This matters for calibration, not for the verdict: the 200K threshold was derived from the F-02
+estimate of 15–25K store operations per *real* session, and a real session includes answer
+submissions that no slice has built yet (S-03 onward). **The rehearsal exercises host actions and
+fan-out only, so its command cost is not comparable to the estimate the threshold came from.** Recheck
+the threshold once answers write to the store.
+
 ## Load run — pending
 
 To be filled by the N=150 run (plan phase 3, step 2). Must record: deployment URL, function region read
@@ -74,7 +105,17 @@ found a live defect.
 | --- | --- | --- | --- |
 | 2026-08-07 | 0 | `fra1` | Host path green, **teardown failed with 404** — `main` was 12 commits behind `origin`, so production still ran F-02 and neither `purge` nor `end` existed there. Left a session document (v5, `question-revealed`, **no players**, so no attendee data) in the production store; removed directly and the namespace confirmed empty. |
 | 2026-08-07 | 0 | `fra1` | Full drive → `purge` 200 after `main` was pushed. 11/11 checks. |
+| 2026-08-07 | **150** | `fra1` | 13/13 checks. **150/150 connected in 1468 ms**, every device received every version. Worst end-to-end p95 **111 ms** against the 1000 ms budget; median 82–107 ms, max 124 ms. Teardown 200, namespace empty. Ably's 200-connection ceiling was not strained — zero refusals. |
+| 2026-08-07 | 12 | `fra1` | 13/13 checks, p95 169 ms. Run made while tailing `vercel logs`, to establish what the stream shows. |
+| 2026-08-07 | 20 (3 killed) | `fra1` | 15/15 checks. Fault injection: every measured action reported `received 17/20`, and p95 (122–189 ms) stayed comparable to a clean run — the loss shows as misses, not as a shifted statistic. |
 | 2026-08-07 | 1 | `fra1` | 13/13 checks. Worst end-to-end p95 **391 ms** against the 1000 ms budget; teardown 200. Not a baseline — one client makes median and p95 the same number and exercises neither the join burst nor the 200-connection ceiling. |
+
+**150 clients measured faster than 1 or 12** (p95 111 ms against 391 and 169). Not a paradox and not
+a reason to distrust the figure: the dominant term is the variance of a single path, not fan-out cost,
+so at 150 samples p95 describes a distribution while at one sample it describes one roll of the dice.
+The supporting evidence is the spread — **max minus median was 17 ms across 150 recipients**, so the
+provider is fanning out to the whole room at once rather than working through a queue. It also means
+the honest way to read the N=1 and N=12 rows is as smoke tests, not as small-room baselines.
 
 Worth noting from the N=1 run: end-to-end was consistently **shorter than the host action's round
 trip** (141 ms vs 159 ms, 168 ms vs 194 ms). The snapshot reaches the client before the HTTP response

@@ -236,6 +236,18 @@ snapshot" — they have different causes and different fixes.
 **Intent**: Discard the first action's figures as cold-start cost, visibly, then report the two figures
 `latency-probe.md` defines plus the population metrics that say whether the sample is trustworthy.
 
+> **Note (2026-08-07) — how 2.4, 2.6 and 2.7 were actually verified.** A live tail settled what
+> `vercel logs` shows: a request line appears only for invocations that *emit* output. Both
+> `token.ts` and `state.ts` spoke on failure paths only, so a run where every device fetched a token
+> produced **zero** token lines — and, symmetrically, an absence of `state` lines proves nothing about
+> polling either. So: 2.4 required instrumenting the token endpoint (`session.token.issued`, no
+> fields), and its log half is verified on the deployment that carries it, not on the N=150 run above.
+> 2.7 is verified by **code inspection instead of logs** — `/api/quiz/state` is fetched in exactly one
+> place, `readState()`, host-side, to learn `purge`'s confirmation version; no device touches it and
+> `awaitArrivals` polls in-process state only. 2.6 required fault injection
+> (`--kill-after-start=<n>`), because every run until then was 150/150 and the miss-accounting path had
+> never executed.
+
 **Contract**: Per measured action report end-to-end p95 (the verdict statistic), median and max;
 round-trip time; clients connected out of N; clients that received the version. Verdict is
 **p95 < 1000 ms**, with median and max always printed so the tail stays visible. Exit code reflects
@@ -436,9 +448,9 @@ change removes a script, a report and a runbook section.
 #### Manual
 
 - [ ] 2.4 N=150 run reports connected and per-version receipt counts; 150 token requests visible in logs
-- [ ] 2.5 Warm-up action is labelled as discarded
-- [ ] 2.6 Killed clients surface as misses rather than skewing p95
-- [ ] 2.7 No per-client polling of `/api/quiz/state`
+- [x] 2.5 Warm-up action is labelled as discarded — 34423bd
+- [x] 2.6 Killed clients surface as misses rather than skewing p95 — 34423bd
+- [x] 2.7 No per-client polling of `/api/quiz/state` — 34423bd
 
 ### Phase 3: Production run and recorded baseline
 
