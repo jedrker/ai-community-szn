@@ -283,6 +283,15 @@ the evidence is the record.
 **Contract**: A dated line naming the threshold and who verified it. The run does not proceed without
 it.
 
+> **Note (2026-08-07).** Satisfied as a recorded deviation, not as written. A monetary alert is not
+> configurable here: Upstash's Budget field exists only on pay-as-you-go and the database is on the
+> free tier, while Vercel's Spend Management excludes Marketplace integrations and is a paid-plan
+> feature besides. Arming it would mean paying in order to be warned about paying. The threshold is
+> instead a **command count — 200K attributable to one run**, against a recorded baseline of 513 /
+> 500,000 for the month, checked manually before and after each load run. This serves the roadmap's
+> stated reason for the alert (catching a polling-shaped design) more directly than a dollar figure,
+> which at this scale would never move. See `rehearsal-report.md`.
+
 #### 2. Region confirmation and the run
 
 **File**: `context/changes/room-scale-rehearsal-harness/rehearsal-report.md`
@@ -441,7 +450,7 @@ change removes a script, a report and a runbook section.
 
 #### Manual
 
-- [ ] 3.4 Spend alert confirmed and recorded with its threshold before the load run
+- [x] 3.4 Spend alert confirmed and recorded with its threshold before the load run — see phase 3 note
 - [ ] 3.5 Function region observed as `fra1` from `x-vercel-id`
 - [ ] 3.6 `latency-probe.md` Measurements table holds real rows; no `_pending_` remains
 - [ ] 3.7 Guardrail verdict stated, including whether F-01's tripwire fired
