@@ -1,6 +1,6 @@
 import { logSessionEvent } from "./log";
 import { publishSnapshot } from "./realtime";
-import { readSession, writeSession, type WriteResult } from "./store";
+import { readPlayerCount, readSession, writeSession, type WriteResult } from "./store";
 import { type SessionState } from "./state";
 
 /**
@@ -201,7 +201,40 @@ export async function applyHostAction(
     };
   }
 
-  const next = nextFrom(current.state, now);
+  const computed = nextFrom(current.state, now);
+
+  /**
+   * THE ONE PLACE THE JOIN COUNT IS INJECTED (roadmap S-02).
+   *
+   * Three separate constructors build a full state literal — `advance.ts`,
+   * `reveal.ts`, and `endedSessionState` — and each of them copies
+   * `current.playerCount`. Copying is correct *because* of this line. Without it the
+   * count is read fresh on every action and then thrown away, so the number on the
+   * host's large screen never moves: a failure the type system cannot see, and one
+   * that a test asserting "the field is present" would sail straight past.
+   *
+   * **Outside the version guard, deliberately.** `COMPARE_AND_SET` must stay a single
+   * `EVAL` (`store.test.ts` asserts it), and computing the count inside it would mean
+   * `cjson` round-tripping a document whose `currentQuestionId` is null in two of the
+   * four phases. So the count is read here and can be a beat old.
+   *
+   * That asymmetry is the point and should not be "fixed": a stale *count* means the
+   * host sees 148 where the room holds 149 until the next action, which costs nothing.
+   * A stale *version* means a lost host action, which costs the segment. One of these
+   * needs the store to serialize it; the other does not.
+   *
+   * `null` from the read means the store could not answer — keep whatever the document
+   * already held rather than publishing a zero, which on a large screen reads as the
+   * room having left.
+   *
+   * Read only when there is something to write. A no-op — advance past the last
+   * question, reveal with nothing open — must not spend a store command to decorate a
+   * state it is not going to commit.
+   */
+  const next =
+    computed === null
+      ? null
+      : { ...computed, playerCount: (await readPlayerCount()) ?? current.state.playerCount };
 
   if (next === null) {
     // Nothing to do — report the unchanged state rather than inventing an error.

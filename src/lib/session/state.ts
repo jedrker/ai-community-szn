@@ -62,6 +62,27 @@ export const sessionStateSchema = z
     /** Epoch milliseconds. */
     startedAt: z.number().int().positive(),
     updatedAt: z.number().int().positive(),
+    /**
+     * How many attendees have joined (roadmap S-02).
+     *
+     * **A count, and deliberately nothing more.** Every host action publishes this
+     * whole document to Ably, which retains it for ~120s irreducibly (measured — see
+     * the retention contract), so a display name added here would be readable for two
+     * minutes by anything holding a subscribe token, and `/api/quiz/token` is
+     * deliberately open. A count carries nothing about who played. Names live in the
+     * players hash; a device knows only its own.
+     *
+     * **Defaulted rather than required, and that is load-bearing.** A session running
+     * when this ships holds a document written before the field existed. Required, it
+     * would fail `parseSessionState` on the next read — a 409 on the host's next
+     * action, on stage. The default makes the old document parse; the output type is
+     * still `number`, so every constructor must set it.
+     *
+     * Freshness is the caller's job, not the schema's: `applyHostAction` overwrites
+     * this on the way out. See the note there for why a stale count is acceptable
+     * where a stale version is not.
+     */
+    playerCount: z.number().int().nonnegative().default(0),
   })
   .superRefine((state, ctx) => {
     // A question id is only ever assigned server-side from the quiz definition,
@@ -111,6 +132,9 @@ export function initialSessionState(now: number): SessionState {
     currentQuestionId: null,
     startedAt: now,
     updatedAt: now,
+    // A new session has no players by construction — `createSession` is
+    // create-if-absent, so reaching here means nothing existed to hold them.
+    playerCount: 0,
   };
 }
 
@@ -145,6 +169,11 @@ export function endedSessionState(current: SessionState, now: number): SessionSt
     currentQuestionId: null,
     startedAt: current.startedAt,
     updatedAt: now,
+    // Carried, not recomputed. Every transition does this and every one of them is
+    // then overwritten by `applyHostAction` with a freshly-read count — see the note
+    // there. Copying is correct *because* it is overwritten; a constructor that tried
+    // to be clever here would be the only one out of step.
+    playerCount: current.playerCount,
   };
 }
 

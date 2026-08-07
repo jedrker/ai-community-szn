@@ -21,11 +21,42 @@ describe("initialSessionState", () => {
       currentQuestionId: null,
       startedAt: NOW,
       updatedAt: NOW,
+      playerCount: 0,
     });
   });
 
   it("produces a document that satisfies its own schema", () => {
     expect(sessionStateSchema.safeParse(initialSessionState(NOW)).success).toBe(true);
+  });
+
+  /**
+   * THE MID-DEPLOY TEST.
+   *
+   * A session running when S-02 ships holds a document written before `playerCount`
+   * existed. If the field were required, the next read would report the document as
+   * invalid — a 409 on the host's next action, in front of the room. The schema
+   * default is what makes the old shape parse, and this is the test that stops the
+   * default being tidied away as redundant.
+   */
+  it("parses a document written before playerCount existed, defaulting it to 0", () => {
+    const beforeS02 = {
+      version: 4,
+      phase: "lobby",
+      currentQuestionId: null,
+      startedAt: NOW,
+      updatedAt: NOW,
+    };
+
+    const result = sessionStateSchema.safeParse(beforeS02);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.playerCount).toBe(0);
+  });
+
+  it("refuses a negative or fractional count", () => {
+    const base = initialSessionState(NOW);
+    expect(sessionStateSchema.safeParse({ ...base, playerCount: -1 }).success).toBe(false);
+    expect(sessionStateSchema.safeParse({ ...base, playerCount: 1.5 }).success).toBe(false);
   });
 
   it("does not open the first question — FR-002 keeps a gathering beat", () => {
@@ -122,6 +153,7 @@ describe("endedSessionState", () => {
     currentQuestionId: quiz.questions[0]!.id,
     startedAt: NOW,
     updatedAt: NOW + 5_000,
+    playerCount: 9,
   };
 
   it("bumps the version, so the terminal snapshot is newer than anything devices hold", () => {
@@ -145,6 +177,15 @@ describe("endedSessionState", () => {
     expect(sessionStateSchema.safeParse(endedSessionState(revealed, NOW + 9_000)).success).toBe(
       true
     );
+  });
+
+  /**
+   * Carried, not reset. `applyHostAction` overwrites it with a freshly-read count on
+   * the way out, so this constructor's job is only to not lose it — a zero here would
+   * mean the closing snapshot told the room nobody had played.
+   */
+  it("carries the join count into the terminal document", () => {
+    expect(endedSessionState(revealed, NOW + 9_000).playerCount).toBe(9);
   });
 
   it("can end a session that never left the lobby", () => {

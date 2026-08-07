@@ -38,6 +38,10 @@ export const POST: APIRoute = async ({ request }) => {
       currentQuestionId: next,
       startedAt: current.startedAt,
       updatedAt: now,
+      // Carried, then overwritten with a freshly-read count by `applyHostAction` —
+      // see the note there. Copying here is correct *because* of that overwrite; a
+      // transition that tried to read the count itself would be the one out of step.
+      playerCount: current.playerCount,
     };
   }, Date.now());
 

@@ -1,7 +1,8 @@
 import { Redis } from "@upstash/redis";
 
-import { registeredKeys, SESSION_KEY } from "./keys";
+import { PLAYER_IDS_KEY, PLAYERS_KEY, registeredKeys, SESSION_KEY } from "./keys";
 import { logSessionEvent } from "./log";
+import { parsePlayerRecord, type PlayerRecord } from "./players";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
 
 /**
@@ -183,6 +184,77 @@ end
 
 redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[2]))
 return { 1, ARGV[1] }
+`;
+
+/**
+ * THE NAME CLAIM — this must stay a single `EVAL`, for the same reason the version
+ * guard must (roadmap S-02, and F-02's delivery lesson).
+ *
+ * ~150 devices claim names within the same few seconds. Resolving that with a
+ * `HEXISTS` in one round trip and an `HSET` in another hands two attendees the same
+ * name whenever the gap between them catches another claim — and the leaderboard stops
+ * being unambiguous, which is the single guarantee FR-008 exists to provide. A
+ * JavaScript guard passes every mocked test in this repository and fails in the room.
+ *
+ * The phase check is inside the script for the same reason and not for tidiness: read
+ * outside, it would be a check against a session that could end before the claim
+ * lands.
+ *
+ * Joining is allowed in `lobby`, `question-open` and `question-revealed`. The drafted
+ * quiz's Q2 is literally the last-chance-to-join beat, so latecomers are the design,
+ * not an edge case. `ended` is refused — and stated as its own branch rather than
+ * folded into a truthy check, because `ended` and `lobby` are the two phases that both
+ * carry a null `currentQuestionId` and mean opposite things (F-03's lesson).
+ *
+ * Both TTLs are armed here, in the same script, for the reason the other scripts
+ * document: a separate `EXPIRE` is another round trip that can fail on its own and
+ * leave a key holding attendee data on no lifetime at all.
+ *
+ * KEYS[1] = session doc, KEYS[2] = players hash, KEYS[3] = player-ids hash
+ * ARGV[1] = folded name, ARGV[2] = record JSON, ARGV[3] = player id, ARGV[4] = ttl
+ * Returns { 1, playerCount } on a claim, { 0, 0 } when the name is taken,
+ * { -1, 0 } when there is no session, { -2, 0 } when the session has ended.
+ */
+const CLAIM_PLAYER = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+  return { -1, 0 }
+end
+
+if cjson.decode(raw).phase == 'ended' then
+  return { -2, 0 }
+end
+
+if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 1 then
+  return { 0, 0 }
+end
+
+redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
+redis.call('HSET', KEYS[3], ARGV[3], ARGV[1])
+redis.call('EXPIRE', KEYS[2], tonumber(ARGV[4]))
+redis.call('EXPIRE', KEYS[3], tonumber(ARGV[4]))
+
+return { 1, redis.call('HLEN', KEYS[2]) }
+`;
+
+/**
+ * Look a player up by the id their device stored.
+ *
+ * **Read-only, and an `EVAL` for the round trip rather than for any guard** — worth
+ * saying, because every other script in this file is an `EVAL` because it needs
+ * atomicity, and a reader who assumes the same of this one will be looking for an
+ * invariant that isn't here. Two `HGET`s in one trip; nothing is being protected.
+ *
+ * KEYS[1] = player-ids hash, KEYS[2] = players hash, ARGV[1] = player id
+ * Returns the record JSON, or false when the id is unknown.
+ */
+const READ_PLAYER_BY_ID = `
+local key = redis.call('HGET', KEYS[1], ARGV[1])
+if not key then
+  return false
+end
+
+return redis.call('HGET', KEYS[2], key)
 `;
 
 /**
@@ -450,6 +522,111 @@ export async function endSession(
 
   logSessionEvent("session.ended", { version: next.version, phase: next.phase });
   return { outcome: "applied", state: next };
+}
+
+export type ClaimResult =
+  | { outcome: "claimed"; playerCount: number }
+  | { outcome: "taken" }
+  | { outcome: "no-session" }
+  | { outcome: "closed" }
+  | { outcome: "unconfigured"; reason: string }
+  | { outcome: "failed"; reason: string };
+
+/**
+ * Claims a display name for a device (roadmap S-02, PRD FR-007/FR-008).
+ *
+ * `key` is the folded form from `validateDisplayName` — the uniqueness key — and
+ * `record.displayName` is what the attendee typed. The caller is responsible for the
+ * fold; this function is responsible for the claim being indivisible.
+ *
+ * `taken` is not an error. It is the ordinary outcome of two people in a room of 150
+ * picking the same first name, and the route renders it as a prompt for a different
+ * one rather than as a failure.
+ *
+ * Publishes nothing. 150 joins publishing 150 snapshots to 150 subscribers is the
+ * O(N²) fan-out the spine contract forbids — the count reaches the room on the host's
+ * next action instead.
+ */
+export async function claimPlayer(key: string, record: PlayerRecord): Promise<ClaimResult> {
+  const redis = client();
+  if (!redis) return unconfigured();
+
+  let result: [number, number] | null;
+  try {
+    result = await redis.eval<[string, string, string, string], [number, number]>(
+      CLAIM_PLAYER,
+      [SESSION_KEY, PLAYERS_KEY, PLAYER_IDS_KEY],
+      [key, JSON.stringify(record), record.id, String(SESSION_TTL_SECONDS)]
+    );
+  } catch (err) {
+    return { outcome: "failed", reason: describe(err) };
+  }
+
+  const status = Number(result?.[0]);
+
+  if (status === -1) return { outcome: "no-session" };
+  if (status === -2) return { outcome: "closed" };
+  if (status === 0) return { outcome: "taken" };
+
+  const playerCount = Number(result?.[1]) || 0;
+
+  // The count, never the name. `LogFields` is a closed type precisely so that the
+  // second option is a compile error rather than a discipline.
+  logSessionEvent("session.player.joined", { playerCount });
+  return { outcome: "claimed", playerCount };
+}
+
+/**
+ * How many players have joined.
+ *
+ * Read by `applyHostAction` on every host action — roughly fifteen times a session,
+ * paced by the host rather than by attendees, which is what keeps it away from the
+ * polling shape the command-counter tripwire exists to catch.
+ *
+ * Returns `null` rather than `0` on any failure, so the caller can tell "nobody has
+ * joined" from "I could not find out" and keep the previous number instead of
+ * publishing a zero that would read, on a large screen, as the room having left.
+ */
+export async function readPlayerCount(): Promise<number | null> {
+  const redis = client();
+  if (!redis) return null;
+
+  try {
+    const count = await redis.hlen(PLAYERS_KEY);
+    return Number(count) || 0;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The player behind an id a device is presenting.
+ *
+ * `null` covers both "unknown id" and "could not read", and the join route treats them
+ * the same way — fall back to the name form. That conflation is deliberate: a device
+ * holding an id from a purged session and a device that hit a store blip both need the
+ * same next step, and distinguishing them would mean showing an attendee an error at
+ * the exact moment the PRD gives them thirty seconds to be playing.
+ */
+export async function readPlayerById(id: string): Promise<PlayerRecord | null> {
+  const redis = client();
+  if (!redis) return null;
+
+  let raw: unknown;
+  try {
+    raw = await redis.eval<[string], unknown>(
+      READ_PLAYER_BY_ID,
+      [PLAYER_IDS_KEY, PLAYERS_KEY],
+      [id]
+    );
+  } catch (err) {
+    console.error("Player lookup failed:", describe(err));
+    return null;
+  }
+
+  if (raw === null || raw === undefined || raw === false) return null;
+
+  return parsePlayerRecord(asDocument(raw));
 }
 
 export type PurgeResult =

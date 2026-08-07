@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const redisMock = {
   get: vi.fn(),
   eval: vi.fn(),
+  hlen: vi.fn(),
 };
 
 // A class rather than `vi.fn(() => redisMock)`: the store calls `new Redis(...)`,
@@ -22,16 +23,19 @@ vi.mock("@upstash/redis", () => ({
 }));
 
 const {
+  claimPlayer,
   createSession,
   endSession,
   purgeSession,
+  readPlayerById,
+  readPlayerCount,
   readSession,
   writeSession,
   ENDED_TTL_SECONDS,
   SESSION_KEY,
   SESSION_TTL_SECONDS,
 } = await import("./store");
-const { registeredKeys } = await import("./keys");
+const { registeredKeys, PLAYER_IDS_KEY, PLAYERS_KEY } = await import("./keys");
 const { quiz } = await import("../../quiz/index");
 
 const NOW = 1_785_000_000_000;
@@ -42,6 +46,7 @@ const lobby = {
   currentQuestionId: null,
   startedAt: NOW,
   updatedAt: NOW,
+  playerCount: 0,
 };
 
 const firstQuestionOpen = {
@@ -50,7 +55,10 @@ const firstQuestionOpen = {
   currentQuestionId: quiz.questions[0]!.id,
   startedAt: NOW,
   updatedAt: NOW + 500,
+  playerCount: 0,
 };
+
+const player = { id: "player-abc", displayName: "Anna", joinedAt: NOW };
 
 function configure(): void {
   vi.stubEnv("KV_REST_API_URL", "https://probe.upstash.io");
@@ -60,6 +68,7 @@ function configure(): void {
 beforeEach(() => {
   redisMock.get.mockReset();
   redisMock.eval.mockReset();
+  redisMock.hlen.mockReset();
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -276,6 +285,7 @@ describe("endSession", () => {
     currentQuestionId: null,
     startedAt: NOW,
     updatedAt: NOW + 5_000,
+    playerCount: 0,
   };
 
   it("applies an end whose expected version matches", async () => {
@@ -403,5 +413,184 @@ describe("purgeSession", () => {
       outcome: "failed",
       reason: "upstash unreachable",
     });
+  });
+});
+
+describe("claimPlayer", () => {
+  beforeEach(configure);
+
+  it("claims a free name and reports the new count", async () => {
+    redisMock.eval.mockResolvedValue([1, 7]);
+
+    await expect(claimPlayer("anna", player)).resolves.toEqual({
+      outcome: "claimed",
+      playerCount: 7,
+    });
+  });
+
+  /**
+   * THE ATOMICITY ASSERTION — the reason this function is Lua at all.
+   *
+   * ~150 devices claim names within the same few seconds. A `HEXISTS` in one round
+   * trip and an `HSET` in another hands two attendees the same name whenever another
+   * claim lands in the gap, and the leaderboard stops being unambiguous — the single
+   * guarantee FR-008 exists to provide. A mocked client makes the racy version look
+   * perfectly correct, which is exactly why this assertion has to exist: it is the
+   * only thing standing between the room and a "simplification" into TypeScript.
+   */
+  it("performs the claim as exactly one atomic store call", async () => {
+    redisMock.eval.mockResolvedValue([1, 1]);
+
+    await claimPlayer("anna", player);
+
+    expect(redisMock.eval).toHaveBeenCalledTimes(1);
+    expect(redisMock.get).not.toHaveBeenCalled();
+    expect(redisMock.hlen).not.toHaveBeenCalled();
+  });
+
+  it("passes the three keys and arms both hash TTLs inside that same call", async () => {
+    redisMock.eval.mockResolvedValue([1, 1]);
+
+    await claimPlayer("anna", player);
+
+    const [script, keys, args] = redisMock.eval.mock.calls[0]!;
+    expect(keys).toEqual([SESSION_KEY, PLAYERS_KEY, PLAYER_IDS_KEY]);
+    expect(args[3]).toBe(String(SESSION_TTL_SECONDS));
+    // Both EXPIREs in the script, not as follow-up calls that can fail on their own
+    // and leave a hash of attendee names on no lifetime at all.
+    expect(script.match(/EXPIRE/g)).toHaveLength(2);
+    // And the phase check is in the script too — read outside, it would be a check
+    // against a session that could end before the claim lands.
+    expect(script).toContain("ended");
+  });
+
+  it("reports a taken name as `taken`, not as an error", async () => {
+    redisMock.eval.mockResolvedValue([0, 0]);
+
+    // The ordinary outcome of two people in a room of 150 picking the same first
+    // name. The route renders it as a prompt, not a failure.
+    await expect(claimPlayer("anna", player)).resolves.toEqual({ outcome: "taken" });
+  });
+
+  it("refuses when no session exists", async () => {
+    redisMock.eval.mockResolvedValue([-1, 0]);
+
+    await expect(claimPlayer("anna", player)).resolves.toEqual({ outcome: "no-session" });
+  });
+
+  /**
+   * `ended` and `lobby` both carry a null `currentQuestionId` and mean opposite
+   * things — F-03's lesson, which cost an `advance` that would have reopened a closed
+   * quiz. A joiner must be able to tell "not started yet" from "already over".
+   */
+  it("refuses a session that has ended, distinctly from one that has not started", async () => {
+    redisMock.eval.mockResolvedValue([-2, 0]);
+
+    await expect(claimPlayer("anna", player)).resolves.toEqual({ outcome: "closed" });
+  });
+
+  it("reports a transport failure without throwing", async () => {
+    redisMock.eval.mockRejectedValue(new Error("upstash unreachable"));
+
+    await expect(claimPlayer("anna", player)).resolves.toEqual({
+      outcome: "failed",
+      reason: "upstash unreachable",
+    });
+  });
+
+  it("never writes a display name to the log", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    redisMock.eval.mockResolvedValue([1, 3]);
+
+    await claimPlayer("anna", player);
+
+    const lines = log.mock.calls.map(([first]) => String(first)).join("\n");
+    expect(lines).toContain("session.player.joined");
+    // Logs are retained ~1 hour and covered by no TTL, no purge and no rollback.
+    expect(lines).not.toContain("Anna");
+    expect(lines).not.toContain("anna");
+  });
+
+  it("reports an unconfigured store rather than throwing", async () => {
+    vi.unstubAllEnvs();
+
+    await expect(claimPlayer("anna", player)).resolves.toMatchObject({
+      outcome: "unconfigured",
+    });
+  });
+});
+
+describe("readPlayerCount", () => {
+  beforeEach(configure);
+
+  it("returns the hash length", async () => {
+    redisMock.hlen.mockResolvedValue(42);
+
+    await expect(readPlayerCount()).resolves.toBe(42);
+    expect(redisMock.hlen).toHaveBeenCalledWith(PLAYERS_KEY);
+  });
+
+  /**
+   * `null`, not `0`. The caller keeps the previous number instead of publishing a
+   * zero — on a large screen a zero reads as the room having left, and a host who
+   * cannot read the count is in a different situation from one whose room is empty.
+   */
+  it("returns null when the store cannot answer", async () => {
+    redisMock.hlen.mockRejectedValue(new Error("unreachable"));
+
+    await expect(readPlayerCount()).resolves.toBeNull();
+  });
+
+  it("returns null when the store is unconfigured", async () => {
+    vi.unstubAllEnvs();
+
+    await expect(readPlayerCount()).resolves.toBeNull();
+  });
+});
+
+describe("readPlayerById", () => {
+  beforeEach(configure);
+
+  it("resolves an id through the reverse index in one round trip", async () => {
+    redisMock.eval.mockResolvedValue(JSON.stringify(player));
+
+    await expect(readPlayerById("player-abc")).resolves.toEqual(player);
+
+    expect(redisMock.eval).toHaveBeenCalledTimes(1);
+    const [, keys] = redisMock.eval.mock.calls[0]!;
+    expect(keys).toEqual([PLAYER_IDS_KEY, PLAYERS_KEY]);
+  });
+
+  it("accepts an already-deserialized record", async () => {
+    // `automaticDeserialization` defaults to true; depending on it silently would
+    // mean every lookup failing if it ever changed.
+    redisMock.eval.mockResolvedValue(player);
+
+    await expect(readPlayerById("player-abc")).resolves.toEqual(player);
+  });
+
+  /**
+   * An unknown id and an unreadable store collapse to the same answer on purpose: a
+   * device holding an id from a purged session and a device that hit a store blip
+   * both need the same next step — the name form — and distinguishing them would mean
+   * showing an attendee an error inside the thirty seconds they have to be playing.
+   */
+  it("returns null for an unknown id", async () => {
+    redisMock.eval.mockResolvedValue(false);
+
+    await expect(readPlayerById("nobody")).resolves.toBeNull();
+  });
+
+  it("returns null on a transport failure rather than throwing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    redisMock.eval.mockRejectedValue(new Error("unreachable"));
+
+    await expect(readPlayerById("player-abc")).resolves.toBeNull();
+  });
+
+  it("returns null on a malformed stored record", async () => {
+    redisMock.eval.mockResolvedValue(JSON.stringify({ id: "abc" }));
+
+    await expect(readPlayerById("player-abc")).resolves.toBeNull();
   });
 });

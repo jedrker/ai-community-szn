@@ -29,16 +29,37 @@
 
 import { Redis } from "@upstash/redis";
 
-/**
- * Mirrored from `src/lib/session/keys.ts` rather than imported: those modules read
- * `import.meta.env`, which is unpopulated under bare `bun`. Kept in sync by the
- * assertion below, which fails if the registry stops matching what this expects.
- */
-const NAMESPACE = "livequiz:";
-const SESSION_KEY = `${NAMESPACE}session`;
+import { registeredKeys, SESSION_KEY, SESSION_NAMESPACE } from "../src/lib/session/keys";
 
-/** Registered keys this script expects the purge to remove. */
-const EXPECTED_REGISTERED = [SESSION_KEY];
+/**
+ * Imported from the registry, not mirrored (corrected 2026-08-07, during S-02).
+ *
+ * This block previously hardcoded `["livequiz:session"]` with a docstring giving two
+ * reasons, **both of which were false**:
+ *
+ * - *"those modules read `import.meta.env`, which is unpopulated under bare `bun`"* —
+ *   `keys.ts` reads nothing and imports nothing; it is deliberately a leaf so
+ *   `store.ts` can import it without a cycle. `rehearse-room.ts` has imported from it
+ *   under bare `bun` since F-04.
+ * - *"kept in sync by the assertion below"* — there was no such assertion.
+ *
+ * The consequence was not theoretical. S-02 added two registered keys holding attendee
+ * display names. A mirrored list would have purged one key of three, left both name
+ * hashes in the store, and **reported a fully green run** — because the script seeds
+ * only what it knows about, so the keys it had never heard of could not show up as
+ * residue either. A probe that cannot fail is worse than no probe, and this one exists
+ * precisely to catch data surviving a purge.
+ *
+ * Importing means the script tracks the registry forever, with no sync step to forget.
+ */
+const NAMESPACE = SESSION_NAMESPACE;
+
+/**
+ * Registered keys this script expects the purge to remove — whatever the registry says
+ * today. Seeded as plain strings even where production stores a hash: this probe tests
+ * whether `DEL` reaches a key, and `DEL` does not care about the value type.
+ */
+const EXPECTED_REGISTERED = registeredKeys();
 
 /** Deliberately unregistered. See the module docstring. */
 const DECOY_UNREGISTERED = `${NAMESPACE}decoy:unregistered`;
@@ -142,6 +163,7 @@ async function main(): Promise<void> {
             currentQuestionId: null,
             startedAt: Date.now(),
             updatedAt: Date.now(),
+            playerCount: 0,
           })
         : "residue-check-placeholder";
     await redis.set(key, value, { ex: SEED_TTL_SECONDS });

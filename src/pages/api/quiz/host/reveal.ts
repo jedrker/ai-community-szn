@@ -38,6 +38,8 @@ export const POST: APIRoute = async ({ request }) => {
       currentQuestionId: current.currentQuestionId,
       startedAt: current.startedAt,
       updatedAt: now,
+      // Carried, then overwritten by `applyHostAction` — same as `advance.ts`.
+      playerCount: current.playerCount,
     };
   }, Date.now());
 

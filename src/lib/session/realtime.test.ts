@@ -23,6 +23,7 @@ const state = {
   currentQuestionId: quiz.questions[0]!.id,
   startedAt: 1_785_000_000_000,
   updatedAt: 1_785_000_001_000,
+  playerCount: 12,
 };
 
 beforeEach(() => {

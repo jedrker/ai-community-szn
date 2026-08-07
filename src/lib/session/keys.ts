@@ -63,7 +63,24 @@ const REGISTERED_KEYS = [
     name: `${SESSION_NAMESPACE}session`,
     holds:
       "The single session document: version, phase, currentQuestionId, startedAt, " +
-      "updatedAt. Players, answers and scores join it or sit beside it from S-02.",
+      "updatedAt, playerCount. A count of players, never their names — display names " +
+      "live in the two hashes below and are deliberately kept out of this document, " +
+      "because it is the one that gets published to Ably on every host action.",
+  },
+  {
+    name: `${SESSION_NAMESPACE}players`,
+    holds:
+      "ATTENDEE DATA. Hash of folded display name -> player record JSON " +
+      "{ id, displayName, joinedAt }. The folded name is the uniqueness key (FR-008); " +
+      "displayName is what the attendee actually typed and what a leaderboard shows. " +
+      "HLEN of this hash is the join count.",
+  },
+  {
+    name: `${SESSION_NAMESPACE}player-ids`,
+    holds:
+      "ATTENDEE DATA. Hash of opaque player id -> folded display name. The reverse " +
+      "index: it is how a device that reloads is recognised from the id it stored, " +
+      "without which a returning attendee would be rejected by their own name claim.",
   },
 ] as const satisfies readonly RegisteredKey[];
 
@@ -76,11 +93,45 @@ const REGISTERED_KEYS = [
 export const SESSION_KEY = REGISTERED_KEYS[0].name;
 
 /**
+ * The players hash: folded display name -> player record.
+ *
+ * Attendee data, and the first of it this project has ever held. It is in the registry
+ * — so `end` shortens it and `purge` deletes it — which is the whole mechanism behind
+ * the PRD's retention guardrail.
+ */
+export const PLAYERS_KEY = REGISTERED_KEYS[1].name;
+
+/**
+ * The reverse index: opaque player id -> folded display name.
+ *
+ * Two keys rather than one because the two lookups go in opposite directions and both
+ * are needed. Claiming asks "is this name taken?", which wants the name as the field;
+ * a reloading device asks "who am I?", which wants the id as the field. A single hash
+ * would make one of those a scan over every player.
+ */
+export const PLAYER_IDS_KEY = REGISTERED_KEYS[2].name;
+
+/**
  * The Ably channel every snapshot is published to.
  *
  * Not a store key — see the module docstring for why it is declared here anyway.
  */
 export const SESSION_CHANNEL = `${SESSION_NAMESPACE}session`;
+
+/**
+ * The `localStorage` entry an attendee's own device holds: `{ id, displayName }`.
+ *
+ * **Not a store key, and no `purge` will ever reach it** — it lives in a browser this
+ * project does not control. That is compliant rather than a gap: the PRD's retention
+ * guardrail is about *operator-accessible* storage, and a phone in someone's pocket is
+ * not that. Stated here rather than left to be discovered, because "attendee data that
+ * survives the purge" is exactly the sentence that should stop a reader.
+ *
+ * Declared in this module for the same reason `SESSION_CHANNEL` is: the invariant is
+ * "one module owns every namespaced name", and an invariant with an exemption list is
+ * one that rots.
+ */
+export const PLAYER_STORAGE_KEY = `${SESSION_NAMESPACE}player`;
 
 /**
  * Every registered key name, in declaration order.

@@ -61,6 +61,30 @@ export const SESSION_EVENTS = [
    * unauthenticated anyway, so there is nothing it could truthfully claim.
    */
   "session.token.issued",
+  /**
+   * An attendee claimed a name (roadmap S-02).
+   *
+   * Carries the resulting `playerCount` and nothing else. **Never the name** — that is
+   * not a convention here, it is a compile error, because `LogFields` has no field a
+   * name would fit in. Logs are retained ~1 hour and are covered by no TTL, no
+   * `purge` and no `vercel rollback`, so anything written here outlives the session
+   * document by design.
+   *
+   * One line per joining device, so a room of 150 writes 150 of these — the same
+   * property that makes `session.token.issued` the instrument for counting the join
+   * burst. Note F-04 measured ~10–15% line loss under a burst of this size, so treat
+   * the count as a floor rather than a tally.
+   */
+  "session.player.joined",
+  /**
+   * A join was refused. `reason` carries the *class* — "taken", "invalid", "closed",
+   * "no-session" — and never the submitted name, for the reason above.
+   *
+   * Distinct from `session.player.joined` rather than a field on it, because a host
+   * watching the stream during the lobby is asking "is the room getting in?", and a
+   * burst of refusals is the answer that needs to stand out.
+   */
+  "session.join.rejected",
 ] as const;
 
 export type SessionEvent = (typeof SESSION_EVENTS)[number];
@@ -95,6 +119,15 @@ type LogFields = {
   reason?: string;
   /** How many registered keys a purge removed. A count, never their contents. */
   keysRemoved?: number;
+  /**
+   * How many attendees have joined. A count, never who they are (roadmap S-02).
+   *
+   * This is the shape every future attendee-related field should copy: an aggregate
+   * that says something useful about the room without saying anything about a person
+   * in it. If a field you want to add cannot be written that way, it probably should
+   * not be written at all.
+   */
+  playerCount?: number;
 };
 
 /**

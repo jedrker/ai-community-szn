@@ -1,7 +1,7 @@
 ---
 change_id: join-and-follow-host
 title: Join and follow host
-status: new
+status: implementing
 created: 2026-08-07
 updated: 2026-08-07
 archived_at: null
@@ -54,6 +54,16 @@ version guard as a single `EVAL` and `store.test.ts` asserts it stays one call �
   (accepted risk with a tripwire in `infrastructure.md`). If the ~2-minute window is judged
   unacceptable once real names are involved, **the remedy is this slice's to take: publish opaque
   player ids and keep names off the channel.**
+
+  > **Corrected 2026-08-07 during planning.** The sentence "From this slice on, the snapshot carries
+  > names" was an expectation, not a fact, and the plan decided against it. `SessionState` gains only
+  > `playerCount` — a count, not attendee data — so **no display name is ever published** and the
+  > ~120s window does not apply to one. Names live in `livequiz:players`; a device knows only its own.
+  > That is the remedy above, taken in its stronger form: rather than publishing opaque ids, this slice
+  > publishes nothing per-player at all, which also avoids the O(N²) fan-out a publish-on-join design
+  > would have caused. **S-07 still owns the open half** — a leaderboard needs names on 150 screens,
+  > and how they get there is that slice's decision, now made deliberately rather than inherited. The
+  > original text is left above rather than edited, so the expectation and its reversal stay visible.
 
 ### Resolve the command-counter anomaly before adding writes
 

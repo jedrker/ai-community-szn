@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const readSessionMock = vi.fn();
 const writeSessionMock = vi.fn();
+const readPlayerCountMock = vi.fn();
 const publishSnapshotMock = vi.fn();
 
 vi.mock("./store", () => ({
   readSession: readSessionMock,
   writeSession: writeSessionMock,
+  readPlayerCount: readPlayerCountMock,
 }));
 
 vi.mock("./realtime", () => ({
@@ -21,21 +23,26 @@ type SessionState = import("./state").SessionState;
 const NOW = 1_785_000_000_000;
 const SECRET = "a-very-long-test-secret-value";
 
+/** The count every fixture carries unless a test is specifically about the count. */
+const COUNT = 3;
+
 const lobby = {
   version: 1,
   phase: "lobby" as const,
   currentQuestionId: null,
   startedAt: NOW,
   updatedAt: NOW,
+  playerCount: COUNT,
 };
 
-function opened(version: number) {
+function opened(version: number, playerCount = COUNT) {
   return {
     version,
     phase: "question-open" as const,
     currentQuestionId: quiz.questions[0]!.id,
     startedAt: NOW,
     updatedAt: NOW + 100,
+    playerCount,
   };
 }
 
@@ -51,6 +58,10 @@ const openFirstQuestion = (current: SessionState): SessionState =>
 beforeEach(() => {
   readSessionMock.mockReset();
   writeSessionMock.mockReset();
+  readPlayerCountMock.mockReset();
+  // The count the store reports unless a test overrides it. Matching the fixtures'
+  // own `playerCount` keeps every assertion below about the thing it is testing.
+  readPlayerCountMock.mockResolvedValue(COUNT);
   publishSnapshotMock.mockReset();
   vi.stubEnv("LIVEQUIZ_HOST_SECRET", SECRET);
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -223,6 +234,60 @@ describe("applyHostAction", () => {
 
     const result = await applyHostAction(openFirstQuestion, NOW);
     expect(result.status).toBe(409);
+  });
+
+  /**
+   * THE COUNT-FRESHNESS TEST.
+   *
+   * Three separate constructors build a full state literal — `advance.ts`,
+   * `reveal.ts`, `endedSessionState` — and each copies `current.playerCount`. That is
+   * correct only because `applyHostAction` overwrites the field on the way out.
+   * Without the overwrite, the count is read fresh on every action and thrown away,
+   * and the number on the host's large screen never moves for the whole segment.
+   *
+   * The assertion is deliberately that the written count DIFFERS from the one on
+   * `current`. A weaker "the field is present" check passes against the bug, since the
+   * copied field is present and merely wrong — which is exactly how this would have
+   * shipped.
+   */
+  it("writes a freshly-read count, not the one the transition copied", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
+    readPlayerCountMock.mockResolvedValue(42);
+    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(2, 42) });
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+
+    // The transition copies `current.playerCount` (3), exactly as the real ones do.
+    await applyHostAction((current) => opened(current.version + 1, current.playerCount), NOW);
+
+    const [, written] = writeSessionMock.mock.calls[0]!;
+    expect(written.playerCount).toBe(42);
+    expect(written.playerCount).not.toBe(lobby.playerCount);
+  });
+
+  /**
+   * A count is not worth losing a host action over, and a zero on a large screen
+   * reads as the room having left — so an unreadable count keeps the last known one.
+   */
+  it("keeps the previous count when the store cannot report one", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
+    readPlayerCountMock.mockResolvedValue(null);
+    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(2) });
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+
+    const result = await applyHostAction(openFirstQuestion, NOW);
+
+    expect(result.status).toBe(200);
+    const [, written] = writeSessionMock.mock.calls[0]!;
+    expect(written.playerCount).toBe(lobby.playerCount);
+  });
+
+  /** A no-op must not spend a store command decorating a state it will not commit. */
+  it("does not read the count when the transition is a no-op", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(4) });
+
+    await applyHostAction(() => null, NOW);
+
+    expect(readPlayerCountMock).not.toHaveBeenCalled();
   });
 
   /** Never a plain success when the store rejected the write. */
