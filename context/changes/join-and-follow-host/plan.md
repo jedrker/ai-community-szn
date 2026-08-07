@@ -976,31 +976,31 @@ stream (F-03's lesson).
 
 #### Automated
 
-- [x] 1.1 Test suite passes: `bun run test`
-- [x] 1.2 Type check clean: `bun run type-check`
-- [x] 1.3 `keys.test.ts` still passes — no namespaced literal outside `keys.ts`
-- [x] 1.4 `claimPlayer` is asserted to be a single `eval` call
-- [x] 1.5 A session document without `playerCount` parses and defaults to `0`
+- [x] 1.1 Test suite passes: `bun run test` — 93a7900
+- [x] 1.2 Type check clean: `bun run type-check` — 93a7900
+- [x] 1.3 `keys.test.ts` still passes — no namespaced literal outside `keys.ts` — 93a7900
+- [x] 1.4 `claimPlayer` is asserted to be a single `eval` call — 93a7900
+- [x] 1.5 A session document without `playerCount` parses and defaults to `0` — 93a7900
 
 #### Manual
 
-- [x] 1.6 Reading `keys.ts` makes clear what attendee data each new key holds, without opening this plan
+- [x] 1.6 Reading `keys.ts` makes clear what attendee data each new key holds, without opening this plan — 93a7900
 
 ### Phase 2: The join endpoint and the public quiz projection
 
 #### Automated
 
-- [ ] 2.1 Test suite passes: `bun run test`
-- [ ] 2.2 Type check clean: `bun run type-check`
-- [ ] 2.3 `public.test.ts` finds no answer value in the projection
-- [ ] 2.4 A route test covers each join outcome and asserts the join path never calls `publishSnapshot`
-- [ ] 2.7 A route test covers the `playerId` hit and miss paths
+- [x] 2.1 Test suite passes: `bun run test`
+- [x] 2.2 Type check clean: `bun run type-check`
+- [x] 2.3 `public.test.ts` finds no answer value in the projection
+- [x] 2.4 A route test covers each join outcome and asserts the join path never calls `publishSnapshot`
+- [x] 2.7 A route test covers the `playerId` hit and miss paths
 
 #### Manual
 
-- [ ] 2.5 `curl -X POST -H "Origin: <base>" -F displayName=Anna <base>/api/quiz/join` claims, and a second identical call returns 409 (the `Origin` header is required — see the F-02 trap)
-- [ ] 2.6 Claiming `anna` after `Anna` is rejected; claiming before `start` is rejected with a distinct message
-- [ ] 2.8 Posting the returned `playerId` back returns the same player with `resumed: true`; an unknown `playerId` returns 404
+- [x] 2.5 `curl -X POST -H "Origin: <base>" -F displayName=Anna <base>/api/quiz/join` claims, and a second identical call returns 409 (the `Origin` header is required — see the F-02 trap)
+- [x] 2.6 Claiming `anna` after `Anna` is rejected; claiming before `start` is rejected with a distinct message
+- [x] 2.8 Posting the returned `playerId` back returns the same player with `resumed: true`; an unknown `playerId` returns 404
 
 ### Phase 3: The client runtime
 

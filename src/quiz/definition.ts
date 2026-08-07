@@ -57,9 +57,15 @@ export const quizDefinition = {
       correctOptionIds: ["large-language-model"],
     },
 
+    // The id names the *question*, not the answer. It was `halucynacje` until S-02,
+    // which is the accepted answer spelled out — and question ids necessarily reach
+    // the browser, because the published snapshot identifies the open question by id.
+    // An attendee reading page source had the answer. Ids describing their subject is
+    // the convention (see the module docstring); this is the case where the subject
+    // *is* the answer, so the convention has to bend.
     {
       kind: "text",
-      id: "halucynacje",
+      id: "zmyslanie-faktow",
       prompt: "Jak nazywa się zjawisko, gdy AI z pełnym przekonaniem zmyśla fakty?",
       points: POINTS,
       acceptedAnswers: ["halucynacje", "halucynacja", "hallucinations", "hallucination"],

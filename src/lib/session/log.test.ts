@@ -65,6 +65,30 @@ describe("logSessionEvent", () => {
     });
   });
 
+  it("carries S-02's two join events", () => {
+    expect(SESSION_EVENTS).toContain("session.player.joined");
+    expect(SESSION_EVENTS).toContain("session.join.rejected");
+  });
+
+  /**
+   * The join events are the first that fire once per *attendee*, so they are the ones
+   * most likely to be "improved" later with something identifying. Asserted as exact
+   * objects for the same reason `session.token.issued` is: a count and a reason class
+   * are the whole of what they may carry.
+   */
+  it("emits a count and a reason class, never anything about a person", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    logSessionEvent("session.player.joined", { playerCount: 7 });
+    logSessionEvent("session.join.rejected", { reason: "taken" });
+
+    const parse = (index: number): unknown =>
+      JSON.parse(spy.mock.calls[index]![0].slice(LOG_PREFIX.length + 1));
+
+    expect(parse(0)).toEqual({ event: "session.player.joined", playerCount: 7 });
+    expect(parse(1)).toEqual({ event: "session.join.rejected", reason: "taken" });
+  });
+
   /**
    * **This is the enforcement, and it is load-bearing in both directions.**
    *
