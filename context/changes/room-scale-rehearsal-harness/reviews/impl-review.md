@@ -4,7 +4,7 @@
 - **Plan**: `context/changes/room-scale-rehearsal-harness/plan.md`
 - **Scope**: Phases 1–3 of 3 (all complete — 22/22 Progress items `[x]`)
 - **Date**: 2026-08-07
-- **Verdict**: REJECTED
+- **Verdict**: REJECTED at review; all 10 findings triaged and fixed 2026-08-07 (3f082f4, ff4f9e9)
 - **Findings**: 1 critical, 6 warnings, 3 observations
 
 > The verdict is driven by documentation accuracy, not by broken code. The harness works, every gate
@@ -77,7 +77,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   - Confidence: MEDIUM — the fault did not reproduce in three attempts, so it may be rare and slow to
     catch.
   - Blind spot: Whether the stall is even client-side (CLI) or server-side is unknown.
-- **Decision**: PENDING
+- **Decision**: FIXED via Fix A (3f082f4) — claim corrected in all four documents, risk row re-graded H/H → M/M, superseded text quoted rather than deleted.
 
 ### F2 — A single action reaching zero devices passes the verdict
 
@@ -92,7 +92,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   the one that would happen in practice, and it is the exact failure this harness exists to surface.
 - **Fix**: `record(false, …)` for any counted measurement with `deltas.length === 0`, so it fails the
   run instead of being dropped from the statistic.
-- **Decision**: PENDING
+- **Decision**: FIXED (3f082f4) — zero-arrival actions now `record(false)`. Verified by killing every client: four failed checks, verdict FAILED, exit 1.
 
 ### F3 — No signal handler: Ctrl-C leaves a live session on production for four hours
 
@@ -106,7 +106,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   subsequent run's pre-flight refuse for a reason unrelated to a real session — the outcome the
   teardown docstring claims to prevent. Verified: no `process.on` anywhere in `scripts/`.
 - **Fix**: `process.on("SIGINT")` and `process.on("SIGTERM")` → `teardown` → `closePool` → exit.
-- **Decision**: PENDING
+- **Decision**: FIXED DIFFERENTLY (3f082f4) — the chosen signal handler proved to be dead code: measured on bun 1.3.14, `process.on` never fires for SIGINT/SIGTERM/SIGHUP/SIGUSR2. Replaced with `--purge-stale`, an opt-in recovery path, refusal still the default. Verified end to end by SIGKILLing a live run.
 
 ### F4 — Host fetches have no timeout, so a stalled request hangs the run with 150 sockets open
 
@@ -120,7 +120,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   teardown. The catch blocks already treat a failed fetch as a first-class outcome, so the handling
   exists — only the deadline is missing.
 - **Fix**: `signal: AbortSignal.timeout(15_000)` on both fetches.
-- **Decision**: PENDING
+- **Decision**: FIXED (3f082f4) — `AbortSignal.timeout(15_000)` on both host fetches.
 
 ### F5 — A client that fails to connect stays open and keeps retrying during the measurement
 
@@ -135,7 +135,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   are being taken*, perturbing two of the things being measured. Every run so far was 150/150, so this
   path has never executed.
 - **Fix**: `device.client?.close()` inside the `catch` before returning the device.
-- **Decision**: PENDING
+- **Decision**: FIXED (3f082f4) — failed clients are closed in the `catch`; `closePool` also gained its own `finally`.
 
 ### F6 — The recorded baseline is one figure from a population that spans 111–536 ms
 
@@ -165,7 +165,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   - Tradeoff: More production load for a number whose verdict is not in doubt.
   - Confidence: MEDIUM — depends on the variance being stationary, which four runs cannot establish.
   - Blind spot: Does not address the n ≤ 20 labelling problem, which needs the code fix either way.
-- **Decision**: PENDING
+- **Decision**: FIXED via Fix A (ff4f9e9) — baseline recorded as p95 111–592 ms across seven runs; `max*` label and `n=` printed below 21 samples; verdict warns that one run is not a baseline.
 
 ### F7 — The mirrored-constants rationale is contradicted by the imports two lines above it
 
@@ -197,7 +197,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
     a test whose scope was deliberately chosen.
   - Confidence: MEDIUM — the scan change is easy; whether the mirror is worth keeping is the open part.
   - Blind spot: Other scripts may already hold namespaced literals that the widened scan would fail on.
-- **Decision**: PENDING
+- **Decision**: FIXED via Fix A (ff4f9e9) — mirror and `assertMirrorsMatchRegistry` deleted, imported constants used directly.
 
 ### F8 — A 502 from purge is recorded as a failed teardown though the data was deleted
 
@@ -209,7 +209,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   closing broadcast failed. The harness treats any non-200 as a failed check, so a successful purge
   with a failed publish exits 1 and reads as residue left behind — the opposite of what happened.
 - **Fix**: Treat 502 from `purge` as success-with-a-note, matching the route's documented meaning.
-- **Decision**: PENDING
+- **Decision**: FIXED (ff4f9e9) — 502 from purge recorded as success with a note.
 
 ### F9 — The killed-device assertion and `awaitArrivals` state opposite intents
 
@@ -223,7 +223,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   of the truth. Unlikely, since `close()` transitions locally before the next publish, but the two
   comments cannot both be the intent.
 - **Fix**: Count arrivals from killed devices explicitly and subtract them from the expected miss floor.
-- **Decision**: PENDING
+- **Decision**: FIXED (ff4f9e9) — buffered arrivals from killed devices are subtracted from the expected miss floor.
 
 ### F10 — Report status is stale, and the tripwire it promises has no operational home
 
@@ -239,7 +239,7 @@ Automated criteria re-run during review: `bun run type-check` → 0 errors; `bun
   standing in for the spend alert the roadmap required.
 - **Fix**: Update the header, and add a commands-counter line to the runbook's rehearsal section
   (read the Upstash counter before and after; investigate above ~200K for one run).
-- **Decision**: PENDING
+- **Decision**: FIXED (ff4f9e9) — status header corrected; the commands-counter tripwire now has a runbook entry, along with `--purge-stale`.
 
 ## Notes carried but not raised as findings
 
