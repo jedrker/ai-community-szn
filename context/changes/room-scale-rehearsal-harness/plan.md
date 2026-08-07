@@ -247,6 +247,15 @@ snapshot" — they have different causes and different fixes.
 > `awaitArrivals` polls in-process state only. 2.6 required fault injection
 > (`--kill-after-start=<n>`), because every run until then was 150/150 and the miss-accounting path had
 > never executed.
+>
+> **Amendment to 2.4 (same date), and it is a finding, not a technicality.** With `token.ts`
+> instrumented, the count still cannot be taken: a 150-device burst **kills the log stream**. Measured
+> on production — 14 requests at 20-second spacing delivered 14 of 14 lines, an N=5 run delivered 5 of
+> 5, and the N=150 run delivered **1**, after which the feed went permanently silent while the CLI kept
+> printing `waiting for new logs...`. So 2.4's log half is met by proving per-device issuance at N=5
+> and reasoning that 150/150 connected clients required 150 minted tokens. The larger consequence is
+> the runbook's, not this criterion's: the live tail is the project's only visibility and it fails first
+> under the event that opens a session. See `rehearsal-report.md`.
 
 **Contract**: Per measured action report end-to-end p95 (the verdict statistic), median and max;
 round-trip time; clients connected out of N; clients that received the version. Verdict is
@@ -447,7 +456,7 @@ change removes a script, a report and a runbook section.
 
 #### Manual
 
-- [ ] 2.4 N=150 run reports connected and per-version receipt counts; 150 token requests visible in logs
+- [x] 2.4 N=150 run reports connected and per-version receipt counts; 150 token requests visible in logs — 34423bd, log half amended (see phase 2 note)
 - [x] 2.5 Warm-up action is labelled as discarded — 34423bd
 - [x] 2.6 Killed clients surface as misses rather than skewing p95 — 34423bd
 - [x] 2.7 No per-client polling of `/api/quiz/state` — 34423bd

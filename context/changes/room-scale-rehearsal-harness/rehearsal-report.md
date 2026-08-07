@@ -85,6 +85,54 @@ submissions that no slice has built yet (S-03 onward). **The rehearsal exercises
 fan-out only, so its command cost is not comparable to the estimate the threshold came from.** Recheck
 the threshold once answers write to the store.
 
+## The log stream dies under the load it exists to observe
+
+Criterion 2.4 asked for 150 token requests to be visible in the deployment logs. `token.ts` was
+instrumented for exactly that (`session.token.issued`). **The instrumentation works and the criterion
+still cannot be met — because the join burst destroys the channel meant to observe it.**
+
+What was measured, on production, deployment `dpl_AVtWhKUdppv9NRPyWheChNg8RN5T`:
+
+| Test | Result |
+| --- | --- |
+| 14 requests at 20-second intervals over 4.5 min | **14 of 14** lines delivered — the stream is stable at low rate and does not expire on a timer |
+| N=5 rehearsal, quiet stream | **5 of 5** token lines, plus every host-action line. Each device fetches its own token; the harness does exercise the endpoint per device |
+| N=150 rehearsal | **1 of ~150** token lines. 12 host-action lines from the same run arrived, then the stream went permanently silent — a subsequent N=5 run added nothing to it |
+
+So the sequence is: burst → the feed delivers a fraction → the feed stops for good. **`vercel logs` keeps
+printing `waiting for new logs...` the whole time.** A dead stream and a quiet system are the same
+observation.
+
+This cost real time in this session: three consecutive runs measured zero token lines and the obvious
+reading was "the clients never call the endpoint". They do — proven at N=5. The instrument had died,
+and it had died in a way that looks exactly like a working instrument.
+
+### Why this outlives F-04
+
+`docs/runbook-live-session.md` §Before the session tells the host to tail these logs during the
+segment, and F-01 established that this stream is the project's **only** visibility — there is no CI, no
+alerting, no error tracking. The failure mode now measured is that the tail **dies silently under
+precisely the event that opens a real session**: ~150 devices joining at once. For the rest of the
+segment the host watches a terminal that cannot report anything, and reads its silence as calm.
+
+Consequences that belong outside this change:
+
+- The runbook's live-tail step needs a re-attach instruction and a way to tell a live stream from a
+  dead one (fire a throwaway request and confirm its line appears).
+- `infrastructure.md`'s risk register should carry this: the mitigation it credits for "a failure is
+  discovered by attendees" is the log tail, and the tail is now known to fail first under load.
+- Open Roadmap Question 3 was **partially discharged** on the grounds that the operational minimum —
+  tailing logs plus a second device — existed. The log half of that minimum is weaker than recorded,
+  which strengthens the case for real alerting rather than closing it.
+
+### How 2.4 is settled
+
+Verified by an amended method, recorded rather than quietly substituted: **per-device token issuance is
+proven at N=5 (5/5, one line per device)**, and the N=150 run's connection result (150/150 connected,
+each holding the lobby snapshot) is only reachable if 150 tokens were minted, since an Ably client with
+no token does not connect. Counting all 150 in the log stream is not achievable on this platform, and
+the reason is now measured rather than assumed.
+
 ## Load run — pending
 
 To be filled by the N=150 run (plan phase 3, step 2). Must record: deployment URL, function region read
