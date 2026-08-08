@@ -58,20 +58,28 @@ spend alert the roadmap asked for, which cannot be configured on the free tier
 (`context/changes/room-scale-rehearsal-harness/rehearsal-report.md` records why). In the Upstash console,
 reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `commands` for the month:
 
-- **Measured 2026-08-08 (S-02): a full N=150 rehearsal costs ~420 commands**, and a real event is on
-  the order of **500–600** — one `EVAL` per attendee joining, plus one `GET`+`HLEN` per device connect
-  and per host action. Minting an Ably token still touches no store key.
+- **Measured 2026-08-08 (S-02): a full N=150 rehearsal costs ~1260 commands**, and a real event is on
+  the order of **1600** — because **Upstash bills a Lua `EVAL` *and* every `redis.call` inside it**,
+  so one attendee joining costs eight commands, not one. Plus a `GET`+`HLEN` per device connect and
+  per host action. Minting an Ably token still touches no store key.
+- **The console counter lags. Do not quote a reading taken minutes after a burst.** Measured: a
+  reading 7 minutes after three N=150 runs was 2526 commands short of the same counter 85 minutes
+  later, with ~15 commands of work in between. A premature reading looks settled and is not — this is
+  how the first version of this section came to understate the cost by 3×. Wait, re-read, and only
+  quote a figure that has stopped moving.
 - **The plan ceiling is 500K per month, not 200K.** The tripwire below is a deliberately conservative
   fraction of the limit, not the limit itself.
 - **Above ~200K attributable to a single run, stop and look.** **This is a polling detector, not a
-  capacity guard** — it sits roughly 350× above a real session, and nothing but a loop could approach
+  capacity guard** — it sits roughly 125× above a real session, and nothing but a loop could approach
   it. Do not raise it as usage grows: raising it is how it stops working. The failure it catches is
   cheap in money and expensive in architecture.
-- **Cost is measured but not fully explained.** The S-02 delta was ~2.5× what the code accounts for,
-  almost entirely in *reads* (~12× predicted); a join looks to cost roughly two billable commands
-  rather than one. See `context/changes/join-and-follow-host/command-counter-diagnostic.md`. The older
-  513 → 4102 figure across seven F-04 runs is a much larger discrepancy again and remains unexplained.
-  **If you see the counter rising while nothing is running, that is a finding worth chasing.**
+- **Cost is now explained.** The settled S-02 delta matches the eight-commands-per-join model to
+  within 0.1% (writes predicted 2320 against 2323 observed), so nothing is issuing commands
+  unprompted. See `context/changes/join-and-follow-host/command-counter-diagnostic.md`. The older
+  513 → 4102 figure across seven F-04 runs is still not fully explained — those runs had no joins, and
+  the same mechanism inflates their cost only ~3×, not the ~13× observed.
+  **If you see the counter rising while nothing is running — and it has genuinely settled — that is
+  still a finding worth chasing.**
 
 ## Before the session
 

@@ -45,50 +45,91 @@ confirming none is running before taking either reading below.
 
 ## Readings
 
-Both readings must be taken with **nothing running**: no rehearsal, no `bun run dev` against the real
-store, no host action, and no other person driving the deployed site.
+The original method was two readings taken with **nothing running**, on the reasoning that a flat
+figure rules out candidate (2) and a rising one confirms it.
+
+**That method was superseded by a better one, and the readings below follow the better one.** What
+actually settled the question was *attribution*: pricing a known workload against the counter and
+seeing whether the arithmetic closes. It does, to within 0.1% — which is a stronger result than a flat
+idle reading, because a flat reading rules out only continuous traffic while attribution also prices
+the work. It is also what exposed the lag that made the original method unreliable: an "idle" window
+can be busy with a *previous* burst still being ingested, and it looks identical to a quiet one.
 
 **Instrument**: Upstash console → database `upstash-kv-chestnut-pillow` → Usage → `commands` this month.
 
 **This is a human-only step** — the console is not reachable from this environment.
 
-| | Reading | Writes | Reads | Timestamp | Elapsed since previous |
+| | Reading | Writes | Reads | Timestamp | Elapsed |
 | --- | --- | --- | --- | --- | --- |
 | Reference (F-04, before load runs) | 513 | — | — | 2026-08-07 | — |
 | Reference (F-04, after three load runs) | 4102 | — | — | 2026-08-07 | — |
 | Phase 5, before three N=150 runs | 1541 | 640 | 901 | 2026-08-08 ~11:05 | — |
-| **Reading 1** (= Phase 5 after-run reading) | 2794 | 1411 | 1383 | 2026-08-08 ~11:20 | — |
-| **Reading 2** | _pending_ | | | _pending_ | _pending_ |
+| **Reading 1** (~7 min after the last run) | 2794 | 1411 | 1383 | 2026-08-08 ~11:52 | 47 min |
+| **Reading 2** (~85 min after the last run) | 5320 | 2963 | 2357 | 2026-08-08 ~13:15 | 83 min |
 
-Note the monthly counter reset between the F-04 references and these — 1541 is not
-comparable to 4102 as an absolute, only the *deltas* are.
+The monthly counter reset between the F-04 references and these, so 1541 is not comparable
+to 4102 as an absolute — only the deltas are.
 
-**Idle delta**: _pending reading 2_
+**Delta reading 1 → reading 2: +2526** (writes +1552, reads +974), against roughly **15**
+commands of attributable work in that window (`check-purge-residue.ts`, and five
+verification `curl`s after a deploy).
 
 ## Verdict
 
-_Pending reading 2._
+**Nothing is issuing commands unprompted. The counter lags, and reading 1 was premature.**
 
-**What reading 2 can and cannot still settle.** Candidate (2) — something issuing commands
-continuously — is fully answerable, and that is the candidate that would be a finding
-larger than this slice. It needs only an idle window, which is available now: reading 1 was
-taken immediately after the Phase 5 runs finished and the namespace was purged, so any rise
-by reading 2 is unprompted traffic by definition.
+Read naively, reading 2 looks alarming: +2526 where ~15 was expected. It is not. Priced
+across the whole window instead — baseline 1541 → 5320, a settled delta of **+3779** for
+three N=150 runs — the figure is accounted for almost exactly by the runs themselves, once
+each join is priced correctly:
 
-Candidate (1) is now only partly answerable. Phase 5 measured a **live** delta of +1253
-commands against a code accounting of ~510, with the excess almost entirely in reads
-(~12× predicted) — see `join-burst-report.md`. That is consistent with (1), and it also
-raises a fourth candidate the F-04 report did not name:
+| | Predicted | Observed |
+| --- | --- | --- |
+| Writes | 465 EVALs + 450×4 internal + ~55 host = **2320** | **2323** |
+| Reads | 450×3 + 15 probes×2 + ~30 host = **1410** | **1456** |
+| Total | **~3775** | **3779** |
 
-4. **A Lua `EVAL` is billed as more than one command.** ~155 claims per Phase 5 run against
-   ~161 excess reads per run is close to one-read-per-claim, which would be the script's
-   opening `GET`. Not confirmed — `HEXISTS` and `HLEN` in the same script are evidently not
-   billed the same way, or the figure would be near 465, and ~100 excess *writes* per run
-   remain unexplained either way.
+Writes agree to three commands in 2300. So:
 
-The probe that would settle (4) costs two console readings and one HTTP request: read the
-counter, issue exactly one join, read it again. Cheaper and more informative than the
-original idle diagnostic, and it is the version worth keeping if only one is ever run.
+- **Candidate (2) is ruled out.** There is no continuous background traffic. The rise
+  between the two readings was the console still ingesting the burst.
+- **Candidate (4) is confirmed, and was understated.** Upstash bills a Lua `EVAL` **and
+  every `redis.call` inside it**. The claim script makes seven internal calls (`GET`,
+  `HEXISTS`, `HSET`, `HSET`, `EXPIRE`, `EXPIRE`, `HLEN`), so **a join costs eight commands,
+  not one — and not the "roughly two" this file guessed after Phase 5.**
+- **Candidate (1) is no longer needed** as an explanation for the S-02 figures. It may still
+  contribute, but nothing is left over for it to explain.
+- **Candidate (3) remains eliminated** by the code-side table above.
+
+### The method finding, which outlasts the numbers
+
+**A counter reading taken minutes after a burst is not settled, and looks exactly like one
+that is.** Reading 1 was recorded in `join-burst-report.md` as final and produced a cost
+model 3× too low, which then propagated into the runbook. The mechanism that made the
+original 513 → 4102 delta look mysterious may well be partly this: a reading taken at the
+wrong moment. **Quote a counter only after it has stopped moving, and record the interval at
+which it was read** — both readings above now carry one.
+
+### What is still open
+
+**The F-04 anomaly is not resolved.** Those seven runs had no join stage, so the
+eight-commands-per-join mechanism does not apply to them; the version-guard `EVAL` bills 3
+rather than 1, which inflates their cost ~3×, not the ~13× implied by ~513 per run. Either
+something else was running during that window, or those readings were themselves taken
+mid-ingest. Not worth further measurement now — the cost is bounded, measured, and ~3% of
+plan at ten events a month.
+
+### Consequence for cost, settled
+
+- One N=150 rehearsal run: **~1260 commands**.
+- One real 150-attendee event: **~1600** (150 joins × 8, ~15 host actions × ~6, ~150 device
+  connects × 2).
+- Ten events a month ≈ **3% of the 500K plan**.
+
+**One design consequence for S-03.** A script's cost is now a function of how many
+`redis.call`s it makes. That does not argue for shortening the claim — its seven calls are
+what make it atomic. It does mean an answer-submission script, running once per attendee per
+question (150 × 14), is the first place script length could actually matter.
 
 ## Sequencing deviation, recorded rather than silent
 

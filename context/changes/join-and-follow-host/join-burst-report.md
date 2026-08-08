@@ -87,49 +87,55 @@ Predicted **before** running, so the comparison is a test and not a rationalisat
 1 pre-flight `GET`, 3 for `start`, 150 join `EVAL`s, 12 for four flow verbs, 3 for
 teardown ≈ **169 per run**, ~510 for three.
 
-| | Commands | Writes | Reads |
-| --- | --- | --- | --- |
-| Before the three runs | 1541 | 640 | 901 |
-| After | 2794 | 1411 | 1383 |
-| **Delta** | **+1253** | **+771** | **+482** |
-| Predicted delta | ~510 | ~470 | ~40 |
+| | Commands | Writes | Reads | Taken |
+| --- | --- | --- | --- | --- |
+| Before the three runs | 1541 | 640 | 901 | ~11:05 |
+| ~7 min after the last run | 2794 | 1411 | 1383 | ~11:52 |
+| **~85 min after the last run** | **5320** | **2963** | **2357** | **~13:15** |
+| **Settled delta** | **+3779** | **+2323** | **+1456** | |
+| Predicted delta (wrong — see below) | ~510 | ~470 | ~40 | |
 
 The 150 Ably subscribers touch no store key — minting a subscribe token reads nothing —
 so the burst itself is the whole cost.
 
-**The prediction was 2.5× low, and the miss is almost entirely in the reads.** Per run,
-against a code accounting of ~156 writes and ~13 reads:
+**Two corrections, and the first is about the instrument.**
 
-| | Predicted / run | Observed / run | Factor |
-| --- | --- | --- | --- |
-| Writes | ~156 | ~257 | 1.65× |
-| Reads | ~13 | ~161 | **12×** |
+**1. The console counter lags, and a reading taken minutes after a burst is not settled.**
+The 11:52 reading was recorded here as final. It was not: 85 minutes later, with only ~15
+commands of work in between, the counter had risen another 2526. Nothing was issuing
+commands unprompted — the counter was still ingesting the three runs. Any figure in this
+file taken from the 11:52 reading was therefore ~3× too low. **Wait for a counter to stop
+moving before quoting it**, and quote the interval at which it was read.
 
-**Leading hypothesis: the claim `EVAL` is billed as more than one command.** The script's
-first statement is `GET` on the session document, and ~155 claims per run (150 plus the
-5-variant collision probe) against ~161 observed reads is close enough to one-read-per-claim
-that the coincidence is worth naming. The `HEXISTS` and `HLEN` inside the same script are
-apparently not billed the same way, or the read figure would be near 465 — so this is a
-partial explanation at best, and the write excess (~100/run) is not explained by it at all.
+**2. A join costs eight commands, not one — Upstash bills the `EVAL` *and* every
+`redis.call` inside it.** The claim script makes seven internal calls (`GET`, `HEXISTS`,
+`HSET`, `HSET`, `EXPIRE`, `EXPIRE`, `HLEN`), three of them reads. Pricing the settled delta
+that way:
 
-**Not asserted as fact.** The honest statement is that a join costs **roughly two billable
-commands, not one**, and the rest is unattributed. The cheap probe that would settle it:
-read the counter, issue exactly one join, read it again. That is Phase 0's method applied
-to a known operation instead of to an idle store, and it is now the more useful version of
-that diagnostic — Phase 0's original framing (attribute the historical delta before
-attendee writes exist) expired when Phase 1 shipped.
+| | Predicted under the eight-command model | Observed |
+| --- | --- | --- |
+| Writes | 465 EVALs + 450×4 internal + ~55 host = **2320** | **2323** |
+| Reads | 450×3 + 15 probes×2 + ~30 host = **1410** | **1456** |
+| Total | **~3775** | **3779** |
 
-**Relation to the inherited 513 → 4102 anomaly: unresolved, and probably not the same
-thing.** Those seven F-04 runs had no join stage, so the code accounted for roughly 19
-commands each against ~513 observed — a factor near 27×, an order of magnitude worse than
-the 2.5× here. A single multiplier does not explain both. What can be said is that the
-current cost is *bounded and measured*, which the earlier figure was not.
+Writes agree to three commands in 2300. That is close enough to treat the mechanism as
+established rather than hypothesised, which is a change of status from the earlier draft of
+this file — it guessed "roughly two billable commands per join" and was too timid by 4×.
 
-**One new per-request cost landed this phase and belongs in any later projection:**
-`/api/quiz/state` now issues an `HLEN` alongside its `GET`, because the host's refresh
-button was otherwise re-reading a document whose count could not have changed. That is one
-extra command per device per *connect* (~150 a session) plus one per host refresh. Paced by
-connects and by the host, not by a timer.
+**Settled cost, for anyone projecting from this file:**
+
+- One N=150 rehearsal run: **~1260 commands** (not the ~420 first recorded here).
+- One real 150-attendee event: ~150 joins × 8, plus ~15 host actions × ~6, plus ~150
+  device connects × 2 (`/api/quiz/state` issues a `GET` and an `HLEN`) ≈ **~1600 commands**.
+- Ten events a month ≈ 16K, or **~3% of the 500K plan**.
+
+**One design consequence worth carrying into S-03.** The eight-command cost is a direct
+function of how many `redis.call`s a script makes, so a Lua script's *length* is now a cost
+decision and not only a correctness one. That does not argue for splitting the claim — its
+seven calls are what make it atomic, and three round trips over HTTP would be both slower
+and unsafe. It does mean an answer-submission script written without that in mind, running
+once per attendee per question, is the first place this could actually matter: 150 attendees
+× 14 questions × N calls.
 
 ### The tripwire
 
@@ -138,13 +144,11 @@ plan ceiling as **500K per month**, so the tripwire is not the limit — it is a
 deliberately conservative fraction of it, and that is worth stating in the runbook rather
 than leaving a reader to infer a limit that is wrong by 2.5×.
 
-Using the **measured** cost rather than the predicted one — ~420 per rehearsal run, plus
-~150 for attendee connects now that `/api/quiz/state` also issues an `HLEN` — a real event
-costs on the order of **500–600 commands**. Even at ten events a month that is ~1% of the
-500K plan.
+Using the **settled** cost above, a real event costs on the order of **1600 commands**, and
+ten events a month ~3% of the 500K plan.
 
 The tripwire needs no numeric change, but it needs its purpose stated. It is **not** a
-capacity guard: at 200K it sits ~350× above a real session, and anything approaching it
+capacity guard: at 200K it sits ~125× above a real session, and anything approaching it
 could only have been produced by something looping. Recording it as "40% of the limit"
 would invite someone to raise it when usage grows, which would defeat it. The runbook edit
 in Phase 6 should say that, and correct the implied ceiling — the plan is 500K/month, not

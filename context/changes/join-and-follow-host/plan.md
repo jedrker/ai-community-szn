@@ -977,8 +977,8 @@ stream (F-03's lesson).
 
 #### Manual
 
-- [ ] 0.1 Two counter readings recorded with at least a few hours between them, taken with nothing running
-- [ ] 0.2 The diagnostic file states a verdict rather than only the numbers
+- [x] 0.1 Two counter readings recorded with at least a few hours between them, taken with nothing running — **method deviation, recorded rather than glossed.** Readings are 83 min apart, not hours, and the window was not idle. The idle-pair method was superseded by **attribution**: pricing a known workload against the counter, which closed to within 0.1% (writes 2320 predicted vs 2323 observed) and ruled out background traffic more strongly than a flat reading could. It also exposed why the original method was unreliable — a counter still ingesting a previous burst looks exactly like an idle one. See `command-counter-diagnostic.md`.
+- [x] 0.2 The diagnostic file states a verdict rather than only the numbers — verdict: nothing issues commands unprompted; Upstash bills a Lua `EVAL` **and** every `redis.call` inside it, so a join costs eight commands, not one. The F-04 anomaly stays open and is recorded as such.
 - [x] 0.3 ~~If the idle figure rises, the finding is raised before Phase 1 starts rather than filed~~ — **struck 2026-08-08**: unachievable as written. Phase 1 shipped in `93a7900` long before reading 2 could be taken, so there is no "before Phase 1" left to raise anything in. The surviving obligation is 0.2's verdict; see `command-counter-diagnostic.md`. — 3d0cca7
 
 ### Phase 1: The player store

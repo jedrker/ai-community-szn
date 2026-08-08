@@ -1,7 +1,7 @@
 ---
 change_id: join-and-follow-host
 title: Join and follow host
-status: impl_reviewed
+status: implemented
 created: 2026-08-07
 updated: 2026-08-08
 archived_at: null
