@@ -22,6 +22,7 @@ describe("initialSessionState", () => {
       startedAt: NOW,
       updatedAt: NOW,
       playerCount: 0,
+      revealedOptionIds: null,
     });
   });
 
@@ -154,6 +155,7 @@ describe("endedSessionState", () => {
     startedAt: NOW,
     updatedAt: NOW + 5_000,
     playerCount: 9,
+    revealedOptionIds: null,
   };
 
   it("bumps the version, so the terminal snapshot is newer than anything devices hold", () => {
@@ -224,5 +226,84 @@ describe("the ended phase invariant", () => {
   it("still requires a question for the phases that have one", () => {
     expect(parseSessionState({ ...ended, phase: "question-open" }).ok).toBe(false);
     expect(parseSessionState({ ...ended, phase: "question-revealed" }).ok).toBe(false);
+  });
+});
+
+describe("revealedOptionIds", () => {
+  const open = {
+    version: 3,
+    phase: "question-open" as const,
+    currentQuestionId: quiz.questions[1]!.id,
+    startedAt: NOW,
+    updatedAt: NOW + 1_000,
+    playerCount: 5,
+    revealedOptionIds: null,
+  };
+
+  /**
+   * THE MID-DEPLOY TEST, again — the `playerCount` reasoning applies unchanged.
+   *
+   * A session running when S-03 ships holds a document written before this field
+   * existed. Required, it would fail the next read and 409 the host's next action in
+   * front of the room. The default is what makes the old shape parse, and this is the
+   * test that stops it being tidied away.
+   */
+  it("defaults to null so a pre-deploy document still parses", () => {
+    const { revealedOptionIds: _omitted, ...preDeploy } = open;
+
+    const result = sessionStateSchema.safeParse(preDeploy);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.revealedOptionIds).toBeNull();
+  });
+
+  it("accepts the correct ids in question-revealed", () => {
+    const revealed = { ...open, phase: "question-revealed" as const, revealedOptionIds: ["a"] };
+
+    expect(sessionStateSchema.safeParse(revealed).success).toBe(true);
+  });
+
+  it("accepts an empty array in question-revealed — nothing to highlight", () => {
+    // What an unscored question and a non-choice question both produce. It must not
+    // read as an error, because a warm-up is a normal beat.
+    const revealed = { ...open, phase: "question-revealed" as const, revealedOptionIds: [] };
+
+    expect(sessionStateSchema.safeParse(revealed).success).toBe(true);
+  });
+
+  /**
+   * THE INVARIANT THAT KEEPS AN ANSWER FROM OUTLIVING ITS QUESTION.
+   *
+   * A non-null value in `question-open` is the previous question's answer key,
+   * published to every phone in the room while that question is still being answered.
+   * This is also the reason the field is set in `reveal.ts` and cleared everywhere
+   * else, rather than injected in `applyHostAction` beside `playerCount`.
+   */
+  it.each(["lobby", "question-open", "ended"] as const)(
+    "refuses a non-null value in %s",
+    (phase) => {
+      const questionless = phase === "lobby" || phase === "ended";
+      const candidate = {
+        ...open,
+        phase,
+        currentQuestionId: questionless ? null : open.currentQuestionId,
+        revealedOptionIds: ["a"],
+      };
+
+      expect(sessionStateSchema.safeParse(candidate).success).toBe(false);
+    }
+  );
+
+  it("is null on every constructor that is not a reveal", () => {
+    expect(initialSessionState(NOW).revealedOptionIds).toBeNull();
+
+    const revealed = {
+      ...open,
+      phase: "question-revealed" as const,
+      revealedOptionIds: ["a", "b"],
+    };
+    // Cleared, not carried: the ending snapshot is about the session, not about
+    // whichever question was on screen when the host closed it.
+    expect(endedSessionState(revealed, NOW + 9_000).revealedOptionIds).toBeNull();
   });
 });

@@ -42,6 +42,12 @@ export const POST: APIRoute = async ({ request }) => {
       // see the note there. Copying here is correct *because* of that overwrite; a
       // transition that tried to read the count itself would be the one out of step.
       playerCount: current.playerCount,
+      // Cleared — and note this is the exact opposite of the line above it. The
+      // count is copied because `applyHostAction` overwrites it; the revealed ids
+      // are cleared *here* because nothing overwrites them, and a carried value
+      // would publish the previous question's answer key alongside the new
+      // question. See the field's note in `state.ts`.
+      revealedOptionIds: null,
     };
   }, Date.now());
 

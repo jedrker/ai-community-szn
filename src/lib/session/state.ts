@@ -83,6 +83,30 @@ export const sessionStateSchema = z
      * where a stale version is not.
      */
     playerCount: z.number().int().nonnegative().default(0),
+    /**
+     * The correct option ids for the question being revealed (roadmap S-03, FR-016).
+     *
+     * **This is the field that looks like `playerCount` above and behaves in the
+     * opposite way. Read this before editing either.**
+     *
+     * `playerCount` is decoration on a transition: a stale value costs nothing, so it
+     * is overwritten in `applyHostAction` for every action and the three state
+     * constructors merely copy it. `revealedOptionIds` is *part of* the transition —
+     * it is the payload of revealing — so it is set by `reveal.ts` and cleared by
+     * every other transition. Injecting it in `applyHostAction` would carry the
+     * previous question's answer into the next question and show it to the room.
+     *
+     * It rides the snapshot rather than being fetched because the correct answer is
+     * quiz content, not attendee data: 150 devices already receive this document, and
+     * a phone whose per-device result fetch fails still sees the right answer
+     * highlighted. The award and the running total are per-player and cannot travel
+     * here — same reasoning as `playerCount`'s note about Ably's ~120s retention.
+     *
+     * `.default(null)` for the same load-bearing reason `playerCount` carries
+     * `.default(0)`: a session document written before this ships must still parse, or
+     * the host's next action 409s mid-segment.
+     */
+    revealedOptionIds: z.array(z.string()).nullable().default(null),
   })
   .superRefine((state, ctx) => {
     // A question id is only ever assigned server-side from the quiz definition,
@@ -120,6 +144,17 @@ export const sessionStateSchema = z
         message: `Faza "${state.phase}" wymaga otwartego pytania.`,
       });
     }
+
+    // The invariant that stops a revealed answer outliving its question. A non-null
+    // value in `question-open` is the previous question's answer key, published to
+    // every device in the room while that question is still being answered.
+    if (state.phase !== "question-revealed" && state.revealedOptionIds !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["revealedOptionIds"],
+        message: `W fazie "${state.phase}" nie można ujawniać poprawnych odpowiedzi.`,
+      });
+    }
   });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;
@@ -135,6 +170,9 @@ export function initialSessionState(now: number): SessionState {
     // A new session has no players by construction — `createSession` is
     // create-if-absent, so reaching here means nothing existed to hold them.
     playerCount: 0,
+    // Nothing is revealed in the lobby, and unlike `playerCount` this is NOT
+    // overwritten downstream — every constructor but `reveal.ts` owns its own null.
+    revealedOptionIds: null,
   };
 }
 
@@ -174,6 +212,10 @@ export function endedSessionState(current: SessionState, now: number): SessionSt
     // there. Copying is correct *because* it is overwritten; a constructor that tried
     // to be clever here would be the only one out of step.
     playerCount: current.playerCount,
+    // Cleared, not carried — the ending snapshot is about the session, not about
+    // whichever question happened to be revealed when the host closed it. The
+    // schema refuses a non-null value outside `question-revealed` anyway.
+    revealedOptionIds: null,
   };
 }
 

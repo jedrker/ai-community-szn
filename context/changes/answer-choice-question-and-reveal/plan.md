@@ -836,27 +836,27 @@ never was — `docs/runbook-live-session.md` already carries that.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 `store.test.ts` asserts `submitAnswer` is a single `eval` call
-- [x] 2.4 `keys.test.ts` passes — no namespaced literal introduced in `store.ts`
+- [x] 2.1 Unit tests pass: `bun run test` — 95ac6aa
+- [x] 2.2 Type checking passes: `bun run type-check` — 95ac6aa
+- [x] 2.3 `store.test.ts` asserts `submitAnswer` is a single `eval` call — 95ac6aa
+- [x] 2.4 `keys.test.ts` passes — no namespaced literal introduced in `store.ts` — 95ac6aa
 
 #### Manual
 
-- [x] 2.5 Predicted per-event command cost written down and matching the implemented script
+- [x] 2.5 Predicted per-event command cost written down and matching the implemented script — 95ac6aa
 - [ ] 2.6 Dev-server submission returns `accepted` once, `already-answered` on repeat
 
 ### Phase 3: Routes and the reveal payload
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 `state.test.ts` covers the default, the phase invariant, and every constructor
-- [ ] 3.4 `answer.test.ts` covers scoring, kind refusal, clamping, and a verdict-free response
-- [ ] 3.5 `result.test.ts` covers the phase gate, the `ended`-phase total, and the `not-found`/`failed` split
-- [ ] 3.6 `routes.test.ts` still passes — reveal's no-op and rejection behaviour unchanged
-- [ ] 3.7 `keys.test.ts` and `boundary.test.ts` pass
+- [x] 3.1 Unit tests pass: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 `state.test.ts` covers the default, the phase invariant, and every constructor
+- [x] 3.4 `answer.test.ts` covers scoring, kind refusal, clamping, and a verdict-free response
+- [x] 3.5 `result.test.ts` covers the phase gate, the `ended`-phase total, and the `not-found`/`failed` split
+- [x] 3.6 `routes.test.ts` still passes — reveal's no-op and rejection behaviour unchanged
+- [x] 3.7 `keys.test.ts` and `boundary.test.ts` pass
 
 #### Manual
 

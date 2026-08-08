@@ -87,6 +87,30 @@ export const SESSION_EVENTS = [
    * burst of refusals is the answer that needs to stand out.
    */
   "session.join.rejected",
+  /**
+   * An answer was recorded (roadmap S-03).
+   *
+   * Carries `questionId` and nothing else. **Never the selected options** — an answer
+   * is attendee data under CLAUDE.md's rule, and logs are retained ~1 hour covered by
+   * no TTL, no `purge` and no rollback, so a line here outlives the session document
+   * that the whole retention guardrail is built around. `questionId` is already in the
+   * vocabulary and says nothing about a person; there is no field an option id would
+   * fit in, and that closure is the enforcement.
+   *
+   * One line per attendee per question — 150 × 14 in a real event, which makes these
+   * the densest lines the stream will carry. F-04 measured ~10–15% loss under a burst,
+   * so treat any count of them as a floor.
+   */
+  "session.answer.accepted",
+  /**
+   * A submission was refused, with the class in `rejection`.
+   *
+   * Distinct from `session.answer.accepted` rather than a field on it, for the reason
+   * the join events are split: a host watching the stream during a question is asking
+   * "are the answers landing?", and a burst of refusals is the answer that has to
+   * stand out.
+   */
+  "session.answer.rejected",
 ] as const;
 
 export type SessionEvent = (typeof SESSION_EVENTS)[number];
@@ -142,7 +166,16 @@ type LogFields = {
    *
    * Extend the union when a new refusal class appears. Never widen it to `string`.
    */
-  rejection?: "taken" | "invalid" | "closed" | "no-session" | "unknown-player";
+  rejection?:
+    | "taken"
+    | "invalid"
+    | "closed"
+    | "no-session"
+    | "unknown-player"
+    /** S-03: the question closed, or a different one is open, before the answer landed. */
+    | "not-open"
+    /** S-03: this player already answered this question. FR-004 makes the first final. */
+    | "already-answered";
 };
 
 /**

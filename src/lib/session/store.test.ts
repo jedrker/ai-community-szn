@@ -50,6 +50,7 @@ const lobby = {
   startedAt: NOW,
   updatedAt: NOW,
   playerCount: 0,
+  revealedOptionIds: null,
 };
 
 const firstQuestionOpen = {
@@ -59,6 +60,7 @@ const firstQuestionOpen = {
   startedAt: NOW,
   updatedAt: NOW + 500,
   playerCount: 0,
+  revealedOptionIds: null,
 };
 
 const player = { id: "player-abc", displayName: "Anna", joinedAt: NOW };
@@ -289,6 +291,7 @@ describe("endSession", () => {
     startedAt: NOW,
     updatedAt: NOW + 5_000,
     playerCount: 0,
+    revealedOptionIds: null,
   };
 
   it("applies an end whose expected version matches", async () => {

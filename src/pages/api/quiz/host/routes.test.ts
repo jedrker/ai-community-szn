@@ -635,3 +635,75 @@ describe("the flow verbs refuse to reopen an ended session", () => {
     expect(body.error).toContain("Sesja została zakończona");
   });
 });
+
+describe("the reveal payload (roadmap S-03)", () => {
+  /**
+   * `applyHostAction` is mocked, so the transition itself is exercised by capturing
+   * the callback the route hands it and running it against a state. That is the only
+   * place `revealedOptionIds` is ever set, which makes it worth pinning here.
+   */
+  function transitionFrom(): (current: any, now: number) => any {
+    return applyHostActionMock.mock.calls[0]![0] as (current: any, now: number) => any;
+  }
+
+  const open = (questionId: string) => ({
+    version: 3,
+    phase: "question-open" as const,
+    currentQuestionId: questionId,
+    startedAt: NOW,
+    updatedAt: NOW + 500,
+    playerCount: 6,
+    revealedOptionIds: null,
+  });
+
+  beforeEach(() => {
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: revealed, applied: true },
+    });
+  });
+
+  it("puts the correct option ids on the revealed state", async () => {
+    await call(reveal);
+
+    const next = transitionFrom()(open("llm-skrot"), NOW + 5_000);
+
+    expect(next.revealedOptionIds).toEqual(["large-language-model"]);
+  });
+
+  it("carries every correct id for a multi-answer question", async () => {
+    await call(reveal);
+
+    const next = transitionFrom()(open("summer-tour-zakonczenie"), NOW + 5_000);
+
+    expect(next.revealedOptionIds).toEqual(["kino", "networking"]);
+  });
+
+  it("reveals an empty array for an unscored choice question", async () => {
+    await call(reveal);
+
+    // Nothing to highlight, and the client must read that as a warm-up rather than
+    // as an error — this is the gather beat that welcomes latecomers.
+    expect(transitionFrom()(open("czy-wszyscy-gotowi"), NOW).revealedOptionIds).toEqual([]);
+  });
+
+  it("reveals an empty array for a kind this slice does not answer", async () => {
+    // Text, number and word-cloud get their own reveal in S-05/S-06/S-08.
+    await call(reveal);
+
+    expect(transitionFrom()(open("zmyslanie-faktow"), NOW).revealedOptionIds).toEqual([]);
+  });
+
+  it("advance clears it, so an answer key cannot outlive its question", async () => {
+    await call(advance);
+
+    const next = transitionFrom()(
+      { ...open("llm-skrot"), phase: "question-revealed", revealedOptionIds: ["large-language-model"] },
+      NOW + 9_000
+    );
+
+    // THE ONE THAT MATTERS. A carried value publishes the previous question's answer
+    // key alongside the new question, to every phone in the room.
+    expect(next.revealedOptionIds).toBeNull();
+  });
+});
