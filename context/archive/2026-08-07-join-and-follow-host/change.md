@@ -1,10 +1,10 @@
 ---
 change_id: join-and-follow-host
 title: Join and follow host
-status: implemented
+status: archived
 created: 2026-08-07
 updated: 2026-08-08
-archived_at: null
+archived_at: 2026-08-08T11:18:28Z
 ---
 
 ## Notes

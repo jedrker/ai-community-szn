@@ -313,7 +313,7 @@ and do NOT re-scaffold them.
   - ~~Is the 30-second join target met when 150 devices join in a burst?~~ **Answered, with stated
     limits.** Three N=150 runs against production: the burst completes in **1.24–1.65 s**, 4–6% of
     FR-002's budget, with 150/150 claims accepted and zero duplicate folded names across 450
-    concurrent claims. See `context/changes/join-and-follow-host/join-burst-report.md`.
+    concurrent claims. See `context/archive/2026-08-07-join-and-follow-host/join-burst-report.md`.
 
     **It is a lower bound, not a venue simulation** — one process on one network, measuring the claim
     round trip and not a phone painting a screen. Paint time remains unmeasured anywhere and was
@@ -478,7 +478,7 @@ and do NOT re-scaffold them.
 | F-02       | `session-state-and-realtime-spine`    | Server-authoritative session state with sub-second fan-out         | no                    | Needs F-01 only — no blocking unknown left. Name claim must be atomic |
 | F-03       | `session-end-and-data-purge`          | End a session and purge attendee names and answers                 | done                  | **Delivered 2026-08-06.** S-02/S-03/S-07 must read `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md` before adding any key or snapshot field |
 | F-04       | `room-scale-rehearsal-harness`        | Drive ~150 simulated devices through a session and measure         | no                    | Needs F-02                                                    |
-| S-02       | `join-and-follow-host`                | Join a session by display name and follow the host's question      | done                  | **Delivered 2026-08-08.** Settled the client-interactivity approach (Question 2) — S-03/S-07/S-08 must read `context/changes/join-and-follow-host/join-contract.md` |
+| S-02       | `join-and-follow-host`                | Join a session by display name and follow the host's question      | done                  | **Delivered 2026-08-08.** Settled the client-interactivity approach (Question 2) — S-03/S-07/S-08 must read `context/archive/2026-08-07-join-and-follow-host/join-contract.md` |
 | S-03       | `answer-choice-question-and-reveal`   | Answer a choice question and see result and points at reveal       | no                    | North star. Needs S-02                                        |
 | S-04       | `host-participation-and-distribution` | Large screen: answer count while open, distribution at reveal      | no                    | Needs S-03                                                    |
 | S-05       | `free-text-answers`                   | Free-text answers matched ignoring case, spacing and diacritics    | no                    | Needs S-03                                                    |
@@ -606,6 +606,29 @@ and do NOT re-scaffold them.
 
 (Empty on first generation. `/10x-archive` appends here — and flips that item's `Status` to `done` —
 when a change whose `Change ID` matches a roadmap item is archived.)
+
+- **S-02: Attendee can open the session link, enter an unused display name, and see the host's current
+  question appear on their phone as the host starts the session and advances through it.** — Archived
+  2026-08-08 → `context/archive/2026-08-07-join-and-follow-host/`. **The atomic claim holds at room
+  scale:** 450 concurrent claims across three N=150 runs against production produced **zero duplicate
+  folded names**, and the collision probe (case + diacritics + spacing at once) was refused 5/5 every
+  run. The join burst completes in **1.24–1.65 s**, 4–6% of FR-002's 30 s budget. **Open Roadmap
+  Question 2 is closed:** vanilla TypeScript modules in `src/lib/client/` plus `define:vars`, no UI
+  framework — accepted cost is hand-written DOM updates for S-07 and S-08. **Names are never
+  published**, which corrects PRD Deviation 2 and hands S-07 the leaderboard-naming choice
+  deliberately rather than by default. Lessons: (1) **A plan can assert two things that cannot both
+  hold, and the implementation will quietly satisfy one** — "the count is embedded at host-action
+  time" and "refresh is how the host watches the lobby fill" were both in the plan; the count was
+  implemented per the data rule and the refresh button silently did nothing, through green tests and a
+  clean type-check, until a two-device run on production. Recorded in
+  `context/foundation/lessons.md`. (2) **A counter reading taken minutes after a burst is not settled
+  and looks exactly like one that is** — the first reading produced a store-cost model 3× too low that
+  propagated into the runbook before a later reading caught it. (3) **Upstash bills a Lua `EVAL` *and*
+  every `redis.call` inside it**, so a join costs eight commands, not one; script length is now a cost
+  decision, which S-03's answer path (150 × 14 invocations) should account for. (4) **Two
+  conflated error cases needed opposite treatment** — the impl review's F1 found that "unknown player"
+  and "the store threw" shared one return shape, so a transient blip cleared a device's stored id and
+  locked the attendee out under their own name.
 
 - **F-04: (foundation) roughly 150 simulated devices can be driven through a session against the real
   spine, with fan-out latency and answer loss observed rather than assumed.** — Archived 2026-08-07 →
