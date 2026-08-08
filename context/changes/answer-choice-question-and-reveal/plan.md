@@ -850,13 +850,13 @@ never was — `docs/runbook-live-session.md` already carries that.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 `state.test.ts` covers the default, the phase invariant, and every constructor
-- [x] 3.4 `answer.test.ts` covers scoring, kind refusal, clamping, and a verdict-free response
-- [x] 3.5 `result.test.ts` covers the phase gate, the `ended`-phase total, and the `not-found`/`failed` split
-- [x] 3.6 `routes.test.ts` still passes — reveal's no-op and rejection behaviour unchanged
-- [x] 3.7 `keys.test.ts` and `boundary.test.ts` pass
+- [x] 3.1 Unit tests pass: `bun run test` — 0fce857
+- [x] 3.2 Type checking passes: `bun run type-check` — 0fce857
+- [x] 3.3 `state.test.ts` covers the default, the phase invariant, and every constructor — 0fce857
+- [x] 3.4 `answer.test.ts` covers scoring, kind refusal, clamping, and a verdict-free response — 0fce857
+- [x] 3.5 `result.test.ts` covers the phase gate, the `ended`-phase total, and the `not-found`/`failed` split — 0fce857
+- [x] 3.6 `routes.test.ts` still passes — reveal's no-op and rejection behaviour unchanged — 0fce857
+- [x] 3.7 `keys.test.ts` and `boundary.test.ts` pass — 0fce857
 
 #### Manual
 
@@ -867,11 +867,11 @@ never was — `docs/runbook-live-session.md` already carries that.
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 `boundary.test.ts` passes for `answer.ts` and the page `<script>` blocks
-- [ ] 4.4 `keys.test.ts` passes — the new storage key is a literal only in `keys.ts`
-- [ ] 4.5 Render tests cover selection, toggling, revealed marking, and `textContent`
+- [x] 4.1 Unit tests pass: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 `boundary.test.ts` passes for `answer.ts` and the page `<script>` blocks
+- [x] 4.4 `keys.test.ts` passes — the new storage key is a literal only in `keys.ts`
+- [x] 4.5 Render tests cover selection, toggling, revealed marking, and `textContent`
 
 #### Manual
 

@@ -1,7 +1,7 @@
 ---
 import "../../styles/global.css";
 
-import { PLAYER_STORAGE_KEY } from "../../lib/session/keys";
+import { PLAYER_STORAGE_KEY, QUESTION_SEEN_STORAGE_KEY } from "../../lib/session/keys";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
 import { publicQuiz } from "../../quiz/public";
 
@@ -95,6 +95,29 @@ import { publicQuiz } from "../../quiz/public";
         <p id="player-name" class="text-text-secondary text-base"></p>
         <p id="follow-status" class="text-xl font-semibold"></p>
         <div id="question" class="flex flex-col gap-4"></div>
+
+        <!-- The answering controls. Hidden for every phase and kind that cannot be
+             answered, so nothing tappable is ever on screen without a purpose. -->
+        <button
+          id="answer-submit"
+          type="button"
+          hidden
+          class="w-full rounded-xl bg-brand-purple px-4 py-4 text-2xl font-semibold
+                 text-white disabled:opacity-50"
+        >
+          Wyślij odpowiedź
+        </button>
+        <p id="answer-note" hidden class="text-text-secondary text-lg"></p>
+        <p id="answer-error" role="alert" aria-live="polite" class="text-lg text-red-400"></p>
+
+        <!-- The reveal panel. The verdict line is per device and arrives from
+             /api/quiz/result; the correct answer above it came with the snapshot and
+             is on screen whether or not that fetch succeeds. -->
+        <section id="result" hidden class="flex flex-col gap-1">
+          <p id="result-verdict" class="text-2xl font-bold"></p>
+          <p id="result-award" class="text-xl"></p>
+          <p id="result-total" class="text-text-secondary text-lg"></p>
+        </section>
       </section>
     </main>
 
@@ -109,10 +132,11 @@ import { publicQuiz } from "../../quiz/public";
         channelName: SESSION_CHANNEL,
         snapshotEvent: SNAPSHOT_EVENT,
         storageKey: PLAYER_STORAGE_KEY,
+        seenStorageKey: QUESTION_SEEN_STORAGE_KEY,
         questions: publicQuiz.questions,
       }}
     >
-      window.__liveQuiz = { channelName, snapshotEvent, storageKey, questions };
+      window.__liveQuiz = { channelName, snapshotEvent, storageKey, seenStorageKey, questions };
     </script>
 
     <script>
@@ -122,6 +146,12 @@ import { publicQuiz } from "../../quiz/public";
         type SessionClient,
       } from "../../lib/client/session";
       import { clearPlayer, readPlayer, writePlayer } from "../../lib/client/player";
+      import {
+        fetchResult,
+        markSeen,
+        submitAnswer,
+        type OwnResult,
+      } from "../../lib/client/answer";
       import { el, renderQuestion, setHidden, setText } from "../../lib/client/render";
       import type { PublicQuestion } from "../../quiz/public";
 
@@ -129,6 +159,7 @@ import { publicQuiz } from "../../quiz/public";
         channelName: string;
         snapshotEvent: string;
         storageKey: string;
+        seenStorageKey: string;
         questions: PublicQuestion[];
       };
 
@@ -147,9 +178,32 @@ import { publicQuiz } from "../../quiz/public";
       const nameInput = el("display-name") as HTMLInputElement;
       const submit = el("join-submit") as HTMLButtonElement;
       const form = el("join-form") as HTMLFormElement;
+      const answerSubmit = el("answer-submit") as HTMLButtonElement;
+      const answerNote = el("answer-note");
+      const answerError = el("answer-error");
+      const resultPanel = el("result");
 
       let connection: ConnectionStatus = "connecting";
       let joined = false;
+      let player: { id: string; displayName: string } | null = null;
+
+      /**
+       * Everything the answering beats need, keyed by question id.
+       *
+       * Per question rather than a single "current" value, because the snapshot is what
+       * decides which question is current and it can move under us. Keyed state means
+       * an out-of-order or replayed snapshot renders the right thing rather than
+       * mixing one question's selection into another — the property `render()` already
+       * had and that these additions must not cost.
+       */
+      const selections = new Map<string, string[]>();
+      const submitted = new Set<string>();
+      const results = new Map<string, OwnResult>();
+      /** Questions whose result fetch has already been issued — one per device, ever. */
+      const resultRequested = new Set<string>();
+
+      const OPTION_CLASS =
+        "rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl";
 
       const client = createSessionClient({
         channelName: config.channelName,
@@ -181,6 +235,7 @@ import { publicQuiz } from "../../quiz/public";
         if (connection === "lost") {
           setText("follow-status", "Utracono połączenie. Próbujemy połączyć ponownie…");
           el("follow-status").className = "text-xl font-semibold text-red-400";
+          hideAnswerControls();
           return;
         }
 
@@ -192,12 +247,14 @@ import { publicQuiz } from "../../quiz/public";
         if (state === null || state.phase === "ended") {
           setText("follow-status", "To już koniec. Dzięki za grę!");
           setHidden(questionBox, true);
+          hideAnswerControls();
           return;
         }
 
         if (state.phase === "lobby") {
           setText("follow-status", "Jesteś w grze. Czekamy na prowadzącego…");
           setHidden(questionBox, true);
+          hideAnswerControls();
           return;
         }
 
@@ -214,21 +271,219 @@ import { publicQuiz } from "../../quiz/public";
         );
 
         setHidden(questionBox, false);
+
         // An id absent from the projection means the definition changed under a live
         // session. `renderQuestion` shows a neutral placeholder rather than an error.
-        renderQuestion(
-          questionBox,
-          position === -1 ? undefined : config.questions[position],
-          {
+        const question = position === -1 ? undefined : config.questions[position];
+
+        if (state.phase === "question-revealed") {
+          renderRevealed(question, state.revealedOptionIds ?? null);
+          return;
+        }
+
+        renderOpen(question);
+      }
+
+      /** Every answering control off, in one call, so no branch can leave one behind. */
+      function hideAnswerControls(): void {
+        setHidden(answerSubmit, true);
+        setHidden(answerNote, true);
+        setHidden(resultPanel, true);
+        setText("answer-error", "");
+      }
+
+      /**
+       * `question-open` — the answering beat.
+       *
+       * The paint time is recorded first and read back if this device has seen the
+       * question before, which is what makes a reload keep its original clock rather
+       * than restarting it at full speed weight.
+       */
+      function renderOpen(question: PublicQuestion | undefined): void {
+        setHidden(resultPanel, true);
+
+        const answerable =
+          question !== undefined &&
+          (question.kind === "single-choice" || question.kind === "multiple-choice");
+
+        if (!question || !answerable) {
+          // Text, number and word cloud are S-05, S-06 and S-08. Static text, and no
+          // control — something tappable that does nothing reads as a broken quiz.
+          renderQuestion(questionBox, question, {
             prompt: "text-3xl font-bold leading-tight",
             list: "flex flex-col gap-3",
-            // Static text, not controls: the answer path is S-03's, and something
-            // tappable that does nothing reads as a broken quiz from row three.
-            option:
-              "rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl",
-          }
-        );
+            option: OPTION_CLASS,
+          });
+          hideAnswerControls();
+          return;
+        }
+
+        markSeen(config.seenStorageKey, question.id);
+
+        const selected = selections.get(question.id) ?? [];
+        const locked = submitted.has(question.id);
+
+        renderQuestion(questionBox, question, {
+          prompt: "text-3xl font-bold leading-tight",
+          list: "flex flex-col gap-3",
+          option: OPTION_CLASS,
+          optionSelected: "border-brand-purple-light bg-brand-purple/30 font-semibold",
+          mode: locked ? "static" : "answerable",
+          selectedOptionIds: selected,
+          onSelect: (next) => {
+            selections.set(question.id, next);
+            render();
+          },
+        });
+
+        setHidden(answerNote, false);
+        if (locked) {
+          // Confirmed, and nothing about correctness — that waits for the host.
+          answerNote.textContent = "Odpowiedź zapisana. Czekamy na prowadzącego…";
+          setHidden(answerSubmit, true);
+          return;
+        }
+
+        // FR-017: say up front that a warm-up is a warm-up. Driven by `scored` from the
+        // projection, never inferred from a zero award — the payloads are identical.
+        answerNote.textContent = question.scored
+          ? question.kind === "multiple-choice"
+            ? "Możesz wybrać kilka odpowiedzi. Liczy się też czas."
+            : "Liczy się też czas — im szybciej, tym więcej punktów."
+          : "To pytanie na rozgrzewkę — bez punktów.";
+
+        setHidden(answerSubmit, false);
+        answerSubmit.disabled = selected.length === 0;
       }
+
+      /**
+       * `question-revealed` — the payoff beat.
+       *
+       * The correct answer comes from the snapshot, so it is on screen before any
+       * request is made. **If the per-device fetch fails, that is what stays on
+       * screen** — the split between broadcast correctness and per-device scoring
+       * exists precisely so a failed fetch costs the score line and nothing more.
+       */
+      function renderRevealed(
+        question: PublicQuestion | undefined,
+        revealedOptionIds: readonly string[] | null
+      ): void {
+        setHidden(answerSubmit, true);
+        setHidden(answerNote, true);
+        setText("answer-error", "");
+
+        renderQuestion(questionBox, question, {
+          prompt: "text-3xl font-bold leading-tight",
+          list: "flex flex-col gap-3",
+          option: OPTION_CLASS,
+          optionSelected: "border-brand-purple-light font-semibold",
+          optionCorrect: "border-green-400 bg-green-500/20 font-semibold",
+          optionWrong: "border-red-400 bg-red-500/20",
+          mode: "revealed",
+          selectedOptionIds: selections.get(question?.id ?? "") ?? [],
+          correctOptionIds: revealedOptionIds,
+        });
+
+        if (!question) {
+          setHidden(resultPanel, true);
+          return;
+        }
+
+        // A device that stayed silent sees the correct answer and no verdict.
+        if (!submitted.has(question.id)) {
+          setHidden(resultPanel, true);
+          return;
+        }
+
+        // An unscored question has no award to fetch, so asking would spend a request
+        // to be told nothing — and this is 2 of the 14 questions removed from a fan-in
+        // of 150 devices per reveal. The warm-up gets its own line instead.
+        if (!question.scored) {
+          setHidden(resultPanel, false);
+          setText("result-verdict", "Dzięki za odpowiedź!");
+          setText("result-award", "To była rozgrzewka — bez punktów.");
+          setText("result-total", "");
+          return;
+        }
+
+        const known = results.get(question.id);
+        if (known) {
+          showResult(known);
+          return;
+        }
+
+        // Not yet fetched. Issue it once — `render()` runs on every snapshot and every
+        // tap, and an ungated fetch here would issue one per render.
+        setHidden(resultPanel, true);
+        if (!resultRequested.has(question.id) && player) {
+          resultRequested.add(question.id);
+          void fetchResult(player.id, question.id).then((own) => {
+            // A failure leaves the correct answer on screen and says nothing else. It
+            // is deliberately not retried and deliberately not an error message: the
+            // attendee has the answer, and a red line about a score they cannot see is
+            // worse than a missing one.
+            if (own) {
+              results.set(question.id, own);
+              render();
+            }
+          });
+        }
+      }
+
+      function showResult(own: OwnResult): void {
+        setHidden(resultPanel, false);
+        setText("result-verdict", own.correct ? "Dobrze!" : "Tym razem nie.");
+        setText("result-award", own.correct ? `+${own.awarded ?? 0} pkt` : "+0 pkt");
+        setText("result-total", `Twój wynik: ${own.total} pkt`);
+      }
+
+      /**
+       * The answer submit path.
+       *
+       * The in-flight guard lives in `answer.ts`; this one owns what the attendee sees
+       * while it is in flight, exactly as the join button does.
+       */
+      async function sendAnswer(): Promise<void> {
+        const state = client.current();
+        const questionId = state?.currentQuestionId;
+        if (!player || !questionId || state?.phase !== "question-open") return;
+
+        const selected = selections.get(questionId) ?? [];
+        if (selected.length === 0) return;
+
+        answerSubmit.disabled = true;
+        answerSubmit.textContent = "Wysyłanie…";
+        setText("answer-error", "");
+
+        // The device's own clock, from the paint this device recorded — not from the
+        // host's advance, and not reset by a reload.
+        const elapsedMs = Date.now() - markSeen(config.seenStorageKey, questionId);
+
+        const outcome = await submitAnswer(player.id, questionId, selected, elapsedMs);
+
+        answerSubmit.textContent = "Wyślij odpowiedź";
+
+        if (outcome.outcome === "accepted") {
+          submitted.add(questionId);
+          render();
+          return;
+        }
+
+        if (outcome.outcome === "rejected") {
+          // The server's own Polish message — "already answered", "no longer open".
+          // Treated as final: the answer is not going to be accepted by retrying.
+          submitted.add(questionId);
+          setText("answer-error", outcome.error);
+          render();
+          return;
+        }
+
+        // The network, not the session. Let them try again.
+        setText("answer-error", "Nie udało się wysłać. Spróbuj ponownie.");
+        answerSubmit.disabled = false;
+      }
+
+      answerSubmit.addEventListener("click", () => void sendAnswer());
 
       function showJoinForm(): void {
         setHidden(boot, true);
@@ -238,16 +493,20 @@ import { publicQuiz } from "../../quiz/public";
       }
 
       async function enterSession(
-        player: { id: string; displayName: string },
+        joining: { id: string; displayName: string },
         state: Parameters<SessionClient["apply"]>[0]
       ): Promise<void> {
         joined = true;
-        writePlayer(config.storageKey, player);
+        // Held for the rest of the segment: every submission and every result fetch is
+        // made in this id's name, and it is the only thing this device knows about
+        // itself that the server also knows.
+        player = joining;
+        writePlayer(config.storageKey, joining);
 
         setHidden(boot, true);
         setHidden(joinSection, true);
         setHidden(followSection, false);
-        setText("player-name", `Grasz jako ${player.displayName}`);
+        setText("player-name", `Grasz jako ${joining.displayName}`);
 
         // Applied before connecting: the join response already carries the host's
         // current state, so the first render costs no extra round trip inside the

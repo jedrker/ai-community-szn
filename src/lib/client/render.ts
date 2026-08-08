@@ -44,15 +44,69 @@ export type QuestionClassNames = {
   readonly prompt?: string;
   readonly list?: string;
   readonly option?: string;
+  /** Appended to an option this device has selected, in either answerable or revealed mode. */
+  readonly optionSelected?: string;
+  /** Appended to a correct option in revealed mode. */
+  readonly optionCorrect?: string;
+  /** Appended to an option this device selected that turned out to be wrong. */
+  readonly optionWrong?: string;
 };
+
+/**
+ * How the options behave.
+ *
+ * - `static` — text, no interaction. The lobby, and any kind this slice does not answer.
+ * - `answerable` — real tap targets. Buttons, not list items: a phone gets a proper
+ *   target and keyboard focus works without reinventing either.
+ * - `revealed` — the correct option marked, and this device's own selection marked
+ *   beside it. Still not interactive; the answer is already locked.
+ */
+export type QuestionMode = "static" | "answerable" | "revealed";
+
+export type RenderQuestionOptions = QuestionClassNames & {
+  readonly mode?: QuestionMode;
+  /** What this device has picked so far. */
+  readonly selectedOptionIds?: readonly string[];
+  /** From `state.revealedOptionIds`. `null` outside a reveal; `[]` means nothing to mark. */
+  readonly correctOptionIds?: readonly string[] | null;
+  /**
+   * Receives the **new complete selection**, not the option that was tapped.
+   *
+   * Single-choice replaces, multiple-choice toggles — and doing that here rather than
+   * in the view means the two kinds' behaviour lives in one place, next to the
+   * rendering that has to agree with it. The caller stores what it is handed and
+   * re-renders; this module holds no state of its own, which is what keeps an
+   * out-of-order snapshot harmless.
+   */
+  readonly onSelect?: (selectedOptionIds: string[]) => void;
+};
+
+/** Single-choice replaces the selection; multiple-choice toggles within it. */
+function nextSelection(
+  kind: PublicQuestion["kind"],
+  selected: readonly string[],
+  optionId: string
+): string[] {
+  if (kind !== "multiple-choice") return [optionId];
+
+  return selected.includes(optionId)
+    ? selected.filter((id) => id !== optionId)
+    : [...selected, optionId];
+}
+
+/** Joins the base option class with whatever state classes apply. */
+function optionClassName(parts: readonly (string | undefined)[]): string {
+  return parts.filter((part): part is string => Boolean(part)).join(" ");
+}
 
 /**
  * Renders one question into a container: the prompt, plus the option list for the two
  * choice kinds.
  *
- * **The options are static text, not controls.** The answer path is S-03's. Rendering
- * something tappable that does nothing would look broken on stage, and would be read by
- * the room as the quiz having failed rather than as a feature not shipped yet.
+ * **The options became controls in S-03.** They were deliberately static text until the
+ * answer path existed — something tappable that does nothing reads from row three as a
+ * broken quiz rather than as a feature not shipped yet. `mode` is what decides now, and
+ * `static` remains the default so the host view and any unanswerable kind are unchanged.
  *
  * An **unknown question id renders the placeholder rather than an error**. It means the
  * quiz definition changed under a live session — `sessionStateSchema` already refuses
@@ -67,27 +121,73 @@ export type QuestionClassNames = {
 export function renderQuestion(
   container: HTMLElement,
   question: PublicQuestion | undefined,
-  classNames: QuestionClassNames = {}
+  options: RenderQuestionOptions = {}
 ): void {
   container.replaceChildren();
 
+  const mode = options.mode ?? "static";
+  const selected = options.selectedOptionIds ?? [];
+  const correct = options.correctOptionIds ?? null;
+
   const prompt = document.createElement("p");
-  if (classNames.prompt) prompt.className = classNames.prompt;
+  if (options.prompt) prompt.className = options.prompt;
   prompt.textContent = question ? question.prompt : MISSING_QUESTION_TEXT;
   container.append(prompt);
 
   if (!question?.options?.length) return;
 
   const list = document.createElement("ul");
-  if (classNames.list) list.className = classNames.list;
+  if (options.list) list.className = options.list;
 
   for (const option of question.options) {
     const item = document.createElement("li");
-    if (classNames.option) item.className = classNames.option;
-    item.textContent = option.text;
-    // A hook for a later slice to find its own options by id without re-deriving the
-    // order, which `publicQuiz` deliberately shuffles.
+    const isSelected = selected.includes(option.id);
+    const isCorrect = correct !== null && correct.includes(option.id);
+
+    // The hook a later slice needs to find its own options by id without re-deriving
+    // the order, which `publicQuiz` deliberately shuffles. It stays on the `li` in
+    // every mode so a test or a future view can address an option the same way.
     item.dataset.optionId = option.id;
+
+    if (mode === "answerable") {
+      const button = document.createElement("button");
+      // Explicitly `button`: inside the form-less section it would default to
+      // `submit`, and a submit button in a page that later grows a form reloads it.
+      button.type = "button";
+      button.className = optionClassName([
+        options.option,
+        isSelected ? options.optionSelected : undefined,
+      ]);
+      // `textContent`, never `innerHTML` — S-08 will feed this attendee-supplied
+      // strings, and a renderer that interpolates markup is the one it would feed.
+      button.textContent = option.text;
+      button.dataset.optionId = option.id;
+      button.setAttribute("aria-pressed", String(isSelected));
+
+      button.addEventListener("click", () => {
+        options.onSelect?.(nextSelection(question.kind, selected, option.id));
+      });
+
+      item.append(button);
+    } else {
+      // `static` also carries the selection, which is what a locked answer looks like:
+      // the attendee has submitted, the options no longer respond, and the one they
+      // picked is still shown as theirs. Correctness is absent by construction here —
+      // there is nothing to be correct against until the host reveals.
+      item.className = optionClassName([
+        options.option,
+        mode === "revealed" && isCorrect ? options.optionCorrect : undefined,
+        mode === "revealed" && isSelected && !isCorrect ? options.optionWrong : undefined,
+        isSelected && (mode === "static" || isCorrect) ? options.optionSelected : undefined,
+      ]);
+      item.textContent = option.text;
+
+      // Marked in the DOM as well as by class, so "which did I pick" survives a
+      // stylesheet that fails to load on a venue network.
+      if (isSelected) item.dataset.selected = "true";
+      if (mode === "revealed" && isCorrect) item.dataset.correct = "true";
+    }
+
     list.append(item);
   }
 
