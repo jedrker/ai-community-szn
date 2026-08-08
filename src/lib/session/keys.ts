@@ -82,6 +82,22 @@ const REGISTERED_KEYS = [
       "index: it is how a device that reloads is recognised from the id it stored, " +
       "without which a returning attendee would be rejected by their own name claim.",
   },
+  {
+    name: `${SESSION_NAMESPACE}answers`,
+    holds:
+      "ATTENDEE DATA. Hash of `<questionId>:<playerId>` -> answer record JSON " +
+      "{ playerId, questionId, optionIds, elapsedMs, correct, awarded, answeredAt }. " +
+      "What a given person answered, which is the most sensitive thing this project " +
+      "stores. No display name: the players hash owns that mapping, and a second copy " +
+      "is a second thing the purge has to reach.",
+  },
+  {
+    name: `${SESSION_NAMESPACE}scores`,
+    holds:
+      "ATTENDEE DATA. Hash of opaque player id -> running total (an integer). " +
+      "Pseudonymous on its own, but joinable against the players hash, so it is " +
+      "attendee data by the same reasoning the reverse index is.",
+  },
 ] as const satisfies readonly RegisteredKey[];
 
 /**
@@ -112,6 +128,27 @@ export const PLAYERS_KEY = REGISTERED_KEYS[1].name;
 export const PLAYER_IDS_KEY = REGISTERED_KEYS[2].name;
 
 /**
+ * The answers hash: `<questionId>:<playerId>` -> answer record.
+ *
+ * One hash for the whole session rather than one key per question. A per-question
+ * name would have to be assembled at runtime, and a runtime-assembled name is exactly
+ * what this registry cannot see — reached by neither `end` nor `purge`, and invisible
+ * to `keys.test.ts`, which scans for literals. The compound field carries the same
+ * information at no cost. `answerField` in `answers.ts` owns the format.
+ */
+export const ANSWERS_KEY = REGISTERED_KEYS[3].name;
+
+/**
+ * The scores hash: opaque player id -> running total.
+ *
+ * Keyed by id rather than by folded name, unlike the players hash: the totals are
+ * read back by the device that owns them, and a device knows its id. S-07's
+ * leaderboard is the slice that needs the join back to a name, and it is also the
+ * slice that has to decide what putting 150 names on a screen means.
+ */
+export const SCORES_KEY = REGISTERED_KEYS[4].name;
+
+/**
  * The Ably channel every snapshot is published to.
  *
  * Not a store key — see the module docstring for why it is declared here anyway.
@@ -132,6 +169,22 @@ export const SESSION_CHANNEL = `${SESSION_NAMESPACE}session`;
  * one that rots.
  */
 export const PLAYER_STORAGE_KEY = `${SESSION_NAMESPACE}player`;
+
+/**
+ * The `localStorage` entry holding when this device first *saw* each question:
+ * `{ [questionId]: epochMs }`.
+ *
+ * Same posture as `PLAYER_STORAGE_KEY` above — not a store key, no purge reaches it,
+ * and that is compliant rather than a gap. It holds no answer and no name, only the
+ * timestamps of a device's own paints.
+ *
+ * **It exists because a reload otherwise resets the clock.** FR-019 measures the
+ * speed component from when the question became visible on that device; a value held
+ * only in memory is regenerated on reload, which would hand full speed weight to
+ * anyone who reloaded mid-question. Reloads during a 15-minute segment are near
+ * certain, so the timestamp is persisted and read back rather than overwritten.
+ */
+export const QUESTION_SEEN_STORAGE_KEY = `${SESSION_NAMESPACE}seen`;
 
 /**
  * Every registered key name, in declaration order.

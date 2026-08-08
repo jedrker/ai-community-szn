@@ -111,6 +111,38 @@ describe("the public projection is complete enough to render", () => {
     }
   });
 
+  /**
+   * S-03's one addition to the projection, and the reason it exists: an unscored
+   * question and a wrong answer produce the identical result payload
+   * (`{ correct: false, awarded: 0 }`), so a view that inferred "warm-up" from the
+   * award would tell every latecomer who answered the gather question that they
+   * failed. The flag is what lets the copy differ.
+   */
+  it("marks whether each question is scored, matching points !== null", () => {
+    for (const question of quiz.questions) {
+      expect(getPublicQuestionById(question.id)?.scored).toBe(question.points !== null);
+    }
+  });
+
+  it("covers both cases, so neither branch is asserted vacuously", () => {
+    const flags = publicQuiz.questions.map((question) => question.scored);
+
+    // The drafted quiz has exactly two unscored questions — the word cloud that opens
+    // the segment and the gather beat. If either becomes scored, this fails and the
+    // warm-up copy needs rethinking rather than silently disappearing.
+    expect(flags.filter((scored) => scored === false)).toHaveLength(2);
+    expect(flags.filter((scored) => scored === true).length).toBeGreaterThan(0);
+  });
+
+  it("says whether, never how much", () => {
+    // `points` stays in FORBIDDEN_KEYS above; this pins the *value* out too, so a
+    // future `scored: 1000` truthiness shortcut fails here.
+    for (const question of publicQuiz.questions) {
+      expect(typeof question.scored).toBe("boolean");
+    }
+    expect(serialized).not.toContain("1000");
+  });
+
   it("returns undefined for an unknown id rather than throwing", () => {
     // A question id arriving from a device is untrusted input.
     expect(getPublicQuestionById("nie-ma-takiego-pytania")).toBeUndefined();

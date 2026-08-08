@@ -17,6 +17,9 @@ import type { Question, Quiz } from "./schema";
  * `points` is deliberately absent too. It is not an answer, but what an attendee is
  * told about scoring is S-03's decision, and there is no reason for this slice to make
  * it by accident.
+ *
+ * **S-03 took that decision, in its narrowest form: `scored`, a boolean.** Whether a
+ * question is worth anything travels; how much it is worth does not. See the field.
  */
 
 export type PublicOption = {
@@ -33,6 +36,19 @@ export type PublicQuestion = {
   readonly id: string;
   readonly kind: Question["kind"];
   readonly prompt: string;
+  /**
+   * Whether this question is worth points at all (`points !== null`, FR-017).
+   *
+   * **Without it the attendee view cannot deliver FR-017's warm-up copy at all.** The
+   * result payload for an unscored question is `{ correct: false, awarded: 0 }` —
+   * byte-identical to a wrong answer on a scored one — so a view inferring "warm-up"
+   * from `awarded === 0` would tell every latecomer who answered the drafted Q2, the
+   * beat that exists to gather the room, that they got it wrong.
+   *
+   * A boolean, not the value: `points` stays in `FORBIDDEN_KEYS` and the point value
+   * still does not travel.
+   */
+  readonly scored: boolean;
   /** Present for the two choice kinds; absent for text, number and word-cloud. */
   readonly options?: readonly PublicOption[];
 };
@@ -129,6 +145,8 @@ function toPublicQuestion(question: Question): PublicQuestion {
     id: question.id,
     kind: question.kind,
     prompt: question.prompt,
+    // Whether, never how much. `points` itself remains forbidden.
+    scored: question.points !== null,
   } as const;
 
   // The only kinds with anything more to show. `text`, `number` and `word-cloud` are
