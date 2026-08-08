@@ -9,7 +9,17 @@
       "Bash(git commit -m ' *)",
       "Bash(git checkout *)",
       "Bash(echo \"exit=$? \\(no output above = clean\\)\")",
-      "Bash(echo \"empty=$?\")"
+      "Bash(echo \"empty=$?\")",
+      "Bash(git push *)",
+      "Bash(perl -0pi -e 's/^\\(- \\\\[x\\\\] 4\\\\.[1-4] .*?\\)$/$1 — 27ef48d/gm' context/changes/join-and-follow-host/plan.md)",
+      "Bash(timeout 60 vercel ls --yes)",
+      "Bash(vercel whoami *)",
+      "Bash(vercel project *)",
+      "Bash(pkill -f \"astro dev\")",
+      "Bash(pkill -f qrcode-terminal)",
+      "Bash(lsof -ti:4333,4334,4335)",
+      "Bash(xargs -r kill)",
+      "Bash(python3 -)"
     ]
   },
   "enabledPlugins": {

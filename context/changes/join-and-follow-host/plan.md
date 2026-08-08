@@ -1028,38 +1028,38 @@ stream (F-03's lesson).
 
 #### Automated
 
-- [x] 4.1 Build succeeds: `bun run build`
-- [x] 4.2 Type check clean: `bun run type-check`
-- [x] 4.3 Test suite passes: `bun run test` — including `keys.test.ts` over the two new pages
-- [x] 4.4 Neither new page references `LIVEQUIZ_HOST_SECRET` (grep, or an assertion in the boundary test)
+- [x] 4.1 Build succeeds: `bun run build` — 27ef48d
+- [x] 4.2 Type check clean: `bun run type-check` — 27ef48d
+- [x] 4.3 Test suite passes: `bun run test` — including `keys.test.ts` over the two new pages — 27ef48d
+- [x] 4.4 Neither new page references `LIVEQUIZ_HOST_SECRET` (grep, or an assertion in the boundary test) — 27ef48d
 
 #### Manual
 
-- [ ] 4.5 Against a preview deployment, on two devices: host starts, phone shows the lobby; host advances, phone shows question 1 within a second; host advances again, phone follows
-- [ ] 4.6 A second phone claiming the same name is rejected and the field keeps its value and focus
-- [ ] 4.7 A phone reloading mid-question comes back as the **same player**, without being shown the name form and without re-claiming, and re-renders the current question without waiting for a host action
-- [ ] 4.12 A phone whose stored player no longer exists (after a purge) falls back to the name form cleanly
-- [ ] 4.13 Double-tapping the join button does not report the attendee's own name as taken (impl review F4)
-- [ ] 4.8 The host view's phase, prompt and join count are legible from across a room
-- [ ] 4.9 The join count increases after the host taps refresh in the lobby
-- [ ] 4.10 Killing the phone's connection shows the connection-lost state, distinct from lobby and from ended
-- [ ] 4.11 The host view with no secret entered shows the routes' Polish 401 message
+- [x] 4.5 Against a preview deployment, on two devices: host starts, phone shows the lobby; host advances, phone shows question 1 within a second; host advances again, phone follows — 06022fb
+- [x] 4.6 A second phone claiming the same name is rejected and the field keeps its value and focus — 06022fb
+- [x] 4.7 A phone reloading mid-question comes back as the **same player**, without being shown the name form and without re-claiming, and re-renders the current question without waiting for a host action — 06022fb
+- [x] 4.12 A phone whose stored player no longer exists (after a purge) falls back to the name form cleanly — 06022fb
+- [x] 4.13 Double-tapping the join button does not report the attendee's own name as taken (impl review F4) — 06022fb
+- [x] 4.8 The host view's phase, prompt and join count are legible from across a room — 06022fb
+- [x] 4.9 The join count increases after the host taps refresh in the lobby — 06022fb
+- [x] 4.10 Killing the phone's connection shows the connection-lost state, distinct from lobby and from ended — 06022fb
+- [x] 4.11 The host view with no secret entered shows the routes' Polish 401 message — 06022fb
 
 ### Phase 5: Measure the join burst
 
 #### Automated
 
-- [ ] 5.1 `bun run type-check` clean with the harness change
-- [ ] 5.2 Harness unit-testable parts (name generation, distribution maths) covered if they are non-trivial
+- [x] 5.1 `bun run type-check` clean with the harness change
+- [x] 5.2 Harness unit-testable parts (name generation, distribution maths) covered if they are non-trivial
 
 #### Manual
 
-- [ ] 5.3 An N=150 run reports 150 of 150 claims succeeded with zero duplicate folded names
-- [ ] 5.4 The collision probe is rejected 100% of the time
-- [ ] 5.5 The join burst completes well inside the 30-second target, with the distribution recorded
-- [ ] 5.6 At least three runs recorded, reported as a range
-- [ ] 5.7 Command-counter delta recorded before and after, and the 200K tripwire re-examined against it
-- [ ] 5.8 `scripts/check-purge-residue.ts` reports an empty namespace after teardown
+- [x] 5.3 An N=150 run reports 150 of 150 claims succeeded with zero duplicate folded names
+- [x] 5.4 The collision probe is rejected 100% of the time
+- [x] 5.5 The join burst completes well inside the 30-second target, with the distribution recorded
+- [x] 5.6 At least three runs recorded, reported as a range
+- [x] 5.7 Command-counter delta recorded before and after, and the 200K tripwire re-examined against it
+- [x] 5.8 `scripts/check-purge-residue.ts` reports an empty namespace after teardown
 
 ### Phase 6: Record the decisions
 

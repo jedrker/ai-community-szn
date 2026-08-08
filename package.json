@@ -12,7 +12,11 @@
     "astro": "astro",
     "test": "vitest run",
     "test:watch": "vitest",
-    "type-check": "astro check"
+    "type-check": "astro check",
+    "quiz:reset": "bun scripts/reset-quiz.ts",
+    "quiz:check-purge": "bun scripts/check-purge-residue.ts",
+    "quiz:rehearse": "bun scripts/rehearse-room.ts",
+    "quiz:probe-config": "bun scripts/probe-spine-config.ts"
   },
   "dependencies": {
     "@astrojs/tailwind": "^6.0.2",

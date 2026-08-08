@@ -41,12 +41,24 @@
  * Run: bun scripts/rehearse-room.ts --base=https://<production-url> [--clients=150]
  *        [--kill-after-start=<n>]   fault injection — see `killAfterStart`
  *        [--purge-stale]            clear a session left by an interrupted run
+ *
+ * ## The join stage (roadmap S-02, Phase 5)
+ *
+ * Between `start` and the flow verbs, all N devices claim a name at once. That burst is
+ * the only place the name claim's atomicity is *tested* rather than asserted: the Lua
+ * `EVAL` exists so two attendees cannot end up holding one name, and a mocked test has
+ * nothing to race against. See `runJoinBurst` and `auditPlayerStore`.
  */
 
 import { Realtime } from "ably";
 import { Redis } from "@upstash/redis";
 
-import { SESSION_CHANNEL, SESSION_KEY } from "../src/lib/session/keys";
+import {
+  PLAYER_IDS_KEY,
+  PLAYERS_KEY,
+  SESSION_CHANNEL,
+  SESSION_KEY,
+} from "../src/lib/session/keys";
 import { SNAPSHOT_EVENT } from "../src/lib/session/realtime";
 
 /**
@@ -341,6 +353,15 @@ type ActionOutcome = {
    */
   note: string | null;
   version: number | null;
+  /**
+   * The count the route embedded in the published snapshot (roadmap S-02 §5).
+   *
+   * Carried so the run can check the injection end to end against the real store: the
+   * count is read outside the version guard and written onto the state on its way out,
+   * and nothing in the mocked suite can prove that the number the room receives is the
+   * number the store holds.
+   */
+  playerCount: number | null;
   vercelId: string | null;
   region: string | null;
   roundTripMs: number;
@@ -398,6 +419,7 @@ async function hostAction(
       applied: null,
       note: null,
       version: null,
+      playerCount: null,
       vercelId: null,
       region: null,
       roundTripMs: performance.now() - clickedAt,
@@ -418,7 +440,7 @@ async function hostAction(
   }
 
   const payload = (body ?? {}) as {
-    state?: { version?: unknown };
+    state?: { version?: unknown; playerCount?: unknown };
     applied?: unknown;
     note?: unknown;
     error?: unknown;
@@ -434,6 +456,8 @@ async function hostAction(
     applied: typeof payload.applied === "boolean" ? payload.applied : null,
     note: typeof payload.note === "string" ? payload.note : null,
     version,
+    playerCount:
+      typeof payload.state?.playerCount === "number" ? payload.state.playerCount : null,
     vercelId,
     region: functionRegion(vercelId),
     roundTripMs,
@@ -718,6 +742,259 @@ function killDevices(config: Config, devices: Device[]): void {
   );
 }
 
+/* ------------------------------------------------------------------------- *
+ * The join burst (roadmap S-02, Phase 5)
+ *
+ * The one failure a green suite cannot catch. `store.test.ts` asserts the claim is a
+ * single `EVAL` with three keys — that it *is* one round trip — but a mocked test can
+ * never observe the race the script exists to prevent, because there is nothing to
+ * race against. Only N real requests arriving at one real store can.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The name device `index` claims.
+ *
+ * Polish diacritics on purpose. `ł` and `ó` are exactly where a naive NFD fold breaks
+ * (`normalize.ts`), so a rehearsal using ASCII names would exercise the uniqueness key
+ * without exercising the fold that produces it.
+ */
+function rehearsalName(index: number): string {
+  return `Gość ${index + 1}`;
+}
+
+/**
+ * The same name a scanner would consider different and the fold must not: uppercased,
+ * diacritics stripped, and an extra internal space.
+ *
+ * Three folds at once — case, diacritics, whitespace collapsing — because they are
+ * three separate lines in `validateDisplayName` and any one of them regressing alone
+ * would let a duplicate through.
+ */
+function collisionName(index: number): string {
+  return `GOSC  ${index + 1}`;
+}
+
+type JoinResult = {
+  index: number;
+  status: number;
+  ms: number;
+  playerId: string | null;
+  displayName: string | null;
+  error: string | null;
+};
+
+/**
+ * One claim, the way a phone makes it.
+ *
+ * The `Origin` header is required for the same reason `hostAction` sets it: Astro
+ * refuses a cross-origin POST that reads `formData()` with a 403 *before* the handler
+ * runs, so without it every claim in the burst would fail for a reason that has nothing
+ * to do with the store.
+ */
+async function joinOnce(config: Config, index: number, displayName: string): Promise<JoinResult> {
+  const form = new FormData();
+  form.set("displayName", displayName);
+
+  const startedAt = performance.now();
+
+  try {
+    const response = await fetch(`${config.baseUrl}/api/quiz/join`, {
+      method: "POST",
+      headers: { Origin: config.baseUrl },
+      body: form,
+      signal: AbortSignal.timeout(HOST_REQUEST_TIMEOUT_MS),
+    });
+    const ms = performance.now() - startedAt;
+    const body = (await response.json().catch(() => ({}))) as {
+      player?: { id?: unknown; displayName?: unknown };
+      error?: unknown;
+    };
+
+    return {
+      index,
+      status: response.status,
+      ms,
+      playerId: typeof body.player?.id === "string" ? body.player.id : null,
+      displayName:
+        typeof body.player?.displayName === "string" ? body.player.displayName : null,
+      error: typeof body.error === "string" ? body.error : null,
+    };
+  } catch (err) {
+    return {
+      index,
+      status: 0,
+      ms: performance.now() - startedAt,
+      playerId: null,
+      displayName: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function reportDistribution(label: string, samples: number[]): void {
+  if (samples.length === 0) {
+    note(label, "no samples");
+    return;
+  }
+
+  const sorted = [...samples].sort((a, b) => a - b);
+  const tail = sorted.length >= MIN_TAIL_SAMPLES ? "p95" : "max*";
+
+  console.log(
+    `  ··    ${label} — min ${Math.round(sorted[0]!)} ms   ` +
+      `median ${Math.round(percentile(sorted, 0.5))} ms   ` +
+      `${tail} ${Math.round(percentile(sorted, 0.95))} ms   ` +
+      `max ${Math.round(sorted[sorted.length - 1]!)} ms   n=${sorted.length}`
+  );
+}
+
+/**
+ * Reads the two player hashes back and asks the question FR-008 exists to answer:
+ * **can two devices believe they hold the same name?**
+ *
+ * Checking the players hash alone cannot answer it. Its field *is* the folded name, so
+ * a duplicate is structurally impossible there — a lost race would show up as one hash
+ * entry silently overwritten by the other, and `HLEN` would look perfectly healthy.
+ *
+ * The reverse index is what makes the failure visible. It is keyed by player id, so two
+ * ids that both claimed the same folded name both survive in it, and grouping by value
+ * surfaces exactly the pair. That is also why a mismatch between the accepted-claim
+ * count and `HLEN(players)` is checked separately: it is the same fault seen from the
+ * other side.
+ */
+async function auditPlayerStore(redis: Redis, accepted: number): Promise<void> {
+  const players = (await redis.hgetall(PLAYERS_KEY)) ?? {};
+  const reverse = (await redis.hgetall(PLAYER_IDS_KEY)) ?? {};
+
+  const playerCount = Object.keys(players).length;
+  const idCount = Object.keys(reverse).length;
+
+  record(
+    playerCount === accepted,
+    "every accepted claim is in the players hash",
+    `${accepted} claim(s) accepted, ${playerCount} name(s) stored` +
+      (playerCount === accepted
+        ? ""
+        : " — a shortfall means one claim overwrote another, which is the lost race")
+  );
+
+  const idsByName = new Map<string, string[]>();
+  for (const [id, folded] of Object.entries(reverse)) {
+    const key = String(folded);
+    idsByName.set(key, [...(idsByName.get(key) ?? []), id]);
+  }
+
+  const duplicates = [...idsByName.entries()].filter(([, ids]) => ids.length > 1);
+
+  record(
+    duplicates.length === 0,
+    "no two players hold the same folded name",
+    duplicates.length === 0
+      ? `${idCount} player id(s) map to ${idsByName.size} distinct folded name(s)`
+      : duplicates
+          .map(([name, ids]) => `"${name}" held by ${ids.length} ids`)
+          .join("; ") +
+          " — THIS IS THE FAILURE THE CLAIM SCRIPT EXISTS TO PREVENT. Stop and read " +
+          "the Phase 5 implementation note before patching anything."
+  );
+}
+
+/**
+ * All N devices claim a name at once, then a few claim a name that differs from an
+ * already-taken one only by case, diacritics and spacing.
+ *
+ * Returns the number of accepted claims, which the caller checks against the count the
+ * next host action embeds in its published snapshot.
+ */
+async function runJoinBurst(config: Config, redis: Redis): Promise<number> {
+  if (config.clients === 0) {
+    note("join burst", "0 clients — skipped");
+    return 0;
+  }
+
+  const startedAt = performance.now();
+  const results = await Promise.all(
+    Array.from({ length: config.clients }, (_, index) =>
+      joinOnce(config, index, rehearsalName(index))
+    )
+  );
+  const wallClockMs = performance.now() - startedAt;
+
+  const accepted = results.filter((result) => result.status === 200);
+  const rejected = results.filter((result) => result.status !== 200);
+
+  record(
+    accepted.length === config.clients,
+    "join burst accepted every claim",
+    `${accepted.length}/${config.clients} in ${Math.round(wallClockMs)} ms wall clock`
+  );
+
+  reportDistribution("join round trip", results.map((result) => result.ms));
+
+  if (rejected.length > 0) {
+    const byReason = new Map<string, number>();
+    for (const result of rejected) {
+      const reason = `${result.status} ${result.error ?? "no detail"}`;
+      byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
+    }
+    for (const [reason, count] of byReason) note("join rejected", `${count}× ${reason}`);
+  }
+
+  // Every accepted claim must have come back with a distinct player id. Two devices
+  // handed the same id would be one device as far as every later slice is concerned.
+  const ids = new Set(accepted.map((result) => result.playerId));
+  record(
+    ids.size === accepted.length && !ids.has(null),
+    "every accepted claim got a distinct player id",
+    `${ids.size} distinct id(s) across ${accepted.length} acceptance(s)`
+  );
+
+  /**
+   * The collision probe. Deliberately run *after* the burst rather than inside it: the
+   * burst's own names are distinct by construction, so it tests concurrency and not the
+   * fold, and mixing the two would leave a fold regression indistinguishable from a
+   * race.
+   */
+  const probeCount = Math.min(5, accepted.length);
+  if (probeCount > 0) {
+    const probes = await Promise.all(
+      accepted
+        .slice(0, probeCount)
+        .map((result) => joinOnce(config, result.index, collisionName(result.index)))
+    );
+
+    const allRejected = probes.every((probe) => probe.status === 409);
+    record(
+      allRejected,
+      "collision probe rejected 100% of the time",
+      allRejected
+        ? `${probes.length}/${probes.length} variants refused as taken ` +
+            `(e.g. "${collisionName(accepted[0]!.index)}" vs "${rehearsalName(accepted[0]!.index)}")`
+        : probes
+            .map((probe) => `${probe.status} for "${collisionName(probe.index)}"`)
+            .join("; ") +
+            " — a variant that is not refused means the fold is not being applied, and " +
+            "two people can appear on the leaderboard under the same name"
+    );
+  }
+
+  await auditPlayerStore(redis, accepted.length);
+
+  const target = 30_000;
+  record(
+    wallClockMs < target,
+    "join burst inside the 30 s target",
+    `${Math.round(wallClockMs)} ms against ${target} ms (PRD FR-002)`
+  );
+  note(
+    "what this figure is not",
+    "the claim round trip from one process on one network — not a phone painting a " +
+      "screen, and not a venue network. FR-002 is informed by this, not proven by it"
+  );
+
+  return accepted.length;
+}
+
 /** Waits until every connected device holds `version`, or the timeout expires. */
 async function awaitArrivals(devices: Device[], version: number): Promise<void> {
   const deadline = performance.now() + ARRIVAL_TIMEOUT_MS;
@@ -853,7 +1130,11 @@ function reportMeasurement(measurement: Measurement, total: number): void {
  * but explicitly discarded, because a silently dropped sample is indistinguishable from
  * a flattering one.
  */
-async function runRehearsal(config: Config, devices: Device[]): Promise<boolean> {
+async function runRehearsal(
+  config: Config,
+  devices: Device[],
+  redis: Redis
+): Promise<boolean> {
   const warmUp = await measureAction(config, "start", devices, {
     discarded: true,
     label: "start",
@@ -871,6 +1152,15 @@ async function runRehearsal(config: Config, devices: Device[]): Promise<boolean>
     );
   }
 
+  /**
+   * The join stage sits here on purpose: after `start`, because a claim against no
+   * session is refused, and before the flow verbs, because the count only reaches the
+   * room on a host action — so the first `advance` below is what carries it, and its
+   * snapshot is where the injection can be checked end to end.
+   */
+  console.log("\nJoin burst:\n");
+  const accepted = await runJoinBurst(config, redis);
+
   killDevices(config, devices);
 
   const measurements: Measurement[] = [warmUp];
@@ -878,6 +1168,30 @@ async function runRehearsal(config: Config, devices: Device[]): Promise<boolean>
   // Two questions' worth of the real rhythm: open, reveal, open, reveal.
   for (const verb of ["advance", "reveal", "advance", "reveal"] as const) {
     measurements.push(await measureAction(config, verb, devices));
+  }
+
+  /**
+   * The count the room actually received, against the count the store actually holds.
+   *
+   * This is the only place §5's injection is tested against reality. `host.test.ts`
+   * pins that the published count differs from the one on `current`, but a mock cannot
+   * show that the number reaching 150 devices is the number in the hash — and the
+   * failure mode there is silent: the type system cannot see a count that is read fresh
+   * and then discarded.
+   */
+  if (accepted > 0) {
+    const published = measurements
+      .map((measurement) => measurement.outcome.playerCount)
+      .filter((count): count is number => count !== null);
+    const last = published[published.length - 1];
+
+    record(
+      last === accepted,
+      "the published snapshot carries the real join count",
+      last === undefined
+        ? "no action published a count"
+        : `${last} in the last published snapshot, ${accepted} accepted claim(s)`
+    );
   }
 
   console.log("\nPer-action figures (end to end = click → snapshot arrival, one clock):\n");
@@ -1023,7 +1337,7 @@ async function main(): Promise<void> {
   let verdict = false;
 
   try {
-    verdict = await runRehearsal(config, devices);
+    verdict = await runRehearsal(config, devices, redis);
   } finally {
     // Always, including after a thrown request. A rehearsal that leaves state behind
     // blocks the next one on a pre-flight refusal that means nothing.
