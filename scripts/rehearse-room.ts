@@ -53,13 +53,17 @@
 import { Realtime } from "ably";
 import { Redis } from "@upstash/redis";
 
+import { answerField } from "../src/lib/session/answers";
 import {
+  ANSWERS_KEY,
   PLAYER_IDS_KEY,
   PLAYERS_KEY,
+  SCORES_KEY,
   SESSION_CHANNEL,
   SESSION_KEY,
 } from "../src/lib/session/keys";
 import { SNAPSHOT_EVENT } from "../src/lib/session/realtime";
+import { getPublicQuestionById } from "../src/quiz/public";
 
 /**
  * Mirrored from `src/lib/session/host.ts` — not a namespaced name, so not in the
@@ -362,6 +366,21 @@ type ActionOutcome = {
    * number the store holds.
    */
   playerCount: number | null;
+  /**
+   * The question the published snapshot opened, so the answer stage below knows what to
+   * answer without a second read. Same reasoning as `playerCount`: the run should check
+   * the thing the room actually received, not a thing it fetched separately.
+   */
+  questionId: string | null;
+  /**
+   * The correct option ids the reveal put on the wire (roadmap S-03).
+   *
+   * Checked at room scale because this is the one field that is *supposed* to carry an
+   * answer, and the failure mode is silent in both directions: absent, correctness never
+   * reaches the room; present outside a reveal, it is the previous question's answer key
+   * published while the next question is being answered.
+   */
+  revealedOptionIds: string[] | null;
   vercelId: string | null;
   region: string | null;
   roundTripMs: number;
@@ -420,6 +439,8 @@ async function hostAction(
       note: null,
       version: null,
       playerCount: null,
+      questionId: null,
+      revealedOptionIds: null,
       vercelId: null,
       region: null,
       roundTripMs: performance.now() - clickedAt,
@@ -440,7 +461,12 @@ async function hostAction(
   }
 
   const payload = (body ?? {}) as {
-    state?: { version?: unknown; playerCount?: unknown };
+    state?: {
+      version?: unknown;
+      playerCount?: unknown;
+      currentQuestionId?: unknown;
+      revealedOptionIds?: unknown;
+    };
     applied?: unknown;
     note?: unknown;
     error?: unknown;
@@ -458,6 +484,15 @@ async function hostAction(
     version,
     playerCount:
       typeof payload.state?.playerCount === "number" ? payload.state.playerCount : null,
+    questionId:
+      typeof payload.state?.currentQuestionId === "string"
+        ? payload.state.currentQuestionId
+        : null,
+    revealedOptionIds: Array.isArray(payload.state?.revealedOptionIds)
+      ? payload.state.revealedOptionIds.filter(
+          (id): id is string => typeof id === "string"
+        )
+      : null,
     vercelId,
     region: functionRegion(vercelId),
     roundTripMs,
@@ -906,10 +941,10 @@ async function auditPlayerStore(redis: Redis, accepted: number): Promise<void> {
  * Returns the number of accepted claims, which the caller checks against the count the
  * next host action embeds in its published snapshot.
  */
-async function runJoinBurst(config: Config, redis: Redis): Promise<number> {
+async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]> {
   if (config.clients === 0) {
     note("join burst", "0 clients — skipped");
-    return 0;
+    return [];
   }
 
   const startedAt = performance.now();
@@ -992,7 +1027,229 @@ async function runJoinBurst(config: Config, redis: Redis): Promise<number> {
       "screen, and not a venue network. FR-002 is informed by this, not proven by it"
   );
 
-  return accepted.length;
+  // The accepted claims themselves, not just how many: the answer stage below submits
+  // as these player ids, and an id the store never issued is refused by the script.
+  return accepted;
+}
+
+/* ------------------------------------------------------------------------- *
+ * The submission burst (roadmap S-03, Phase 5)
+ *
+ * The first path in this project that scales with attendees × questions. What a mocked
+ * test cannot show: that 150 concurrent `EVAL`s against one real store record exactly
+ * 150 answers, one per player, with no lost write and no double-scored player.
+ *
+ * One question, not fourteen. The second would re-measure what the first proved, at
+ * real store cost against a plan ceiling this slice already moves from ~1% to ~54%.
+ * ------------------------------------------------------------------------- */
+
+type AnswerResult = {
+  index: number;
+  status: number;
+  ms: number;
+  error: string | null;
+};
+
+/** One submission, the way a phone makes it. `Origin` for the reason `joinOnce` sets it. */
+async function answerOnce(
+  config: Config,
+  index: number,
+  playerId: string,
+  questionId: string,
+  optionId: string,
+  elapsedMs: number
+): Promise<AnswerResult> {
+  const form = new FormData();
+  form.set("playerId", playerId);
+  form.set("questionId", questionId);
+  form.set("elapsedMs", String(elapsedMs));
+  form.append("optionIds", optionId);
+
+  const startedAt = performance.now();
+
+  try {
+    const response = await fetch(`${config.baseUrl}/api/quiz/answer`, {
+      method: "POST",
+      headers: { Origin: config.baseUrl },
+      body: form,
+      signal: AbortSignal.timeout(HOST_REQUEST_TIMEOUT_MS),
+    });
+    const ms = performance.now() - startedAt;
+    const body = (await response.json().catch(() => ({}))) as { error?: unknown };
+
+    return {
+      index,
+      status: response.status,
+      ms,
+      error: typeof body.error === "string" ? body.error : null,
+    };
+  } catch (err) {
+    return {
+      index,
+      status: 0,
+      ms: performance.now() - startedAt,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Reads the answers and scores hashes back and asks the question the atomic script
+ * exists to answer: **can one player end up with two answers, or none?**
+ *
+ * The answers hash is keyed `<questionId>:<playerId>`, so a duplicate is structurally
+ * impossible in it — which is exactly why counting alone is not enough. A lost write
+ * shows up as a *shortfall*, and the scores hash is the other side of the same fault:
+ * a player scored twice would hold a total no single answer could produce.
+ */
+async function auditAnswerStore(
+  redis: Redis,
+  questionId: string,
+  players: JoinResult[],
+  accepted: number
+): Promise<void> {
+  const answers = (await redis.hgetall(ANSWERS_KEY)) ?? {};
+  const scores = (await redis.hgetall(SCORES_KEY)) ?? {};
+
+  const forQuestion = Object.keys(answers).filter((field) => field.startsWith(`${questionId}:`));
+
+  record(
+    forQuestion.length === accepted,
+    "every accepted submission is in the answers hash",
+    `${accepted} accepted, ${forQuestion.length} stored for "${questionId}"` +
+      (forQuestion.length === accepted
+        ? ""
+        : " — a shortfall means a write was lost, which is what the single EVAL prevents")
+  );
+
+  // One field per player for this question, checked by construction rather than trusted:
+  // the field name is built from the same function the route uses, so a separator that
+  // drifted would show up here as a total miss rather than as a silent mismatch.
+  const missing = players
+    .filter((player) => player.playerId !== null)
+    .filter((player) => !(answerField(questionId, player.playerId!) in answers));
+
+  record(
+    missing.length === 0 || missing.length === players.length - accepted,
+    "no player answered this question twice",
+    `${forQuestion.length} field(s) for ${players.length} player(s) — the field name is ` +
+      "the uniqueness key, so a second answer would have to overwrite the first"
+  );
+
+  const totals = Object.values(scores).map((value) => Number(value));
+  const impossible = totals.filter((total) => Number.isFinite(total) && total > 1000);
+
+  record(
+    impossible.length === 0,
+    "no player's total exceeds one question's maximum",
+    impossible.length === 0
+      ? `${totals.length} total(s), all within 0–1000 after one scored question`
+      : `${impossible.length} total(s) above 1000 — a player was scored more than once ` +
+          "for a single answer"
+  );
+}
+
+/**
+ * All N devices submit an answer to the open question at once.
+ *
+ * Elapsed times are spread deterministically across the speed window rather than
+ * randomised: a fixed spread makes two runs comparable, and the thing under test is the
+ * store's behaviour under concurrency, not the scorer's — `scoring.test.ts` owns that.
+ */
+async function runAnswerBurst(
+  config: Config,
+  redis: Redis,
+  players: JoinResult[],
+  questionId: string | null
+): Promise<void> {
+  if (players.length === 0) {
+    note("answer burst", "no joined players — skipped");
+    return;
+  }
+
+  if (questionId === null) {
+    record(false, "answer burst", "the published snapshot named no open question");
+    return;
+  }
+
+  const question = getPublicQuestionById(questionId);
+  const optionIds = question?.options?.map((option) => option.id) ?? [];
+
+  if (optionIds.length === 0) {
+    record(
+      false,
+      "answer burst",
+      `"${questionId}" is not a choice question — the stage must run against one, or it ` +
+        "measures the refusal path"
+    );
+    return;
+  }
+
+  const startedAt = performance.now();
+  const results = await Promise.all(
+    players
+      .filter((player) => player.playerId !== null)
+      .map((player, position) =>
+        answerOnce(
+          config,
+          player.index,
+          player.playerId!,
+          questionId,
+          // Spread across the options so the run is not one option's write path repeated.
+          optionIds[position % optionIds.length]!,
+          // Spread across the speed window, so awards land across the 500–1000 band.
+          1_000 + ((position * 137) % 18_000)
+        )
+      )
+  );
+  const wallClockMs = performance.now() - startedAt;
+
+  const accepted = results.filter((result) => result.status === 200);
+  const rejected = results.filter((result) => result.status !== 200);
+
+  record(
+    accepted.length === results.length,
+    "answer burst accepted every submission",
+    `${accepted.length}/${results.length} in ${Math.round(wallClockMs)} ms wall clock ` +
+      `on "${questionId}"`
+  );
+
+  reportDistribution("answer round trip", results.map((result) => result.ms));
+
+  if (rejected.length > 0) {
+    const byReason = new Map<string, number>();
+    for (const result of rejected) {
+      const reason = `${result.status} ${result.error ?? "no detail"}`;
+      byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
+    }
+    for (const [reason, count] of byReason) note("answer rejected", `${count}× ${reason}`);
+  }
+
+  await auditAnswerStore(redis, questionId, players, accepted.length);
+
+  // FR-004: the first answer is final. A resubmission must be refused by the store, not
+  // by the view — the view is the half an attendee can bypass with one `curl`.
+  const repeatable = accepted[0];
+  const repeatPlayer = players.find((player) => player.index === repeatable?.index);
+  if (repeatPlayer?.playerId) {
+    const repeat = await answerOnce(
+      config,
+      repeatPlayer.index,
+      repeatPlayer.playerId,
+      questionId,
+      optionIds[0]!,
+      1_500
+    );
+
+    record(
+      repeat.status === 409,
+      "a second answer from the same player is refused",
+      repeat.status === 409
+        ? `409 — "${repeat.error ?? "no detail"}"`
+        : `${repeat.status} — HSETNX is what makes the first answer final; a second ` +
+            "acceptance means the lock and the write came apart"
+    );
+  }
 }
 
 /** Waits until every connected device holds `version`, or the timeout expires. */
@@ -1159,7 +1416,8 @@ async function runRehearsal(
    * snapshot is where the injection can be checked end to end.
    */
   console.log("\nJoin burst:\n");
-  const accepted = await runJoinBurst(config, redis);
+  const players = await runJoinBurst(config, redis);
+  const accepted = players.length;
 
   killDevices(config, devices);
 
@@ -1168,6 +1426,51 @@ async function runRehearsal(
   // Two questions' worth of the real rhythm: open, reveal, open, reveal.
   for (const verb of ["advance", "reveal", "advance", "reveal"] as const) {
     measurements.push(await measureAction(config, verb, devices));
+  }
+
+  /**
+   * One more advance, which opens the first *scored choice* question in the drafted
+   * quiz — the rhythm above walks a word cloud and the unscored gather beat, and
+   * neither can be answered by this slice. Then the submission burst, then the reveal
+   * that pays it off.
+   */
+  const answerable = await measureAction(config, "advance", devices, {
+    label: "advance",
+  });
+  measurements.push(answerable);
+
+  console.log("\nAnswer burst:\n");
+  await runAnswerBurst(config, redis, players, answerable.outcome.questionId);
+
+  const payoff = await measureAction(config, "reveal", devices);
+  measurements.push(payoff);
+
+  /**
+   * The reveal payload, checked against the room rather than against a mock.
+   *
+   * `routes.test.ts` pins that the transition sets the field; only a real run can show
+   * that the ids survive the store round trip and the publish, and that the advance
+   * before this reveal did not carry the previous question's key along with it.
+   */
+  if (answerable.outcome.questionId !== null) {
+    const revealed = payoff.outcome.revealedOptionIds;
+    record(
+      revealed !== null && revealed.length > 0,
+      "the revealed snapshot carries the correct option ids",
+      revealed === null
+        ? "the published snapshot carried no revealedOptionIds — correctness never " +
+            "reached the room"
+        : `${revealed.length} id(s) for "${answerable.outcome.questionId}"`
+    );
+
+    record(
+      answerable.outcome.revealedOptionIds === null,
+      "the question-open snapshot carries no answer key",
+      answerable.outcome.revealedOptionIds === null
+        ? "null while the question was open, as the schema requires"
+        : "an answer key was published WHILE THE QUESTION WAS OPEN — this is the " +
+            "previous reveal's value surviving the advance"
+    );
   }
 
   /**

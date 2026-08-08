@@ -58,10 +58,20 @@ spend alert the roadmap asked for, which cannot be configured on the free tier
 (`context/changes/room-scale-rehearsal-harness/rehearsal-report.md` records why). In the Upstash console,
 reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `commands` for the month:
 
-- **Measured 2026-08-08 (S-02): a full N=150 rehearsal costs ~1260 commands**, and a real event is on
+- **Measured 2026-08-08 (S-02): a full N=150 rehearsal costs ~1260 commands**, and a real event was on
   the order of **1600** — because **Upstash bills a Lua `EVAL` *and* every `redis.call` inside it**,
   so one attendee joining costs eight commands, not one. Plus a `GET`+`HLEN` per device connect and
   per host action. Minting an Ably token still touches no store key.
+- **S-03 changed the order of magnitude, and this is the figure to use now.** Answering is the first
+  path that scales with **attendees × questions**: a submission bills 8 (a `readSession`, plus an
+  `EVAL` with six internal calls) and a per-device result read bills 4. At 150 attendees over 14
+  questions that is **~27k commands per event**, against ~1600 before — a ~17× rise on the same
+  eight-commands-per-EVAL model, not a new mechanism.
+  Predicted-vs-observed for the S-03 run is recorded in
+  `context/changes/answer-choice-question-and-reveal/answer-cost-report.md`.
+- **Ten events a month reaches ~270k, about 54% of the 500K ceiling** — up from roughly 1%. Not a
+  blocker and not an incident; it is simply no longer noise, and it is the first time this project's
+  store spend is worth a conversation before the room size or the question count grows again.
 - **The console counter lags. Do not quote a reading taken minutes after a burst.** Measured: a
   reading 7 minutes after three N=150 runs was 2526 commands short of the same counter 85 minutes
   later, with ~15 commands of work in between. A premature reading looks settled and is not — this is
@@ -70,9 +80,14 @@ reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `c
 - **The plan ceiling is 500K per month, not 200K.** The tripwire below is a deliberately conservative
   fraction of the limit, not the limit itself.
 - **Above ~200K attributable to a single run, stop and look.** **This is a polling detector, not a
-  capacity guard** — it sits roughly 125× above a real session, and nothing but a loop could approach
-  it. Do not raise it as usage grows: raising it is how it stops working. The failure it catches is
-  cheap in money and expensive in architecture.
+  capacity guard** — nothing but a loop could approach it in one run. Do not raise it as usage grows:
+  raising it is how it stops working. The failure it catches is cheap in money and expensive in
+  architecture.
+  **The threshold is unchanged; its margin is not.** It sat roughly 125× above a real session when
+  that session cost ~1600 commands. After S-03 a real event is ~27k, so the same threshold now sits
+  roughly **7×** above one. Still ample for a polling detector — a loop overshoots by orders of
+  magnitude, not by sevenfold — but the sentence that justified it has moved, and a reader quoting
+  "125×" from an older copy of this file would be quoting a number that no longer exists.
 - **Cost is now explained.** The settled S-02 delta matches the eight-commands-per-join model to
   within 0.1% (writes predicted 2320 against 2323 observed), so nothing is issuing commands
   unprompted. See `context/archive/2026-08-07-join-and-follow-host/command-counter-diagnostic.md`. The older

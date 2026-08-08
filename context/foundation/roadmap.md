@@ -52,7 +52,7 @@ an attendee is scoring on their own device.
 | F-04  | `room-scale-rehearsal-harness`        | (foundation) the spine can be driven by ~150 simulated devices and measured            | F-02          | Success Criteria guardrails (1s fan-out, 150 concurrent)                  | done     |
 | S-01  | `quiz-definition-and-validation`      | Organizer can author the whole quiz in a file and have it rejected if malformed        | —             | FR-001, FR-017                                                            | done     |
 | S-02  | `join-and-follow-host`                | Attendee can join a started session by name and see the host's current question        | S-01, F-02    | US-01, US-02, FR-002, FR-003, FR-007, FR-008                              | done     |
-| S-03  | `answer-choice-question-and-reveal`   | Attendee can answer a choice question and see if they were right and what they scored  | S-02          | US-01, US-02, FR-004, FR-010, FR-016, FR-019                              | proposed |
+| S-03  | `answer-choice-question-and-reveal`   | Attendee can answer a choice question and see if they were right and what they scored  | S-02          | US-01, US-02, FR-004, FR-010, FR-016, FR-019                              | done     |
 | S-04  | `host-participation-and-distribution` | Host can show the room how many have answered, then the distribution at reveal         | S-03          | US-02, FR-005                                                             | proposed |
 | S-05  | `free-text-answers`                   | Attendee can answer a free-text question without being punished for diacritics         | S-03          | US-01, FR-011                                                             | proposed |
 | S-06  | `guess-the-number-answers`            | Attendee can guess a number and score by how close they were                           | S-03          | US-01, FR-013                                                             | proposed |
@@ -350,7 +350,20 @@ and do NOT re-scaffold them.
   device rather than from the host's action. The trap is measuring speed from the host's advance, which
   would silently penalise slow connections and contradict the PRD's stated input. Getting the scoring
   rule right here means S-05, S-06 and S-08 add a mechanic rather than a second scoring model.
-- **Status:** proposed
+
+  **Retired 2026-08-08 — the named trap.** Speed is measured from the device's own first paint, and
+  the timestamp is persisted per question in `localStorage`, so a reload mid-question keeps its
+  original clock instead of restarting it at full speed weight. `speedWeight` is exported on its own
+  and applies to every scored answer regardless of kind, so S-05 and S-06 add a correctness function
+  beside `scoreChoiceAnswer` rather than a second scoring model.
+
+  **Restated, and larger than the original risk.** Answering is the first path that scales with
+  attendees × questions: a real event moves from ~1,600 store commands to **~27,000**, and ten events
+  a month reach ~54% of the documented 500K ceiling, up from ~1%. The runbook's per-run tripwire is
+  unchanged and is not approached; its margin fell from ~125× to ~7×. Not a blocker, and no longer
+  noise — S-04, S-07 and S-08 each add per-attendee paths on top of this one, so the next slice to
+  raise it should say so deliberately. See `answer-cost-report.md` and `answer-contract.md`.
+- **Status:** done
 
 ### S-04: Host shows participation, then the distribution
 

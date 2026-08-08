@@ -867,11 +867,11 @@ never was — `docs/runbook-live-session.md` already carries that.
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 `boundary.test.ts` passes for `answer.ts` and the page `<script>` blocks
-- [x] 4.4 `keys.test.ts` passes — the new storage key is a literal only in `keys.ts`
-- [x] 4.5 Render tests cover selection, toggling, revealed marking, and `textContent`
+- [x] 4.1 Unit tests pass: `bun run test` — 31473be
+- [x] 4.2 Type checking passes: `bun run type-check` — 31473be
+- [x] 4.3 `boundary.test.ts` passes for `answer.ts` and the page `<script>` blocks — 31473be
+- [x] 4.4 `keys.test.ts` passes — the new storage key is a literal only in `keys.ts` — 31473be
+- [x] 4.5 Render tests cover selection, toggling, revealed marking, and `textContent` — 31473be
 
 #### Manual
 
@@ -886,9 +886,9 @@ never was — `docs/runbook-live-session.md` already carries that.
 
 #### Automated
 
-- [ ] 5.1 Full suite passes: `bun run test`
-- [ ] 5.2 Type checking passes: `bun run type-check`
-- [ ] 5.3 `bun run build` succeeds
+- [x] 5.1 Full suite passes: `bun run test`
+- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.3 `bun run build` succeeds
 - [ ] 5.4 Harness at `--clients=150`: 150/150 accepted, zero duplicate answers
 
 #### Manual
