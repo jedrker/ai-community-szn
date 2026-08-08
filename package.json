@@ -23,6 +23,7 @@
     "ably": "^2.26.0",
     "astro": "^6.4.8",
     "glightbox": "^3.3.1",
+    "qrcode": "^1.5.4",
     "resend": "^6.9.4",
     "tailwindcss": "^4.2.2",
     "zod": "^4.3.6"
@@ -30,6 +31,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@types/node": "^25.5.0",
+    "@types/qrcode": "^1.5.6",
     "typescript": "^6",
     "vite": "^7.3.6",
     "vitest": "^4.1.10"

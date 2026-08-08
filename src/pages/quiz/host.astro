@@ -1,6 +1,8 @@
 ---
 import "../../styles/global.css";
 
+import QRCode from "qrcode";
+
 import { HOST_SECRET_HEADER } from "../../lib/session/host";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
 import { publicQuiz } from "../../quiz/public";
@@ -34,8 +36,31 @@ import { publicQuiz } from "../../quiz/public";
  * recovery path both lean on. A mis-click at the front of a room is not recoverable.
  */
 
-/** What the room types into a phone. Built from the request so preview and production agree. */
+/** Where the room goes. Built from the request so preview and production agree. */
 const attendeeUrl = new URL("/quiz", Astro.url);
+
+/**
+ * The join QR (added 2026-08-08, from the first two-device run).
+ *
+ * The URL as text was the only way in, and typing it is the slowest step in a flow
+ * PRD FR-002 gives thirty seconds — 150 people transcribing a hostname is the join
+ * target spent before anyone has picked a name.
+ *
+ * Rendered **server-side into inline SVG**, so nothing extra ships to the phones and
+ * the projector needs no network of its own to draw it. Dark modules on white rather
+ * than the page's dark palette: an inverted QR is readable by many scanners and
+ * reliably readable by fewer, and the venue is not the place to find out which kind
+ * someone brought.
+ *
+ * The generator is server-only. `boundary.test.ts` would fail the suite if a
+ * `<script>` block below ever imported it.
+ */
+const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
+  type: "svg",
+  errorCorrectionLevel: "M",
+  margin: 1,
+  color: { dark: "#0a0a0f", light: "#ffffff" },
+});
 ---
 
 <html lang="pl" class="bg-surface-primary">
@@ -49,14 +74,24 @@ const attendeeUrl = new URL("/quiz", Astro.url);
     class="min-h-dvh bg-surface-primary text-text-primary font-archivo antialiased
            flex flex-col gap-8 px-8 py-6"
   >
-    <header class="flex flex-wrap items-baseline justify-between gap-4">
+    <header class="flex flex-wrap items-center justify-between gap-6">
       <h1 class="text-brand-purple-light text-sm font-bold uppercase tracking-[0.2em]">
         LiveQuiz — prowadzący
       </h1>
-      <p class="text-text-secondary text-lg">
-        Dołącz na telefonie:
-        <span class="text-text-primary font-semibold">{attendeeUrl.host}{attendeeUrl.pathname}</span>
-      </p>
+
+      <!-- The join affordance, sized for the back of the room: scan, or read the URL
+           off the same block. Both routes to the same place, side by side. -->
+      <div class="flex items-center gap-5">
+        <div class="h-40 w-40 rounded-xl bg-white p-2 [&>svg]:h-full [&>svg]:w-full">
+          <Fragment set:html={joinQrSvg} />
+        </div>
+        <div class="flex flex-col gap-1">
+          <p class="text-text-secondary text-lg">Zeskanuj albo wpisz:</p>
+          <p class="text-3xl font-bold leading-tight break-all">
+            {attendeeUrl.host}{attendeeUrl.pathname}
+          </p>
+        </div>
+      </div>
     </header>
 
     <!-- Compact, and above the controls: it is the first thing to fix when an action
@@ -200,10 +235,33 @@ const attendeeUrl = new URL("/quiz", Astro.url);
         }
       }
 
+      /**
+       * The join count as of the last time anything told us one.
+       *
+       * Two sources feed it and both are legitimate: a snapshot carries the count that
+       * was embedded when the host last acted, and `/api/quiz/state` carries one read
+       * live. Whichever spoke most recently wins, because neither is authoritative over
+       * the other — the count is informational by design, and the only failure that
+       * matters is showing a stale number forever, which is what happened before the
+       * live read existed.
+       *
+       * `null` means nothing has told us yet.
+       */
+      let liveCount: number | null = null;
+
       const client = createSessionClient({
         channelName: config.channelName,
         snapshotEvent: config.snapshotEvent,
-        onSnapshot: () => render(),
+        onSnapshot: (state) => {
+          if (state) liveCount = state.playerCount;
+          render();
+        },
+        onCount: (count) => {
+          // Fires even when the snapshot was dropped as not-newer, which is the
+          // ordinary case for a refresh in a lobby nobody has advanced out of.
+          if (count !== null) liveCount = count;
+          render();
+        },
         onConnection: (status: ConnectionStatus, detail: string) => {
           setText("connection", `połączenie: ${detail}`);
           el("connection").className =
@@ -227,12 +285,13 @@ const attendeeUrl = new URL("/quiz", Astro.url);
           setText("phase", "brak sesji");
           setText("player-count", "—");
           setText("version", "—");
+          liveCount = null;
           renderQuestion(questionBox, undefined, { prompt: "text-4xl font-bold leading-tight" });
           return;
         }
 
         setText("phase", PHASE_LABELS[state.phase] ?? state.phase);
-        setText("player-count", state.playerCount);
+        setText("player-count", liveCount ?? state.playerCount);
         setText("version", state.version);
 
         const question = config.questions.find(

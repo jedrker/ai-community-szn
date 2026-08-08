@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 
-import { readSession } from "../../../lib/session/store";
+import { readPlayerCount, readSession } from "../../../lib/session/store";
 
 /**
  * The current session snapshot.
@@ -49,9 +49,35 @@ export const GET: APIRoute = async () => {
     );
   }
 
+  /**
+   * The join count, read live and returned **beside** the document rather than inside
+   * it (roadmap S-02, found in the Phase 4 two-device run).
+   *
+   * `state.playerCount` is only ever written by `applyHostAction`, so the document
+   * carries the count as of the last host action and nothing else can move it. That is
+   * the right design for the *published* snapshot — no join may publish, or 150 joins
+   * fan out to 150 subscribers — but it made the host's refresh button a lie: it
+   * re-read a document whose count could not have changed, so the lobby appeared empty
+   * however many people had joined, until the host advanced.
+   *
+   * So the freshness lives here instead. The document is returned untouched — its
+   * `playerCount` is still the last published one, and overwriting it would let a
+   * client apply a count under a version that never carried it — and the live figure
+   * travels as a sibling field the caller may use or ignore.
+   *
+   * Costs one `HLEN` per state fetch, which is once per device per *connect* (~150 a
+   * session) plus one per host refresh. Paced by connects and by the host, not by a
+   * timer: still nothing like the polling shape the command-counter tripwire watches
+   * for.
+   *
+   * `null` means "could not find out" — distinct from `0`, so a caller keeps the
+   * number it already had rather than rendering an empty room.
+   */
+  const playerCount = result.state === null ? null : await readPlayerCount();
+
   // No session yet is a normal state, not a 404 — the harness and S-02 both
   // render "waiting for the host" from it.
-  return new Response(JSON.stringify({ state: result.state }), {
+  return new Response(JSON.stringify({ state: result.state, playerCount }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });

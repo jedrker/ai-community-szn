@@ -59,6 +59,19 @@ export type SessionClientOptions = {
   /** Called for every snapshot that wins the version check, and only those. */
   readonly onSnapshot: (state: Snapshot, source: SnapshotSource) => void;
   readonly onConnection?: (status: ConnectionStatus, detail: string) => void;
+  /**
+   * The live join count from `/api/quiz/state`, called on every successful fetch —
+   * **including one whose snapshot the version check dropped.**
+   *
+   * That exemption is the whole reason this is a separate callback. The count is
+   * informational and deliberately stale-tolerant, while the version guard exists to
+   * order flow state; routing the count through the guard means a refresh that returns
+   * the same version reports nothing, which is exactly how the host's refresh button
+   * came to show an empty lobby in the Phase 4 two-device run.
+   *
+   * `null` means the server could not find out. Keep the previous number.
+   */
+  readonly onCount?: (count: number | null) => void;
 };
 
 export type SessionClient = {
@@ -125,8 +138,14 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
       throw new Error(`state fetch returned ${response.status}`);
     }
 
-    const body = (await response.json()) as { state?: Snapshot };
+    const body = (await response.json()) as {
+      state?: Snapshot;
+      playerCount?: number | null;
+    };
     apply(body.state ?? null, "fetch");
+    // Deliberately outside `apply` — see `onCount` for why the count must not be
+    // gated on the snapshot having won the version check.
+    options.onCount?.(body.playerCount ?? null);
   };
 
   const start = async (): Promise<void> => {
