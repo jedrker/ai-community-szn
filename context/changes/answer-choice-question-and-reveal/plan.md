@@ -886,9 +886,9 @@ never was — `docs/runbook-live-session.md` already carries that.
 
 #### Automated
 
-- [x] 5.1 Full suite passes: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
-- [x] 5.3 `bun run build` succeeds
+- [x] 5.1 Full suite passes: `bun run test` — ae1078c
+- [x] 5.2 Type checking passes: `bun run type-check` — ae1078c
+- [x] 5.3 `bun run build` succeeds — ae1078c
 - [ ] 5.4 Harness at `--clients=150`: 150/150 accepted, zero duplicate answers
 
 #### Manual
