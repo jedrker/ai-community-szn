@@ -54,6 +54,17 @@ The claim is one Lua `EVAL` — phase check, collision check, both writes, both 
 `store.test.ts` asserts it stays a single `eval`. **Do not move any part of it into TypeScript.**
 Verified at room scale: 450 concurrent claims, zero duplicates (`join-burst-report.md`).
 
+## Option order is shuffled — render from `publicQuiz`, never from `quiz`
+
+`publicQuiz` deterministically shuffles each question's options (seeded by question id, so
+every device and the server agree, and the order survives a reload). It exists because the
+drafted quiz puts the correct answer first in six of eight single-choice questions — tapping
+option one would have scored most of the segment.
+
+**Consequence for S-04:** a distribution drawn in `definition.ts` order would mislabel every
+bar. `public.test.ts` pins the positional spread; when adding a question makes it fail, the
+generator is not broken — bump `SHUFFLE_SALT`.
+
 ## Names are not in the snapshot — S-07 still owns the choice
 
 `SessionState` gained exactly one field, `playerCount`. **No display name is ever published.** Ably

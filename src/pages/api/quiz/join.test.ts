@@ -55,7 +55,7 @@ beforeEach(() => {
   publishSnapshotMock.mockReset();
   readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
   claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
-  readPlayerByIdMock.mockResolvedValue({ player: null, state: lobby });
+  readPlayerByIdMock.mockResolvedValue({ outcome: "not-found", player: null, state: lobby });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -166,7 +166,7 @@ describe("claiming a name", () => {
 
 describe("a device coming back", () => {
   it("recognises a stored player id and reports it as resumed", async () => {
-    readPlayerByIdMock.mockResolvedValue({ player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
 
     const response = await join({ request: request({ playerId: "player-abc" }) } as never);
 
@@ -186,7 +186,7 @@ describe("a device coming back", () => {
    * for the rest of the session.
    */
   it("never attempts a fresh claim for a device presenting an id", async () => {
-    readPlayerByIdMock.mockResolvedValue({ player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
 
     await join({ request: request({ playerId: "player-abc" }) } as never);
 
@@ -194,7 +194,7 @@ describe("a device coming back", () => {
   });
 
   it("prefers the stored id even when a name is also sent", async () => {
-    readPlayerByIdMock.mockResolvedValue({ player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
 
     await join({ request: request({ playerId: "player-abc", displayName: "Anna" }) } as never);
 
@@ -206,8 +206,27 @@ describe("a device coming back", () => {
    * clears its storage and shows the form. 404 rather than 200-with-null so a client
    * cannot mistake it for a successful resume.
    */
+  /**
+   * **503, not 404 — the distinction the full-plan review added.**
+   *
+   * A 404 tells the device its identity is dead and the client clears the stored id.
+   * When the store merely failed, that is a claim the server cannot support: the
+   * attendee is still holding a name, so clearing sends them to a form where their own
+   * name comes back `taken` and they are locked out for the segment. Asserting only
+   * "not 200" would pass against that bug; the status code is the assertion.
+   */
+  it("reports a store failure as 503 so the client keeps its stored id", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    readPlayerByIdMock.mockResolvedValue({ outcome: "failed", player: null, state: null });
+
+    const response = await join({ request: request({ playerId: "player-abc" }) } as never);
+
+    expect(response.status).toBe(503);
+    expect(claimPlayerMock).not.toHaveBeenCalled();
+  });
+
   it("reports an unknown id as 404 so the client falls back to the form", async () => {
-    readPlayerByIdMock.mockResolvedValue({ player: null, state: null });
+    readPlayerByIdMock.mockResolvedValue({ outcome: "not-found", player: null, state: null });
 
     const response = await join({ request: request({ playerId: "gone" }) } as never);
 
@@ -228,7 +247,7 @@ describe("what joining must never do", () => {
     claimPlayerMock.mockResolvedValue({ outcome: "taken", state: lobby });
     await join({ request: request({ displayName: "Anna" }) } as never);
 
-    readPlayerByIdMock.mockResolvedValue({ player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
     await join({ request: request({ playerId: "player-abc" }) } as never);
 
     expect(publishSnapshotMock).not.toHaveBeenCalled();
@@ -250,7 +269,7 @@ describe("what joining must never do", () => {
     claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
     await join({ request: request({ displayName: "Anna" }) } as never);
 
-    readPlayerByIdMock.mockResolvedValue({ player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
     await join({ request: request({ playerId: "player-abc" }) } as never);
 
     expect(readSessionMock).not.toHaveBeenCalled();
@@ -296,5 +315,9 @@ describe("what joining must never do", () => {
     expect(lines).toContain("session.join.rejected");
     // Logs are retained ~1 hour and covered by no TTL, no purge and no rollback.
     expect(lines).not.toContain("Anna");
+    // The class travels under `rejection`, a closed union — not under the free-text
+    // `reason`, which is where it used to sit and where a display name would also fit.
+    expect(lines).toContain('"rejection":"taken"');
+    expect(lines).not.toContain('"reason"');
   });
 });

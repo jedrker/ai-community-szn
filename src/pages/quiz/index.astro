@@ -280,9 +280,20 @@ import { publicQuiz } from "../../quiz/public";
           return;
         }
 
-        // The stored id no longer resolves — a purged or expired session. Drop it so
-        // this device does not carry a ghost player into the next one, and let the
-        // attendee join afresh.
+        // **The store could not answer, so keep the id.** Same reasoning as the network
+        // branch above: nothing here says the id is dead, and clearing it on a blip
+        // would send an attendee back to a form to re-claim the name they are still
+        // holding — refused as taken, locked out for the rest of the segment. Only a
+        // 404, which is the server saying it looked and found nothing, may clear.
+        if (response.status >= 500) {
+          setText("join-error", payload.error ?? "Chwilowy problem. Odśwież stronę.");
+          showJoinForm();
+          return;
+        }
+
+        // The stored id genuinely no longer resolves — a purged or expired session.
+        // Drop it so this device does not carry a ghost player into the next one, and
+        // let the attendee join afresh.
         clearPlayer(config.storageKey);
         showJoinForm();
       }

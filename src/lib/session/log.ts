@@ -77,8 +77,10 @@ export const SESSION_EVENTS = [
    */
   "session.player.joined",
   /**
-   * A join was refused. `reason` carries the *class* — "taken", "invalid", "closed",
-   * "no-session" — and never the submitted name, for the reason above.
+   * A join was refused. `rejection` carries the *class* — and it is a union rather than
+   * a string precisely so the submitted name cannot be put there, for the reason above.
+   * It rode on the free-text `reason` until the full-plan review; that made the rule a
+   * comment when this file's whole premise is that the type enforces it.
    *
    * Distinct from `session.player.joined` rather than a field on it, because a host
    * watching the stream during the lobby is asking "is the room getting in?", and a
@@ -128,6 +130,19 @@ type LogFields = {
    * not be written at all.
    */
   playerCount?: number;
+  /**
+   * Why a join was refused — **a closed set, not a string** (roadmap S-02).
+   *
+   * This rode on `reason` until the full-plan review, which is a free-text field, so
+   * `{ reason: submittedName }` compiled fine and only a comment stood between a log
+   * stream and an attendee's display name. That is precisely the arrangement this whole
+   * type exists to reject: the closure *is* the enforcement, not a note beside one.
+   * `reason` stays free-text because genuine failure detail (a store error message) has
+   * nowhere else to go — which is exactly why a rejection class must not share it.
+   *
+   * Extend the union when a new refusal class appears. Never widen it to `string`.
+   */
+  rejection?: "taken" | "invalid" | "closed" | "no-session" | "unknown-player";
 };
 
 /**

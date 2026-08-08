@@ -52,6 +52,13 @@ and is never bundled with feature work. Update in-range with `bun update @astroj
 `bun add @astrojs/vercel@latest`. Relatedly, the Vercel **function region cannot be configured in
 `astro.config.ts`** — the v10 adapter exposes no region option, so region lives in `vercel.json`.
 
+`qrcode` (with `@types/qrcode`) carries no version constraint — recorded here because in this file
+an unmentioned dependency is indistinguishable from an unconsidered one. It is **server-side only**:
+`/quiz/host` calls it in frontmatter to render the join QR as inline SVG, so nothing ships to the
+phones. Never import it from a client module — `src/lib/client/boundary.test.ts` will not catch that
+for you, since the rule it enforces is about `src/quiz/` and `src/lib/session/`, not about bundle
+weight in general.
+
 ## Rendering model — hybrid, and easy to get wrong
 
 `astro.config.ts` sets `output: "server"` with the `@astrojs/vercel` adapter, and content routes opt

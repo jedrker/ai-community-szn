@@ -571,7 +571,11 @@ describe("readPlayerById", () => {
   it("resolves an id through the reverse index in one round trip", async () => {
     redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby)]);
 
-    await expect(readPlayerById("player-abc")).resolves.toEqual({ player, state: lobby });
+    await expect(readPlayerById("player-abc")).resolves.toEqual({
+      outcome: "found",
+      player,
+      state: lobby,
+    });
 
     // One round trip for both the record and the session document — a reloading
     // device needs both, and the script has both in hand.
@@ -585,31 +589,63 @@ describe("readPlayerById", () => {
     // mean every lookup failing if it ever changed.
     redisMock.eval.mockResolvedValue([player, lobby]);
 
-    await expect(readPlayerById("player-abc")).resolves.toEqual({ player, state: lobby });
+    await expect(readPlayerById("player-abc")).resolves.toEqual({
+      outcome: "found",
+      player,
+      state: lobby,
+    });
   });
 
   /**
-   * An unknown id and an unreadable store collapse to the same answer on purpose: a
-   * device holding an id from a purged session and a device that hit a store blip
-   * both need the same next step — the name form — and distinguishing them would mean
-   * showing an attendee an error inside the thirty seconds they have to be playing.
+   * **`not-found` and `failed` must never collapse into one answer.**
+   *
+   * They did until the full-plan review: both reported a null player, the route
+   * answered 404 to both, and the client cleared the id it had stored. A store blip
+   * during a reload therefore erased the device's identity, and the attendee re-typed
+   * the name they were still holding, was refused as `taken`, and was locked out for
+   * the rest of the segment.
+   *
+   * Both cases really do need the same fallback *screen* — that part of the original
+   * reasoning held. What they need opposite treatment for is `localStorage`.
    */
-  it("returns null for an unknown id", async () => {
+  it("reports an unknown id as not-found, with the session it did read", async () => {
     redisMock.eval.mockResolvedValue([false, JSON.stringify(lobby)]);
 
-    await expect(readPlayerById("nobody")).resolves.toEqual({ player: null, state: lobby });
+    await expect(readPlayerById("nobody")).resolves.toEqual({
+      outcome: "not-found",
+      player: null,
+      state: lobby,
+    });
   });
 
-  it("returns null on a transport failure rather than throwing", async () => {
+  it("reports a transport failure as failed, not as not-found", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     redisMock.eval.mockRejectedValue(new Error("unreachable"));
 
-    await expect(readPlayerById("player-abc")).resolves.toEqual({ player: null, state: null });
+    const result = await readPlayerById("player-abc");
+
+    // The assertion that matters: `failed`, distinct from the unknown-id case above.
+    // Asserting only `player: null` would pass against the lockout bug.
+    expect(result).toEqual({ outcome: "failed", player: null, state: null });
+  });
+
+  it("reports an unconfigured store as failed rather than as an unknown player", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    vi.stubEnv("KV_REST_API_TOKEN", "");
+
+    await expect(readPlayerById("player-abc")).resolves.toEqual({
+      outcome: "failed",
+      player: null,
+      state: null,
+    });
   });
 
   it("returns null on a malformed stored record", async () => {
     redisMock.eval.mockResolvedValue([JSON.stringify({ id: "abc" }), JSON.stringify(lobby)]);
 
-    await expect(readPlayerById("player-abc")).resolves.toMatchObject({ player: null });
+    await expect(readPlayerById("player-abc")).resolves.toMatchObject({
+      outcome: "not-found",
+      player: null,
+    });
   });
 });

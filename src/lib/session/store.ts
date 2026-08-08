@@ -646,19 +646,37 @@ export async function readPlayerCount(): Promise<number | null> {
 }
 
 /**
+ * What a lookup by player id found — and, crucially, whether it could look at all.
+ *
+ * **`not-found` and `failed` must stay distinguishable, and this used to be one shape.**
+ * A `null` player meant both "no such id" and "the store threw", the route answered 404
+ * to both, and the client concluded from any non-OK that its stored id was dead and
+ * cleared it. One blip on an Upstash call during a reload therefore destroyed the
+ * device's identity — and the attendee then re-typed the name they were still holding,
+ * was refused as `taken`, and was locked out for the rest of the segment. That is the
+ * exact failure the whole resume path exists to prevent, reached through the error
+ * handler instead of through the front door.
+ *
+ * The earlier conflation was defended as deliberate — both cases *do* need the same
+ * fallback screen — and that part was right. What it missed is that the two cases need
+ * opposite things done to `localStorage`: `not-found` must clear it, `failed` must not.
+ */
+export type LookupResult = {
+  readonly outcome: "found" | "not-found" | "failed";
+  readonly player: PlayerRecord | null;
+  readonly state: SessionState | null;
+};
+
+/**
  * The player behind an id a device is presenting.
  *
- * `null` covers both "unknown id" and "could not read", and the join route treats them
- * the same way — fall back to the name form. That conflation is deliberate: a device
- * holding an id from a purged session and a device that hit a store blip both need the
- * same next step, and distinguishing them would mean showing an attendee an error at
- * the exact moment the PRD gives them thirty seconds to be playing.
+ * Read-only, and an `EVAL` for the round trip rather than for any guard — it does a
+ * `HGET` on the reverse index then a `HGET` on the players hash, so a returning device
+ * costs one round trip instead of two. Nothing here is protecting an invariant.
  */
-export async function readPlayerById(
-  id: string
-): Promise<{ player: PlayerRecord | null; state: SessionState | null }> {
+export async function readPlayerById(id: string): Promise<LookupResult> {
   const redis = client();
-  if (!redis) return { player: null, state: null };
+  if (!redis) return { outcome: "failed", player: null, state: null };
 
   let result: [unknown, unknown] | null;
   try {
@@ -669,7 +687,7 @@ export async function readPlayerById(
     );
   } catch (err) {
     console.error("Player lookup failed:", describe(err));
-    return { player: null, state: null };
+    return { outcome: "failed", player: null, state: null };
   }
 
   const rawPlayer = result?.[0];
@@ -686,7 +704,7 @@ export async function readPlayerById(
     return parsed.ok ? parsed.state : null;
   })();
 
-  return { player, state };
+  return { outcome: player ? "found" : "not-found", player, state };
 }
 
 export type PurgeResult =

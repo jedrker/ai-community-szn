@@ -1050,7 +1050,7 @@ stream (F-03's lesson).
 #### Automated
 
 - [x] 5.1 `bun run type-check` clean with the harness change — 43648d9
-- [x] 5.2 Harness unit-testable parts (name generation, distribution maths) covered if they are non-trivial — 43648d9
+- [x] 5.2 Harness unit-testable parts (name generation, distribution maths) covered if they are non-trivial — 43648d9 — **no test added; the "if non-trivial" escape was exercised deliberately.** `rehearsalName` is a template string, and the distribution report reuses the existing `percentile`, which F-04's per-action figures already depend on. Recorded on the row because a bare `[x]` reads as "coverage was added" (impl review F6).
 
 #### Manual
 

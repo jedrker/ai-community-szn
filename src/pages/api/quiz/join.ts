@@ -66,33 +66,43 @@ export const POST: APIRoute = async ({ request }) => {
   if (typeof playerId === "string" && playerId.length > 0) {
     // One round trip: the lookup returns the session document alongside the record,
     // because a returning device needs both and the script has both in hand.
-    const { player, state } = await readPlayerById(playerId);
+    const lookup = await readPlayerById(playerId);
 
-    if (player) {
+    if (lookup.outcome === "found" && lookup.player) {
       return json(200, {
-        player: { id: player.id, displayName: player.displayName },
-        state,
+        player: { id: lookup.player.id, displayName: lookup.player.displayName },
+        state: lookup.state,
         resumed: true,
       });
     }
 
-    // Not an error the attendee did anything to cause: the ordinary path here is a
-    // device holding an id from a purged or expired session. The client clears its
-    // storage and shows the form. 404 rather than 200-with-null so the client cannot
-    // mistake it for a successful resume.
-    logSessionEvent("session.join.rejected", { reason: "unknown-player" });
+    // **503, not 404, and the difference is the whole point.** The store could not
+    // answer, so this says nothing about whether the id is good. A 404 here would tell
+    // the device its identity is dead; it would clear the id it is still holding a name
+    // under, re-enter that name, be refused as `taken`, and be locked out for the rest
+    // of the segment. The client retries or waits on a 503 and keeps the id.
+    if (lookup.outcome === "failed") {
+      console.error("Player lookup failed for a resuming device");
+      return json(503, { error: MESSAGES.failed });
+    }
+
+    // Genuinely no such player. Not an error the attendee did anything to cause: the
+    // ordinary path here is a device holding an id from a purged or expired session.
+    // The client clears its storage and shows the form. 404 rather than 200-with-null
+    // so the client cannot mistake it for a successful resume.
+    logSessionEvent("session.join.rejected", { rejection: "unknown-player" });
     return json(404, { error: MESSAGES.unknownPlayer });
   }
 
   if (typeof rawName !== "string") {
-    logSessionEvent("session.join.rejected", { reason: "invalid" });
+    logSessionEvent("session.join.rejected", { rejection: "invalid" });
     return json(400, { error: MESSAGES.missing });
   }
 
   const validated = validateDisplayName(rawName);
   if (!validated.ok) {
     // The *class*, never the submitted name — logs outlive the session document.
-    logSessionEvent("session.join.rejected", { reason: "invalid" });
+    logSessionEvent("session.join.rejected", { rejection: "invalid" });
     return json(400, { error: validated.error });
   }
 
@@ -105,7 +115,7 @@ export const POST: APIRoute = async ({ request }) => {
   const claim = await claimPlayer(validated.key, record);
 
   if (claim.outcome === "taken") {
-    logSessionEvent("session.join.rejected", { reason: "taken" });
+    logSessionEvent("session.join.rejected", { rejection: "taken" });
     return json(409, { error: MESSAGES.taken });
   }
 
@@ -113,12 +123,12 @@ export const POST: APIRoute = async ({ request }) => {
   // and they are the two phases that both carry a null question (F-03's lesson). One
   // shared message would leave a latecomer waiting for a session that had finished.
   if (claim.outcome === "no-session") {
-    logSessionEvent("session.join.rejected", { reason: "no-session" });
+    logSessionEvent("session.join.rejected", { rejection: "no-session" });
     return json(409, { error: MESSAGES.notStarted });
   }
 
   if (claim.outcome === "closed") {
-    logSessionEvent("session.join.rejected", { reason: "closed" });
+    logSessionEvent("session.join.rejected", { rejection: "closed" });
     return json(409, { error: MESSAGES.ended });
   }
 
