@@ -1,0 +1,352 @@
+---
+import "../../styles/global.css";
+
+import { HOST_SECRET_HEADER } from "../../lib/session/host";
+import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
+import { publicQuiz } from "../../quiz/public";
+
+/**
+ * The host view (roadmap S-02).
+ *
+ * Drives the segment from the stage and shows the room what it needs to see. Read from
+ * the back of a venue room, so the phase, the prompt and the join count are set at a
+ * scale well past the site's ordinary body type. All copy is Polish.
+ *
+ * **On demand — no `prerender` export.**
+ *
+ * ## The secret is typed, never shipped
+ *
+ * This page reads no secret in its frontmatter and embeds none in its HTML. The host
+ * types it into a field once, it is held in `sessionStorage` for the tab's lifetime,
+ * and every action sends it as the `x-livequiz-host-secret` header to the existing
+ * `/api/quiz/host/*` routes. So the page stays as unprotected as the PRD wants — there
+ * is nothing on it worth guarding — while the write path stays guarded by the routes
+ * that already do it. A missing or wrong secret surfaces those routes' own Polish 401
+ * rather than a second message that could disagree with it.
+ *
+ * That is the difference from `spine-check.astro`, which ships the secret to the
+ * browser and is therefore only allowed to exist behind `LIVEQUIZ_HARNESS`.
+ *
+ * ## `end` and `purge` are deliberately not here
+ *
+ * F-03 set the two irreversible verbs apart from the flow verbs on purpose. They stay
+ * on the harness page with its confirmation flow, which the runbook and the rehearsal
+ * recovery path both lean on. A mis-click at the front of a room is not recoverable.
+ */
+
+/** What the room types into a phone. Built from the request so preview and production agree. */
+const attendeeUrl = new URL("/quiz", Astro.url);
+---
+
+<html lang="pl" class="bg-surface-primary">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>LiveQuiz — prowadzący</title>
+  </head>
+  <body
+    class="min-h-dvh bg-surface-primary text-text-primary font-archivo antialiased
+           flex flex-col gap-8 px-8 py-6"
+  >
+    <header class="flex flex-wrap items-baseline justify-between gap-4">
+      <h1 class="text-brand-purple-light text-sm font-bold uppercase tracking-[0.2em]">
+        LiveQuiz — prowadzący
+      </h1>
+      <p class="text-text-secondary text-lg">
+        Dołącz na telefonie:
+        <span class="text-text-primary font-semibold">{attendeeUrl.host}{attendeeUrl.pathname}</span>
+      </p>
+    </header>
+
+    <!-- Compact, and above the controls: it is the first thing to fix when an action
+         comes back 401, and nothing else on the page works until it is right. -->
+    <section class="flex flex-wrap items-center gap-3">
+      <label for="secret" class="text-text-secondary text-base">Sekret hosta</label>
+      <input
+        id="secret"
+        type="password"
+        autocomplete="off"
+        class="flex-1 min-w-56 rounded-lg border border-surface-border bg-surface-secondary
+               px-3 py-2 text-lg text-text-primary focus:border-brand-purple-light
+               focus:outline-none"
+      />
+      <span id="secret-note" class="text-text-secondary text-base"></span>
+    </section>
+
+    <main class="flex flex-1 flex-col gap-8">
+      <!-- The three figures the room and the host read from a distance. -->
+      <section class="grid gap-6 sm:grid-cols-3">
+        <div>
+          <p class="text-text-secondary text-lg uppercase tracking-wide">Faza</p>
+          <p id="phase" class="text-5xl font-bold leading-tight">—</p>
+        </div>
+        <div>
+          <p class="text-text-secondary text-lg uppercase tracking-wide">Uczestnicy</p>
+          <p id="player-count" class="text-7xl font-bold leading-none text-brand-purple-light">
+            —
+          </p>
+        </div>
+        <div>
+          <p class="text-text-secondary text-lg uppercase tracking-wide">Wersja</p>
+          <p id="version" class="text-5xl font-bold leading-tight">—</p>
+        </div>
+      </section>
+
+      <section id="question" class="flex flex-col gap-5"></section>
+    </main>
+
+    <footer class="flex flex-col gap-4">
+      <div class="flex flex-wrap gap-3">
+        <button
+          data-action="start"
+          class="rounded-xl bg-brand-purple px-6 py-4 text-2xl font-semibold text-white
+                 disabled:opacity-50"
+        >
+          start
+        </button>
+        <button
+          data-action="advance"
+          class="rounded-xl bg-brand-purple px-6 py-4 text-2xl font-semibold text-white
+                 disabled:opacity-50"
+        >
+          dalej
+        </button>
+        <button
+          data-action="reveal"
+          class="rounded-xl bg-brand-purple px-6 py-4 text-2xl font-semibold text-white
+                 disabled:opacity-50"
+        >
+          pokaż odpowiedź
+        </button>
+        <!-- No join publishes anything (that would be the O(N^2) fan-out the spine
+             contract forbids), so this is how the host watches the lobby fill. -->
+        <button
+          id="refresh"
+          class="rounded-xl border border-surface-border bg-surface-secondary px-6 py-4
+                 text-2xl font-semibold text-text-primary disabled:opacity-50"
+        >
+          odśwież
+        </button>
+      </div>
+
+      <p id="connection" class="text-text-secondary text-base">połączenie: —</p>
+      <p id="message" role="status" aria-live="polite" class="text-xl"></p>
+    </footer>
+
+    <script
+      define:vars={{
+        channelName: SESSION_CHANNEL,
+        snapshotEvent: SNAPSHOT_EVENT,
+        secretHeader: HOST_SECRET_HEADER,
+        questions: publicQuiz.questions,
+      }}
+    >
+      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, questions };
+    </script>
+
+    <script>
+      import { createSessionClient, type ConnectionStatus } from "../../lib/client/session";
+      import { el, renderQuestion, setText } from "../../lib/client/render";
+      import type { PublicQuestion } from "../../quiz/public";
+
+      type Config = {
+        channelName: string;
+        snapshotEvent: string;
+        secretHeader: string;
+        questions: PublicQuestion[];
+      };
+
+      type ActionResponse = {
+        state?: unknown;
+        applied?: boolean;
+        note?: string;
+        error?: string;
+      };
+
+      /**
+       * `sessionStorage`, not `localStorage`: the secret should not outlive the tab the
+       * host opened for this segment. Outside the session namespace on purpose: it is
+       * not session data, nothing in `keys.ts` governs it, and no purge has any business
+       * with it — it is a convenience for one browser tab.
+       */
+      const SECRET_STORAGE_KEY = "quiz-host-secret";
+
+      const config = (window as unknown as { __liveQuizHost: Config }).__liveQuizHost;
+
+      const secretField = el("secret") as HTMLInputElement;
+      const questionBox = el("question");
+      const refresh = el("refresh") as HTMLButtonElement;
+
+      const actionButtons = (): HTMLButtonElement[] =>
+        Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-action]"));
+
+      const allButtons = (): HTMLButtonElement[] => [...actionButtons(), refresh];
+
+      function readSecret(): string {
+        try {
+          return window.sessionStorage.getItem(SECRET_STORAGE_KEY) ?? "";
+        } catch {
+          return "";
+        }
+      }
+
+      function storeSecret(value: string): void {
+        try {
+          window.sessionStorage.setItem(SECRET_STORAGE_KEY, value);
+        } catch {
+          // Storage disabled. The field still holds the value for this page load,
+          // which is enough to run the segment.
+        }
+      }
+
+      const client = createSessionClient({
+        channelName: config.channelName,
+        snapshotEvent: config.snapshotEvent,
+        onSnapshot: () => render(),
+        onConnection: (status: ConnectionStatus, detail: string) => {
+          setText("connection", `połączenie: ${detail}`);
+          el("connection").className =
+            status === "connected"
+              ? "text-text-secondary text-base"
+              : "text-red-400 text-base";
+        },
+      });
+
+      const PHASE_LABELS: Record<string, string> = {
+        lobby: "poczekalnia",
+        "question-open": "pytanie otwarte",
+        "question-revealed": "odpowiedź ujawniona",
+        ended: "zakończona",
+      };
+
+      function render(): void {
+        const state = client.current();
+
+        if (state === null) {
+          setText("phase", "brak sesji");
+          setText("player-count", "—");
+          setText("version", "—");
+          renderQuestion(questionBox, undefined, { prompt: "text-4xl font-bold leading-tight" });
+          return;
+        }
+
+        setText("phase", PHASE_LABELS[state.phase] ?? state.phase);
+        setText("player-count", state.playerCount);
+        setText("version", state.version);
+
+        const question = config.questions.find(
+          (candidate) => candidate.id === state.currentQuestionId
+        );
+        renderQuestion(questionBox, state.currentQuestionId === null ? undefined : question, {
+          prompt: "text-6xl font-bold leading-tight",
+          list: "grid gap-3 sm:grid-cols-2",
+          option:
+            "rounded-xl border border-surface-border bg-surface-secondary px-5 py-4 text-3xl",
+        });
+      }
+
+      function say(text: string, bad: boolean): void {
+        setText("message", text);
+        el("message").className = bad ? "text-xl text-red-400" : "text-xl text-emerald-400";
+      }
+
+      /**
+       * The three non-plain outcomes the host routes already return are reported as
+       * themselves, because collapsing any of them into "worked" or "failed" is what
+       * makes a host retry the wrong thing on stage:
+       *
+       * - `applied: false` with a note — the state is not where the host thought, but
+       *   nothing broke and the room is fine. Retrying does nothing.
+       * - `502` with the state committed — the write landed, the broadcast did not.
+       *   Retrying the *same* action is the fix, and is safe: devices drop a snapshot
+       *   they already hold.
+       * - `401` — the secret. Nothing else will work until it is corrected.
+       */
+      async function fire(action: string): Promise<void> {
+        allButtons().forEach((button) => {
+          button.disabled = true;
+        });
+        say("…", false);
+
+        try {
+          const response = await fetch(`/api/quiz/host/${action}`, {
+            method: "POST",
+            headers: { [config.secretHeader]: secretField.value },
+          });
+          const payload = (await response.json().catch(() => ({}))) as ActionResponse;
+
+          if (payload.state !== undefined) {
+            client.apply(payload.state as Parameters<typeof client.apply>[0], "http");
+          }
+
+          if (response.status === 401) {
+            say(payload.error ?? "Brak uprawnień hosta.", true);
+            secretField.focus();
+            secretField.select();
+            return;
+          }
+
+          if (response.status === 502) {
+            say(
+              payload.error ??
+                "Zapisano, ale nie dotarło do urządzeń. Powtórz tę samą akcję.",
+              true
+            );
+            return;
+          }
+
+          if (!response.ok) {
+            say(payload.error ?? `Błąd ${response.status}.`, true);
+            return;
+          }
+
+          if (payload.applied === false) {
+            say(
+              payload.note === "no-op"
+                ? `${action}: nic do zrobienia (koniec pytań?). Stan bez zmian.`
+                : `${action}: ta akcja została już zastosowana. Stan bez zmian.`,
+              false
+            );
+            return;
+          }
+
+          say(`${action}: OK`, false);
+        } catch (err) {
+          say(`${action}: żądanie nie doszło (${String(err)})`, true);
+        } finally {
+          allButtons().forEach((button) => {
+            button.disabled = false;
+          });
+        }
+      }
+
+      actionButtons().forEach((button) => {
+        button.addEventListener("click", () => {
+          void fire(button.dataset.action ?? "");
+        });
+      });
+
+      refresh.addEventListener("click", () => {
+        refresh.disabled = true;
+        client
+          .refresh()
+          .then(() => say("odświeżono", false))
+          .catch((err: unknown) => say(`nie udało się odświeżyć: ${String(err)}`, true))
+          .finally(() => {
+            refresh.disabled = false;
+          });
+      });
+
+      secretField.value = readSecret();
+      secretField.addEventListener("input", () => {
+        storeSecret(secretField.value);
+        setText("secret-note", secretField.value.length > 0 ? "zapamiętany w tej karcie" : "");
+      });
+      setText("secret-note", secretField.value.length > 0 ? "zapamiętany w tej karcie" : "");
+
+      render();
+      void client.start();
+    </script>
+  </body>
+</html>

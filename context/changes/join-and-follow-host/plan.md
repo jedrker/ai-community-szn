@@ -1015,23 +1015,23 @@ stream (F-03's lesson).
 
 #### Automated
 
-- [x] 3.1 Test suite passes: `bun run test`
-- [x] 3.2 Type check clean: `bun run type-check`
-- [x] 3.3 `boundary.test.ts` fires on its fixture and passes on the real modules
-- [x] 3.4 `keys.test.ts` now scans `src/lib/client/`
+- [x] 3.1 Test suite passes: `bun run test` — 58895b5
+- [x] 3.2 Type check clean: `bun run type-check` — 58895b5
+- [x] 3.3 `boundary.test.ts` fires on its fixture and passes on the real modules — 58895b5
+- [x] 3.4 `keys.test.ts` now scans `src/lib/client/` — 58895b5
 
 #### Manual
 
-- [x] 3.5 Nothing user-visible yet; review is of the module boundaries
+- [x] 3.5 Nothing user-visible yet; review is of the module boundaries — 58895b5
 
 ### Phase 4: The two views
 
 #### Automated
 
-- [ ] 4.1 Build succeeds: `bun run build`
-- [ ] 4.2 Type check clean: `bun run type-check`
-- [ ] 4.3 Test suite passes: `bun run test` — including `keys.test.ts` over the two new pages
-- [ ] 4.4 Neither new page references `LIVEQUIZ_HOST_SECRET` (grep, or an assertion in the boundary test)
+- [x] 4.1 Build succeeds: `bun run build`
+- [x] 4.2 Type check clean: `bun run type-check`
+- [x] 4.3 Test suite passes: `bun run test` — including `keys.test.ts` over the two new pages
+- [x] 4.4 Neither new page references `LIVEQUIZ_HOST_SECRET` (grep, or an assertion in the boundary test)
 
 #### Manual
 

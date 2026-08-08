@@ -3,7 +3,13 @@
     "allow": [
       "Bash(export PATH=\"$HOME/.bun/bin:$PATH\")",
       "Bash(bun run:*)",
-      "WebFetch(domain:luma.com)"
+      "WebFetch(domain:luma.com)",
+      "Bash(git add *)",
+      "Bash(echo \"EMPTY=$?\")",
+      "Bash(git commit -m ' *)",
+      "Bash(git checkout *)",
+      "Bash(echo \"exit=$? \\(no output above = clean\\)\")",
+      "Bash(echo \"empty=$?\")"
     ]
   },
   "enabledPlugins": {

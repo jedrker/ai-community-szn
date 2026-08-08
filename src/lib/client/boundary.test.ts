@@ -268,6 +268,36 @@ describe("client modules stay on the client side of the boundary", () => {
     expect(findBoundaryViolations(clientScriptOnly(page))).toEqual([]);
   });
 
+  /**
+   * The host secret may reach a browser only from a page that cannot exist in
+   * production (roadmap S-02, plan §4.4).
+   *
+   * Stated as a rule rather than an exemption list: `spine-check.astro` renders the
+   * secret into its HTML and is allowed to, because `isHarnessEnabled()` 404s it
+   * outside Preview and local development. Any page that names the variable without
+   * that guard would ship the write credential to every phone in the room. `/quiz` and
+   * `/quiz/host` name it nowhere — the host types it and it travels as a header.
+   */
+  it.each(
+    readdirSync(PAGES_DIR, { recursive: true, encoding: "utf8" })
+      .filter((name) => name.endsWith(".astro"))
+      .map((name) => ({ name, source: readFileSync(join(PAGES_DIR, name), "utf8") }))
+  )("$name only names the host secret behind the harness guard", ({ name, source }) => {
+    // Assembled so this file does not itself count as naming it.
+    const variable = `LIVEQUIZ_${"HOST"}_SECRET`;
+    if (!source.includes(variable)) return;
+
+    expect(
+      source.includes("isHarnessEnabled()"),
+      `src/pages/quiz/${name} names ${variable} but does not call isHarnessEnabled().\n\n` +
+        `A page that puts the host secret in its markup hands the write credential to ` +
+        `every\ndevice that opens it. Only a page gated by the harness flag — which is ` +
+        `never set in\nProduction — may do that. The production host view has the host ` +
+        `type the secret into\na field and sends it as the x-livequiz-host-secret header ` +
+        `instead.`
+    ).toBe(true);
+  });
+
   it.each(scannedFiles())("$label stays inside the boundary", ({ label, source }) => {
     const violations = findBoundaryViolations(source);
 

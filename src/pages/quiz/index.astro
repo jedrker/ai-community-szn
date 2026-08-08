@@ -1,0 +1,353 @@
+---
+import "../../styles/global.css";
+
+import { PLAYER_STORAGE_KEY } from "../../lib/session/keys";
+import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
+import { publicQuiz } from "../../quiz/public";
+
+/**
+ * The attendee view (roadmap S-02, PRD FR-002/FR-007/FR-008).
+ *
+ * Claim a name, then follow the host. Read on a phone held at arm's length in a dark
+ * room, so the type is large and the contrast is high; all copy is Polish.
+ *
+ * **On demand — no `prerender` export.** It renders per request because the join and
+ * the current session state are both request-time facts. See CLAUDE.md's route table.
+ *
+ * **Reads no secret of any kind.** Everything below reaches the browser deliberately:
+ * the channel and event names (which a subscribe-only token already grants access to),
+ * the `localStorage` key, and the *public* quiz projection — prompts and option text,
+ * never an answer. `src/lib/client/boundary.test.ts` scans the `<script>` blocks below
+ * and fails the suite if one reads env or value-imports `src/quiz/` or
+ * `src/lib/session/`; this frontmatter is excluded from that scan because it runs
+ * server-side, which is exactly how these values are fetched.
+ *
+ * **No `BaseLayout`.** That layout carries the site navbar, footer and OG metadata for
+ * a content site. This is a full-screen single-purpose view, so it keeps its own
+ * document shell — `spine-check.astro`'s precedent — but styled with Tailwind utilities
+ * rather than an inline `<style>` block.
+ */
+---
+
+<html lang="pl" class="bg-surface-primary">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>LiveQuiz — dołącz</title>
+  </head>
+  <body
+    class="min-h-dvh bg-surface-primary text-text-primary font-archivo antialiased
+           flex flex-col items-center px-5 py-8"
+  >
+    <main class="w-full max-w-md flex flex-col gap-6">
+      <h1 class="text-brand-purple-light text-sm font-bold uppercase tracking-[0.2em]">
+        LiveQuiz
+      </h1>
+
+      <!-- Shown until the stored-player check resolves, so a returning device never
+           flashes the name form it is about to skip. -->
+      <section id="boot" class="text-text-secondary text-lg">Ładowanie…</section>
+
+      <noscript>
+        <p class="text-lg">
+          Ten quiz wymaga włączonego JavaScriptu. Włącz go i odśwież stronę.
+        </p>
+      </noscript>
+
+      <section id="join" hidden class="flex flex-col gap-5">
+        <p class="text-2xl font-semibold leading-tight">
+          Wpisz swoją nazwę, żeby dołączyć do quizu.
+        </p>
+
+        <form id="join-form" class="flex flex-col gap-4" novalidate>
+          <label for="display-name" class="text-text-secondary text-base">
+            Twoja nazwa
+          </label>
+          <input
+            id="display-name"
+            name="displayName"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            autocapitalize="words"
+            autocorrect="off"
+            spellcheck="false"
+            maxlength="24"
+            class="w-full rounded-xl border border-surface-border bg-surface-secondary
+                   px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
+                   focus:border-brand-purple-light focus:outline-none"
+            placeholder="np. Ania"
+          />
+          <button
+            id="join-submit"
+            type="submit"
+            class="w-full rounded-xl bg-brand-purple px-4 py-4 text-2xl font-semibold
+                   text-white disabled:opacity-50"
+          >
+            Dołącz
+          </button>
+          <p id="join-error" role="alert" aria-live="polite" class="text-lg text-red-400"></p>
+        </form>
+      </section>
+
+      <section id="follow" hidden class="flex flex-col gap-6">
+        <p id="player-name" class="text-text-secondary text-base"></p>
+        <p id="follow-status" class="text-xl font-semibold"></p>
+        <div id="question" class="flex flex-col gap-4"></div>
+      </section>
+    </main>
+
+    <!--
+      `define:vars` forces an inline, unprocessed script, so it cannot import from npm.
+      The handoff is therefore split in two exactly as `spine-check.astro` does it: this
+      block parks the server-rendered values on `window`, and the module script below
+      picks them up.
+    -->
+    <script
+      define:vars={{
+        channelName: SESSION_CHANNEL,
+        snapshotEvent: SNAPSHOT_EVENT,
+        storageKey: PLAYER_STORAGE_KEY,
+        questions: publicQuiz.questions,
+      }}
+    >
+      window.__liveQuiz = { channelName, snapshotEvent, storageKey, questions };
+    </script>
+
+    <script>
+      import {
+        createSessionClient,
+        type ConnectionStatus,
+        type SessionClient,
+      } from "../../lib/client/session";
+      import { clearPlayer, readPlayer, writePlayer } from "../../lib/client/player";
+      import { el, renderQuestion, setHidden, setText } from "../../lib/client/render";
+      import type { PublicQuestion } from "../../quiz/public";
+
+      type Config = {
+        channelName: string;
+        snapshotEvent: string;
+        storageKey: string;
+        questions: PublicQuestion[];
+      };
+
+      type JoinResponse = {
+        player?: { id: string; displayName: string };
+        state?: Parameters<SessionClient["apply"]>[0];
+        error?: string;
+      };
+
+      const config = (window as unknown as { __liveQuiz: Config }).__liveQuiz;
+
+      const boot = el("boot");
+      const joinSection = el("join");
+      const followSection = el("follow");
+      const questionBox = el("question");
+      const nameInput = el("display-name") as HTMLInputElement;
+      const submit = el("join-submit") as HTMLButtonElement;
+      const form = el("join-form") as HTMLFormElement;
+
+      let connection: ConnectionStatus = "connecting";
+      let joined = false;
+
+      const client = createSessionClient({
+        channelName: config.channelName,
+        snapshotEvent: config.snapshotEvent,
+        onSnapshot: () => render(),
+        onConnection: (status) => {
+          connection = status;
+          render();
+        },
+      });
+
+      function indexOfQuestion(id: string): number {
+        return config.questions.findIndex((question) => question.id === id);
+      }
+
+      /**
+       * The whole attendee-facing state machine, in one function driven by the snapshot
+       * and the connection status. Rendering from state rather than from events is what
+       * makes an out-of-order or duplicated snapshot harmless.
+       */
+      function render(): void {
+        if (!joined) return;
+
+        const state = client.current();
+
+        // Lost connection wins over everything: whatever is on screen is no longer
+        // known to be current, and saying so is the difference between a quiet room and
+        // a broken phone. The three states `ended` exists to separate are exactly these.
+        if (connection === "lost") {
+          setText("follow-status", "Utracono połączenie. Próbujemy połączyć ponownie…");
+          el("follow-status").className = "text-xl font-semibold text-red-400";
+          return;
+        }
+
+        el("follow-status").className = "text-xl font-semibold";
+
+        // `null` here is what a purge looks like from a phone. Render it as the end of
+        // the session, never as the name form — the session really is over, and sending
+        // someone back to a form they cannot complete is the worse of the two wrongs.
+        if (state === null || state.phase === "ended") {
+          setText("follow-status", "To już koniec. Dzięki za grę!");
+          setHidden(questionBox, true);
+          return;
+        }
+
+        if (state.phase === "lobby") {
+          setText("follow-status", "Jesteś w grze. Czekamy na prowadzącego…");
+          setHidden(questionBox, true);
+          return;
+        }
+
+        const id = state.currentQuestionId;
+        const position = id === null ? -1 : indexOfQuestion(id);
+        const label =
+          position === -1
+            ? "Pytanie"
+            : `Pytanie ${position + 1} z ${config.questions.length}`;
+
+        setText(
+          "follow-status",
+          state.phase === "question-revealed" ? `${label} — odpowiedź ujawniona` : label
+        );
+
+        setHidden(questionBox, false);
+        // An id absent from the projection means the definition changed under a live
+        // session. `renderQuestion` shows a neutral placeholder rather than an error.
+        renderQuestion(
+          questionBox,
+          position === -1 ? undefined : config.questions[position],
+          {
+            prompt: "text-3xl font-bold leading-tight",
+            list: "flex flex-col gap-3",
+            // Static text, not controls: the answer path is S-03's, and something
+            // tappable that does nothing reads as a broken quiz from row three.
+            option:
+              "rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl",
+          }
+        );
+      }
+
+      function showJoinForm(): void {
+        setHidden(boot, true);
+        setHidden(followSection, true);
+        setHidden(joinSection, false);
+        nameInput.focus();
+      }
+
+      async function enterSession(
+        player: { id: string; displayName: string },
+        state: Parameters<SessionClient["apply"]>[0]
+      ): Promise<void> {
+        joined = true;
+        writePlayer(config.storageKey, player);
+
+        setHidden(boot, true);
+        setHidden(joinSection, true);
+        setHidden(followSection, false);
+        setText("player-name", `Grasz jako ${player.displayName}`);
+
+        // Applied before connecting: the join response already carries the host's
+        // current state, so the first render costs no extra round trip inside the
+        // thirty seconds FR-002 allows.
+        client.apply(state ?? null, "http");
+        render();
+
+        await client.start();
+      }
+
+      /** A device coming back after a reload, recognised by the id it stored. */
+      async function resume(playerId: string): Promise<void> {
+        const body = new FormData();
+        body.set("playerId", playerId);
+
+        let response: Response;
+        try {
+          response = await fetch("/api/quiz/join", { method: "POST", body });
+        } catch {
+          // The network, not the session. Offer the form rather than stranding the
+          // device on "Ładowanie…" forever.
+          showJoinForm();
+          return;
+        }
+
+        const payload = (await response.json().catch(() => ({}))) as JoinResponse;
+
+        if (response.ok && payload.player) {
+          await enterSession(payload.player, payload.state ?? null);
+          return;
+        }
+
+        // The stored id no longer resolves — a purged or expired session. Drop it so
+        // this device does not carry a ghost player into the next one, and let the
+        // attendee join afresh.
+        clearPlayer(config.storageKey);
+        showJoinForm();
+      }
+
+      /**
+       * The submit path.
+       *
+       * **The control disables on first press and stays disabled until the response
+       * resolves.** Two fast taps mint two player ids: the first claims the name, the
+       * second comes back `taken` — so the attendee is told their own just-claimed name
+       * is unavailable, and the device may discard the valid id the first request
+       * returned. Double-tapping a button that has not visibly responded is the ordinary
+       * thing to do on a phone against a thirty-second clock, so this is the expected
+       * path, not an edge case.
+       */
+      let inFlight = false;
+
+      async function claim(): Promise<void> {
+        if (inFlight) return;
+        inFlight = true;
+        submit.disabled = true;
+        submit.textContent = "Dołączanie…";
+        setText("join-error", "");
+
+        const body = new FormData();
+        body.set("displayName", nameInput.value);
+
+        try {
+          const response = await fetch("/api/quiz/join", { method: "POST", body });
+          const payload = (await response.json().catch(() => ({}))) as JoinResponse;
+
+          if (response.ok && payload.player) {
+            await enterSession(payload.player, payload.state ?? null);
+            return;
+          }
+
+          setText("join-error", payload.error ?? "Nie udało się dołączyć.");
+        } catch {
+          setText("join-error", "Brak połączenia. Spróbuj ponownie.");
+        } finally {
+          inFlight = false;
+          submit.disabled = false;
+          submit.textContent = "Dołącz";
+          // The value is deliberately left in the field and focus returned to it: a
+          // retry loop sits inside the window the 30-second target covers, and that is
+          // the one place a lost input costs the most.
+          if (!joined) {
+            nameInput.focus();
+            nameInput.select();
+          }
+        }
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void claim();
+      });
+
+      const stored = readPlayer(config.storageKey);
+      if (stored) {
+        void resume(stored.id);
+      } else {
+        // Nothing stored: straight to the form, with no round trip to wait through.
+        showJoinForm();
+      }
+    </script>
+  </body>
+</html>
