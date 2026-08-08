@@ -58,13 +58,20 @@ spend alert the roadmap asked for, which cannot be configured on the free tier
 (`context/changes/room-scale-rehearsal-harness/rehearsal-report.md` records why). In the Upstash console,
 reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `commands` for the month:
 
-- One rehearsal should cost on the order of **20 commands** — minting a token touches no store key, and
-  a host action is one `get` plus one `EVAL`.
-- **Above ~200K attributable to a single run, stop and look.** That is the signature of a polling design
-  replacing the push design, which is cheap in money and expensive in architecture.
-- Recorded readings so far: 513 before the first load run, 4102 after seven of them. That delta is
-  larger than the code accounts for and is **still unexplained** — if you see the counter rising while
-  nothing is running, that is a finding worth chasing.
+- **Measured 2026-08-08 (S-02): a full N=150 rehearsal costs ~420 commands**, and a real event is on
+  the order of **500–600** — one `EVAL` per attendee joining, plus one `GET`+`HLEN` per device connect
+  and per host action. Minting an Ably token still touches no store key.
+- **The plan ceiling is 500K per month, not 200K.** The tripwire below is a deliberately conservative
+  fraction of the limit, not the limit itself.
+- **Above ~200K attributable to a single run, stop and look.** **This is a polling detector, not a
+  capacity guard** — it sits roughly 350× above a real session, and nothing but a loop could approach
+  it. Do not raise it as usage grows: raising it is how it stops working. The failure it catches is
+  cheap in money and expensive in architecture.
+- **Cost is measured but not fully explained.** The S-02 delta was ~2.5× what the code accounts for,
+  almost entirely in *reads* (~12× predicted); a join looks to cost roughly two billable commands
+  rather than one. See `context/changes/join-and-follow-host/command-counter-diagnostic.md`. The older
+  513 → 4102 figure across seven F-04 runs is a much larger discrepancy again and remains unexplained.
+  **If you see the counter rising while nothing is running, that is a finding worth chasing.**
 
 ## Before the session
 
@@ -157,7 +164,37 @@ Open the attendee-facing view on a phone that is *not* the host machine, on the 
 possible. This is the minimum failure detection this project has: without monitoring, a second device
 is how you notice a problem before the room does.
 
-**4. Re-read the tripwire.** (30 seconds — do not skip.)
+**4. Reset the session. (S-02 — mandatory, not tidy.)**
+
+```bash
+bun run quiz:reset
+```
+
+`start` is **create-if-absent**: without a reset, it picks up the previous session, its players and
+its phase, and the room joins a quiz already halfway through. The four-hour TTL will not save you —
+it is longer than the gap between a rehearsal and the event.
+
+There is no button for this. `end` and `purge` live only on `/quiz/spine-check`, which 404s in
+production by design (it renders the host secret into HTML), so **the terminal is the only reset path
+at an event.** Do it before the room arrives, not after they start joining.
+
+**5. Open `/quiz/host` and paste the host secret.**
+
+The host view is at `<production-url>/quiz/host`. The page itself is unprotected — there is nothing
+on it worth guarding — but every action sends the secret as a header, so paste
+`LIVEQUIZ_HOST_SECRET` into the **Sekret hosta** field once. It is held in `sessionStorage` for that
+tab only: **close the tab and you re-paste it.** Do not open the host view in a tab you are going to
+close.
+
+**Confirm the field is accepted by taking one throwaway action** — which step 2 already requires for
+the log stream anyway, so this costs nothing extra. A wrong or missing secret shows the routes' own
+Polish message, *Brak uprawnień hosta*. Finding that out at the front of a room is the failure this
+step exists to prevent.
+
+Then put the attendee view on the large screen if you want the room to see it, and point them at
+**`/quiz`** — the host view shows a QR code and the URL side by side for exactly that.
+
+**6. Re-read the tripwire.** (30 seconds — do not skip.)
 
 The project deliberately stays on the Vercel **Hobby** plan. Two conditions would change that decision.
 Ask both, out loud:
@@ -178,6 +215,15 @@ Ask both, out loud:
 raise it before the event rather than after.
 
 ## During the session
+
+- **The join count only moves when you make it move.** It refreshes on a host action or on the
+  **odśwież** button, and never on its own. **That is by design, not a bug**: 150 joins each
+  broadcasting to 150 devices is the O(N²) fan-out the spine is built to avoid, so nothing is
+  published when someone joins. While the lobby fills, tap **odśwież** to watch it climb.
+
+- **`end` and `purge` are not on the host view.** Only `start`, `dalej`, `pokaż odpowiedź` and
+  `odśwież` are — the irreversible verbs were deliberately kept off a screen you drive from a stage.
+  To close a session, use `bun run quiz:reset` from the terminal.
 
 - **Watch the log stream**, not the dashboard. The stream is the only place a runtime error appears in
   time to act on.

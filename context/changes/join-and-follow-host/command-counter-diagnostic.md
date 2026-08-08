@@ -52,18 +52,43 @@ store, no host action, and no other person driving the deployed site.
 
 **This is a human-only step** — the console is not reachable from this environment.
 
-| | Reading | Timestamp | Elapsed since previous |
-| --- | --- | --- | --- |
-| Reference (F-04, before load runs) | 513 | 2026-08-07 | — |
-| Reference (F-04, after three load runs) | 4102 | 2026-08-07 | — |
-| **Reading 1** | _pending_ | _pending_ | — |
-| **Reading 2** | _pending_ | _pending_ | _pending_ |
+| | Reading | Writes | Reads | Timestamp | Elapsed since previous |
+| --- | --- | --- | --- | --- | --- |
+| Reference (F-04, before load runs) | 513 | — | — | 2026-08-07 | — |
+| Reference (F-04, after three load runs) | 4102 | — | — | 2026-08-07 | — |
+| Phase 5, before three N=150 runs | 1541 | 640 | 901 | 2026-08-08 ~11:05 | — |
+| **Reading 1** (= Phase 5 after-run reading) | 2794 | 1411 | 1383 | 2026-08-08 ~11:20 | — |
+| **Reading 2** | _pending_ | | | _pending_ | _pending_ |
 
-**Idle delta**: _pending_
+Note the monthly counter reset between the F-04 references and these — 1541 is not
+comparable to 4102 as an absolute, only the *deltas* are.
+
+**Idle delta**: _pending reading 2_
 
 ## Verdict
 
-_Pending both readings._
+_Pending reading 2._
+
+**What reading 2 can and cannot still settle.** Candidate (2) — something issuing commands
+continuously — is fully answerable, and that is the candidate that would be a finding
+larger than this slice. It needs only an idle window, which is available now: reading 1 was
+taken immediately after the Phase 5 runs finished and the namespace was purged, so any rise
+by reading 2 is unprompted traffic by definition.
+
+Candidate (1) is now only partly answerable. Phase 5 measured a **live** delta of +1253
+commands against a code accounting of ~510, with the excess almost entirely in reads
+(~12× predicted) — see `join-burst-report.md`. That is consistent with (1), and it also
+raises a fourth candidate the F-04 report did not name:
+
+4. **A Lua `EVAL` is billed as more than one command.** ~155 claims per Phase 5 run against
+   ~161 excess reads per run is close to one-read-per-claim, which would be the script's
+   opening `GET`. Not confirmed — `HEXISTS` and `HLEN` in the same script are evidently not
+   billed the same way, or the figure would be near 465, and ~100 excess *writes* per run
+   remain unexplained either way.
+
+The probe that would settle (4) costs two console readings and one HTTP request: read the
+counter, issue exactly one join, read it again. Cheaper and more informative than the
+original idle diagnostic, and it is the version worth keeping if only one is ever run.
 
 ## Sequencing deviation, recorded rather than silent
 
@@ -78,6 +103,24 @@ The gate therefore moved from "before Phase 1" to "before anything reaches produ
 it does work. If reading 2 shows a rising idle counter, Phase 1's code is the part of the slice least
 likely to be invalidated by that finding, and no measurement has been spent.
 
+**And then it moved again, past the point of doing any work — recorded rather than glossed.** The
+whole slice reached production before reading 2 was taken: Phase 4 deployed the views and Phase 5
+drove three N=150 rehearsals against the live store. So the *sequencing* intent of this phase was not
+met. Plan step **0.3** ("raise the finding before Phase 1 starts") was struck on 2026-08-08 as
+unachievable rather than ticked, because ticking it would claim something that did not happen.
+
+What survives is worth stating plainly, because it is easy to read the above as "Phase 0 failed and
+was abandoned":
+
+- **The question that would have been a real finding is still fully answerable.** Reading 1 was taken
+  immediately after the Phase 5 runs finished and the namespace was purged. Any rise by reading 2,
+  with nothing running, is unprompted traffic by definition — and *that* is candidate (2), the one
+  worth chasing.
+- **What was lost is the clean attribution of the historical 513 → 4102 delta**, which needed a
+  pre-attendee-write baseline. That is gone and will not come back.
+- **What was gained instead was not planned but is more useful:** Phase 5 measured live cost against a
+  stated prediction, which is a stronger instrument than an idle reading and produced candidate (4).
+
 ## Consequence for the tripwire
 
 Independent of which explanation the readings support, the 200K tripwire recorded in
@@ -90,4 +133,16 @@ S-02 changes the shape of the denominator for the first time — roughly one `EV
 (~150) plus one `HLEN` per host action (~15). Phase 5 takes the first counter delta with attendee
 writes in the system, and that is the reading against which the threshold should actually be set.
 
-_To be completed in Phase 5._
+**Completed in Phase 5.** Measured cost is **~420 commands per full rehearsal run** (not the
+~170 the code predicts), plus ~150 for attendee connects now that `/api/quiz/state` also
+issues an `HLEN`. A real event therefore costs on the order of **500–600 commands**.
+
+Two corrections follow, and both belong in the runbook:
+
+- **The plan ceiling is 500K per month, not 200K.** A reader of the runbook alone would
+  infer the tripwire *is* the limit, which is wrong by 2.5×.
+- **The tripwire needs no numeric change, but it needs its purpose stated.** At 200K it
+  sits roughly 350× above a real session. It is not a capacity guard and must not be
+  described as one — anything approaching it could only have been produced by something
+  looping, which is precisely what it exists to catch. Recording it as "40% of the limit"
+  would invite someone to raise it as usage grows, defeating it.

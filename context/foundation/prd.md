@@ -132,11 +132,23 @@ during an event.
   > published to Ably on every host action, and Ably retains messages for roughly two minutes for
   > connection recovery regardless of the persistence setting (measured, not assumed —
   > `context/archive/2026-08-06-session-end-and-data-purge/ably-retention-probe.md`). Message persistence *is*
-  > disabled for the namespace; this floor cannot be reduced further by configuration. From S-02,
-  > when snapshots begin carrying display names, that window applies to them. Unlike deviation 1
-  > this was not chosen, and the only way to remove it is to keep names out of published snapshots
-  > entirely — a decision handed to S-02 in
+  > disabled for the namespace; this floor cannot be reduced further by configuration. Unlike
+  > deviation 1 this was not chosen, and the only way to remove it is to keep names out of published
+  > snapshots entirely — a decision handed to S-02 in
   > `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md`.
+  >
+  > **Corrected 2026-08-08 (S-02).** This entry previously read "From S-02, when snapshots begin
+  > carrying display names, that window applies to them." That is now counterfactual and would have
+  > overstated the deviation: **S-02 took the remedy.** No display name is ever published. The
+  > session document gained exactly one field, `playerCount` — a count, not attendee data — so the
+  > ~2-minute Ably window applies to no name. Names live in `livequiz:players`, which `end` re-arms
+  > and `purge` deletes, and a device knows only its own. The original sentence is quoted here rather
+  > than silently rewritten, so the expectation and its reversal both stay visible.
+  >
+  > **S-07 inherits the open half.** A leaderboard needs names on 150 screens, and how they get there
+  > is that slice's decision — publish them and accept the window, or publish opaque ids and have each
+  > device resolve only itself. S-02 deliberately did not decide it by accident on S-07's behalf. See
+  > `context/changes/join-and-follow-host/join-contract.md`.
 - Every capability the existing site provides today continues to work unchanged: event browsing,
   speaker profiles, both signup forms, and the practice of publishing content by committing Markdown.
 

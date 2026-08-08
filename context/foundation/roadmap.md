@@ -3,7 +3,7 @@ project: "LiveQuiz"
 version: 3
 status: draft
 created: 2026-08-05
-updated: 2026-08-07
+updated: 2026-08-08
 prd_version: 1
 main_goal: quality
 top_blocker: decisions
@@ -51,7 +51,7 @@ an attendee is scoring on their own device.
 | F-03  | `session-end-and-data-purge`          | (foundation) a session can be ended and its attendee data is gone afterwards           | F-02          | Success Criteria guardrail (retention), Access Control Changes            | done     |
 | F-04  | `room-scale-rehearsal-harness`        | (foundation) the spine can be driven by ~150 simulated devices and measured            | F-02          | Success Criteria guardrails (1s fan-out, 150 concurrent)                  | done     |
 | S-01  | `quiz-definition-and-validation`      | Organizer can author the whole quiz in a file and have it rejected if malformed        | —             | FR-001, FR-017                                                            | done     |
-| S-02  | `join-and-follow-host`                | Attendee can join a started session by name and see the host's current question        | S-01, F-02    | US-01, US-02, FR-002, FR-003, FR-007, FR-008                              | proposed |
+| S-02  | `join-and-follow-host`                | Attendee can join a started session by name and see the host's current question        | S-01, F-02    | US-01, US-02, FR-002, FR-003, FR-007, FR-008                              | done     |
 | S-03  | `answer-choice-question-and-reveal`   | Attendee can answer a choice question and see if they were right and what they scored  | S-02          | US-01, US-02, FR-004, FR-010, FR-016, FR-019                              | proposed |
 | S-04  | `host-participation-and-distribution` | Host can show the room how many have answered, then the distribution at reveal         | S-03          | US-02, FR-005                                                             | proposed |
 | S-05  | `free-text-answers`                   | Attendee can answer a free-text question without being punished for diacritics         | S-03          | US-01, FR-011                                                             | proposed |
@@ -306,13 +306,19 @@ and do NOT re-scaffold them.
 - **Prerequisites:** S-01, F-02
 - **Parallel with:** F-03, F-04
 - **Blockers:** —
-- **Unknowns:**
-  - How do the two interactive views get their client behaviour, given no UI-framework integration is
-    installed and the stack is content-first by design? This is the first slice that needs an answer,
-    and the answer shapes every view after it. — Owner: `/10x-plan` on this slice. Block: no.
-  - Is the 30-second join target met when 150 devices join in a burst on a venue network, or does
-    joining need measuring separately from steady-state fan-out? — Owner: user, measured by F-04.
-    Block: no.
+- **Unknowns:** _both answered 2026-08-08._
+  - ~~How do the two interactive views get their client behaviour?~~ **Answered: vanilla TypeScript
+    modules in `src/lib/client/` plus `define:vars`, no framework.** See Open Roadmap Question 2 for
+    the reasoning and the accepted cost to S-07/S-08.
+  - ~~Is the 30-second join target met when 150 devices join in a burst?~~ **Answered, with stated
+    limits.** Three N=150 runs against production: the burst completes in **1.24–1.65 s**, 4–6% of
+    FR-002's budget, with 150/150 claims accepted and zero duplicate folded names across 450
+    concurrent claims. See `context/changes/join-and-follow-host/join-burst-report.md`.
+
+    **It is a lower bound, not a venue simulation** — one process on one network, measuring the claim
+    round trip and not a phone painting a screen. Paint time remains unmeasured anywhere and was
+    deliberately left out of scope. The target is therefore *informed* by this figure, not proven by
+    it; the 20× margin is what makes the gap tolerable rather than closing it.
 - **Risk:** The first slice where the spine meets real devices, so it is where a wrong spine decision
   surfaces. The store decision reaches directly into this slice's correctness in one place: the
   display-name claim must be atomic in the store rather than a read-then-write pair, or 150 near-
@@ -321,7 +327,12 @@ and do NOT re-scaffold them.
   Name-collision rejection sits here rather than later because it is part of the same join flow the
   30-second target covers. The client-interactivity choice made here is the most consequential
   unstated decision in the roadmap — it is where the "not a SPA" tension gets resolved in practice.
-- **Status:** proposed
+
+  **Retired 2026-08-08.** The atomicity risk was the one worth naming and it held: 450 concurrent
+  claims across three N=150 runs produced zero duplicate folded names, and the collision probe
+  (case + diacritics + spacing at once) was refused 5/5 every run. The claim is a single Lua `EVAL`,
+  as F-02 required.
+- **Status:** done
 
 ### S-03: Attendee answers a choice question and learns their result
 
@@ -467,7 +478,7 @@ and do NOT re-scaffold them.
 | F-02       | `session-state-and-realtime-spine`    | Server-authoritative session state with sub-second fan-out         | no                    | Needs F-01 only — no blocking unknown left. Name claim must be atomic |
 | F-03       | `session-end-and-data-purge`          | End a session and purge attendee names and answers                 | done                  | **Delivered 2026-08-06.** S-02/S-03/S-07 must read `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md` before adding any key or snapshot field |
 | F-04       | `room-scale-rehearsal-harness`        | Drive ~150 simulated devices through a session and measure         | no                    | Needs F-02                                                    |
-| S-02       | `join-and-follow-host`                | Join a session by display name and follow the host's question      | no                    | Needs S-01 + F-02. Settles the client-interactivity approach   |
+| S-02       | `join-and-follow-host`                | Join a session by display name and follow the host's question      | done                  | **Delivered 2026-08-08.** Settled the client-interactivity approach (Question 2) — S-03/S-07/S-08 must read `context/changes/join-and-follow-host/join-contract.md` |
 | S-03       | `answer-choice-question-and-reveal`   | Answer a choice question and see result and points at reveal       | no                    | North star. Needs S-02                                        |
 | S-04       | `host-participation-and-distribution` | Large screen: answer count while open, distribution at reveal      | no                    | Needs S-03                                                    |
 | S-05       | `free-text-answers`                   | Free-text answers matched ignoring case, spacing and diacritics    | no                    | Needs S-03                                                    |
@@ -493,10 +504,31 @@ and do NOT re-scaffold them.
    decision. Revisit only if hosting itself moves. Vercel's first-party Global Config was checked and
    ruled out: it is read-optimised and not writable at answer-submission rate. Retained rather than
    deleted so the reasoning stays visible.
-2. **How do the host and attendee views get their client behaviour?** — No UI-framework integration is
-   installed and `tech-stack.md` records that the framework is content-first and explicitly "not a
-   SPA". S-02 is the first slice that needs an answer and the answer shapes every view after it.
-   Owner: `/10x-plan` on S-02. Block: no.
+2. **~~How do the host and attendee views get their client behaviour?~~ — RESOLVED 2026-08-08 (S-02):
+   vanilla TypeScript modules in `src/lib/client/`, imported by Astro `<script>` tags, with
+   `define:vars` as the server→client handoff. No UI framework, and none should be added.** The
+   original text is kept below rather than deleted, per this file's convention.
+
+   Three reasons decided it. It was already proven end to end — `spine-check.astro` implemented the
+   whole spine-contract client rule in a plain `<script>` before S-02 existed. It keeps the client
+   bundle to essentially the Ably SDK (measured at build: 211 KB of SDK against ~7 KB of project
+   code), which matters because the venue network is the one link nobody controls and the join target
+   had never been measured. And it does not fight the framework: `tech-stack.md` records that the
+   stack is content-first and explicitly "not a SPA", so adding an integration for two views would
+   have been the larger deviation.
+
+   **The accepted cost, recorded so a later slice can reverse this knowingly rather than discover
+   it:** S-07's leaderboard and S-08's continuously-updating word cloud will be hand-written DOM
+   updates with no diffing. If either turns out to need a framework, this is the decision to revisit —
+   and reversing it is a slice's worth of work, not a line.
+
+   Two gates enforce the boundary rather than leaving it to discipline: `boundary.test.ts` fails the
+   suite if a client module or an Astro `<script>` block reads `import.meta.env` or *value*-imports
+   `src/quiz/` or `src/lib/session/`, and `keys.test.ts` now scans `src/lib/client/` too.
+
+   > _Original text:_ No UI-framework integration is installed and `tech-stack.md` records that the
+   > framework is content-first and explicitly "not a SPA". S-02 is the first slice that needs an
+   > answer and the answer shapes every view after it. Owner: `/10x-plan` on S-02. Block: no.
 3. **Does the live blast radius justify CI and live-session alerting?** — Forwarded from
    `shape-notes.md` and now sharpened by `infrastructure.md`'s risk register, which rates "no CI gate
    between commit and production" high-likelihood and "a failure is discovered by attendees"

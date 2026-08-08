@@ -979,7 +979,7 @@ stream (F-03's lesson).
 
 - [ ] 0.1 Two counter readings recorded with at least a few hours between them, taken with nothing running
 - [ ] 0.2 The diagnostic file states a verdict rather than only the numbers
-- [ ] 0.3 If the idle figure rises, the finding is raised before Phase 1 starts rather than filed
+- [x] 0.3 ~~If the idle figure rises, the finding is raised before Phase 1 starts rather than filed~~ — **struck 2026-08-08**: unachievable as written. Phase 1 shipped in `93a7900` long before reading 2 could be taken, so there is no "before Phase 1" left to raise anything in. The surviving obligation is 0.2's verdict; see `command-counter-diagnostic.md`.
 
 ### Phase 1: The player store
 
@@ -1049,28 +1049,28 @@ stream (F-03's lesson).
 
 #### Automated
 
-- [x] 5.1 `bun run type-check` clean with the harness change
-- [x] 5.2 Harness unit-testable parts (name generation, distribution maths) covered if they are non-trivial
+- [x] 5.1 `bun run type-check` clean with the harness change — 43648d9
+- [x] 5.2 Harness unit-testable parts (name generation, distribution maths) covered if they are non-trivial — 43648d9
 
 #### Manual
 
-- [x] 5.3 An N=150 run reports 150 of 150 claims succeeded with zero duplicate folded names
-- [x] 5.4 The collision probe is rejected 100% of the time
-- [x] 5.5 The join burst completes well inside the 30-second target, with the distribution recorded
-- [x] 5.6 At least three runs recorded, reported as a range
-- [x] 5.7 Command-counter delta recorded before and after, and the 200K tripwire re-examined against it
-- [x] 5.8 `scripts/check-purge-residue.ts` reports an empty namespace after teardown
+- [x] 5.3 An N=150 run reports 150 of 150 claims succeeded with zero duplicate folded names — 43648d9
+- [x] 5.4 The collision probe is rejected 100% of the time — 43648d9
+- [x] 5.5 The join burst completes well inside the 30-second target, with the distribution recorded — 43648d9
+- [x] 5.6 At least three runs recorded, reported as a range — 43648d9
+- [x] 5.7 Command-counter delta recorded before and after, and the 200K tripwire re-examined against it — 43648d9
+- [x] 5.8 `scripts/check-purge-residue.ts` reports an empty namespace after teardown — 43648d9
 
 ### Phase 6: Record the decisions
 
 #### Automated
 
-- [ ] 6.1 Test suite passes: `bun run test`
-- [ ] 6.2 Type check clean: `bun run type-check`
+- [x] 6.1 Test suite passes: `bun run test`
+- [x] 6.2 Type check clean: `bun run type-check`
 
 #### Manual
 
-- [ ] 6.3 Roadmap Question 2 reads as resolved, with the decision and the accepted cost both visible
-- [ ] 6.4 `prd.md`'s Deviation 2 no longer asserts something untrue about snapshots
-- [ ] 6.5 `join-contract.md` fits on a page
-- [ ] 6.6 A reader of `CLAUDE.md` alone would not add a UI framework or put a name in a snapshot
+- [x] 6.3 Roadmap Question 2 reads as resolved, with the decision and the accepted cost both visible
+- [x] 6.4 `prd.md`'s Deviation 2 no longer asserts something untrue about snapshots
+- [x] 6.5 `join-contract.md` fits on a page
+- [x] 6.6 A reader of `CLAUDE.md` alone would not add a UI framework or put a name in a snapshot

@@ -63,6 +63,7 @@ back into static generation per route. Both halves are deliberate:
 | `/prelegenci`, `/prelegenci/[...slug]` | prerendered (`export const prerender = true`) |
 | `/` | on-demand — the homepage resolves the next upcoming event per request |
 | `/zglos-sie` | on-demand |
+| `/quiz`, `/quiz/host` | on-demand — the LiveQuiz attendee and host views |
 | `/api/*` | on-demand (POST handlers) |
 
 Do **not** flip `output` to `"static"`, and do not add or remove a `prerender` export to "make it
@@ -136,7 +137,35 @@ references it. It is a leftover from the Tailwind 3 integration style. Do not im
 the Astro `integrations` array — it will appear to work and produce a second, conflicting Tailwind
 setup. It should be removed (`bun remove @astrojs/tailwind`).
 
-## Server-side modules (`src/lib/`)
+## Client interactivity — vanilla modules, and no framework
+
+Browser behaviour lives in **`src/lib/client/` as plain TypeScript modules**, imported by Astro
+`<script>` tags. The server hands values down with **`define:vars`**. **No UI-framework integration
+is installed and none should be added** — not React, not Preact, not Alpine. This was decided
+deliberately in S-02 (roadmap Open Question 2), not by omission: the pattern was already proven by
+`spine-check.astro`, and it keeps the client bundle to essentially the Ably SDK, which matters
+because the venue network is the one link nobody controls. The accepted cost is that later views do
+hand-written DOM updates with no diffing.
+
+`src/lib/client/boundary.test.ts` enforces the boundary. A client module — **and any `<script>`
+block in `src/pages/quiz/*.astro`** — may not read `import.meta.env` and may not *value*-import from
+`src/quiz/` or `src/lib/session/`. `import type` is erased and is therefore allowed; that is how
+`SessionState` and `PublicQuestion` reach these modules.
+
+Name the two failure modes, because the rule reads arbitrary without them:
+
+- A value import from `src/quiz/` ships every question's `correctOptionIds`, `acceptedAnswers` and
+  `correctValue` **to the phone being asked the question**. That is the exact leak `src/quiz/public.ts`
+  exists to prevent, and the page still looks correct afterwards.
+- A value import from `src/lib/session/`, or an `import.meta.env` read, pulls server configuration
+  into a public bundle and drags `zod` and the Upstash and Ably server SDKs into a download budget
+  that has to survive a venue network.
+
+**Astro frontmatter is deliberately not scanned** — it runs server-side and is *meant* to read env
+and import server modules. That is how the views get the channel name to pass down. Do not "fix" a
+boundary failure by deleting a frontmatter import.
+
+## Server-side modules (`src/lib/`, except `src/lib/client/`)
 
 Named exports, no default exports. Secrets come from `import.meta.env` and are documented in
 `.env.example` (`RESEND_API_KEY`, `ADMIN_EMAIL`, `RESEND_AUDIENCE_ID`, `SLACK_WEBHOOK_URL`).
@@ -177,6 +206,21 @@ Before adding any key or any field to a published snapshot, read
 `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md`. It also records the one
 constraint that is not enforceable in code: Ably retains published snapshots for ~2 minutes and that
 floor cannot be configured away.
+
+**Names never enter a published snapshot.** S-02 added two attendee-data keys —
+`livequiz:players` (folded display name → player record) and `livequiz:player-ids` (opaque id →
+folded name, the reverse index a reloading device is recognised by) — and both are in the registry,
+so `end` and `purge` reach them. What it deliberately did *not* do is put a name on the wire.
+`SessionState` gained exactly one field, `playerCount`: a count, not attendee data.
+
+The reason is the ~2-minute Ably floor above, plus the fact that `/api/quiz/token` is deliberately
+open — so a display name in a snapshot is readable for two minutes by anyone who asks for a token.
+A count carries nothing about who played, and a device knows only its own name. Joining also
+publishes nothing at all: 150 joins fanning out to 150 subscribers is the O(N²) shape the spine
+contract forbids, so the count reaches the room on the host's next action instead.
+
+S-07 still owns the open half — a leaderboard needs names on 150 screens. See
+`context/changes/join-and-follow-host/join-contract.md`.
 
 ## API route conventions
 
