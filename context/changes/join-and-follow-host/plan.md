@@ -1015,14 +1015,14 @@ stream (F-03's lesson).
 
 #### Automated
 
-- [ ] 3.1 Test suite passes: `bun run test`
-- [ ] 3.2 Type check clean: `bun run type-check`
-- [ ] 3.3 `boundary.test.ts` fires on its fixture and passes on the real modules
-- [ ] 3.4 `keys.test.ts` now scans `src/lib/client/`
+- [x] 3.1 Test suite passes: `bun run test`
+- [x] 3.2 Type check clean: `bun run type-check`
+- [x] 3.3 `boundary.test.ts` fires on its fixture and passes on the real modules
+- [x] 3.4 `keys.test.ts` now scans `src/lib/client/`
 
 #### Manual
 
-- [ ] 3.5 Nothing user-visible yet; review is of the module boundaries
+- [x] 3.5 Nothing user-visible yet; review is of the module boundaries
 
 ### Phase 4: The two views
 

@@ -31,6 +31,14 @@ import { registeredKeys, SESSION_KEY, SESSION_NAMESPACE } from "./keys";
 const SESSION_DIR = fileURLToPath(new URL(".", import.meta.url));
 const API_DIR = fileURLToPath(new URL("../../pages/api/quiz", import.meta.url));
 /**
+ * The browser modules (roadmap S-02). They hold no store key and cannot — a client
+ * module may not value-import from this directory at all (`boundary.test.ts`), so a
+ * namespaced name here could only be a literal someone retyped rather than imported,
+ * which is exactly the escape this scan exists to catch. Added because a new directory
+ * is invisible to a scan that lists its directories by hand.
+ */
+const CLIENT_DIR = fileURLToPath(new URL("../client", import.meta.url));
+/**
  * Astro pages are scanned too, and not for completeness' sake: frontmatter runs
  * server-side and can reach the store, so a key literal there would be as real as one
  * in a `.ts` module — and would have been invisible to a `.ts`-only scan.
@@ -82,6 +90,11 @@ function sourceFiles(): { label: string; path: string }[] {
     .filter((name) => name !== REGISTRY_FILE)
     .map((name) => ({ label: `src/lib/session/${name}`, path: join(SESSION_DIR, name) }));
 
+  const clientFiles = readdirSync(CLIENT_DIR)
+    .filter((name) => name.endsWith(".ts"))
+    .filter((name) => !name.endsWith(".test.ts"))
+    .map((name) => ({ label: `src/lib/client/${name}`, path: join(CLIENT_DIR, name) }));
+
   const apiFiles = readdirSync(API_DIR, { recursive: true, encoding: "utf8" })
     .filter((name) => name.endsWith(".ts"))
     .filter((name) => !name.endsWith(".test.ts"))
@@ -91,7 +104,7 @@ function sourceFiles(): { label: string; path: string }[] {
     .filter((name) => name.endsWith(".astro"))
     .map((name) => ({ label: `src/pages/quiz/${name}`, path: join(PAGES_DIR, name) }));
 
-  return [...sessionFiles, ...apiFiles, ...pageFiles];
+  return [...sessionFiles, ...clientFiles, ...apiFiles, ...pageFiles];
 }
 
 describe("every namespaced name is declared in keys.ts", () => {
