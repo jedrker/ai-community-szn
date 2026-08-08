@@ -75,7 +75,7 @@ reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `c
   cheap in money and expensive in architecture.
 - **Cost is now explained.** The settled S-02 delta matches the eight-commands-per-join model to
   within 0.1% (writes predicted 2320 against 2323 observed), so nothing is issuing commands
-  unprompted. See `context/changes/join-and-follow-host/command-counter-diagnostic.md`. The older
+  unprompted. See `context/archive/2026-08-07-join-and-follow-host/command-counter-diagnostic.md`. The older
   513 → 4102 figure across seven F-04 runs is still not fully explained — those runs had no joins, and
   the same mechanism inflates their cost only ~3×, not the ~13× observed.
   **If you see the counter rising while nothing is running — and it has genuinely settled — that is

@@ -227,7 +227,7 @@ publishes nothing at all: 150 joins fanning out to 150 subscribers is the O(N²)
 contract forbids, so the count reaches the room on the host's next action instead.
 
 S-07 still owns the open half — a leaderboard needs names on 150 screens. See
-`context/changes/join-and-follow-host/join-contract.md`.
+`context/archive/2026-08-07-join-and-follow-host/join-contract.md`.
 
 ## API route conventions
 

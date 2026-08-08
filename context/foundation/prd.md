@@ -148,7 +148,7 @@ during an event.
   > **S-07 inherits the open half.** A leaderboard needs names on 150 screens, and how they get there
   > is that slice's decision — publish them and accept the window, or publish opaque ids and have each
   > device resolve only itself. S-02 deliberately did not decide it by accident on S-07's behalf. See
-  > `context/changes/join-and-follow-host/join-contract.md`.
+  > `context/archive/2026-08-07-join-and-follow-host/join-contract.md`.
 - Every capability the existing site provides today continues to work unchanged: event browsing,
   speaker profiles, both signup forms, and the practice of publishing content by committing Markdown.
 
