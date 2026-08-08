@@ -113,10 +113,19 @@ export function validateDisplayName(raw: string): ValidatedDisplayName {
  * An opaque per-device identity, minted server-side.
  *
  * Opaque on purpose: it is handed to the browser and comes back on later requests, so
- * it must carry nothing about who the attendee is. It is not a secret — holding
- * someone else's id would let you claim to be them — which is acceptable under the
- * PRD's stated model, where the room is trusted for the length of one session and
- * there are no accounts to steal.
+ * it must carry nothing about who the attendee is.
+ *
+ * **"Not a secret" is a claim scoped to S-02, and S-03 must re-take it rather than
+ * inherit it.** Holding someone else's id lets you claim to be them, which is
+ * acceptable *today* only because the id carries nothing worth stealing — the worst an
+ * impostor gets is a display name. From S-03 the same id carries a score, and from
+ * S-07 a leaderboard position, so the sentence stops being about nothing and starts
+ * being about the thing the whole segment builds toward.
+ *
+ * That may well still be fine: a v4 UUID is unguessable, the ids travel over HTTPS,
+ * and the PRD's no-accounts, trust-the-room model is a deliberate decision rather than
+ * an oversight. The point is that it is a decision, and the slice that attaches scores
+ * is the one that should make it.
  */
 export function newPlayerId(): string {
   return crypto.randomUUID();

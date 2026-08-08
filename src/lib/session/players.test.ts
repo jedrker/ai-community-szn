@@ -87,7 +87,10 @@ describe("validateDisplayName — what is refused", () => {
   it("refuses characters outside the allowlist", () => {
     expect(rejected("<script>").error).toBeTruthy();
     expect(rejected("Anna 🎉").error).toBeTruthy();
-    expect(rejected("Anna​Anna").error).toBeTruthy(); // zero-width space
+    // Written as an escape, never as the raw character: U+200B is invisible in every
+    // editor, so a formatter or a copy-paste can silently delete it and leave this
+    // asserting that "AnnaAnna" is rejected — which it is not.
+    expect(rejected("Anna\u200bAnna").error).toBeTruthy();
   });
 
   /**

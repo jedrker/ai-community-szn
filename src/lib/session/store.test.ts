@@ -420,11 +420,14 @@ describe("claimPlayer", () => {
   beforeEach(configure);
 
   it("claims a free name and reports the new count", async () => {
-    redisMock.eval.mockResolvedValue([1, 7]);
+    redisMock.eval.mockResolvedValue([1, 7, JSON.stringify(lobby)]);
 
     await expect(claimPlayer("anna", player)).resolves.toEqual({
       outcome: "claimed",
       playerCount: 7,
+      // The document the script checked, carried out so the route needs no second
+      // read — see the one-round-trip note on CLAIM_PLAYER.
+      state: lobby,
     });
   });
 
@@ -439,7 +442,7 @@ describe("claimPlayer", () => {
    * only thing standing between the room and a "simplification" into TypeScript.
    */
   it("performs the claim as exactly one atomic store call", async () => {
-    redisMock.eval.mockResolvedValue([1, 1]);
+    redisMock.eval.mockResolvedValue([1, 1, JSON.stringify(lobby)]);
 
     await claimPlayer("anna", player);
 
@@ -449,7 +452,7 @@ describe("claimPlayer", () => {
   });
 
   it("passes the three keys and arms both hash TTLs inside that same call", async () => {
-    redisMock.eval.mockResolvedValue([1, 1]);
+    redisMock.eval.mockResolvedValue([1, 1, JSON.stringify(lobby)]);
 
     await claimPlayer("anna", player);
 
@@ -465,16 +468,20 @@ describe("claimPlayer", () => {
   });
 
   it("reports a taken name as `taken`, not as an error", async () => {
-    redisMock.eval.mockResolvedValue([0, 0]);
+    redisMock.eval.mockResolvedValue([0, 0, JSON.stringify(lobby)]);
 
     // The ordinary outcome of two people in a room of 150 picking the same first
     // name. The route renders it as a prompt, not a failure.
-    await expect(claimPlayer("anna", player)).resolves.toEqual({ outcome: "taken" });
+    await expect(claimPlayer("anna", player)).resolves.toEqual({
+      outcome: "taken",
+      state: lobby,
+    });
   });
 
   it("refuses when no session exists", async () => {
-    redisMock.eval.mockResolvedValue([-1, 0]);
+    redisMock.eval.mockResolvedValue([-1, 0, false]);
 
+    // No session means no document to carry out — the only outcome without state.
     await expect(claimPlayer("anna", player)).resolves.toEqual({ outcome: "no-session" });
   });
 
@@ -484,9 +491,13 @@ describe("claimPlayer", () => {
    * quiz. A joiner must be able to tell "not started yet" from "already over".
    */
   it("refuses a session that has ended, distinctly from one that has not started", async () => {
-    redisMock.eval.mockResolvedValue([-2, 0]);
+    redisMock.eval.mockResolvedValue([-2, 0, JSON.stringify({ ...lobby, phase: "ended", version: 9 })]);
 
-    await expect(claimPlayer("anna", player)).resolves.toEqual({ outcome: "closed" });
+    const result = await claimPlayer("anna", player);
+    expect(result).toMatchObject({ outcome: "closed" });
+    // The ended document travels too, so a late joiner can be shown the closing
+    // screen rather than a bare error.
+    expect(result).toHaveProperty("state.phase", "ended");
   });
 
   it("reports a transport failure without throwing", async () => {
@@ -498,15 +509,21 @@ describe("claimPlayer", () => {
     });
   });
 
+  /**
+   * The success event is emitted by the route, not here — the six rejection lines live
+   * there too, and an event family split across two layers means a second caller of
+   * this function inherits success logging for free and no rejection logging at all.
+   * What this asserts is the part that must hold wherever it is logged: the name never
+   * reaches a log line, since logs are retained ~1 hour and covered by no TTL, no
+   * purge and no rollback.
+   */
   it("never writes a display name to the log", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    redisMock.eval.mockResolvedValue([1, 3]);
+    redisMock.eval.mockResolvedValue([1, 3, JSON.stringify(lobby)]);
 
     await claimPlayer("anna", player);
 
     const lines = log.mock.calls.map(([first]) => String(first)).join("\n");
-    expect(lines).toContain("session.player.joined");
-    // Logs are retained ~1 hour and covered by no TTL, no purge and no rollback.
     expect(lines).not.toContain("Anna");
     expect(lines).not.toContain("anna");
   });
@@ -552,21 +569,23 @@ describe("readPlayerById", () => {
   beforeEach(configure);
 
   it("resolves an id through the reverse index in one round trip", async () => {
-    redisMock.eval.mockResolvedValue(JSON.stringify(player));
+    redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby)]);
 
-    await expect(readPlayerById("player-abc")).resolves.toEqual(player);
+    await expect(readPlayerById("player-abc")).resolves.toEqual({ player, state: lobby });
 
+    // One round trip for both the record and the session document — a reloading
+    // device needs both, and the script has both in hand.
     expect(redisMock.eval).toHaveBeenCalledTimes(1);
     const [, keys] = redisMock.eval.mock.calls[0]!;
-    expect(keys).toEqual([PLAYER_IDS_KEY, PLAYERS_KEY]);
+    expect(keys).toEqual([PLAYER_IDS_KEY, PLAYERS_KEY, SESSION_KEY]);
   });
 
   it("accepts an already-deserialized record", async () => {
     // `automaticDeserialization` defaults to true; depending on it silently would
     // mean every lookup failing if it ever changed.
-    redisMock.eval.mockResolvedValue(player);
+    redisMock.eval.mockResolvedValue([player, lobby]);
 
-    await expect(readPlayerById("player-abc")).resolves.toEqual(player);
+    await expect(readPlayerById("player-abc")).resolves.toEqual({ player, state: lobby });
   });
 
   /**
@@ -576,21 +595,21 @@ describe("readPlayerById", () => {
    * showing an attendee an error inside the thirty seconds they have to be playing.
    */
   it("returns null for an unknown id", async () => {
-    redisMock.eval.mockResolvedValue(false);
+    redisMock.eval.mockResolvedValue([false, JSON.stringify(lobby)]);
 
-    await expect(readPlayerById("nobody")).resolves.toBeNull();
+    await expect(readPlayerById("nobody")).resolves.toEqual({ player: null, state: lobby });
   });
 
   it("returns null on a transport failure rather than throwing", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     redisMock.eval.mockRejectedValue(new Error("unreachable"));
 
-    await expect(readPlayerById("player-abc")).resolves.toBeNull();
+    await expect(readPlayerById("player-abc")).resolves.toEqual({ player: null, state: null });
   });
 
   it("returns null on a malformed stored record", async () => {
-    redisMock.eval.mockResolvedValue(JSON.stringify({ id: "abc" }));
+    redisMock.eval.mockResolvedValue([JSON.stringify({ id: "abc" }), JSON.stringify(lobby)]);
 
-    await expect(readPlayerById("player-abc")).resolves.toBeNull();
+    await expect(readPlayerById("player-abc")).resolves.toMatchObject({ player: null });
   });
 });

@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 
 import { logSessionEvent } from "../../../lib/session/log";
 import { newPlayerId, validateDisplayName } from "../../../lib/session/players";
-import { claimPlayer, readPlayerById, readSession } from "../../../lib/session/store";
+import { claimPlayer, readPlayerById } from "../../../lib/session/store";
 
 /**
  * Joins the session (roadmap S-02, PRD FR-007/FR-008).
@@ -64,13 +64,14 @@ export const POST: APIRoute = async ({ request }) => {
   // A returning device first. Checked before the name so a reload never turns into a
   // second claim — which would fail as `taken` against the attendee's own name.
   if (typeof playerId === "string" && playerId.length > 0) {
-    const existing = await readPlayerById(playerId);
+    // One round trip: the lookup returns the session document alongside the record,
+    // because a returning device needs both and the script has both in hand.
+    const { player, state } = await readPlayerById(playerId);
 
-    if (existing) {
-      const current = await readSession();
+    if (player) {
       return json(200, {
-        player: { id: existing.id, displayName: existing.displayName },
-        state: current.outcome === "ok" ? current.state : null,
+        player: { id: player.id, displayName: player.displayName },
+        state,
         resumed: true,
       });
     }
@@ -131,14 +132,18 @@ export const POST: APIRoute = async ({ request }) => {
     return json(503, { error: MESSAGES.failed });
   }
 
-  // The state travels with the claim so a joining device renders the host's current
-  // question from this response, with no second round trip inside the thirty seconds
-  // PRD FR-002 gives it.
-  const current = await readSession();
+  // The count, never the name. `LogFields` is a closed type precisely so the second
+  // option is a compile error rather than a discipline. Emitted here rather than in
+  // `claimPlayer` so the whole join event family lives at one layer.
+  logSessionEvent("session.player.joined", { playerCount: claim.playerCount });
 
+  // The state travels out of the claim script itself, so a joining device renders the
+  // host's current question from this response with no second round trip inside the
+  // thirty seconds PRD FR-002 gives it — and the state it gets is the one the claim
+  // was checked against, not a later read that could disagree with it.
   return json(200, {
     player: { id: record.id, displayName: record.displayName },
-    state: current.outcome === "ok" ? current.state : null,
+    state: claim.state,
     playerCount: claim.playerCount,
   });
 };

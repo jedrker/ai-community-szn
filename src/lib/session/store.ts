@@ -210,23 +210,32 @@ return { 1, ARGV[1] }
  * document: a separate `EXPIRE` is another round trip that can fail on its own and
  * leave a key holding attendee data on no lifetime at all.
  *
+ * **The session document is returned, not just consulted.** The script has to `GET`
+ * it to check the phase, and a joining device needs exactly that document to render
+ * the host's current question. Reading it here and again from TypeScript would double
+ * the store cost of the one path that scales with room size — ~300 commands per
+ * 150-device room instead of ~150 — and the second read could only be *staler* than
+ * the claim it accompanies. Returning it also means the state a device receives is
+ * provably the state its claim was checked against.
+ *
  * KEYS[1] = session doc, KEYS[2] = players hash, KEYS[3] = player-ids hash
  * ARGV[1] = folded name, ARGV[2] = record JSON, ARGV[3] = player id, ARGV[4] = ttl
- * Returns { 1, playerCount } on a claim, { 0, 0 } when the name is taken,
- * { -1, 0 } when there is no session, { -2, 0 } when the session has ended.
+ * Returns { 1, playerCount, sessionJson } on a claim, { 0, 0, sessionJson } when the
+ * name is taken, { -1, 0, false } when there is no session, and
+ * { -2, 0, sessionJson } when the session has ended.
  */
 const CLAIM_PLAYER = `
 local raw = redis.call('GET', KEYS[1])
 if not raw then
-  return { -1, 0 }
+  return { -1, 0, false }
 end
 
 if cjson.decode(raw).phase == 'ended' then
-  return { -2, 0 }
+  return { -2, 0, raw }
 end
 
 if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 1 then
-  return { 0, 0 }
+  return { 0, 0, raw }
 end
 
 redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
@@ -234,7 +243,7 @@ redis.call('HSET', KEYS[3], ARGV[3], ARGV[1])
 redis.call('EXPIRE', KEYS[2], tonumber(ARGV[4]))
 redis.call('EXPIRE', KEYS[3], tonumber(ARGV[4]))
 
-return { 1, redis.call('HLEN', KEYS[2]) }
+return { 1, redis.call('HLEN', KEYS[2]), raw }
 `;
 
 /**
@@ -245,16 +254,27 @@ return { 1, redis.call('HLEN', KEYS[2]) }
  * atomicity, and a reader who assumes the same of this one will be looking for an
  * invariant that isn't here. Two `HGET`s in one trip; nothing is being protected.
  *
- * KEYS[1] = player-ids hash, KEYS[2] = players hash, ARGV[1] = player id
- * Returns the record JSON, or false when the id is unknown.
+ * Returns the session document alongside the record, for the reason `CLAIM_PLAYER`
+ * does: a returning device needs both, and fetching the session separately would
+ * double the cost of the reload path.
+ *
+ * KEYS[1] = player-ids hash, KEYS[2] = players hash, KEYS[3] = session doc
+ * ARGV[1] = player id
+ * Returns { recordJson, sessionJson }, or { false, sessionJson } when the id is
+ * unknown. `sessionJson` is itself `false` when no session exists.
  */
 const READ_PLAYER_BY_ID = `
-local key = redis.call('HGET', KEYS[1], ARGV[1])
-if not key then
-  return false
+local session = redis.call('GET', KEYS[3])
+if not session then
+  session = false
 end
 
-return redis.call('HGET', KEYS[2], key)
+local key = redis.call('HGET', KEYS[1], ARGV[1])
+if not key then
+  return { false, session }
+end
+
+return { redis.call('HGET', KEYS[2], key), session }
 `;
 
 /**
@@ -524,11 +544,18 @@ export async function endSession(
   return { outcome: "applied", state: next };
 }
 
+/**
+ * Every outcome that had the session document in hand carries it out.
+ *
+ * `state` is the document the claim was actually checked against — not a later read of
+ * it — so a device can never be told "you are in" alongside a state that contradicts
+ * the check that let it in. It is `null` only where there genuinely was no session.
+ */
 export type ClaimResult =
-  | { outcome: "claimed"; playerCount: number }
-  | { outcome: "taken" }
+  | { outcome: "claimed"; playerCount: number; state: SessionState | null }
+  | { outcome: "taken"; state: SessionState | null }
   | { outcome: "no-session" }
-  | { outcome: "closed" }
+  | { outcome: "closed"; state: SessionState | null }
   | { outcome: "unconfigured"; reason: string }
   | { outcome: "failed"; reason: string };
 
@@ -551,9 +578,9 @@ export async function claimPlayer(key: string, record: PlayerRecord): Promise<Cl
   const redis = client();
   if (!redis) return unconfigured();
 
-  let result: [number, number] | null;
+  let result: [number, number, unknown] | null;
   try {
-    result = await redis.eval<[string, string, string, string], [number, number]>(
+    result = await redis.eval<[string, string, string, string], [number, number, unknown]>(
       CLAIM_PLAYER,
       [SESSION_KEY, PLAYERS_KEY, PLAYER_IDS_KEY],
       [key, JSON.stringify(record), record.id, String(SESSION_TTL_SECONDS)]
@@ -564,16 +591,35 @@ export async function claimPlayer(key: string, record: PlayerRecord): Promise<Cl
 
   const status = Number(result?.[0]);
 
+  /**
+   * The document the script checked, parsed through the same schema every other read
+   * goes through. A document that fails to parse becomes `null` rather than an error:
+   * the claim itself already succeeded or failed on its own terms, and refusing a
+   * joining attendee because the *state* was unreadable would turn a rendering problem
+   * into a lockout. The client re-primes from `/api/quiz/state` in that case.
+   */
+  const state = ((): SessionState | null => {
+    const raw = result?.[2];
+    if (raw === null || raw === undefined || raw === false) return null;
+    const parsed = parseSessionState(asDocument(raw));
+    if (!parsed.ok) {
+      logSessionEvent("session.read.invalid", { reason: parsed.problems.join("; ") });
+      return null;
+    }
+    return parsed.state;
+  })();
+
   if (status === -1) return { outcome: "no-session" };
-  if (status === -2) return { outcome: "closed" };
-  if (status === 0) return { outcome: "taken" };
+  if (status === -2) return { outcome: "closed", state };
+  if (status === 0) return { outcome: "taken", state };
 
   const playerCount = Number(result?.[1]) || 0;
 
-  // The count, never the name. `LogFields` is a closed type precisely so that the
-  // second option is a compile error rather than a discipline.
-  logSessionEvent("session.player.joined", { playerCount });
-  return { outcome: "claimed", playerCount };
+  // Deliberately NOT logged here. The six `session.join.rejected` lines live at the
+  // route, and an event family split across two layers means a second caller of this
+  // function would inherit success logging for free and no rejection logging at all.
+  // `join.ts` emits `session.player.joined` beside them.
+  return { outcome: "claimed", playerCount, state };
 }
 
 /**
@@ -608,25 +654,39 @@ export async function readPlayerCount(): Promise<number | null> {
  * same next step, and distinguishing them would mean showing an attendee an error at
  * the exact moment the PRD gives them thirty seconds to be playing.
  */
-export async function readPlayerById(id: string): Promise<PlayerRecord | null> {
+export async function readPlayerById(
+  id: string
+): Promise<{ player: PlayerRecord | null; state: SessionState | null }> {
   const redis = client();
-  if (!redis) return null;
+  if (!redis) return { player: null, state: null };
 
-  let raw: unknown;
+  let result: [unknown, unknown] | null;
   try {
-    raw = await redis.eval<[string], unknown>(
+    result = await redis.eval<[string], [unknown, unknown]>(
       READ_PLAYER_BY_ID,
-      [PLAYER_IDS_KEY, PLAYERS_KEY],
+      [PLAYER_IDS_KEY, PLAYERS_KEY, SESSION_KEY],
       [id]
     );
   } catch (err) {
     console.error("Player lookup failed:", describe(err));
-    return null;
+    return { player: null, state: null };
   }
 
-  if (raw === null || raw === undefined || raw === false) return null;
+  const rawPlayer = result?.[0];
+  const rawState = result?.[1];
 
-  return parsePlayerRecord(asDocument(raw));
+  const player =
+    rawPlayer === null || rawPlayer === undefined || rawPlayer === false
+      ? null
+      : parsePlayerRecord(asDocument(rawPlayer));
+
+  const state = ((): SessionState | null => {
+    if (rawState === null || rawState === undefined || rawState === false) return null;
+    const parsed = parseSessionState(asDocument(rawState));
+    return parsed.ok ? parsed.state : null;
+  })();
+
+  return { player, state };
 }
 
 export type PurgeResult =

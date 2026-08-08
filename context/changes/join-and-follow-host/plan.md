@@ -653,6 +653,14 @@ On a rejected claim the field keeps focus and its value, and the Polish error ap
 successful claim the player is written to storage and the state from the join response is applied
 immediately, so the first render costs no extra round trip.
 
+**The submit control must disable on first press and stay disabled until the response resolves**
+(added 2026-08-08 from impl review F4). Two fast taps mint two player ids; the first claims the name
+and the second comes back `taken` — so the attendee is told their own just-claimed name is
+unavailable, and the device may discard the valid id the first request returned. Double-tapping a
+button that has not visibly responded is the ordinary thing to do on a phone against a thirty-second
+clock, so this is the expected path, not an edge case. `spine-check.astro` already does exactly this
+for host actions; copy that.
+
 Uses `BaseLayout`? **No** — the layout carries the site navbar, footer and OG metadata for a content
 site, and this is a full-screen single-purpose view. Follow `spine-check.astro`'s precedent of its own
 document shell, but styled with Tailwind utilities rather than an inline `<style>` block, since
@@ -708,6 +716,7 @@ browser-side secret is the reason it must stay behind `LIVEQUIZ_HARNESS`. No beh
 - Against a preview deployment, on two devices: host starts, phone shows the lobby; host advances,
   phone shows question 1 within a second; host advances again, phone follows
 - A second phone claiming the same name is rejected and the field keeps its value and focus
+- Double-tapping the join button does not report the attendee's own name as taken (impl review F4)
 - A phone reloading mid-question comes back as the **same player**, without being shown the name form
   and without re-claiming, and re-renders the current question without waiting for a host action
 - A phone whose stored player no longer exists (after a purge) falls back to the name form cleanly
@@ -990,17 +999,17 @@ stream (F-03's lesson).
 
 #### Automated
 
-- [x] 2.1 Test suite passes: `bun run test`
-- [x] 2.2 Type check clean: `bun run type-check`
-- [x] 2.3 `public.test.ts` finds no answer value in the projection
-- [x] 2.4 A route test covers each join outcome and asserts the join path never calls `publishSnapshot`
-- [x] 2.7 A route test covers the `playerId` hit and miss paths
+- [x] 2.1 Test suite passes: `bun run test` — 45ff3d8
+- [x] 2.2 Type check clean: `bun run type-check` — 45ff3d8
+- [x] 2.3 `public.test.ts` finds no answer value in the projection — 45ff3d8
+- [x] 2.4 A route test covers each join outcome and asserts the join path never calls `publishSnapshot` — 45ff3d8
+- [x] 2.7 A route test covers the `playerId` hit and miss paths — 45ff3d8
 
 #### Manual
 
-- [x] 2.5 `curl -X POST -H "Origin: <base>" -F displayName=Anna <base>/api/quiz/join` claims, and a second identical call returns 409 (the `Origin` header is required — see the F-02 trap)
-- [x] 2.6 Claiming `anna` after `Anna` is rejected; claiming before `start` is rejected with a distinct message
-- [x] 2.8 Posting the returned `playerId` back returns the same player with `resumed: true`; an unknown `playerId` returns 404
+- [x] 2.5 `curl -X POST -H "Origin: <base>" -F displayName=Anna <base>/api/quiz/join` claims, and a second identical call returns 409 (the `Origin` header is required — see the F-02 trap) — 45ff3d8
+- [x] 2.6 Claiming `anna` after `Anna` is rejected; claiming before `start` is rejected with a distinct message — 45ff3d8
+- [x] 2.8 Posting the returned `playerId` back returns the same player with `resumed: true`; an unknown `playerId` returns 404 — 45ff3d8
 
 ### Phase 3: The client runtime
 
@@ -1030,6 +1039,7 @@ stream (F-03's lesson).
 - [ ] 4.6 A second phone claiming the same name is rejected and the field keeps its value and focus
 - [ ] 4.7 A phone reloading mid-question comes back as the **same player**, without being shown the name form and without re-claiming, and re-renders the current question without waiting for a host action
 - [ ] 4.12 A phone whose stored player no longer exists (after a purge) falls back to the name form cleanly
+- [ ] 4.13 Double-tapping the join button does not report the attendee's own name as taken (impl review F4)
 - [ ] 4.8 The host view's phase, prompt and join count are legible from across a room
 - [ ] 4.9 The join count increases after the host taps refresh in the lobby
 - [ ] 4.10 Killing the phone's connection shows the connection-lost state, distinct from lobby and from ended
