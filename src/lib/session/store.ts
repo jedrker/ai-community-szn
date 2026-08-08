@@ -1,6 +1,11 @@
 import { Redis } from "@upstash/redis";
 
-import { answerField, parseAnswerRecord, type AnswerRecord } from "./answers";
+import {
+  answerField,
+  answerRecordSchema,
+  parseAnswerRecord,
+  type AnswerRecord,
+} from "./answers";
 import {
   ANSWERS_KEY,
   PLAYER_IDS_KEY,
@@ -857,6 +862,24 @@ export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> 
   const redis = client();
   if (!redis) return unconfigured();
 
+  /**
+   * Validated on the way in, as `writeSession` validates the state on its way out, and
+   * for the same reason: this is the last point at which a record that breaks its own
+   * shape can be stopped from becoming a stored value.
+   *
+   * The failure it prevents is quiet. `readOwnResult` parses what it reads, so a record
+   * that does not satisfy the schema comes back as `null` — and the result route reports
+   * `answered: false` to a device that watched its answer land. A refusal here is
+   * visible; that is not.
+   */
+  const validated = answerRecordSchema.safeParse(record);
+  if (!validated.success) {
+    return {
+      outcome: "failed",
+      reason: validated.error.issues.map((issue) => issue.message).join("; "),
+    };
+  }
+
   let result: [number, number] | null;
   try {
     result = await redis.eval<[string, string, string, string, string, string], [number, number]>(
@@ -882,7 +905,14 @@ export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> 
   if (status === -3) return { outcome: "unknown-player" };
   if (status === 0) return { outcome: "already-answered" };
 
-  return { outcome: "accepted", total: Number(result?.[1]) || 0 };
+  // **Explicit, not a fall-through.** A `null` or malformed reply makes `status` `NaN`,
+  // which fails every comparison above — and reaching a bare `return accepted` from
+  // there would report an answer the store never wrote as recorded. The other scripts
+  // in this file fall through to a *refusal*, which is harmless; here the fall-through
+  // direction is the unsafe one, so this branch names its condition.
+  if (status === 1) return { outcome: "accepted", total: Number(result?.[1]) || 0 };
+
+  return { outcome: "failed", reason: `unexpected submit status: ${String(result?.[0])}` };
 }
 
 /**

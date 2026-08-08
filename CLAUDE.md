@@ -52,6 +52,19 @@ and is never bundled with feature work. Update in-range with `bun update @astroj
 `bun add @astrojs/vercel@latest`. Relatedly, the Vercel **function region cannot be configured in
 `astro.config.ts`** — the v10 adapter exposes no region option, so region lives in `vercel.json`.
 
+`happy-dom` is a **devDependency and a test-environment only**, added in S-03 because
+`src/lib/client/render.test.ts` and `answer.test.ts` need a DOM and this project had none.
+**It is selected per file** by a `// @vitest-environment happy-dom` docblock at the top of those
+two files — the suite's default environment is still `node`, so nothing else pays for it, and a new
+test only gets a DOM by asking for one. Do not add a `vitest.config.ts` to set it globally; there is
+no vitest config file in this project and the per-file docblock is what keeps it that way.
+
+One trap it carries: **its `localStorage` is a Proxy, and `vi.restoreAllMocks()` does not restore a
+spy installed on it.** A test that stubs `localStorage.setItem` to throw will leak that
+implementation into every later test in the file, where it silently swallows writes and fails
+unrelated assertions in a way that reads as a bug in the code under test. Save and restore the
+method by hand — `answer.test.ts`'s `withBrokenWrite` helper is the pattern.
+
 `qrcode` (with `@types/qrcode`) carries no version constraint — recorded here because in this file
 an unmentioned dependency is indistinguishable from an unconsidered one. It is **server-side only**:
 `/quiz/host` calls it in frontmatter to render the join QR as inline SVG, so nothing ships to the

@@ -2,7 +2,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { fetchResult, markSeen, submitAnswer } from "./answer";
+import {
+  clearSeen,
+  fetchResult,
+  hasSubmitted,
+  markSeen,
+  markSubmitted,
+  submitAnswer,
+} from "./answer";
 
 /**
  * The device's half of answering (roadmap S-03).
@@ -19,6 +26,28 @@ const NOW = 1_785_000_000_000;
 beforeEach(() => {
   window.localStorage.clear();
 });
+
+/**
+ * Runs `body` with `localStorage.setItem` throwing, then puts it back.
+ *
+ * Restored by hand rather than by `vi.restoreAllMocks()`: happy-dom's `localStorage` is
+ * a Proxy, and a spy installed on it is NOT restored by the global teardown — the
+ * throwing implementation leaks into every later test in the file, where it silently
+ * swallows writes and makes unrelated assertions fail for a reason that looks like a
+ * bug in the code under test. (It did exactly that once.)
+ */
+function withBrokenWrite(body: () => void): void {
+  const original = window.localStorage.setItem;
+  window.localStorage.setItem = () => {
+    throw new Error("quota");
+  };
+
+  try {
+    body();
+  } finally {
+    window.localStorage.setItem = original;
+  }
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -82,11 +111,101 @@ describe("markSeen", () => {
   it("degrades to the clock starting now when storage cannot be written", () => {
     // Safari in private mode, quota, storage disabled outright. A storage quirk must
     // not stop an attendee answering — `player.ts`'s posture.
-    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
-      throw new Error("quota");
+    withBrokenWrite(() => {
+      expect(markSeen(SEEN_KEY, "q1", NOW)).toBe(NOW);
     });
+  });
+});
 
-    expect(markSeen(SEEN_KEY, "q1", NOW)).toBe(NOW);
+describe("markSubmitted / hasSubmitted", () => {
+  /**
+   * Persisted for the same reason the paint time is. Held only in memory, an attendee
+   * who answered and then reloaded would watch the reveal be told nothing about
+   * themselves — no verdict, no award, no running total — all of which the server is
+   * holding and would happily serve.
+   */
+  it("survives a reload", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+    markSubmitted(SEEN_KEY, "q1");
+
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
+  });
+
+  it("keeps the original paint time, so the clock is not restarted by answering", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+    markSubmitted(SEEN_KEY, "q1", NOW + 5_000);
+
+    expect(markSeen(SEEN_KEY, "q1", NOW + 9_000)).toBe(NOW);
+  });
+
+  it("is false for a question this device stayed silent on", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+
+    // The fan-in gate depends on this: a silent device must still issue no request.
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(false);
+  });
+
+  it("is per question", () => {
+    markSubmitted(SEEN_KEY, "q1");
+
+    expect(hasSubmitted(SEEN_KEY, "q2")).toBe(false);
+  });
+
+  it("is cleared with the rest of the store", () => {
+    markSubmitted(SEEN_KEY, "q1");
+    clearSeen(SEEN_KEY);
+
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(false);
+  });
+
+  /**
+   * The store held a bare number before it carried `submitted`. A device mid-question
+   * when that deploy lands must keep its clock rather than restart it at full speed
+   * weight — the same reasoning as the schema defaults on the server.
+   */
+  it("reads the older bare-number shape rather than discarding it", () => {
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify({ q1: NOW }));
+
+    expect(markSeen(SEEN_KEY, "q1", NOW + 9_000)).toBe(NOW);
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(false);
+  });
+
+  it("does not throw when storage is unavailable", () => {
+    withBrokenWrite(() => {
+      expect(() => markSubmitted(SEEN_KEY, "q1")).not.toThrow();
+    });
+  });
+});
+
+describe("clearSeen", () => {
+  /**
+   * Question ids are stable across sessions, so a map left behind is read back by the
+   * next one — and every correct answer that device gives is then worth the 0.5 floor,
+   * silently. This is why the clock is the one piece of per-question state that has a
+   * lifecycle at all.
+   */
+  it("lets a later session start its own clock", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+    clearSeen(SEEN_KEY);
+
+    expect(markSeen(SEEN_KEY, "q1", NOW + 86_400_000)).toBe(NOW + 86_400_000);
+  });
+
+  it("is safe to call when nothing was stored", () => {
+    expect(() => clearSeen(SEEN_KEY)).not.toThrow();
+  });
+
+  it("does not throw when storage is unavailable", () => {
+    const original = window.localStorage.removeItem;
+    window.localStorage.removeItem = () => {
+      throw new Error("disabled");
+    };
+
+    try {
+      expect(() => clearSeen(SEEN_KEY)).not.toThrow();
+    } finally {
+      window.localStorage.removeItem = original;
+    }
   });
 });
 
@@ -136,6 +255,101 @@ describe("submitAnswer", () => {
     await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({
       outcome: "rejected",
       error: "Odpowiedź została już zapisana.",
+    });
+  });
+
+  /**
+   * A 503 carries a Polish message exactly as a 409 does, and nothing was written.
+   * Trusting the message made the caller lock the question and tell the attendee the
+   * answer was saved, with no way back — one store blip, one lost question.
+   */
+  it("reports a 5xx as failed even though it carries an error message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({ error: "Nie udało się zapisać odpowiedzi." }),
+      })
+    );
+
+    await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({ outcome: "failed" });
+  });
+
+  it("still reports a 409 as a refusal, with the server's message", async () => {
+    // The other side of the same branch: this one IS final, and the attendee should
+    // read why rather than be invited to retry into the same refusal.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: () => Promise.resolve({ error: "Odpowiedź została już zapisana." }),
+      })
+    );
+
+    await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({
+      outcome: "rejected",
+      error: "Odpowiedź została już zapisana.",
+    });
+  });
+
+  it("refuses a concurrent submission for the SAME question", async () => {
+    // Two fast taps against a closing question. The second must not reach the route,
+    // or it comes back `already-answered` and tells the attendee their own accepted
+    // answer was refused.
+    let release: (value: unknown) => void = () => {};
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(pending.then(() => ({ ok: true, json: () => Promise.resolve({}) })))
+    );
+
+    const first = submitAnswer("p1", "q1", ["a"], 1_000);
+    const second = await submitAnswer("p1", "q1", ["a"], 1_000);
+
+    expect(second).toEqual({ outcome: "failed" });
+
+    release(null);
+    await expect(first).resolves.toEqual({ outcome: "accepted" });
+  });
+
+  /**
+   * The guard is keyed by question, not module-wide. A single flag made one slow
+   * request block the *next* question too — every tap there returned instantly and the
+   * view showed a network error that was not one.
+   */
+  it("does not let a slow submission block a different question", async () => {
+    let release: (value: unknown) => void = () => {};
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(pending.then(() => ({ ok: true, json: () => Promise.resolve({}) })))
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stuck = submitAnswer("p1", "q1", ["a"], 1_000);
+
+    await expect(submitAnswer("p1", "q2", ["b"], 1_000)).resolves.toEqual({
+      outcome: "accepted",
+    });
+
+    release(null);
+    await stuck;
+  });
+
+  it("releases the guard once the question's submission settles", async () => {
+    respond(true, {});
+
+    await submitAnswer("p1", "q1", ["a"], 1_000);
+
+    // Otherwise a failed first attempt would lock the attendee out of retrying.
+    await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({
+      outcome: "accepted",
     });
   });
 

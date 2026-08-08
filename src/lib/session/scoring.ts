@@ -121,9 +121,13 @@ export function scoreChoiceAnswer(
  * it. That reasoning is restated at the call site, where it can stop holding.
  */
 export function clampElapsed(clientElapsedMs: number, serverElapsedMs: number): number {
-  // A nonsense window leaves no defensible range to clamp into. Zero is the only
-  // value that is certainly inside it.
-  if (!Number.isFinite(serverElapsedMs) || serverElapsedMs < 0) return 0;
+  // A nonsense window leaves no defensible range to clamp into — most plausibly clock
+  // skew between the instance that handled the advance and the one handling this
+  // answer. Fail to the *floor* weight, not to zero: zero is a full award, and this
+  // branch and the one below it are both "the input made no sense", so they must fail
+  // in the same direction. (They did not, once: this returned 0 and handed full points
+  // to a negative window.)
+  if (!Number.isFinite(serverElapsedMs) || serverElapsedMs < 0) return SPEED_WINDOW_MS;
 
   // A claim that is not a number at all (a failed parse, an absent field) is treated
   // as the slowest answer the window allows rather than the fastest. Garbage should

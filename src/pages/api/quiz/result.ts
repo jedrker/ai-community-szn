@@ -34,6 +34,17 @@ import { readOwnResult } from "../../../lib/session/store";
  * time — and not a 404. A store failure is a 503, and the client must treat the two
  * differently: concluding from a blip that an answer was never recorded tells an
  * attendee they missed a question they watched themselves answer.
+ *
+ * ## Why this route emits no `logSessionEvent`, deliberately
+ *
+ * Every other route in the slice logs its accepted and rejected classes, so the silence
+ * here should be read as a decision rather than an omission. This is the densest path in
+ * the project — ~150 devices × 12 scored questions, all inside a second or two of each
+ * reveal — and one line per fetch would put ~1,800 lines into a stream whose whole
+ * purpose is that a host can grep it mid-segment and see what happened. The failures
+ * that matter are already visible: a 503 prints its reason below, and a result that
+ * never arrives shows up as the attendee's missing score line, not as a missing log.
+ * If S-07 needs the fan-in observed, count it in the harness rather than here.
  */
 
 /** Polish, because the attendee view renders these directly. */
@@ -78,7 +89,10 @@ export const POST: APIRoute = async ({ request }) => {
   // 503, not 404 — "the store could not say" is not "you did not answer". The client
   // keeps the correct answer on screen and does not claim the attendee stayed silent.
   if (result.outcome === "failed") {
-    console.error("Result read failed");
+    // The reason, as `answer.ts` does — a bare "it failed" in a log stream a host is
+    // tailing mid-segment says only that something is wrong, which they can already see
+    // on 150 phones.
+    console.error("Result read failed:", result.reason);
     return json(503, { error: MESSAGES.failed });
   }
 

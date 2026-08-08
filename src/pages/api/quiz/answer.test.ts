@@ -132,6 +132,37 @@ describe("scoring happens at submit, from the raw definition", () => {
   });
 });
 
+describe("only ids the question actually has reach the store", () => {
+  it("drops an option id the question does not have", async () => {
+    await submit(single.id, ["large-language-model", "nie-ma-takiej-opcji"]);
+
+    // An open endpoint would otherwise let any holder of a player id write a value of
+    // their choosing, at a size of their choosing, into the answers hash.
+    expect(submitted().optionIds).toEqual(["large-language-model"]);
+  });
+
+  it("de-duplicates a repeated id", async () => {
+    await submit(single.id, ["large-language-model", "large-language-model"]);
+
+    expect(submitted().optionIds).toEqual(["large-language-model"]);
+  });
+
+  it("still scores correctly when unknown ids were sent alongside the right one", async () => {
+    // Filtering must not turn a correct answer into a wrong one: an unknown id fails
+    // the all-or-nothing match anyway, so dropping it changes nothing about the score.
+    await submit(single.id, ["large-language-model", "x".repeat(5_000)]);
+
+    expect(submitted()).toMatchObject({ correct: true });
+  });
+
+  it("records an empty selection when every id sent was unknown", async () => {
+    await submit(single.id, ["nonsense"]);
+
+    expect(submitted().optionIds).toEqual([]);
+    expect(submitted()).toMatchObject({ correct: false, awarded: 0 });
+  });
+});
+
 describe("the elapsed time is the device's, but it is bounded", () => {
   it("trusts a plausible claim", async () => {
     // The question opened 4s ago; the device says 3.2s.

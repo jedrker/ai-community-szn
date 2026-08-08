@@ -1,7 +1,7 @@
 ---
 change_id: answer-choice-question-and-reveal
 title: Attendee answers a choice question and learns their result
-status: implementing
+status: impl_reviewed
 created: 2026-08-08
 updated: 2026-08-08
 ---

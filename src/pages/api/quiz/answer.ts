@@ -144,14 +144,30 @@ export const POST: APIRoute = async ({ request }) => {
    * (a live participation count, say), this bound silently shortens and every clamp
    * after it hands out more speed weight than it should.
    */
+  /**
+   * **Only ids this question actually has.**
+   *
+   * `getAll` returns whatever the request sent — any count, any length, any content —
+   * and the array is stored verbatim in the answers hash. Unknown ids change no award
+   * (an unrecognised id fails the all-or-nothing match anyway), so the cost is not a
+   * wrong score: it is that an open endpoint would let anyone holding a player id write
+   * a value of their choosing, at a size of their choosing, into the store. Bounding it
+   * against the definition costs one pass and removes the whole class.
+   *
+   * `join.ts` runs `validateDisplayName` before touching the store for the same reason.
+   * This is that step for this route.
+   */
+  const knownOptionIds = new Set(question.options.map((option) => option.id));
+  const selectedOptionIds = [...new Set(optionIds.filter((id) => knownOptionIds.has(id)))];
+
   const now = Date.now();
   const elapsedMs = clampElapsed(rawElapsed, now - session.state.updatedAt);
-  const { correct, awarded } = scoreChoiceAnswer(question, optionIds, elapsedMs);
+  const { correct, awarded } = scoreChoiceAnswer(question, selectedOptionIds, elapsedMs);
 
   const result = await submitAnswer({
     playerId,
     questionId,
-    optionIds,
+    optionIds: selectedOptionIds,
     elapsedMs,
     correct,
     awarded,

@@ -759,6 +759,32 @@ describe("submitAnswer", () => {
     await expect(submitAnswer(answer)).resolves.toMatchObject({ outcome: "failed" });
   });
 
+  /**
+   * The accepted branch names its condition rather than being the fall-through, because
+   * here the fall-through direction is the unsafe one: a malformed reply makes the
+   * status `NaN`, and reporting an answer the store never wrote as recorded is worse
+   * than reporting a written one as failed.
+   */
+  it.each([
+    ["a null reply", null],
+    ["a reply that is not an array", "nonsense"],
+    ["a reply with a non-numeric status", ["ok", 920]],
+  ])("reports %s as failed rather than as accepted", async (_label, reply) => {
+    redisMock.eval.mockResolvedValue(reply);
+
+    await expect(submitAnswer(answer)).resolves.toMatchObject({ outcome: "failed" });
+  });
+
+  it("refuses to store a record that does not satisfy its own schema", async () => {
+    // `readOwnResult` parses what it reads, so a malformed record comes back as `null`
+    // and the result route tells a device that watched its answer land that it never
+    // answered. A refusal here is visible; that is not.
+    await expect(submitAnswer({ ...answer, awarded: -5 })).resolves.toMatchObject({
+      outcome: "failed",
+    });
+    expect(redisMock.eval).not.toHaveBeenCalled();
+  });
+
   it("reports an unconfigured store rather than throwing into the request path", async () => {
     vi.stubEnv("KV_REST_API_URL", "");
     vi.stubEnv("KV_REST_API_TOKEN", "");

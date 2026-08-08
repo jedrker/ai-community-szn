@@ -30,8 +30,17 @@ export type OwnResult = {
   readonly total: number;
 };
 
-/** What the seen-question store holds: question id → first-paint epoch ms. */
-type SeenMap = Record<string, number>;
+/**
+ * What this device knows about one question, across reloads.
+ *
+ * `at` is the first-paint timestamp. `submitted` records that an answer for this
+ * question was accepted — it lives here rather than in a second storage key because the
+ * two have exactly the same lifetime and the same reason to be cleared, and a second
+ * key would be a second thing to register, plumb through `define:vars`, and forget.
+ */
+type SeenEntry = { at: number; submitted?: boolean };
+
+type SeenMap = Record<string, SeenEntry>;
 
 function readSeen(storageKey: string): SeenMap {
   try {
@@ -43,13 +52,33 @@ function readSeen(storageKey: string): SeenMap {
 
     const map: SeenMap = {};
     for (const [questionId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      // A bare number is the shape this store held before it carried `submitted`. Read
+      // it rather than discarding it: a device mid-question when the deploy lands would
+      // otherwise restart its clock and be handed full speed weight.
       if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-        map[questionId] = value;
+        map[questionId] = { at: value };
+        continue;
+      }
+
+      if (typeof value === "object" && value !== null) {
+        const entry = value as { at?: unknown; submitted?: unknown };
+        if (typeof entry.at === "number" && Number.isFinite(entry.at) && entry.at > 0) {
+          map[questionId] = { at: entry.at, submitted: entry.submitted === true };
+        }
       }
     }
     return map;
   } catch {
     return {};
+  }
+}
+
+function writeSeen(storageKey: string, map: SeenMap): void {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(map));
+  } catch {
+    // Private mode, quota, disabled storage. Whatever the caller computed for this page
+    // load is still correct; only surviving a reload is lost.
   }
 }
 
@@ -76,40 +105,102 @@ function readSeen(storageKey: string): SeenMap {
 export function markSeen(storageKey: string, questionId: string, now = Date.now()): number {
   const seen = readSeen(storageKey);
   const existing = seen[questionId];
-  if (typeof existing === "number") return existing;
+  if (existing) return existing.at;
 
-  seen[questionId] = now;
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(seen));
-  } catch {
-    // Private mode, quota, disabled storage. The returned timestamp is still correct
-    // for this page load; only surviving a reload is lost.
-  }
+  seen[questionId] = { at: now };
+  writeSeen(storageKey, seen);
 
   return now;
 }
 
 /**
- * Submits one answer.
+ * Records that this device's answer to this question was accepted.
  *
- * **The in-flight guard is not defensive tidiness.** Two fast taps on a phone against a
- * closing question is the ordinary thing to do, and the second request would come back
+ * **Persisted for the same reason the paint time is: a reload otherwise loses it.** The
+ * view decides from this whether to render the reveal panel and whether to spend a
+ * result fetch at all, so an attendee who answered and then reloaded would watch the
+ * reveal be told nothing about themselves — no verdict, no award, and no running total,
+ * all of which the server is holding and would happily serve.
+ *
+ * Keeps the fan-in gate intact: a device that genuinely stayed silent still has no entry
+ * here, so it still issues no request.
+ */
+export function markSubmitted(storageKey: string, questionId: string, now = Date.now()): void {
+  const seen = readSeen(storageKey);
+  const existing = seen[questionId];
+
+  seen[questionId] = { at: existing?.at ?? now, submitted: true };
+  writeSeen(storageKey, seen);
+}
+
+/** Whether this device already has an accepted answer for this question. */
+export function hasSubmitted(storageKey: string, questionId: string): boolean {
+  return readSeen(storageKey)[questionId]?.submitted === true;
+}
+
+/**
+ * Forgets every recorded paint time.
+ *
+ * **Question ids are stable across sessions**, so without this the map outlives the
+ * session that wrote it: a host who purges and restarts mid-event, or an attendee
+ * returning on the same phone to the next meetup, would have `markSeen` hand back a
+ * timestamp from hours or weeks ago. The elapsed time is then enormous, the server
+ * clamps it to the whole window, and every correct answer is worth the 0.5 floor —
+ * silently, with nothing on either screen to say why.
+ *
+ * Called wherever `clearPlayer` is (a device whose id no longer resolves) and on the
+ * `ended` transition, which is the one moment every still-watching device agrees the
+ * session is over. Silent on failure, like the rest of this module.
+ */
+export function clearSeen(storageKey: string): void {
+  try {
+    window.localStorage.removeItem(storageKey);
+  } catch {
+    // Same reasoning as `markSeen`: a storage quirk must not reach the attendee.
+  }
+}
+
+/**
+ * How long either request is given before it is abandoned.
+ *
+ * Bounds the in-flight guard below, and matches `scripts/rehearse-room.ts`, which sets a
+ * deadline on every call for the same reason: a request that never returns is worse than
+ * one that fails, because nothing downstream can tell the difference between the two.
+ * Generous against a venue network and still well short of a host advance.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Questions with a submission currently in flight.
+ *
+ * **The guard is not defensive tidiness.** Two fast taps on a phone against a closing
+ * question is the ordinary thing to do, and the second request would come back
  * `already-answered` — telling the attendee their own accepted answer was refused. The
  * join button carries the same guard for the same reason.
+ *
+ * **Keyed by question, not module-wide.** A single flag makes one slow request block the
+ * *next* question too: every tap there returns instantly, and the view shows a network
+ * error that is not one. The set plus the deadline above bound that to the question it
+ * belongs to. (`session.ts` keeps its mutable state in a closure; a module-level `Set`
+ * is the smaller version of the same idea, and this module has no factory to hang one
+ * off.)
+ */
+const inFlight = new Set<string>();
+
+/**
+ * Submits one answer.
  *
  * The response deliberately carries no verdict, so there is nothing to return but
  * whether it landed.
  */
-let inFlight = false;
-
 export async function submitAnswer(
   playerId: string,
   questionId: string,
   optionIds: readonly string[],
   elapsedMs: number
 ): Promise<SubmitOutcome> {
-  if (inFlight) return { outcome: "failed" };
-  inFlight = true;
+  if (inFlight.has(questionId)) return { outcome: "failed" };
+  inFlight.add(questionId);
 
   const body = new FormData();
   body.set("playerId", playerId);
@@ -119,17 +210,35 @@ export async function submitAnswer(
   for (const id of optionIds) body.append("optionIds", id);
 
   try {
-    const response = await fetch("/api/quiz/answer", { method: "POST", body });
+    const response = await fetch("/api/quiz/answer", {
+      method: "POST",
+      body,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (response.ok) return { outcome: "accepted" };
+
+    /**
+     * **A 5xx is "we could not say", never "your answer was refused."**
+     *
+     * The route answers `503` with a Polish message when the store is unconfigured
+     * or unreachable, and in both cases nothing was written. Reading the body first
+     * and trusting the message would report a store failure as a refusal — and the
+     * caller treats a refusal as final, so the attendee would be told their answer
+     * was saved, lose the control, and have no way back. That is the same
+     * `failed`-vs-`rejected` conflation `LookupResult` documents on the server.
+     */
+    if (response.status >= 500) return { outcome: "failed" };
 
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
     return payload.error
       ? { outcome: "rejected", error: payload.error }
       : { outcome: "failed" };
   } catch {
+    // Includes the timeout above: an abandoned request is a failure, not a refusal, so
+    // the attendee keeps the control and can try again.
     return { outcome: "failed" };
   } finally {
-    inFlight = false;
+    inFlight.delete(questionId);
   }
 }
 
@@ -148,7 +257,11 @@ export async function fetchResult(playerId: string, questionId: string): Promise
   body.set("questionId", questionId);
 
   try {
-    const response = await fetch("/api/quiz/result", { method: "POST", body });
+    const response = await fetch("/api/quiz/result", {
+      method: "POST",
+      body,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!response.ok) return null;
 
     const payload = (await response.json().catch(() => null)) as OwnResult | null;

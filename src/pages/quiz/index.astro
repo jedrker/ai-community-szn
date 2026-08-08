@@ -147,8 +147,11 @@ import { publicQuiz } from "../../quiz/public";
       } from "../../lib/client/session";
       import { clearPlayer, readPlayer, writePlayer } from "../../lib/client/player";
       import {
+        clearSeen,
         fetchResult,
+        hasSubmitted,
         markSeen,
+        markSubmitted,
         submitAnswer,
         type OwnResult,
       } from "../../lib/client/answer";
@@ -197,7 +200,6 @@ import { publicQuiz } from "../../quiz/public";
        * had and that these additions must not cost.
        */
       const selections = new Map<string, string[]>();
-      const submitted = new Set<string>();
       const results = new Map<string, OwnResult>();
       /** Questions whose result fetch has already been issued — one per device, ever. */
       const resultRequested = new Set<string>();
@@ -248,6 +250,10 @@ import { publicQuiz } from "../../quiz/public";
           setText("follow-status", "To już koniec. Dzięki za grę!");
           setHidden(questionBox, true);
           hideAnswerControls();
+          // Question ids are stable across sessions, so paint times left behind here
+          // would be read back by the next one and score this device at the floor.
+          // This is the one moment every still-watching device agrees it is over.
+          clearSeen(config.seenStorageKey);
           return;
         }
 
@@ -321,7 +327,9 @@ import { publicQuiz } from "../../quiz/public";
         markSeen(config.seenStorageKey, question.id);
 
         const selected = selections.get(question.id) ?? [];
-        const locked = submitted.has(question.id);
+        // Read from storage, not from memory: a reload mid-question must not re-offer
+        // the controls for an answer the store has already accepted.
+        const locked = hasSubmitted(config.seenStorageKey, question.id);
 
         renderQuestion(questionBox, question, {
           prompt: "text-3xl font-bold leading-tight",
@@ -389,8 +397,10 @@ import { publicQuiz } from "../../quiz/public";
           return;
         }
 
-        // A device that stayed silent sees the correct answer and no verdict.
-        if (!submitted.has(question.id)) {
+        // A device that stayed silent sees the correct answer and no verdict. Read
+        // from storage so a reload between answering and the reveal does not turn an
+        // attendee who answered into one who apparently did not.
+        if (!hasSubmitted(config.seenStorageKey, question.id)) {
           setHidden(resultPanel, true);
           return;
         }
@@ -432,6 +442,25 @@ import { publicQuiz } from "../../quiz/public";
 
       function showResult(own: OwnResult): void {
         setHidden(resultPanel, false);
+
+        /**
+         * **`answered: false` is not a wrong answer**, and the two must not share a
+         * line. The server reports it for a device that stayed silent *and* for one
+         * whose submission was refused — a phone that tapped as the host advanced
+         * reaches here believing it answered. Telling it "Tym razem nie." would score
+         * it for a question it never got to answer, which is exactly what the plan
+         * says must not happen.
+         *
+         * The running total still travels: it is true regardless, and it is the one
+         * thing that keeps the panel worth showing.
+         */
+        if (!own.answered) {
+          setText("result-verdict", "Bez odpowiedzi");
+          setText("result-award", "Tym razem nie zdążyliśmy zapisać Twojej odpowiedzi.");
+          setText("result-total", `Twój wynik: ${own.total} pkt`);
+          return;
+        }
+
         setText("result-verdict", own.correct ? "Dobrze!" : "Tym razem nie.");
         setText("result-award", own.correct ? `+${own.awarded ?? 0} pkt` : "+0 pkt");
         setText("result-total", `Twój wynik: ${own.total} pkt`);
@@ -464,7 +493,7 @@ import { publicQuiz } from "../../quiz/public";
         answerSubmit.textContent = "Wyślij odpowiedź";
 
         if (outcome.outcome === "accepted") {
-          submitted.add(questionId);
+          markSubmitted(config.seenStorageKey, questionId);
           render();
           return;
         }
@@ -472,7 +501,7 @@ import { publicQuiz } from "../../quiz/public";
         if (outcome.outcome === "rejected") {
           // The server's own Polish message — "already answered", "no longer open".
           // Treated as final: the answer is not going to be accepted by retrying.
-          submitted.add(questionId);
+          markSubmitted(config.seenStorageKey, questionId);
           setText("answer-error", outcome.error);
           render();
           return;
@@ -554,6 +583,9 @@ import { publicQuiz } from "../../quiz/public";
         // Drop it so this device does not carry a ghost player into the next one, and
         // let the attendee join afresh.
         clearPlayer(config.storageKey);
+        // The paint times belonged to the session this id came from. Kept, they would
+        // be read back by the next one and hand this device the speed floor.
+        clearSeen(config.seenStorageKey);
         showJoinForm();
       }
 

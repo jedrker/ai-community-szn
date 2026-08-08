@@ -190,9 +190,23 @@ describe("clampElapsed bounds what a device claims", () => {
     expect(clampElapsed(Number.POSITIVE_INFINITY, 9_000)).toBe(9_000);
   });
 
-  it("returns zero when the server's own elapsed is nonsense", () => {
-    expect(clampElapsed(4_000, -1)).toBe(0);
-    expect(clampElapsed(4_000, Number.NaN)).toBe(0);
+  /**
+   * Both nonsense-input branches must fail in the SAME direction — toward the floor.
+   *
+   * This returned `0` at first, and `speedWeight(0)` is 1.0, so a negative server window
+   * (clock skew between the instance that handled the advance and the one handling the
+   * answer) handed out a full award. The sibling branch for a garbage *client* value
+   * already failed to the floor; the two disagreed.
+   */
+  it("falls back to the floor when the server's own elapsed is nonsense", () => {
+    expect(clampElapsed(4_000, -1)).toBe(SPEED_WINDOW_MS);
+    expect(clampElapsed(4_000, Number.NaN)).toBe(SPEED_WINDOW_MS);
+  });
+
+  it("never turns a nonsense window into a full award", () => {
+    const { awarded } = scoreChoiceAnswer(scoredSingle, ["a"], clampElapsed(0, -1));
+
+    expect(awarded).toBe(500);
   });
 
   it("leaves a claim of zero intact — the accepted, undetectable case", () => {
