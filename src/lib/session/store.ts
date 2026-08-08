@@ -1,6 +1,14 @@
 import { Redis } from "@upstash/redis";
 
-import { PLAYER_IDS_KEY, PLAYERS_KEY, registeredKeys, SESSION_KEY } from "./keys";
+import { answerField, parseAnswerRecord, type AnswerRecord } from "./answers";
+import {
+  ANSWERS_KEY,
+  PLAYER_IDS_KEY,
+  PLAYERS_KEY,
+  registeredKeys,
+  SCORES_KEY,
+  SESSION_KEY,
+} from "./keys";
 import { logSessionEvent } from "./log";
 import { parsePlayerRecord, type PlayerRecord } from "./players";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
@@ -275,6 +283,109 @@ if not key then
 end
 
 return { redis.call('HGET', KEYS[2], key), session }
+`;
+
+/**
+ * THE SUBMISSION — one answer per player per question, recorded and scored
+ * indivisibly (roadmap S-03, PRD FR-004/FR-010).
+ *
+ * Same shape as `CLAIM_PLAYER` and for the same reasons: the phase check is inside the
+ * script because a check read outside it is a check against a session that can advance
+ * before the write lands, and both TTLs are armed inside it because a separate `EXPIRE`
+ * is another round trip that can fail on its own and leave attendee data on no lifetime
+ * at all. `end` re-arms only keys that exist when the host ends, so between the first
+ * answer and the next host action these two keys are covered by nothing else.
+ *
+ * **`HSETNX` is what makes the first answer final** (FR-004: no changes before the
+ * reveal). The lock and the write are one operation, so there is no window a second
+ * submission can slip through — which a `HEXISTS` followed by an `HSET` would have,
+ * and which two fast taps on one phone would find.
+ *
+ * **The question-id check is not redundant with the phase check.** A phone that submits
+ * as the host advances is still in `question-open`; without comparing ids, its answer
+ * would be recorded against the question that just opened, scored with an elapsed time
+ * measured on the previous one.
+ *
+ * **Seven commands are billed per submission**: this `EVAL` plus six `redis.call`s on
+ * the accepted path (`GET`, `HEXISTS`, `HSETNX`, `HINCRBY`, 2× `EXPIRE`). Upstash bills
+ * the script *and* every call inside it (`command-counter-diagnostic.md`), and this is
+ * the first path in the project that runs once per attendee per question — 150 × 14 of
+ * them in a real event. That number is stated here because Phase 5 prices it: an edit
+ * that adds a call is an edit to the event's cost, and should know it is being watched.
+ *
+ * KEYS[1] = session doc, KEYS[2] = answers hash, KEYS[3] = scores hash,
+ * KEYS[4] = player-ids hash
+ * ARGV[1] = answer field, ARGV[2] = record JSON, ARGV[3] = player id,
+ * ARGV[4] = question id, ARGV[5] = awarded, ARGV[6] = ttl
+ * Returns { 1, total }  accepted
+ *         { 0, 0 }      already answered this question
+ *         { -1, 0 }     no session
+ *         { -2, 0 }     question not open, or a different question is open
+ *         { -3, 0 }     unknown player id
+ */
+const SUBMIT_ANSWER = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+  return { -1, 0 }
+end
+
+local session = cjson.decode(raw)
+if session.phase ~= 'question-open' or session.currentQuestionId ~= ARGV[4] then
+  return { -2, 0 }
+end
+
+if redis.call('HEXISTS', KEYS[4], ARGV[3]) == 0 then
+  return { -3, 0 }
+end
+
+if redis.call('HSETNX', KEYS[2], ARGV[1], ARGV[2]) == 0 then
+  return { 0, 0 }
+end
+
+local total = redis.call('HINCRBY', KEYS[3], ARGV[3], tonumber(ARGV[5]))
+redis.call('EXPIRE', KEYS[2], tonumber(ARGV[6]))
+redis.call('EXPIRE', KEYS[3], tonumber(ARGV[6]))
+
+return { 1, total }
+`;
+
+/**
+ * One device's own result for one question, plus the session document to gate it
+ * against.
+ *
+ * **Read-only, and an `EVAL` for the round trip rather than for any guard** — the same
+ * note `READ_PLAYER_BY_ID` carries, and worth repeating because every *other* script in
+ * this file is an `EVAL` because it needs atomicity. Nothing here is being protected; a
+ * reader looking for the invariant will not find one.
+ *
+ * The session document comes back because the caller has to refuse anything but
+ * `question-revealed` before it hands a correctness verdict to a phone — served while
+ * the question is open, this endpoint is a cheat sheet anyone can `curl`. Reading the
+ * document separately would be a second round trip on the fan-in path, 150 devices wide.
+ *
+ * Four commands billed: this `EVAL` plus `GET`, `HGET`, `HGET`.
+ *
+ * KEYS[1] = session doc, KEYS[2] = answers hash, KEYS[3] = scores hash
+ * ARGV[1] = answer field, ARGV[2] = player id
+ * Returns { sessionJson, answerJson, total }, each `false` when absent.
+ */
+const READ_ANSWER = `
+local session = redis.call('GET', KEYS[1])
+if not session then
+  session = false
+end
+
+local answer = redis.call('HGET', KEYS[2], ARGV[1])
+if not answer then
+  answer = false
+end
+
+local total = redis.call('HGET', KEYS[3], ARGV[2])
+if not total then
+  total = false
+end
+
+return { session, answer, total }
 `;
 
 /**
@@ -705,6 +816,143 @@ export async function readPlayerById(id: string): Promise<LookupResult> {
   })();
 
   return { outcome: player ? "found" : "not-found", player, state };
+}
+
+/**
+ * What happened to a submitted answer.
+ *
+ * `already-answered` and `not-open` are ordinary outcomes rather than errors — the
+ * first is a double tap or a reload-and-resubmit, the second is a phone that answered
+ * as the host advanced — and the route renders each as its own Polish message. They
+ * are separate members for the same reason `LookupResult` splits `not-found` from
+ * `failed`: the device does different things with them, and the one thing it must
+ * never do is conclude from a store blip that its answer was rejected on the merits.
+ */
+export type SubmitResult =
+  | { outcome: "accepted"; total: number }
+  | { outcome: "already-answered" }
+  | { outcome: "not-open" }
+  | { outcome: "no-session" }
+  | { outcome: "unknown-player" }
+  | { outcome: "unconfigured"; reason: string }
+  | { outcome: "failed"; reason: string };
+
+/**
+ * Records a scored answer and advances the player's running total (roadmap S-03).
+ *
+ * The record arrives already scored: the route computes correctness and the award from
+ * the raw definition before calling, so the Lua stays six calls long. That is not a
+ * read-then-write across the two — the route's read decides the *award*, and the
+ * script's own read decides whether the award counts at all.
+ *
+ * Publishes nothing, for the reason joining publishes nothing: 150 submissions fanning
+ * out to 150 subscribers is the O(N²) shape the spine contract forbids. The room learns
+ * nothing from a submission; the device learns its own result at reveal.
+ *
+ * Logs nothing either — `answer.ts` emits the accepted and rejected events beside the
+ * six rejection branches it already owns, so the event family stays in one layer
+ * (`claimPlayer`'s precedent).
+ */
+export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> {
+  const redis = client();
+  if (!redis) return unconfigured();
+
+  let result: [number, number] | null;
+  try {
+    result = await redis.eval<[string, string, string, string, string, string], [number, number]>(
+      SUBMIT_ANSWER,
+      [SESSION_KEY, ANSWERS_KEY, SCORES_KEY, PLAYER_IDS_KEY],
+      [
+        answerField(record.questionId, record.playerId),
+        JSON.stringify(record),
+        record.playerId,
+        record.questionId,
+        String(record.awarded),
+        String(SESSION_TTL_SECONDS),
+      ]
+    );
+  } catch (err) {
+    return { outcome: "failed", reason: describe(err) };
+  }
+
+  const status = Number(result?.[0]);
+
+  if (status === -1) return { outcome: "no-session" };
+  if (status === -2) return { outcome: "not-open" };
+  if (status === -3) return { outcome: "unknown-player" };
+  if (status === 0) return { outcome: "already-answered" };
+
+  return { outcome: "accepted", total: Number(result?.[1]) || 0 };
+}
+
+/**
+ * One device's own result, and whether the store could answer at all.
+ *
+ * **`answer: null` under `outcome: "ok"` means "this device did not answer"; `failed`
+ * means "the store could not say".** The same split `LookupResult` documents, for the
+ * same reason: conflating them makes a transient blip look, on the phone, like proof
+ * that an answer the attendee watched land was never recorded.
+ *
+ * `state` is carried out so the caller can apply the phase gate against the document
+ * the totals were read alongside, rather than against a second, later read.
+ */
+export type OwnResult =
+  | {
+      outcome: "ok";
+      state: SessionState | null;
+      answer: AnswerRecord | null;
+      total: number;
+    }
+  | { outcome: "unconfigured"; reason: string }
+  | { outcome: "failed"; reason: string };
+
+/**
+ * Reads back what this player answered to this question, plus their running total.
+ *
+ * One round trip for all three values. Called by ~150 devices within a second of each
+ * reveal — a fan-in shape this project has not had before, which is why the caller
+ * gates it on "I answered" and "this question is scored" rather than issuing it
+ * unconditionally.
+ */
+export async function readOwnResult(playerId: string, questionId: string): Promise<OwnResult> {
+  const redis = client();
+  if (!redis) return unconfigured();
+
+  let result: [unknown, unknown, unknown] | null;
+  try {
+    result = await redis.eval<[string, string], [unknown, unknown, unknown]>(
+      READ_ANSWER,
+      [SESSION_KEY, ANSWERS_KEY, SCORES_KEY],
+      [answerField(questionId, playerId), playerId]
+    );
+  } catch (err) {
+    console.error("Result lookup failed:", describe(err));
+    return { outcome: "failed", reason: describe(err) };
+  }
+
+  const [rawState, rawAnswer, rawTotal] = [result?.[0], result?.[1], result?.[2]];
+
+  const state = ((): SessionState | null => {
+    if (rawState === null || rawState === undefined || rawState === false) return null;
+    const parsed = parseSessionState(asDocument(rawState));
+    if (!parsed.ok) {
+      logSessionEvent("session.read.invalid", { reason: parsed.problems.join("; ") });
+      return null;
+    }
+    return parsed.state;
+  })();
+
+  const answer =
+    rawAnswer === null || rawAnswer === undefined || rawAnswer === false
+      ? null
+      : parseAnswerRecord(asDocument(rawAnswer));
+
+  // A missing total is zero, not an error: a device that answered nothing correctly
+  // has never touched the scores hash. `HINCRBY` only ever writes integers, so a
+  // non-numeric value here would be corruption, and zero is the safe reading of it.
+  const total = Number(rawTotal) || 0;
+
+  return { outcome: "ok", state, answer, total };
 }
 
 export type PurgeResult =

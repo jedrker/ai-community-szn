@@ -821,29 +821,29 @@ never was — `docs/runbook-live-session.md` already carries that.
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check` (0 errors)
-- [x] 1.3 `scoring.test.ts` covers correctness, weight endpoints, monotonicity, unscored, clamping
-- [x] 1.4 `public.test.ts` covers `scored` on both kinds and `points` still absent
-- [x] 1.5 `keys.test.ts` passes with the two new entries
-- [x] 1.6 `portability.test.ts` passes — no `astro:` specifier in the new modules
+- [x] 1.1 Unit tests pass: `bun run test` — 1e19d5f
+- [x] 1.2 Type checking passes: `bun run type-check` (0 errors) — 1e19d5f
+- [x] 1.3 `scoring.test.ts` covers correctness, weight endpoints, monotonicity, unscored, clamping — 1e19d5f
+- [x] 1.4 `public.test.ts` covers `scored` on both kinds and `points` still absent — 1e19d5f
+- [x] 1.5 `keys.test.ts` passes with the two new entries — 1e19d5f
+- [x] 1.6 `portability.test.ts` passes — no `astro:` specifier in the new modules — 1e19d5f
 
 #### Manual
 
-- [ ] 1.7 The scorer's seam reads as something S-05 would extend, not work around
+- [x] 1.7 The scorer's seam reads as something S-05 would extend, not work around — 1e19d5f
 
 ### Phase 2: The submission script and the result read
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 `store.test.ts` asserts `submitAnswer` is a single `eval` call
-- [ ] 2.4 `keys.test.ts` passes — no namespaced literal introduced in `store.ts`
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 `store.test.ts` asserts `submitAnswer` is a single `eval` call
+- [x] 2.4 `keys.test.ts` passes — no namespaced literal introduced in `store.ts`
 
 #### Manual
 
-- [ ] 2.5 Predicted per-event command cost written down and matching the implemented script
+- [x] 2.5 Predicted per-event command cost written down and matching the implemented script
 - [ ] 2.6 Dev-server submission returns `accepted` once, `already-answered` on repeat
 
 ### Phase 3: Routes and the reveal payload

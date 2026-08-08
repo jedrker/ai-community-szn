@@ -27,15 +27,18 @@ const {
   createSession,
   endSession,
   purgeSession,
+  readOwnResult,
   readPlayerById,
   readPlayerCount,
   readSession,
+  submitAnswer,
   writeSession,
   ENDED_TTL_SECONDS,
   SESSION_KEY,
   SESSION_TTL_SECONDS,
 } = await import("./store");
-const { registeredKeys, PLAYER_IDS_KEY, PLAYERS_KEY } = await import("./keys");
+const { registeredKeys, ANSWERS_KEY, PLAYER_IDS_KEY, PLAYERS_KEY, SCORES_KEY } =
+  await import("./keys");
 const { quiz } = await import("../../quiz/index");
 
 const NOW = 1_785_000_000_000;
@@ -646,6 +649,241 @@ describe("readPlayerById", () => {
     await expect(readPlayerById("player-abc")).resolves.toMatchObject({
       outcome: "not-found",
       player: null,
+    });
+  });
+});
+
+describe("submitAnswer", () => {
+  beforeEach(configure);
+
+  const answer = {
+    playerId: "player-abc",
+    questionId: quiz.questions[0]!.id,
+    optionIds: ["a"],
+    elapsedMs: 3_200,
+    correct: true,
+    awarded: 920,
+    answeredAt: NOW + 3_200,
+  };
+
+  it("accepts a first answer and reports the new running total", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await expect(submitAnswer(answer)).resolves.toEqual({ outcome: "accepted", total: 920 });
+  });
+
+  /**
+   * THE ATOMICITY ASSERTION — the same one that guards the version guard and the name
+   * claim, and it exists to stop the same refactor.
+   *
+   * The phase check, the first-answer lock and the total all have to happen without a
+   * gap. Split across round trips, a phone that submits twice in the moment the host
+   * advances can be recorded against the wrong question, or scored twice. A mocked
+   * client makes every one of those versions look correct.
+   */
+  it("performs the submission as exactly one atomic store call", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    expect(redisMock.eval).toHaveBeenCalledTimes(1);
+    expect(redisMock.get).not.toHaveBeenCalled();
+    expect(redisMock.hlen).not.toHaveBeenCalled();
+  });
+
+  it("passes the four keys and arms both new hash TTLs inside that same call", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    const [script, keys, args] = redisMock.eval.mock.calls[0]!;
+    expect(keys).toEqual([SESSION_KEY, ANSWERS_KEY, SCORES_KEY, PLAYER_IDS_KEY]);
+    expect(args[5]).toBe(String(SESSION_TTL_SECONDS));
+
+    // `end` re-arms only keys that exist when the host ends. Between the first answer
+    // and the next host action, these two EXPIREs are the only thing covering them.
+    expect(script.match(/EXPIRE/g)).toHaveLength(2);
+  });
+
+  it("locks the first answer with HSETNX rather than a check-then-write", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    const [script] = redisMock.eval.mock.calls[0]!;
+    // FR-004: no changes before the reveal. The lock and the write must be one
+    // operation — HEXISTS followed by HSET has a window two fast taps will find.
+    expect(script).toContain("HSETNX");
+    expect(script).not.toContain("HSET ");
+  });
+
+  it("checks the open question id, not only the phase", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    const [script, , args] = redisMock.eval.mock.calls[0]!;
+    // A phone submitting as the host advances is still in `question-open`. Without
+    // the id comparison its answer lands on the question that just opened.
+    expect(script).toContain("currentQuestionId");
+    expect(script).toContain("question-open");
+    expect(args[3]).toBe(answer.questionId);
+  });
+
+  it("writes the field the read path will look for", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    const [, , args] = redisMock.eval.mock.calls[0]!;
+    expect(args[0]).toBe(`${answer.questionId}:${answer.playerId}`);
+  });
+
+  it.each([
+    ["a second answer to the same question", [0, 0], "already-answered"],
+    ["no session", [-1, 0], "no-session"],
+    ["a question that is not open", [-2, 0], "not-open"],
+    ["an unknown player id", [-3, 0], "unknown-player"],
+  ])("maps %s to `%s`", async (_label, reply, outcome) => {
+    redisMock.eval.mockResolvedValue(reply);
+
+    await expect(submitAnswer(answer)).resolves.toEqual({ outcome });
+  });
+
+  it("reports a transport failure as failed, distinct from every refusal above", async () => {
+    redisMock.eval.mockRejectedValue(new Error("unreachable"));
+
+    await expect(submitAnswer(answer)).resolves.toMatchObject({ outcome: "failed" });
+  });
+
+  it("reports an unconfigured store rather than throwing into the request path", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    vi.stubEnv("KV_REST_API_TOKEN", "");
+
+    await expect(submitAnswer(answer)).resolves.toMatchObject({ outcome: "unconfigured" });
+  });
+
+  it("publishes nothing — the room learns nothing from a submission", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    // 150 submissions fanning out to 150 subscribers is the O(N²) shape the spine
+    // contract forbids. Asserted here because the temptation is a one-line addition.
+    expect(redisMock.eval).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("readOwnResult", () => {
+  beforeEach(configure);
+
+  const stored = {
+    playerId: "player-abc",
+    questionId: quiz.questions[0]!.id,
+    optionIds: ["a"],
+    elapsedMs: 3_200,
+    correct: true,
+    awarded: 920,
+    answeredAt: NOW + 3_200,
+  };
+
+  it("returns the answer, the total and the session in one round trip", async () => {
+    redisMock.eval.mockResolvedValue([
+      JSON.stringify(firstQuestionOpen),
+      JSON.stringify(stored),
+      "920",
+    ]);
+
+    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
+      outcome: "ok",
+      state: firstQuestionOpen,
+      answer: stored,
+      total: 920,
+    });
+
+    expect(redisMock.eval).toHaveBeenCalledTimes(1);
+    const [, keys, args] = redisMock.eval.mock.calls[0]!;
+    expect(keys).toEqual([SESSION_KEY, ANSWERS_KEY, SCORES_KEY]);
+    expect(args[0]).toBe(`${stored.questionId}:player-abc`);
+  });
+
+  it("accepts already-deserialized values", async () => {
+    // `automaticDeserialization` defaults to true; depending on it silently would
+    // mean every result read failing if it ever changed.
+    redisMock.eval.mockResolvedValue([firstQuestionOpen, stored, 920]);
+
+    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+      outcome: "ok",
+      answer: stored,
+      total: 920,
+    });
+  });
+
+  /**
+   * **"Did not answer" and "could not say" must stay distinguishable** — the
+   * `LookupResult` lesson, in the one other place it applies. A phone that concludes
+   * from a store blip that its answer was never recorded tells the attendee they
+   * missed a question they watched themselves answer.
+   */
+  it("reports a device that did not answer as ok with a null answer", async () => {
+    redisMock.eval.mockResolvedValue([JSON.stringify(firstQuestionOpen), false, false]);
+
+    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
+      outcome: "ok",
+      state: firstQuestionOpen,
+      answer: null,
+      total: 0,
+    });
+  });
+
+  it("reports a transport failure as failed, not as an unanswered question", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    redisMock.eval.mockRejectedValue(new Error("unreachable"));
+
+    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+      outcome: "failed",
+    });
+  });
+
+  it("reports an unconfigured store as unconfigured, not as an unanswered question", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    vi.stubEnv("KV_REST_API_TOKEN", "");
+
+    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+      outcome: "unconfigured",
+    });
+  });
+
+  it("reads a total of zero for a player who has scored nothing", async () => {
+    redisMock.eval.mockResolvedValue([JSON.stringify(firstQuestionOpen), false, false]);
+
+    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+      total: 0,
+    });
+  });
+
+  it("returns a null answer rather than throwing on a malformed stored record", async () => {
+    redisMock.eval.mockResolvedValue([
+      JSON.stringify(firstQuestionOpen),
+      JSON.stringify({ playerId: "player-abc" }),
+      "920",
+    ]);
+
+    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+      outcome: "ok",
+      answer: null,
+      total: 920,
+    });
+  });
+
+  it("survives a session document that is absent entirely", async () => {
+    redisMock.eval.mockResolvedValue([false, false, false]);
+
+    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
+      outcome: "ok",
+      state: null,
+      answer: null,
+      total: 0,
     });
   });
 });
