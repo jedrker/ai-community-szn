@@ -715,10 +715,10 @@ and is the only thing that can see the orphan.
 
 #### Automated
 
-- [x] 5.1 Full suite passes: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
-- [x] 5.3 `bun audit` reports no new advisories
-- [x] 5.4 `bun run build` succeeds
+- [x] 5.1 Full suite passes: `bun run test` — 4531793
+- [x] 5.2 Type checking passes: `bun run type-check` — 4531793
+- [x] 5.3 `bun audit` reports no new advisories — 4531793
+- [x] 5.4 `bun run build` succeeds — 4531793
 - [ ] 5.5 `bun run quiz:rehearse`: 150/150 accepted, zero lost or doubled writes, both tally findings ok
 - [ ] 5.6 `bun run quiz:check-purge` reports no residue, including the new key
 
