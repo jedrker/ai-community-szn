@@ -53,7 +53,7 @@
 import { Realtime } from "ably";
 import { Redis } from "@upstash/redis";
 
-import { answerField } from "../src/lib/session/answers";
+import { answerField, parseAnswerRecord } from "../src/lib/session/answers";
 import {
   ANSWERS_KEY,
   PLAYER_IDS_KEY,
@@ -61,7 +61,9 @@ import {
   SCORES_KEY,
   SESSION_CHANNEL,
   SESSION_KEY,
+  TALLIES_KEY,
 } from "../src/lib/session/keys";
+import { answeredField, optionField } from "../src/lib/session/tallies";
 import { SNAPSHOT_EVENT } from "../src/lib/session/realtime";
 import { getPublicQuestionById } from "../src/quiz/public";
 
@@ -1146,6 +1148,71 @@ async function auditAnswerStore(
       ? `${totals.length} total(s), all within 0–1000 after one scored question`
       : `${impossible.length} total(s) above 1000 — a player was scored more than once ` +
           "for a single answer"
+  );
+
+  await auditTallies(redis, questionId, answers, forQuestion);
+}
+
+/**
+ * Does the tally agree with the answers hash? (roadmap S-04.)
+ *
+ * **This is the only place counter drift under real concurrency can be seen before an
+ * event.** The increments live inside `SUBMIT_ANSWER`'s Lua, so `store.test.ts` can
+ * only assert structurally — that the right fields are sent and that they sit below the
+ * `HSETNX` — and a mocked client makes every version of that script look correct. 150
+ * simultaneous submissions against the real store is the missing half.
+ *
+ * Two findings, because the two counters can drift independently: the answered counter
+ * against the number of answer fields, and the sum of the option counters against the
+ * number of option ids across those records. The second is a *sum*, not a per-option
+ * check, because it is the one that catches the variadic ARGV tail being truncated or
+ * mis-indexed — a bug that would leave every individual option plausible.
+ */
+async function auditTallies(
+  redis: Redis,
+  questionId: string,
+  answers: Record<string, unknown>,
+  forQuestion: readonly string[]
+): Promise<void> {
+  const tallies = (await redis.hgetall(TALLIES_KEY)) ?? {};
+
+  const answeredCounter = Number(tallies[answeredField(questionId)] ?? 0);
+
+  record(
+    answeredCounter === forQuestion.length,
+    "the answered tally agrees with the answers hash",
+    `tally says ${answeredCounter}, the hash holds ${forQuestion.length} for "${questionId}"` +
+      (answeredCounter === forQuestion.length
+        ? ""
+        : " — the counter and the answer write are one EVAL, so a disagreement means the " +
+          "increment is reachable on a path the HSETNX rejected, or vice versa")
+  );
+
+  // Built from `optionField` rather than spelled out, so the prefix cannot drift from
+  // the format the write path uses — a hand-written `opt:` here would keep matching for
+  // exactly as long as nobody changed the real one.
+  const optionPrefix = optionField(questionId, "");
+  const optionTotal = Object.entries(tallies)
+    .filter(([field]) => field.startsWith(optionPrefix))
+    .reduce((sum, [, value]) => sum + Number(value ?? 0), 0);
+
+  // One record can carry several option ids: the drafted quiz has two multiple-choice
+  // questions, and the tail is what makes them need no encoding scheme.
+  const selections = forQuestion.reduce((sum, field) => {
+    const parsed = parseAnswerRecord(
+      typeof answers[field] === "string" ? JSON.parse(answers[field] as string) : answers[field]
+    );
+    return sum + (parsed?.optionIds.length ?? 0);
+  }, 0);
+
+  record(
+    optionTotal === selections,
+    "the option tallies sum to the selections in the answers hash",
+    `tallies sum to ${optionTotal}, the records carry ${selections} option id(s)` +
+      (optionTotal === selections
+        ? ""
+        : " — a shortfall means the variadic ARGV tail lost entries; an excess means an " +
+          "option was counted on a path the lock rejected")
   );
 }
 

@@ -695,30 +695,30 @@ and is the only thing that can see the orphan.
 
 #### Automated
 
-- [x] 4.1 Type checking passes: `bun run type-check`
-- [x] 4.2 `boundary.test.ts` passes for the new `<script>` block
-- [x] 4.3 `render.test.ts`: bar order, counts, shares, correct marking
-- [x] 4.4 `render.test.ts`: `answered: 0` renders without dividing by zero
-- [x] 4.5 `render.test.ts`: multiple-choice shares summing past 100% render unnormalized
-- [x] 4.6 `render.test.ts`: option text is never interpreted as markup
-- [x] 4.7 Full suite passes: `bun run test`
+- [x] 4.1 Type checking passes: `bun run type-check` — 933bdd1
+- [x] 4.2 `boundary.test.ts` passes for the new `<script>` block — 933bdd1
+- [x] 4.3 `render.test.ts`: bar order, counts, shares, correct marking — 933bdd1
+- [x] 4.4 `render.test.ts`: `answered: 0` renders without dividing by zero — 933bdd1
+- [x] 4.5 `render.test.ts`: multiple-choice shares summing past 100% render unnormalized — 933bdd1
+- [x] 4.6 `render.test.ts`: option text is never interpreted as markup — 933bdd1
+- [x] 4.7 Full suite passes: `bun run test` — 933bdd1
 
 #### Manual
 
-- [x] 4.8 Two devices: count rises without interaction; no distribution during `question-open`
-- [x] 4.9 Network drop freezes the count with a staleness marker and it resumes
-- [x] 4.10 At reveal, bars appear with the correct option marked and counts matching
-- [x] 4.11 Legible from the back of a room; the panel does not push the prompt off screen
-- [x] 4.12 A refused question kind shows no panel rather than a stuck zero
+- [x] 4.8 Two devices: count rises without interaction; no distribution during `question-open` — 933bdd1
+- [x] 4.9 Network drop freezes the count with a staleness marker and it resumes — 933bdd1
+- [x] 4.10 At reveal, bars appear with the correct option marked and counts matching — 933bdd1
+- [x] 4.11 Legible from the back of a room; the panel does not push the prompt off screen — 933bdd1
+- [x] 4.12 A refused question kind shows no panel rather than a stuck zero — 933bdd1
 
 ### Phase 5: Verification and cost
 
 #### Automated
 
-- [ ] 5.1 Full suite passes: `bun run test`
-- [ ] 5.2 Type checking passes: `bun run type-check`
-- [ ] 5.3 `bun audit` reports no new advisories
-- [ ] 5.4 `bun run build` succeeds
+- [x] 5.1 Full suite passes: `bun run test`
+- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.3 `bun audit` reports no new advisories
+- [x] 5.4 `bun run build` succeeds
 - [ ] 5.5 `bun run quiz:rehearse`: 150/150 accepted, zero lost or doubled writes, both tally findings ok
 - [ ] 5.6 `bun run quiz:check-purge` reports no residue, including the new key
 
