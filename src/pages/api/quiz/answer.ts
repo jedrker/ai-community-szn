@@ -1,10 +1,12 @@
 import type { APIRoute } from "astro";
 
+import { MAX_GUESS_MAGNITUDE, parseGuess } from "../../../lib/session/guess";
 import { logSessionEvent } from "../../../lib/session/log";
 import {
   clampElapsed,
   MAX_TEXT_ANSWER_LENGTH,
   scoreChoiceAnswer,
+  scoreNumberAnswer,
   scoreTextAnswer,
 } from "../../../lib/session/scoring";
 import { readSession, submitAnswer } from "../../../lib/session/store";
@@ -43,6 +45,8 @@ const MESSAGES = {
   unknownPlayer: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie.",
   unsupportedKind: "Ten typ pytania nie przyjmuje jeszcze odpowiedzi.",
   tooLong: `Odpowiedź może mieć najwyżej ${MAX_TEXT_ANSWER_LENGTH} znaków.`,
+  notANumber: "Wpisz liczbę.",
+  outOfRange: "Ta liczba jest poza zakresem.",
   unconfigured: "Sesja nie jest skonfigurowana.",
   failed: "Nie udało się zapisać odpowiedzi. Spróbuj ponownie.",
 } as const;
@@ -136,14 +140,11 @@ export const POST: APIRoute = async ({ request }) => {
     return json(409, { error: MESSAGES.notOpen });
   }
 
-  // The seam S-06 (number) and S-08 (word cloud) still extend: a refusal with a message
-  // rather than a crash, so a host who advances to a question this slice does not handle
-  // sees a phone that says so. S-05 took the `text` half of it.
-  if (
-    question.kind !== "single-choice" &&
-    question.kind !== "multiple-choice" &&
-    question.kind !== "text"
-  ) {
+  // The seam S-08 (word cloud) still extends: a refusal with a message rather than a
+  // crash, so a host who advances to a question this slice does not handle sees a phone
+  // that says so. S-05 took the `text` half of it and S-06 the `number` half; the word
+  // cloud is the last kind behind it.
+  if (question.kind === "word-cloud") {
     logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
     return json(409, { error: MESSAGES.unsupportedKind });
   }
@@ -208,6 +209,38 @@ export const POST: APIRoute = async ({ request }) => {
     // reveal shows the attendee what they actually typed.
     answerText = trimmed;
     ({ correct, awarded } = scoreTextAnswer(question, trimmed, elapsedMs));
+  } else if (question.kind === "number") {
+    /**
+     * **Parsed explicitly, refused rather than coerced** — the same `lessons.md` rule 2
+     * discipline as the text branch and the `elapsedMs` block. `parseGuess` returns
+     * `NaN` for an absent field, an empty or whitespace-only one, and anything with a
+     * non-numeric remainder; none of those is a guess of zero.
+     */
+    const guess = parseGuess(form.get("value"));
+
+    if (!Number.isFinite(guess)) {
+      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      return json(400, { error: MESSAGES.notANumber });
+    }
+
+    /**
+     * **Bounded before the store is touched**, exactly as the text length and the
+     * option ids are, and for the same reason: this endpoint is open and takes
+     * `formData`, so an input's attributes bound nothing.
+     *
+     * A negative guess is *not* refused — it is wrong, not malformed, and it scores
+     * zero through the ordinary rule. The bound is about magnitude only, keeping an
+     * arbitrary value out of an arithmetic path whose result is stored as an integer.
+     */
+    if (Math.abs(guess) > MAX_GUESS_MAGNITUDE) {
+      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      return json(400, { error: MESSAGES.outOfRange });
+    }
+
+    // The parsed number, not the raw string: the reveal shows it back, and a later
+    // reader should not have to re-parse an attendee's typing.
+    guessValue = guess;
+    ({ correct, awarded } = scoreNumberAnswer(question, guess, elapsedMs));
   } else {
     /**
      * **Only ids this question actually has.**

@@ -45,6 +45,7 @@ const answered = {
   questionId: QUESTION,
   optionIds: ["large-language-model"],
   text: null,
+  value: null,
   elapsedMs: 3_200,
   correct: true,
   awarded: 920,
@@ -56,6 +57,19 @@ const answeredText = {
   ...answered,
   optionIds: [],
   text: "Halucynacje.",
+};
+
+/**
+ * The same device, on a number question — a **near miss**, deliberately: `correct` is
+ * exact-hit-only for this kind, so this is the record whose flag says nothing about
+ * whether it scored.
+ */
+const answeredNumber = {
+  ...answered,
+  optionIds: [],
+  correct: false,
+  awarded: 800,
+  value: 9_800,
 };
 
 function ask(questionId = QUESTION, playerId = "player-abc"): Promise<Response> {
@@ -135,6 +149,7 @@ describe("the phase gate", () => {
       correct: true,
       awarded: 920,
       text: null,
+      value: null,
       total: 2_740,
     });
   });
@@ -191,6 +206,57 @@ describe("the typed answer travels back to its own device", () => {
   });
 });
 
+/**
+ * The device's own guess (roadmap S-06), returned for the same reason its typed text
+ * is: the view's memory of it does not survive a reload, and the reveal panel needs
+ * both numbers because `correct` alone cannot tell a near miss from a zero.
+ */
+describe("the numeric guess travels back to its own device", () => {
+  it("returns what this device guessed for a number question", async () => {
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: state("question-revealed"),
+      answer: answeredNumber,
+      total: 2_740,
+    });
+
+    expect(await body(await ask())).toMatchObject({
+      answered: true,
+      value: 9_800,
+      // The pair the reveal copy actually branches on: not correct, and yet it scored.
+      correct: false,
+      awarded: 800,
+    });
+  });
+
+  it("returns null for a device that stayed silent", async () => {
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: state("question-revealed"),
+      answer: null,
+      total: 2_740,
+    });
+
+    expect(await body(await ask())).toMatchObject({ answered: false, value: null });
+  });
+
+  it("stays behind the phase gate, like the verdict it travels with", async () => {
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: state("question-open"),
+      answer: answeredNumber,
+      total: 2_740,
+    });
+
+    const response = await ask();
+
+    // An unrevealed number question is the same cheat sheet a choice one would be —
+    // the award alone tells a device how close it was, and there is time to change.
+    expect(response.status).toBe(409);
+    expect(JSON.stringify(await body(response))).not.toContain("9800");
+  });
+});
+
 describe("the ended-phase exception", () => {
   /**
    * `ENDED_TTL_SECONDS` exists so a device that reloads just after the host closes
@@ -211,6 +277,7 @@ describe("the ended-phase exception", () => {
       correct: null,
       awarded: null,
       text: null,
+      value: null,
       total: 8_420,
     });
   });

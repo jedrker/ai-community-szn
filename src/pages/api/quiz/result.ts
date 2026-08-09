@@ -105,6 +105,7 @@ export const POST: APIRoute = async ({ request }) => {
       correct: null,
       awarded: null,
       text: null,
+      value: null,
       total: result.total,
     });
   }
@@ -123,6 +124,7 @@ export const POST: APIRoute = async ({ request }) => {
       correct: null,
       awarded: null,
       text: null,
+      value: null,
       total: result.total,
     });
   }
@@ -143,6 +145,17 @@ export const POST: APIRoute = async ({ request }) => {
      * phase gate that already protects `correct` and `awarded` above.
      */
     text: result.answer.text,
+    /**
+     * What this device guessed, for a number question — `null` for every other kind
+     * (roadmap S-06), and returned for the same reason `text` is: the view's memory of
+     * it does not survive a reload, and the reveal shows the guess beside the true
+     * value.
+     *
+     * It also has to come from here rather than from the input's current contents,
+     * because for this kind the panel's copy depends on both numbers — `correct` is
+     * exact-hit-only and says nothing about a guess that scored 800.
+     */
+    value: result.answer.value,
     total: result.total,
   });
 };

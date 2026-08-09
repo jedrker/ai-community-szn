@@ -21,6 +21,7 @@ vi.mock("../../../lib/session/store", () => ({
 const { POST: answer } = await import("./answer");
 const { quiz } = await import("../../../quiz/index");
 const { SPEED_WINDOW_MS, MAX_TEXT_ANSWER_LENGTH } = await import("../../../lib/session/scoring");
+const { MAX_GUESS_MAGNITUDE } = await import("../../../lib/session/guess");
 
 const NOW = 1_785_000_000_000;
 
@@ -373,17 +374,151 @@ describe("text answers", () => {
   });
 });
 
+describe("numeric guesses", () => {
+  /**
+   * Sends a numeric submission. **`value` is omitted entirely when `raw` is
+   * undefined** — same discipline as `submitText`: the absent-field case is what
+   * `lessons.md` rule 2 is about, and a helper that supplied a default would test the
+   * present case while reading as though it covered the absent one.
+   */
+  function submitGuess(raw?: string, elapsedMs = 4_000): Promise<Response> {
+    const fields: Record<string, string> = {
+      playerId: "player-abc",
+      questionId: number.id,
+      elapsedMs: String(elapsedMs),
+    };
+    if (raw !== undefined) fields.value = raw;
+
+    return answer({ request: request(fields) } as Parameters<typeof answer>[0]) as Promise<Response>;
+  }
+
+  beforeEach(() => {
+    readSessionMock.mockResolvedValue(openOn(number.id));
+  });
+
+  it("covers a real number question whose true value is 10 000", () => {
+    // The fixture, proved rather than assumed — every expectation below is relative
+    // to this value, and a retyped or renamed question would otherwise pass silently.
+    if (number.kind !== "number") throw new Error("expected a number question");
+    expect(number.correctValue).toBe(10_000);
+  });
+
+  it("accepts an exact guess and stores the parsed number", async () => {
+    const response = await submitGuess("10000");
+
+    expect(response.status).toBe(200);
+    expect(submitted().value).toBe(10_000);
+    expect(submitted().optionIds).toEqual([]);
+    expect(submitted().text).toBeNull();
+    expect(submitted().correct).toBe(true);
+    expect(submitted().awarded as number).toBeGreaterThan(0);
+  });
+
+  it("accepts a near-miss with a positive award and correct: false", async () => {
+    // **The partial-credit case.** 9 800 is inside 5%, so it scores well — and
+    // `correct` stays false, because for this kind that flag means "exact hit".
+    const response = await submitGuess("9800");
+
+    expect(response.status).toBe(200);
+    expect(submitted().correct).toBe(false);
+    expect(submitted().awarded as number).toBeGreaterThan(0);
+    expect(submitted().value).toBe(9_800);
+  });
+
+  it("accepts a wildly wrong guess as a recorded answer worth nothing", async () => {
+    const response = await submitGuess("7000");
+
+    expect(response.status).toBe(200);
+    expect(submitted().correct).toBe(false);
+    expect(submitted().awarded).toBe(0);
+  });
+
+  it("accepts a negative guess — wrong is not malformed — and scores it zero", async () => {
+    const response = await submitGuess("-10000");
+
+    expect(response.status).toBe(200);
+    expect(submitted().value).toBe(-10_000);
+    expect(submitted().awarded).toBe(0);
+  });
+
+  it("parses a Polish decimal comma", async () => {
+    const response = await submitGuess("9800,5");
+
+    expect(response.status).toBe(200);
+    expect(submitted().value).toBe(9_800.5);
+  });
+
+  /**
+   * **The absent-field case, asserted by outcome rather than by status** —
+   * `lessons.md` rule 2. A bare `Number()` would have made this a guess of zero: a
+   * 200, a burnt one-answer-per-question lock, and an award of nothing that looks
+   * exactly like a wrong answer.
+   */
+  it("refuses a submission with no value field at all, writing nothing", async () => {
+    const response = await submitGuess();
+
+    expect(response.status).toBe(400);
+    expect((await body(response)).error).toBe("Wpisz liczbę.");
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it.each([["", "empty"], ["   ", "whitespace"], ["abc", "letters"], ["67abc", "a remainder"], ["1e300", "exponent notation"]])(
+    "refuses %s (%s) without writing",
+    async (value) => {
+      const response = await submitGuess(value);
+
+      expect(response.status).toBe(400);
+      expect(submitAnswerMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it("refuses an over-magnitude value with its own message and writes nothing", async () => {
+    const response = await submitGuess("9".repeat(13));
+
+    expect(response.status).toBe(400);
+    expect((await body(response)).error).toBe("Ta liczba jest poza zakresem.");
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts a value exactly at the bound", async () => {
+    const response = await submitGuess(String(MAX_GUESS_MAGNITUDE));
+
+    expect(response.status).toBe(200);
+    expect(submitted().value).toBe(MAX_GUESS_MAGNITUDE);
+  });
+
+  it("weights the guess by the same speed curve", async () => {
+    await submitGuess("10000", 0);
+    const fast = submitted().awarded as number;
+
+    submitAnswerMock.mockClear();
+    await submitGuess("10000", SPEED_WINDOW_MS);
+    const slow = submitted().awarded as number;
+
+    expect(fast).toBeGreaterThan(slow);
+  });
+
+  it("carries no verdict in the response, and no guess into the log", async () => {
+    const log = vi.spyOn(console, "log");
+    const serialized = JSON.stringify(await body(await submitGuess("9800")));
+
+    expect(serialized).not.toContain("correct");
+    expect(serialized).not.toContain("awarded");
+    expect(serialized).not.toContain("total");
+    for (const call of log.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain("9800");
+    }
+  });
+});
+
 describe("refusals", () => {
-  it.each([
-    ["number", () => number],
-    ["word-cloud", () => wordCloud],
-  ])("refuses a %s question, with a message rather than a crash", async (_kind, pick) => {
-    const question = pick();
+  it("refuses a word-cloud question, with a message rather than a crash", async () => {
+    const question = wordCloud;
     readSessionMock.mockResolvedValue(openOn(question.id));
 
     const response = await submit(question.id, []);
 
-    // The seam S-06 and S-08 still extend. S-05 took the text half of it.
+    // The last kind behind the seam. S-05 took the text half of it, S-06 the number half.
     expect(response.status).toBe(409);
     expect((await body(response)).error).toBe("Ten typ pytania nie przyjmuje jeszcze odpowiedzi.");
     expect(submitAnswerMock).not.toHaveBeenCalled();

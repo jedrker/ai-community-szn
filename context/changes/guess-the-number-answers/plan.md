@@ -689,38 +689,38 @@ will not type-check.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 `answers.test.ts` asserts a record without `value` parses to `null`
-- [x] 2.4 `answers.test.ts` asserts a non-finite `value` is rejected
-- [x] 2.5 `routes.test.ts` asserts revealing each number question sets the pl-PL-formatted value, expected string built from the formatter
-- [x] 2.6 `routes.test.ts` asserts revealing a number question leaves `revealedOptionIds` empty
-- [x] 2.7 `routes.test.ts` asserts advancing clears `revealedAnswerText`
-- [x] 2.8 `state.test.ts` still passes
-- [x] 2.9 `keys.test.ts` still passes
+- [x] 2.1 Unit tests pass: `bun run test` — 88a0f52
+- [x] 2.2 Type checking passes: `bun run type-check` — 88a0f52
+- [x] 2.3 `answers.test.ts` asserts a record without `value` parses to `null` — 88a0f52
+- [x] 2.4 `answers.test.ts` asserts a non-finite `value` is rejected — 88a0f52
+- [x] 2.5 `routes.test.ts` asserts revealing each number question sets the pl-PL-formatted value, expected string built from the formatter — 88a0f52
+- [x] 2.6 `routes.test.ts` asserts revealing a number question leaves `revealedOptionIds` empty — 88a0f52
+- [x] 2.7 `routes.test.ts` asserts advancing clears `revealedAnswerText` — 88a0f52
+- [x] 2.8 `state.test.ts` still passes — 88a0f52
+- [x] 2.9 `keys.test.ts` still passes — 88a0f52
 
 ### Phase 3: The route and the result payload
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 Parser tests cover the separator matrix including U+00A0, and that `67,5` is 67.5 not 675
-- [ ] 3.4 Parser tests assert the refusal set: absent, empty, whitespace, alphabetic, trailing garbage, non-finite
-- [ ] 3.5 `answer.test.ts` asserts an absent `value` field is refused, by outcome
-- [ ] 3.6 `answer.test.ts` asserts a correct guess is stored with the parsed number, empty `optionIds`, null `text`
-- [ ] 3.7 `answer.test.ts` asserts a near-miss is accepted with a positive award and `correct: false`
-- [ ] 3.8 `answer.test.ts` asserts an over-magnitude value is refused and nothing is written
-- [ ] 3.9 `answer.test.ts` asserts a negative guess is accepted and scores zero
-- [ ] 3.10 `answer.test.ts` asserts `word-cloud` still receives `unsupportedKind`
-- [ ] 3.11 `answer.test.ts` asserts the existing choice and text cases are unchanged
-- [ ] 3.12 `result.test.ts` asserts `value` returned when answered, null when silent
-- [ ] 3.13 `result.test.ts` asserts the phase gate still refuses an unrevealed number question
+- [x] 3.1 Unit tests pass: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 Parser tests cover the separator matrix including U+00A0, and that `67,5` is 67.5 not 675
+- [x] 3.4 Parser tests assert the refusal set: absent, empty, whitespace, alphabetic, trailing garbage, non-finite
+- [x] 3.5 `answer.test.ts` asserts an absent `value` field is refused, by outcome
+- [x] 3.6 `answer.test.ts` asserts a correct guess is stored with the parsed number, empty `optionIds`, null `text`
+- [x] 3.7 `answer.test.ts` asserts a near-miss is accepted with a positive award and `correct: false`
+- [x] 3.8 `answer.test.ts` asserts an over-magnitude value is refused and nothing is written
+- [x] 3.9 `answer.test.ts` asserts a negative guess is accepted and scores zero
+- [x] 3.10 `answer.test.ts` asserts `word-cloud` still receives `unsupportedKind`
+- [x] 3.11 `answer.test.ts` asserts the existing choice and text cases are unchanged
+- [x] 3.12 `result.test.ts` asserts `value` returned when answered, null when silent
+- [x] 3.13 `result.test.ts` asserts the phase gate still refuses an unrevealed number question
 
 #### Manual
 
-- [ ] 3.14 `curl` `value=1e300`: refused, nothing written
-- [ ] 3.15 `curl` `value=67,5`: accepted and scored as 67.5
+- [x] 3.14 `curl` `value=1e300`: refused, nothing written
+- [x] 3.15 `curl` `value=67,5`: accepted and scored as 67.5
 
 ### Phase 4: The attendee view
 
