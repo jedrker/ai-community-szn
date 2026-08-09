@@ -1,10 +1,10 @@
 ---
 change_id: host-participation-and-distribution
 title: Host participation and distribution
-status: impl_reviewed
+status: archived
 created: 2026-08-09
 updated: 2026-08-09
-archived_at: null
+archived_at: 2026-08-09T18:30:18Z
 ---
 
 ## Notes

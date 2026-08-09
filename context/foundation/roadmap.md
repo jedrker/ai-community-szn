@@ -53,7 +53,7 @@ an attendee is scoring on their own device.
 | S-01  | `quiz-definition-and-validation`      | Organizer can author the whole quiz in a file and have it rejected if malformed        | —             | FR-001, FR-017                                                            | done     |
 | S-02  | `join-and-follow-host`                | Attendee can join a started session by name and see the host's current question        | S-01, F-02    | US-01, US-02, FR-002, FR-003, FR-007, FR-008                              | done     |
 | S-03  | `answer-choice-question-and-reveal`   | Attendee can answer a choice question and see if they were right and what they scored  | S-02          | US-01, US-02, FR-004, FR-010, FR-016, FR-019                              | done     |
-| S-04  | `host-participation-and-distribution` | Host can show the room how many have answered, then the distribution at reveal         | S-03          | US-02, FR-005                                                             | proposed |
+| S-04  | `host-participation-and-distribution` | Host can show the room how many have answered, then the distribution at reveal         | S-03          | US-02, FR-005                                                             | done     |
 | S-05  | `free-text-answers`                   | Attendee can answer a free-text question without being punished for diacritics         | S-03          | US-01, FR-011                                                             | proposed |
 | S-06  | `guess-the-number-answers`            | Attendee can guess a number and score by how close they were                           | S-03          | US-01, FR-013                                                             | proposed |
 | S-07  | `leaderboard-beat`                    | Host can show the leaderboard between questions, and attendees can find themselves on it | S-03        | US-01, US-02, FR-014                                                      | proposed |
@@ -379,7 +379,7 @@ and do NOT re-scaffold them.
   question is open turns the large screen into a cheat sheet. The implementation risk is leaking that
   data to the host view early — the count and the distribution must be two different payloads, not one
   payload rendered differently. Legibility from the back of the room is a real constraint here.
-- **Status:** proposed
+- **Status:** done
 
 ### S-05: Attendee answers a free-text question
 
@@ -754,3 +754,25 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   review *after* the lesson was written. (2) **Archived with 9 manual rows unverified** — the
   two-device run this plan names as its end state was never performed, so every browser-side fix from
   the review is deployed and unexercised. S-09 inherits that gap.
+
+- **S-04: Host can display on the large screen how many attendees have answered the open question,
+  and the distribution of what they chose once the question is revealed.** — Archived 2026-08-09 →
+  `context/archive/2026-08-09-host-participation-and-distribution/`. **The two payloads are separated
+  structurally, not by discipline:** the count and the distribution are two functions in `store.ts`,
+  so the polled endpoint has no shape in which per-option data could travel, and a `superRefine`
+  clause — not a comment — is what keeps `revealedDistribution` inside `question-revealed`. **The
+  counters hold at room scale:** 150 concurrent submissions produced a tally of exactly 150 and an
+  option sum of exactly 150 against production, which is the one check a mocked client cannot make
+  since the increments live in Lua. `check-purge` removed 6 of 6 registered keys, `livequiz:tallies`
+  among them. **Cost is confirmed against a pre-registered prediction:** observed 3,184 against
+  3,210–3,310 written down before the counter was read — **0.8% under**. That measures the
+  per-command model, *not* an event: ~32.4k per event and ~65% of the 500K ceiling at ten events a
+  month remain an extrapolation, and the runbook now says so in those words. **This slice introduced
+  the project's first polling loop**, and its shape (one device, `question-open` on a choice question
+  only, ~2.5 s, 2 commands per tick) is recorded in the runbook so the command tripwire can still
+  tell expected cost from a leak. Lessons: (1) **Prove the fixture reaches the branch the test names**
+  — two tests here were green while exercising the opposite branch (an `undefined` swallowed by a
+  destructuring default, and a distribution fixture built on the word-cloud question so it ran the
+  skip path); recorded in `context/foundation/lessons.md`. (2) **The untested component is where the
+  findings were** — the implementation review put three of five warnings in the poll loop, the only
+  new runtime shape with no automated coverage, while every structurally-enforced invariant held.
