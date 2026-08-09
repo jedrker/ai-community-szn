@@ -50,7 +50,22 @@ export type SnapshotSource = "fetch" | "realtime" | "http";
  * transport: collapse any two of these and a broken screen is indistinguishable from a
  * quiet one at the moment the segment is meant to land.
  */
-export type ConnectionStatus = "connecting" | "connected" | "lost";
+/**
+ * Four states, and the fourth is the one that keeps a room playable.
+ *
+ * A device must be able to tell "waiting for the host" from "the segment is over" from
+ * "my connection died" — and, since the connection-limit change, from "the channel is
+ * gone but I am still being served over HTTP". `degraded` is that last one: snapshots
+ * arrive on a timer instead of instantly, which is worse than `connected` and enormously
+ * better than `lost`, because everything an attendee actually does — joining, answering,
+ * fetching their result — is HTTP and unaffected.
+ *
+ * **`degraded` is earned, never assumed.** It is reported only after a fallback fetch has
+ * actually succeeded. Announcing it on the strength of Ably dropping would put a calm
+ * amber banner on a device that is simply offline, which is the same class of lie as
+ * telling a full room it is reconnecting.
+ */
+export type ConnectionStatus = "connecting" | "connected" | "degraded" | "lost";
 
 /**
  * *Why* the transport is unhealthy, which is a different question from *that* it is.
@@ -119,6 +134,15 @@ export type SessionClientOptions = {
    * `null` means the server could not find out. Keep the previous number.
    */
   readonly onCount?: (count: number | null) => void;
+  /**
+   * Whether to fall back to polling `/api/quiz/state` when the channel is unavailable.
+   *
+   * Opt-in and defaulting to off, so the type change is additive and a future view has to
+   * decide deliberately whether it wants to spend requests this way. Both LiveQuiz views
+   * turn it on: the attendee's because a device Ably refused can still play, the host's
+   * because it is the one device whose failure stops the room.
+   */
+  readonly fallbackPolling?: boolean;
 };
 
 export type SessionClient = {
@@ -189,6 +213,155 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * THE PROJECT'S SECOND POLLING LOOP, and the numbers that make it defensible.
+ *
+ * `/quiz/host`'s participation counter is the first (see its own docstring). This one is
+ * bounded differently: it runs on **any** device whose channel is unavailable, but only
+ * while it is unavailable, and it stops at the end of the session.
+ *
+ * Each tick costs two Redis commands — `GET` plus the `HLEN` behind `playerCount`
+ * (`src/pages/api/quiz/state.ts`). The expected case, ~20 devices refused above the Ably
+ * free tier's 200-connection ceiling, is ~7k commands across a 15-minute segment. The
+ * worst case, Ably unreachable for an entire 220-device room, is ~66k. The free tier is
+ * 500k a month, and the runbook's tripwire is 200k attributable to one run — so both sit
+ * inside it, and saying so here is what stops the next reader diagnosing this loop as the
+ * runaway that tripwire watches for.
+ *
+ * **The jitter is not decoration.** Every device refused by a connection limit is refused
+ * within the same second or two, so a fixed interval would keep the whole cohort polling
+ * in lockstep for the entire segment — 20 simultaneous requests every 6 s instead of a
+ * spread. It also has to be a *symmetric* spread around the base rather than a delay
+ * added to it, or the interval quietly becomes longer than the number written here.
+ */
+const POLL_BASE_MS = 6_000;
+const POLL_JITTER_MS = 1_500;
+/**
+ * How many consecutive failed polls demote a `degraded` device back to `lost`.
+ *
+ * Two, ~12 s. One is too eager: a single failure on a venue network is ordinary, and
+ * flashing red on each one reads as a broken app. Never demoting is worse than either —
+ * a device that has genuinely gone offline would keep a calm amber banner over a question
+ * that has since been replaced, which is the exact silence `lost` exists to break.
+ */
+const POLL_FAILURES_BEFORE_LOST = 2;
+
+export type FallbackPoll = {
+  /** Schedule one tick, if every condition for polling currently holds. */
+  readonly arm: () => void;
+  /** Cancel any scheduled tick and drop out of `degraded`. */
+  readonly stop: () => void;
+  /** Whether a tick is scheduled. Exposed so a test can assert the loop's lifecycle. */
+  readonly isArmed: () => boolean;
+};
+
+/**
+ * The fallback loop, built without any knowledge of Ably.
+ *
+ * Separated from `createSessionClient` for one reason: **the seam has to be testable.** A
+ * timer whose only entry point is an Ably connection callback can be exercised only by
+ * mocking the SDK, and a mock of a third-party client freezes its API and keeps passing
+ * after a real upgrade breaks production. With the loop standing on its own, its whole
+ * lifecycle — promotion, demotion, cancellation, the single-timer invariant — is testable
+ * against a stub `refresh` and nothing else.
+ *
+ * `shouldPoll` is asked on every arm rather than captured once, because every reason to
+ * stop (the channel recovered, the session ended, the caller never opted in) is a moving
+ * fact owned by the caller.
+ */
+export function createFallbackPoll(deps: {
+  readonly refresh: () => Promise<void>;
+  readonly shouldPoll: () => boolean;
+  readonly onDegraded: (degraded: boolean) => void;
+}): FallbackPoll {
+  let timer: number | null = null;
+  let inFlight = false;
+  let failures = 0;
+  let degraded = false;
+
+  /** Symmetric spread around the base, so the average interval stays `POLL_BASE_MS`. */
+  const delay = (): number => POLL_BASE_MS + (Math.random() * 2 - 1) * POLL_JITTER_MS;
+
+  const setDegraded = (next: boolean): void => {
+    if (degraded === next) return;
+    degraded = next;
+    deps.onDegraded(next);
+  };
+
+  /**
+   * Arm one tick, or decline to.
+   *
+   * Every reason not to poll lives here, so the poll body can simply return and its
+   * `finally` can re-arm unconditionally — the arrangement `/quiz/host`'s participation
+   * loop uses, and the reason that one has never stacked two timers.
+   */
+  const arm = (): void => {
+    // Never two timers, and never a timer stacked behind a request that has not come
+    // back. A connection that flaps calls this several times per retry cycle, and each
+    // one would otherwise add a loop: the screen would look right while the spend
+    // doubled, then quadrupled.
+    if (timer !== null || inFlight) return;
+    if (!deps.shouldPoll()) return;
+    // A backgrounded tab is not polled. `visibilitychange` in the caller restarts it —
+    // without that, a phone locked mid-segment would come back to a dead loop.
+    if (document.visibilityState === "hidden") return;
+
+    timer = window.setTimeout(() => {
+      timer = null;
+      void tick();
+    }, delay());
+  };
+
+  /**
+   * One fallback fetch, and the promotion/demotion rule around it.
+   *
+   * A success promotes to `degraded`: the first one is the only evidence that HTTP works
+   * while the channel does not, which is the "earned, never assumed" rule stated on
+   * `ConnectionStatus`. `POLL_FAILURES_BEFORE_LOST` consecutive failures demote, and the
+   * loop keeps running either way so a device can climb back.
+   */
+  const tick = async (): Promise<void> => {
+    if (inFlight) return;
+    /**
+     * **Asked again at fire time, not only at arm time, and the difference is one request
+     * per device.** A tick scheduled while the session was live is still queued when the
+     * host ends it; without this the timer that was already in flight would spend one more
+     * fetch on a session nobody is waiting on — ~220 of them in a full room, right at the
+     * moment the store is being purged. Caught by the test, not by review.
+     */
+    if (!deps.shouldPoll()) return;
+    inFlight = true;
+
+    try {
+      await deps.refresh();
+      failures = 0;
+      setDegraded(true);
+    } catch {
+      failures += 1;
+      if (failures >= POLL_FAILURES_BEFORE_LOST) setDegraded(false);
+    } finally {
+      inFlight = false;
+      // The one place a tick is re-armed, so every branch above simply returns. `arm` is
+      // conditional, and the condition may have gone false while this request was open —
+      // the host ending the session mid-fetch is the ordinary way that happens.
+      arm();
+    }
+  };
+
+  return {
+    arm,
+    isArmed: () => timer !== null,
+    stop: () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+      failures = 0;
+      setDegraded(false);
+    },
+  };
+}
+
 export function createSessionClient(options: SessionClientOptions): SessionClient {
   let current: Snapshot = null;
   let realtime: Ably.Realtime | null = null;
@@ -230,6 +403,62 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
     options.onCount?.(body.playerCount ?? null);
   };
 
+  /**
+   * What the transport last said, held so the fallback can *override* it without
+   * forgetting it. `degraded` is a claim about this client's own polling, not about Ably,
+   * so the two have to be tracked separately or a recovering channel could not be
+   * distinguished from a working fallback.
+   */
+  let transportStatus: ConnectionStatus = "connecting";
+  let transportInfo: ConnectionInfo = { detail: "initialized", cause: null, code: null };
+  let degraded = false;
+
+  /**
+   * The single place a status reaches the view.
+   *
+   * `degraded` masks any unhealthy transport status, not just `lost`: Ably cycles through
+   * `connecting` while it retries, and without the wider condition the banner would
+   * flicker between "backup mode" and "connecting" every retry — motion that reads as
+   * instability on a screen whose whole job here is to look calm.
+   *
+   * `info` is passed through untouched. `detail` stays Ably's own state name because the
+   * host prints it verbatim; the fallback announces itself through the *status*, which is
+   * the thing views branch on.
+   */
+  const report = (): void => {
+    const status: ConnectionStatus =
+      degraded && transportStatus !== "connected" ? "degraded" : transportStatus;
+    options.onConnection?.(status, transportInfo);
+  };
+
+  /**
+   * The three moving facts that decide whether polling is worth doing, asked fresh on
+   * every arm. `ended` is what bounds the spend of a phone left face-up on a table after
+   * the segment: nothing further will change, so nothing further is fetched.
+   */
+  const poll = createFallbackPoll({
+    refresh: () => refresh(),
+    shouldPoll: () =>
+      options.fallbackPolling === true &&
+      transportStatus !== "connected" &&
+      current?.phase !== "ended",
+    onDegraded: (next) => {
+      degraded = next;
+      report();
+    },
+  });
+
+  /**
+   * A backgrounded tab is not polled, and `visibilitychange` is what restarts it.
+   *
+   * Without the listener a phone that was locked mid-segment would come back to a dead
+   * loop and sit on a stale question until reloaded — worse than the spend the hidden
+   * check saves.
+   */
+  const onVisibilityChange = (): void => {
+    if (document.visibilityState === "visible") poll.arm();
+  };
+
   const start = async (): Promise<void> => {
     // Prime *before* subscribing. Between two host actions the wait for the next
     // message is unbounded, so a device that only subscribed would sit on an empty
@@ -264,8 +493,29 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
        */
       const code = change.reason?.code ?? realtime?.connection.errorReason?.code;
       const { status, info } = classifyConnection(change.current, code);
-      options.onConnection?.(status, info);
+      transportStatus = status;
+      transportInfo = info;
+
+      /**
+       * **A recovered channel clears the fallback; anything else arms it.** Only
+       * `connected` stops the loop, deliberately: Ably passes through `connecting` on
+       * every retry, and treating that as recovery would cancel the fallback several
+       * times a minute for a device that never actually reconnects.
+       */
+      if (status === "connected") {
+        // `stop` clears `degraded` through `onDegraded`, which reports on its own; the
+        // report below then carries the recovered status.
+        poll.stop();
+      } else {
+        poll.arm();
+      }
+
+      report();
     });
+
+    if (options.fallbackPolling) {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
 
     const channel = realtime.channels.get(options.channelName);
     await channel.subscribe(options.snapshotEvent, (message) => {
@@ -281,6 +531,11 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
     close: () => {
       realtime?.close();
       realtime = null;
+      // The timer and the listener both outlive the connection unless cancelled here. A
+      // loop left armed after `close` keeps fetching for a client nobody is reading, and
+      // it is the one leak nothing on screen would reveal.
+      poll.stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     },
   };
 }

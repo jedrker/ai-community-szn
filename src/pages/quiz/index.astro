@@ -100,6 +100,27 @@ import { publicQuiz } from "../../quiz/public";
       <section id="follow" hidden class="flex flex-col gap-6">
         <p id="player-name" class="text-text-secondary text-base"></p>
         <p id="follow-status" class="text-xl font-semibold"></p>
+
+        <!-- The backup-mode banner. Shown only while the channel is unavailable *and*
+             polling is working, so it is never on screen at the same time as the red
+             `follow-status` failure line — the two describe mutually exclusive states.
+
+             Static markup, sibling of the status line rather than something
+             `renderQuestion` emits, for the same reason the answer fields below are:
+             `render()` runs on every applied snapshot and `replaceChildren()` would
+             destroy anything living inside the question container. -->
+        <p
+          id="degraded-note"
+          hidden
+          role="status"
+          aria-live="polite"
+          class="rounded-xl border border-amber-400 bg-amber-500/15 px-4 py-3 text-lg
+                 text-amber-200"
+        >
+          Grasz w trybie zapasowym — odświeżamy pytania co kilka sekund. Odpowiedzi
+          działają normalnie, ale punkty za czas mogą być niższe.
+        </p>
+
         <div id="question" class="flex flex-col gap-4"></div>
 
         <!-- The answering controls. Hidden for every phase and kind that cannot be
@@ -260,6 +281,7 @@ import { publicQuiz } from "../../quiz/public";
       const answerNote = el("answer-note");
       const answerError = el("answer-error");
       const answerAccepted = el("answer-accepted");
+      const degradedNote = el("degraded-note");
       const resultPanel = el("result");
 
       let connection: ConnectionStatus = "connecting";
@@ -298,6 +320,12 @@ import { publicQuiz } from "../../quiz/public";
       const client = createSessionClient({
         channelName: config.channelName,
         snapshotEvent: config.snapshotEvent,
+        /**
+         * The whole point of this change: a device Ably refused — most plausibly one that
+         * did not fit under the free tier's 200-connection ceiling — keeps playing over
+         * HTTP instead of sitting out the segment behind a red banner.
+         */
+        fallbackPolling: true,
         onSnapshot: () => render(),
         onConnection: (status, info) => {
           connection = status;
@@ -342,9 +370,25 @@ import { publicQuiz } from "../../quiz/public";
               : "Utracono połączenie. Próbujemy połączyć ponownie…"
           );
           el("follow-status").className = "text-xl font-semibold text-red-400";
+          setHidden(degradedNote, true);
           hideAnswerControls();
           return;
         }
+
+        /**
+         * **`degraded` falls through to the ordinary rendering path, and that is the
+         * entire fix.** The snapshot arrives on a timer instead of instantly, but it is
+         * the same snapshot, and everything the controls below do — submitting, locking,
+         * fetching a result — is HTTP and unaffected by the channel being gone.
+         *
+         * The banner is suppressed once the session is over: `ended` already says
+         * everything, and "we refresh every few seconds" beside "that's it, thanks" is
+         * noise about a transport nobody is waiting on any more.
+         */
+        setHidden(
+          degradedNote,
+          !(connection === "degraded" && state !== null && state.phase !== "ended")
+        );
 
         el("follow-status").className = "text-xl font-semibold";
 

@@ -310,12 +310,18 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       let liveCount: number | null = null;
 
       /**
-       * THE PROJECT'S ONE SANCTIONED POLLING LOOP (roadmap S-04, FR-005).
+       * THE FIRST OF THE PROJECT'S TWO SANCTIONED POLLING LOOPS (roadmap S-04, FR-005).
        *
-       * Nothing else in this project polls, and the runbook's command tripwire is
-       * described there as a polling detector. This is the exception, and it is bounded
-       * on purpose: **one device**, only while a choice question is open, ~2.5s — so an
-       * unexpected pattern in the command counter is still detectable as one.
+       * The runbook's command tripwire is described there as a polling detector, so every
+       * loop that exists has to be nameable. This one is bounded on purpose: **one
+       * device**, only while a choice question is open, ~2.5s — so an unexpected pattern
+       * in the command counter is still detectable as one.
+       *
+       * The second is the connection fallback in `src/lib/client/session.ts`, which polls
+       * `/api/quiz/state` on any device whose Ably channel is unavailable. It is bounded
+       * differently — by the outage, by tab visibility and by the session ending — and its
+       * budget is recorded in `src/pages/api/quiz/state.ts`. The two are independent and
+       * may run at once on this device; neither knows about the other.
        *
        * It is a read. `/api/quiz/host/participation` writes nothing, and that is
        * load-bearing rather than incidental: during `question-open` the session
@@ -357,6 +363,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const client = createSessionClient({
         channelName: config.channelName,
         snapshotEvent: config.snapshotEvent,
+        /**
+         * On for the same reason as the attendee view, with a sharper edge: this is the
+         * one device whose failure stops the room. The host's own actions already return
+         * authoritative state over HTTP, so a host with no channel can still run the
+         * segment — the fallback is what keeps the panel from freezing between them.
+         *
+         * Independent of the participation loop below: that one is bounded to a choice
+         * question on this device, this one to a channel outage. Both may run at once;
+         * neither knows about the other.
+         */
+        fallbackPolling: true,
         onSnapshot: (state) => {
           if (state) liveCount = state.playerCount;
           render();
@@ -377,16 +394,34 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            *
            * Attendee phones get the neutral wording instead; see `index.astro`.
            */
+          /**
+           * Cause and mode are composed rather than chosen between. Picking one would
+           * lose the diagnosis exactly when it is most useful: a host running on the
+           * fallback *because* the account limit is exhausted needs to see both, or the
+           * amber line reads as a network hiccup and the plan never gets raised.
+           */
+          const reason =
+            info.cause === "account-limit"
+              ? `limit Ably wyczerpany (${info.code ?? "?"}) — sala pełna, potrzebny wyższy plan`
+              : info.detail;
+
           setText(
             "connection",
-            info.cause === "account-limit"
-              ? `połączenie: limit Ably wyczerpany (${info.code ?? "?"}) — sala pełna, potrzebny wyższy plan`
-              : `połączenie: ${info.detail}`
+            status === "degraded"
+              ? `połączenie: tryb zapasowy — ${reason}`
+              : `połączenie: ${reason}`
           );
+          /**
+           * Three colours for three situations, because two would merge the one that
+           * needs an action with the one that does not. Amber says the segment is running
+           * on the fallback: worth knowing, not worth stopping for.
+           */
           el("connection").className =
             status === "connected"
               ? "text-text-secondary text-base"
-              : "text-red-400 text-base";
+              : status === "degraded"
+                ? "text-amber-300 text-base"
+                : "text-red-400 text-base";
         },
       });
 

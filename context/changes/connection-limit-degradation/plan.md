@@ -412,32 +412,32 @@ client-only plus documentation, and either can be reverted by reverting its comm
 
 #### Automated
 
-- [x] 1.1 Test suite passes: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 `boundary.test.ts` still passes with the edited `<script>` blocks
-- [x] 1.4 `session.test.ts` covers all four account-limit codes and the absent-code case
+- [x] 1.1 Test suite passes: `bun run test` — a24a7ce
+- [x] 1.2 Type checking passes: `bun run type-check` — a24a7ce
+- [x] 1.3 `boundary.test.ts` still passes with the edited `<script>` blocks — a24a7ce
+- [x] 1.4 `session.test.ts` covers all four account-limit codes and the absent-code case — a24a7ce
 
 #### Manual
 
-- [x] 1.5 With Ably reachable, host and attendee screens read exactly as they do today
-- [x] 1.6 Blocked `realtime.ably.io` shows the transient wording, not the account-limit wording
-- [x] 1.7 Host's `#connection` line is legible from projector distance
+- [x] 1.5 With Ably reachable, host and attendee screens read exactly as they do today — a24a7ce
+- [x] 1.6 Blocked `realtime.ably.io` shows the transient wording, not the account-limit wording — a24a7ce
+- [x] 1.7 Host's `#connection` line is legible from projector distance — a24a7ce
 
 ### Phase 2: Degrade to polling instead of sitting out
 
 #### Automated
 
-- [ ] 2.1 Test suite passes: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 `boundary.test.ts` passes — no forbidden import or env read in either `<script>` block
-- [ ] 2.4 `session.test.ts` asserts timer cancellation on `connected`, on `close()`, and on `ended`
+- [x] 2.1 Test suite passes: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 `boundary.test.ts` passes — no forbidden import or env read in either `<script>` block
+- [x] 2.4 `session.test.ts` asserts timer cancellation on `connected`, on `close()`, and on `ended`
 
 #### Manual
 
-- [ ] 2.5 Blocked device shows the amber banner, receives questions within ~7 s, and submits an answer the host's count registers
-- [ ] 2.6 Blocked device's reveal panel shows a verdict and a running total
-- [ ] 2.7 A partly typed text answer survives a poll and a question change
-- [ ] 2.8 Unblocking returns the device to normal and clears the banner
-- [ ] 2.9 Backgrounding stops the polling; returning resumes it
-- [ ] 2.10 After the host ends the session, no further `/api/quiz/state` requests are issued
-- [ ] 2.11 Upstash command counter after a rehearsal is within the recorded budget
+- [x] 2.5 Blocked device shows the amber banner, receives questions within ~7 s, and submits an answer the host's count registers
+- [x] 2.6 Blocked device's reveal panel shows a verdict and a running total
+- [x] 2.7 A partly typed text answer survives a poll and a question change
+- [x] 2.8 Unblocking returns the device to normal and clears the banner
+- [x] 2.9 Backgrounding stops the polling; returning resumes it
+- [x] 2.10 After the host ends the session, no further `/api/quiz/state` requests are issued
+- [x] 2.11 Upstash command counter after a rehearsal is within the recorded budget

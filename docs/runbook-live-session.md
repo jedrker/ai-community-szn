@@ -362,6 +362,28 @@ Time-to-revert is seconds, because prior deployments stay immutable and pre-buil
    already created, or anything held at an external realtime provider. Once LiveQuiz exists, a rollback
    will not undo session state.
 
+### Attendees report an amber "tryb zapasowy" banner
+
+**What it means.** Those devices could not open an Ably channel and have fallen back to polling
+`/api/quiz/state` every ~6 seconds. They are still in the quiz: they see each question, can submit
+answers, and get their result. They are a few seconds behind the room.
+
+**During the session: do nothing.** There is no action that helps mid-segment, and the fallback is
+already the mitigation. Keep running the quiz normally.
+
+**Check your own screen.** If the host's `połączenie:` line reads `limit Ably wyczerpany (40111) — sala
+pełna`, the cause is the account's peak-connection ceiling — 200 on the free tier — and not the venue
+network. Any other wording points at the network instead.
+
+**The real fix is before the event, not during it.** A room above ~180 people needs a paid Ably plan;
+180 real attendees can already brush 200 once reloads, second tabs, the projector and your own device
+are counted. Check expected attendance against the ceiling when you plan the session — the risk row in
+`context/foundation/infrastructure.md` names the host as owner, per event.
+
+**If someone asks why they scored lower.** Answer honestly: a device on the fallback starts its clock
+when the question reaches it, so it earns fewer speed points. It is not a scoring bug and the banner
+says so on their phone.
+
 ## Standing constraints
 
 - **Keep the repository under a personal GitHub account.** Hobby projects cannot connect to

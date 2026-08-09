@@ -66,9 +66,21 @@ export const GET: APIRoute = async () => {
    * travels as a sibling field the caller may use or ignore.
    *
    * Costs one `HLEN` per state fetch, which is once per device per *connect* (~150 a
-   * session) plus one per host refresh. Paced by connects and by the host, not by a
-   * timer: still nothing like the polling shape the command-counter tripwire watches
-   * for.
+   * session) plus one per host refresh.
+   *
+   * **This endpoint IS now called on a timer, and the figures matter.** The
+   * connection-limit change added a fallback loop in `src/lib/client/session.ts`: a device
+   * whose Ably channel is unavailable re-fetches here every ~6 s so it can keep playing
+   * over HTTP. Two commands per tick, `GET` plus the `HLEN` above. The expected case —
+   * ~20 devices refused above Ably's 200-connection ceiling — is ~7k commands a segment;
+   * the worst case, Ably unreachable for a whole 220-device room, is ~66k. Against a 500k
+   * monthly free tier and the runbook's 200k-per-run tripwire, both are inside the
+   * budget. It is bounded on three sides: only while the channel is down, only while the
+   * tab is visible, and never after the session reaches `ended`.
+   *
+   * So the tripwire is still a polling detector — it now has two known, bounded loops to
+   * subtract before an anomaly means anything. The other is `/quiz/host`'s participation
+   * counter.
    *
    * `null` means "could not find out" — distinct from `0`, so a caller keeps the
    * number it already had rather than rendering an empty room.
