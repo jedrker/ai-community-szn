@@ -747,13 +747,13 @@ will not type-check.
 
 #### Automated
 
-- [x] 5.1 Unit tests pass: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
-- [x] 5.3 Production build succeeds: `bun run build`
+- [x] 5.1 Unit tests pass: `bun run test` — e097d34
+- [x] 5.2 Type checking passes: `bun run type-check` — e097d34
+- [x] 5.3 Production build succeeds: `bun run build` — e097d34
 
 #### Manual
 
-- [x] 5.4 Two-device run through both number questions
-- [x] 5.5 On `ai-devs-absolwenci`, 9,800 scores well and 7,000 scores nothing
-- [x] 5.6 The large screen shows the formatted correct value with no `host.astro` change
-- [x] 5.7 `docs/runbook-live-session.md` still describes reality
+- [x] 5.4 Two-device run through both number questions — e097d34
+- [x] 5.5 On `ai-devs-absolwenci`, 9,800 scores well and 7,000 scores nothing — e097d34
+- [x] 5.6 The large screen shows the formatted correct value with no `host.astro` change — e097d34
+- [x] 5.7 `docs/runbook-live-session.md` still describes reality — e097d34
