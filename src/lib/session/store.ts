@@ -13,10 +13,12 @@ import {
   registeredKeys,
   SCORES_KEY,
   SESSION_KEY,
+  TALLIES_KEY,
 } from "./keys";
 import { logSessionEvent } from "./log";
 import { parsePlayerRecord, type PlayerRecord } from "./players";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
+import { answeredField, optionField } from "./tallies";
 
 /**
  * The authoritative session store (roadmap F-02).
@@ -311,17 +313,27 @@ return { redis.call('HGET', KEYS[2], key), session }
  * would be recorded against the question that just opened, scored with an elapsed time
  * measured on the previous one.
  *
- * **Seven commands are billed per submission**: this `EVAL` plus six `redis.call`s on
- * the accepted path (`GET`, `HEXISTS`, `HSETNX`, `HINCRBY`, 2× `EXPIRE`). Upstash bills
- * the script *and* every call inside it (`command-counter-diagnostic.md`), and this is
- * the first path in the project that runs once per attendee per question — 150 × 14 of
- * them in a real event. That number is stated here because Phase 5 prices it: an edit
- * that adds a call is an edit to the event's cost, and should know it is being watched.
+ * **The tallies are incremented after the `HSETNX`, never before** (roadmap S-04).
+ * Placed above the lock they would count a submission the lock then rejects, and the
+ * projector would show more answers than the answers hash holds — a drift nothing else
+ * would report. Below it, the increments inherit the same atomicity that makes the
+ * first answer final: a duplicate never reaches them.
+ *
+ * **Ten commands are billed per submission**, up from seven: this `EVAL` plus nine
+ * `redis.call`s on the accepted path (`GET`, `HEXISTS`, `HSETNX`, `HINCRBY` for the
+ * score, `HINCRBY` for the answered counter, one `HINCRBY` per selected option, 3×
+ * `EXPIRE`). That is `k + 2` more than before, where `k` is the number of options the
+ * attendee selected. Upstash bills the script *and* every call inside it
+ * (`command-counter-diagnostic.md`), and this is the first path in the project that
+ * runs once per attendee per question — 150 × 14 of them in a real event. That number
+ * is stated here because Phase 5 prices it: an edit that adds a call is an edit to the
+ * event's cost, and should know it is being watched.
  *
  * KEYS[1] = session doc, KEYS[2] = answers hash, KEYS[3] = scores hash,
- * KEYS[4] = player-ids hash
+ * KEYS[4] = player-ids hash, KEYS[5] = tallies hash
  * ARGV[1] = answer field, ARGV[2] = record JSON, ARGV[3] = player id,
- * ARGV[4] = question id, ARGV[5] = awarded, ARGV[6] = ttl
+ * ARGV[4] = question id, ARGV[5] = awarded, ARGV[6] = ttl,
+ * ARGV[7] = answered field, ARGV[8..] = one option field per selected option
  * Returns { 1, total }  accepted
  *         { 0, 0 }      already answered this question
  *         { -1, 0 }     no session
@@ -348,8 +360,15 @@ if redis.call('HSETNX', KEYS[2], ARGV[1], ARGV[2]) == 0 then
 end
 
 local total = redis.call('HINCRBY', KEYS[3], ARGV[3], tonumber(ARGV[5]))
+
+redis.call('HINCRBY', KEYS[5], ARGV[7], 1)
+for i = 8, #ARGV do
+  redis.call('HINCRBY', KEYS[5], ARGV[i], 1)
+end
+
 redis.call('EXPIRE', KEYS[2], tonumber(ARGV[6]))
 redis.call('EXPIRE', KEYS[3], tonumber(ARGV[6]))
+redis.call('EXPIRE', KEYS[5], tonumber(ARGV[6]))
 
 return { 1, total }
 `;
@@ -882,9 +901,9 @@ export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> 
 
   let result: [number, number] | null;
   try {
-    result = await redis.eval<[string, string, string, string, string, string], [number, number]>(
+    result = await redis.eval<string[], [number, number]>(
       SUBMIT_ANSWER,
-      [SESSION_KEY, ANSWERS_KEY, SCORES_KEY, PLAYER_IDS_KEY],
+      [SESSION_KEY, ANSWERS_KEY, SCORES_KEY, PLAYER_IDS_KEY, TALLIES_KEY],
       [
         answerField(record.questionId, record.playerId),
         JSON.stringify(record),
@@ -892,6 +911,14 @@ export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> 
         record.questionId,
         String(record.awarded),
         String(SESSION_TTL_SECONDS),
+        answeredField(record.questionId),
+        // A variadic tail rather than a delimited string: a multiple-choice answer
+        // needs no encoding scheme, and the script loops from ARGV[8] to #ARGV. An
+        // answer with no options selected simply contributes no option increments,
+        // and still counts toward `answered` — the two questions the panel asks are
+        // "how many people answered" and "what did they choose", and those are not
+        // the same question.
+        ...record.optionIds.map((optionId) => optionField(record.questionId, optionId)),
       ]
     );
   } catch (err) {
@@ -913,6 +940,106 @@ export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> 
   if (status === 1) return { outcome: "accepted", total: Number(result?.[1]) || 0 };
 
   return { outcome: "failed", reason: `unexpected submit status: ${String(result?.[0])}` };
+}
+
+/**
+ * A counter as it comes back from the store.
+ *
+ * `HINCRBY` only ever writes integers, so the shapes reachable here are a number, the
+ * decimal string of one, and `null` for a field nobody has touched. Zero is the safe
+ * reading of all three — an untouched counter *is* zero — and the distinction that
+ * matters, "the store could not say", is carried by the enclosing function returning
+ * `null`, never by a value in here.
+ */
+function counterFrom(raw: unknown): number {
+  return Number(raw) || 0;
+}
+
+/**
+ * The aggregate answer to one question: how many people answered, and what they chose.
+ *
+ * `options` is keyed by option id, not by hash field — the caller renders against the
+ * question definition, and the field format is `tallies.ts`' business alone.
+ */
+export type QuestionTallies = {
+  readonly answered: number;
+  readonly options: Record<string, number>;
+};
+
+/**
+ * How many people have answered one question (roadmap S-04, PRD FR-005).
+ *
+ * **This is the polled read, and it is a separate function from `readQuestionTallies`
+ * on purpose.** FR-005 was revised during shaping because a distribution on the
+ * projector while answering is open is a cheat sheet for anyone who glances up — so the
+ * count and the distribution travel by two routes gated by two mechanisms. Splitting
+ * them here means the poll path is *structurally* incapable of returning per-option
+ * data: there is no shape for it to travel in, and no handler has to remember to drop a
+ * field. One function returning both would leave the whole slice's reason for existing
+ * resting on a route trimming its response, and the failure would be invisible, because
+ * the screen would still look right.
+ *
+ * Returns `null` rather than `0` on any failure — `readPlayerCount`'s discipline, for
+ * the same reason. On a large screen a count that drops to zero reads as the room
+ * having stopped answering; the caller keeps its last number instead.
+ *
+ * One billed command (`HGET`).
+ */
+export async function readAnsweredCount(questionId: string): Promise<number | null> {
+  const redis = client();
+  if (!redis) return null;
+
+  try {
+    return counterFrom(await redis.hget(TALLIES_KEY, answeredField(questionId)));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The whole distribution for one question — the reveal's read (roadmap S-04).
+ *
+ * Called once per reveal, from `reveal.ts`, and never from a polled path. See
+ * `readAnsweredCount` above for why the two are separate functions rather than one with
+ * a flag.
+ *
+ * A field nobody has touched is `0`, not an absence: an option that nobody picked is a
+ * fact about the room, and rendering it as a missing bar would misreport it. **A
+ * failure is `null` for the whole read**, so the caller can publish "there is nothing to
+ * show" rather than a full set of zeroes, which on a projector reads as nobody having
+ * answered at the one moment that claim is most damaging.
+ *
+ * One billed command (`HMGET` over the answered field plus one field per option).
+ */
+export async function readQuestionTallies(
+  questionId: string,
+  optionIds: readonly string[]
+): Promise<QuestionTallies | null> {
+  const redis = client();
+  if (!redis) return null;
+
+  const answered = answeredField(questionId);
+  const fields = optionIds.map((optionId) => optionField(questionId, optionId));
+
+  let raw: Record<string, unknown> | null;
+  try {
+    raw = await redis.hmget<Record<string, unknown>>(TALLIES_KEY, answered, ...fields);
+  } catch {
+    return null;
+  }
+
+  // `HMGET` on a hash that does not exist yet answers `null` for the whole reply. That
+  // is "nobody has answered", not "the store could not say" — the key is simply not
+  // written until the first submission — so it becomes zeroes rather than a `null`
+  // return. Only the throw above is a failure.
+  const values = raw ?? {};
+
+  const options: Record<string, number> = {};
+  optionIds.forEach((optionId, index) => {
+    options[optionId] = counterFrom(values[fields[index]!]);
+  });
+
+  return { answered: counterFrom(values[answered]), options };
 }
 
 /**

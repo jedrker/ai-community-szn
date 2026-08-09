@@ -98,6 +98,18 @@ const REGISTERED_KEYS = [
       "Pseudonymous on its own, but joinable against the players hash, so it is " +
       "attendee data by the same reasoning the reverse index is.",
   },
+  {
+    name: `${SESSION_NAMESPACE}tallies`,
+    holds:
+      "NOT attendee data — the first registered key that is not. Hash of aggregate " +
+      "counters: `answered:<questionId>` -> how many people answered, and " +
+      "`opt:<questionId>:<optionId>` -> how many chose that option. Counts over a " +
+      "150-person room identify nobody, and no field is keyed by a player id or a " +
+      "name. It is registered and purged anyway, because the registry has no " +
+      "exemption list: an invariant with one is an invariant that rots, and the " +
+      "cheapest way to keep 'every namespaced name is here' true is to keep it " +
+      "true without exceptions.",
+  },
 ] as const satisfies readonly RegisteredKey[];
 
 /**
@@ -147,6 +159,25 @@ export const ANSWERS_KEY = REGISTERED_KEYS[3].name;
  * slice that has to decide what putting 150 names on a screen means.
  */
 export const SCORES_KEY = REGISTERED_KEYS[4].name;
+
+/**
+ * The tallies hash: aggregate counters, one per question and one per option.
+ *
+ * The two field families are `answered:<questionId>` and
+ * `opt:<questionId>:<optionId>`, and `tallies.ts` owns both formats — the role
+ * `answerField` plays for the answers hash, and for the same reason: a read path and a
+ * write path that spell a field differently present as "nobody answered".
+ *
+ * One hash for the whole session rather than one per question, for the reason
+ * `ANSWERS_KEY` documents: a per-question name would have to be assembled at runtime,
+ * and a runtime-assembled name is reached by neither `end` nor `purge`.
+ *
+ * Counted at submission rather than derived at read time. The answers hash reaches
+ * ~1,500 fields by the last question, so deriving a count would trade a bounded
+ * per-submission cost for an unbounded per-read one — on the one read this slice
+ * intends to poll.
+ */
+export const TALLIES_KEY = REGISTERED_KEYS[5].name;
 
 /**
  * The Ably channel every snapshot is published to.

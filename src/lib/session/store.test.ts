@@ -8,6 +8,8 @@ const redisMock = {
   get: vi.fn(),
   eval: vi.fn(),
   hlen: vi.fn(),
+  hget: vi.fn(),
+  hmget: vi.fn(),
 };
 
 // A class rather than `vi.fn(() => redisMock)`: the store calls `new Redis(...)`,
@@ -27,9 +29,11 @@ const {
   createSession,
   endSession,
   purgeSession,
+  readAnsweredCount,
   readOwnResult,
   readPlayerById,
   readPlayerCount,
+  readQuestionTallies,
   readSession,
   submitAnswer,
   writeSession,
@@ -37,8 +41,9 @@ const {
   SESSION_KEY,
   SESSION_TTL_SECONDS,
 } = await import("./store");
-const { registeredKeys, ANSWERS_KEY, PLAYER_IDS_KEY, PLAYERS_KEY, SCORES_KEY } =
+const { registeredKeys, ANSWERS_KEY, PLAYER_IDS_KEY, PLAYERS_KEY, SCORES_KEY, TALLIES_KEY } =
   await import("./keys");
+const { answeredField, optionField } = await import("./tallies");
 const { quiz } = await import("../../quiz/index");
 
 const NOW = 1_785_000_000_000;
@@ -74,6 +79,8 @@ beforeEach(() => {
   redisMock.get.mockReset();
   redisMock.eval.mockReset();
   redisMock.hlen.mockReset();
+  redisMock.hget.mockReset();
+  redisMock.hmget.mockReset();
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -694,18 +701,18 @@ describe("submitAnswer", () => {
     expect(redisMock.hlen).not.toHaveBeenCalled();
   });
 
-  it("passes the four keys and arms both new hash TTLs inside that same call", async () => {
+  it("passes the five keys and arms all three hash TTLs inside that same call", async () => {
     redisMock.eval.mockResolvedValue([1, 920]);
 
     await submitAnswer(answer);
 
     const [script, keys, args] = redisMock.eval.mock.calls[0]!;
-    expect(keys).toEqual([SESSION_KEY, ANSWERS_KEY, SCORES_KEY, PLAYER_IDS_KEY]);
+    expect(keys).toEqual([SESSION_KEY, ANSWERS_KEY, SCORES_KEY, PLAYER_IDS_KEY, TALLIES_KEY]);
     expect(args[5]).toBe(String(SESSION_TTL_SECONDS));
 
     // `end` re-arms only keys that exist when the host ends. Between the first answer
-    // and the next host action, these two EXPIREs are the only thing covering them.
-    expect(script.match(/EXPIRE/g)).toHaveLength(2);
+    // and the next host action, these three EXPIREs are the only thing covering them.
+    expect(script.match(/EXPIRE/g)).toHaveLength(3);
   });
 
   it("locks the first answer with HSETNX rather than a check-then-write", async () => {
@@ -740,6 +747,73 @@ describe("submitAnswer", () => {
 
     const [, , args] = redisMock.eval.mock.calls[0]!;
     expect(args[0]).toBe(`${answer.questionId}:${answer.playerId}`);
+  });
+
+  /**
+   * THE TALLY ASSERTIONS (roadmap S-04).
+   *
+   * **What a mocked client can and cannot prove, said plainly.** The increments happen
+   * inside the Lua, so nothing here executes them — these assertions are structural:
+   * that the right fields are sent, and that the increments sit below the lock rather
+   * than above it. Whether 150 concurrent submissions actually land 150 increments is
+   * invisible to this file by construction, and `scripts/rehearse-room.ts` is where it
+   * is checked against the real store. Both are needed; neither substitutes.
+   */
+  it("sends one answered field and one field per selected option", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    const [, , args] = redisMock.eval.mock.calls[0]!;
+    expect(args[6]).toBe(answeredField(answer.questionId));
+    expect(args.slice(7)).toEqual([optionField(answer.questionId, "a")]);
+  });
+
+  it("sends a field per option for a multiple-choice answer, with no encoding scheme", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer({ ...answer, optionIds: ["a", "b"] });
+
+    const [, , args] = redisMock.eval.mock.calls[0]!;
+    // A variadic ARGV tail, not a delimited string — an option id needs no escaping
+    // and the script loops to #ARGV.
+    expect(args.slice(7)).toEqual([
+      optionField(answer.questionId, "a"),
+      optionField(answer.questionId, "b"),
+    ]);
+  });
+
+  it("increments the tallies only after the HSETNX that makes the answer final", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    const [script] = redisMock.eval.mock.calls[0]!;
+    const lock = script.indexOf("HSETNX");
+    const firstTally = script.indexOf("KEYS[5]");
+
+    // Above the lock, the increments would count a duplicate submission that the lock
+    // then rejects — the projector would show more answers than the answers hash holds,
+    // with nothing to report the drift. Below it, they inherit the lock's atomicity.
+    expect(lock).toBeGreaterThan(-1);
+    expect(firstTally).toBeGreaterThan(lock);
+  });
+
+  it("puts every rejection branch above the increments, so a refusal counts nothing", async () => {
+    redisMock.eval.mockResolvedValue([1, 920]);
+
+    await submitAnswer(answer);
+
+    const [script] = redisMock.eval.mock.calls[0]!;
+    const firstTally = script.indexOf("KEYS[5]");
+
+    // no-session, not-open, unknown-player and already-answered all return before the
+    // script reaches the tallies key. Asserted positionally because the mock cannot run
+    // the Lua: what it can prove is that no reachable path reaches an increment first.
+    for (const branch of ["return { -1, 0 }", "return { -2, 0 }", "return { -3, 0 }", "return { 0, 0 }"]) {
+      expect(script.indexOf(branch), `${branch} must precede the tally increments`).toBeGreaterThan(-1);
+      expect(script.indexOf(branch)).toBeLessThan(firstTally);
+    }
   });
 
   it.each([
@@ -800,6 +874,153 @@ describe("submitAnswer", () => {
     // 150 submissions fanning out to 150 subscribers is the O(N²) shape the spine
     // contract forbids. Asserted here because the temptation is a one-line addition.
     expect(redisMock.eval).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("readAnsweredCount", () => {
+  beforeEach(configure);
+
+  const questionId = quiz.questions[0]!.id;
+
+  it("reads the answered field in one command", async () => {
+    redisMock.hget.mockResolvedValue(37);
+
+    await expect(readAnsweredCount(questionId)).resolves.toBe(37);
+    expect(redisMock.hget).toHaveBeenCalledWith(TALLIES_KEY, answeredField(questionId));
+    expect(redisMock.hget).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a decimal string as well as a number", async () => {
+    // `automaticDeserialization` defaults to true, but depending on it silently would
+    // mean every poll reading zero if it were ever turned off.
+    redisMock.hget.mockResolvedValue("37");
+
+    await expect(readAnsweredCount(questionId)).resolves.toBe(37);
+  });
+
+  it("reports an untouched question as zero, not as an absence", async () => {
+    redisMock.hget.mockResolvedValue(null);
+
+    // Nobody has answered yet — a fact, and the first thing the panel shows on every
+    // question.
+    await expect(readAnsweredCount(questionId)).resolves.toBe(0);
+  });
+
+  /**
+   * `null`, not `0` — `readPlayerCount`'s discipline. On a projector a count that drops
+   * to zero reads as the room having stopped answering, and the poll's whole failure
+   * posture (keep the last number, mark it stale) depends on being able to tell the two
+   * apart here.
+   */
+  it("returns null when the store cannot answer", async () => {
+    redisMock.hget.mockRejectedValue(new Error("unreachable"));
+
+    await expect(readAnsweredCount(questionId)).resolves.toBeNull();
+  });
+
+  it("returns null when the store is unconfigured", async () => {
+    vi.unstubAllEnvs();
+
+    await expect(readAnsweredCount(questionId)).resolves.toBeNull();
+  });
+
+  /**
+   * THE SEPARATION ASSERTION (PRD FR-005).
+   *
+   * The poll must not be able to return per-option data — not because the route trims
+   * it, but because there is no shape for it to travel in. A `readAnsweredCount` that
+   * grew an options field would make the distribution reachable from a path served
+   * while the question is open, and the screen would look identical.
+   */
+  it("returns a bare number, with no route for option data to travel", async () => {
+    redisMock.hget.mockResolvedValue(4);
+
+    expect(typeof (await readAnsweredCount(questionId))).toBe("number");
+    // One field requested, and it is the answered counter — not a wildcard read of the
+    // hash that a caller could sift.
+    expect(redisMock.hget.mock.calls[0]![1]).toBe(answeredField(questionId));
+    expect(redisMock.hmget).not.toHaveBeenCalled();
+  });
+});
+
+describe("readQuestionTallies", () => {
+  beforeEach(configure);
+
+  const questionId = quiz.questions[0]!.id;
+  const optionIds = ["a", "b", "c"];
+
+  it("reads the answered field and every option field in one command", async () => {
+    redisMock.hmget.mockResolvedValue({
+      [answeredField(questionId)]: 10,
+      [optionField(questionId, "a")]: 6,
+      [optionField(questionId, "b")]: 3,
+      [optionField(questionId, "c")]: 1,
+    });
+
+    await expect(readQuestionTallies(questionId, optionIds)).resolves.toEqual({
+      answered: 10,
+      options: { a: 6, b: 3, c: 1 },
+    });
+
+    expect(redisMock.hmget).toHaveBeenCalledTimes(1);
+    expect(redisMock.hmget).toHaveBeenCalledWith(
+      TALLIES_KEY,
+      answeredField(questionId),
+      optionField(questionId, "a"),
+      optionField(questionId, "b"),
+      optionField(questionId, "c")
+    );
+  });
+
+  it("keys the result by option id, not by hash field", async () => {
+    // The caller renders against the question definition; the field format is
+    // `tallies.ts`' business and must not leak into the reveal payload.
+    redisMock.hmget.mockResolvedValue({ [optionField(questionId, "a")]: 2 });
+
+    const tallies = await readQuestionTallies(questionId, ["a"]);
+    expect(Object.keys(tallies!.options)).toEqual(["a"]);
+  });
+
+  it("reports an option nobody picked as zero rather than omitting it", async () => {
+    redisMock.hmget.mockResolvedValue({
+      [answeredField(questionId)]: 4,
+      [optionField(questionId, "a")]: 4,
+    });
+
+    // "Nobody chose this" is a fact about the room. A missing bar would misreport it.
+    await expect(readQuestionTallies(questionId, optionIds)).resolves.toEqual({
+      answered: 4,
+      options: { a: 4, b: 0, c: 0 },
+    });
+  });
+
+  it("reports an untouched question as zeros, not as a failure", async () => {
+    // HMGET answers null for the whole reply when the hash does not exist yet, which is
+    // every question until its first submission.
+    redisMock.hmget.mockResolvedValue(null);
+
+    await expect(readQuestionTallies(questionId, optionIds)).resolves.toEqual({
+      answered: 0,
+      options: { a: 0, b: 0, c: 0 },
+    });
+  });
+
+  /**
+   * **`null` for the whole read, never a set of zeroes.** At reveal, zeroes render as
+   * every bar empty, which on a projector reads as "nobody answered" — the same wrong
+   * message the poll refuses, at the higher-stakes moment. `null` is the field's own
+   * vocabulary for "there is nothing to show".
+   */
+  it("returns null when the store cannot answer", async () => {
+    redisMock.hmget.mockRejectedValue(new Error("unreachable"));
+
+    await expect(readQuestionTallies(questionId, optionIds)).resolves.toBeNull();
+  });
+
+  it("returns null when the store is unconfigured", async () => {
+    vi.unstubAllEnvs();
+
+    await expect(readQuestionTallies(questionId, optionIds)).resolves.toBeNull();
   });
 });
 
