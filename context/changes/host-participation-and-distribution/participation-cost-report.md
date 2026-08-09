@@ -93,10 +93,65 @@ submission refused 409, worst end-to-end p95 446 ms against the 1,000 ms budget,
 | | Value |
 | --- | --- |
 | Counter before | **8,073** (writes 4,617 + reads 3,456; console rounded it to 8.1k) |
-| Counter after (settled, ≥90 min) | _pending_ |
-| Observed delta | _pending_ |
-| Predicted delta | ~2,930 |
-| Disagreement | _pending_ |
+| Counter after (settled) | **11,257** (writes 6,693 + reads 4,564; console rounded it to 11k) |
+| **Observed delta** | **3,184** (writes +2,076, reads +1,108) |
+| Predicted window | 3,210 – 3,310 |
+| **Disagreement** | **0.8% below the bottom of the range**, ~2.3% under the midpoint |
+
+**The model holds.** The prediction was written down before the counter was read, and the aggregate
+lands just under the low end of the range. Nothing is issuing commands nobody counted.
+
+Three honest qualifications on that agreement:
+
+- **The individual terms are not separable.** One aggregate delta cannot confirm that a submission
+  costs exactly 11 rather than, say, 10 with the poll costing more than modelled. What it confirms is
+  that the *sum* of the model's terms matches reality — which is the claim that matters for capacity,
+  and the one an unnoticed extra call would break.
+- **A shortfall is the direction lag produces.** The console understates until it settles, so if this
+  reading is still creeping the true delta is slightly higher and moves further *into* the predicted
+  range rather than away from it. The reading was taken once rather than confirmed by a second read a
+  few minutes later; a small upward correction would not change the conclusion.
+- **The poll was the loose term and it did not blow up.** ~100–200 was the widest band in the
+  estimate, and the total leaves no room for it to have been far above that.
+
+### What this does and does not measure
+
+**It measures the model, not an event.** The window covers a 150-client harness run plus a
+single-attendee 14-question stage pass — not 150 people answering 14 questions. The **~32.4k
+per-event** figure is still an extrapolation.
+
+What changed is its standing: it is built from the same per-command counts this delta just confirmed
+to within ~1%, so it is now an *evidence-backed extrapolation* rather than an unverified prediction.
+The distinction is worth keeping — a future reader deciding whether to trust 65% of the ceiling
+should know that the multiplier was measured and the multiplicand was not.
+
+### The stage rehearsal is inside the measured window
+
+The 5.9 stage rehearsal ran between the baseline reading and the post-run reading, so the window
+covers **both** the harness run and a manual pass: 14 questions driven from the host view, one phone
+joined, one answer submitted.
+
+**Estimated and written down before the counter was read**, so the model cannot be quietly fitted to
+the result afterwards:
+
+| Path | Commands | Basis |
+| --- | --- | --- |
+| `start` | ~3 | `CREATE_IF_ABSENT` — `EVAL` + `GET` + `SET` |
+| 14 × `advance` | ~70 | 5 each: `readSession` + `readPlayerCount` + `COMPARE_AND_SET` (`EVAL`+`GET`+`SET`) |
+| 14 × `reveal` | ~80 | 5 each, plus one `HMGET` on each of the 10 choice questions |
+| 1 join | ~8 | S-02's measured per-join figure |
+| Device connects (`GET` + `HLEN` each) | ~6 | host page and phone, allowing a reload |
+| 1 submission | 11 | `readSession` + `SUBMIT_ANSWER` at k = 1 — the S-04 figure |
+| 1 result read | 4 | `READ_ANSWER` |
+| **Subtotal** | **~182** | |
+| The poll | **~100–200** | 2 per tick, 10 choice questions, at ~10–25 s open each |
+| **Stage run total** | **~280–380** | |
+
+**The poll is the loose term, and deliberately so.** It is the only path here paced by a clock rather
+than by a person, so its cost depends entirely on how long each question stayed open — which is why
+the runbook records the loop's *shape* rather than a single number.
+
+**Combined predicted window: ~3,210–3,310 commands** (harness ~2,930 + stage ~280–380).
 
 Two things that bias the "before" figure, both small and both stated rather than discovered later:
 

@@ -724,6 +724,6 @@ and is the only thing that can see the orphan.
 
 #### Manual
 
-- [ ] 5.7 Command counter read before and ≥90 minutes after, delta attributed to the predicted model
-- [ ] 5.8 Cost report, runbook update and contract note written and consistent
-- [ ] 5.9 Full stage rehearsal read from a distance
+- [x] 5.7 Command counter read before and ≥90 minutes after, delta attributed to the predicted model
+- [x] 5.8 Cost report, runbook update and contract note written and consistent
+- [x] 5.9 Full stage rehearsal read from a distance

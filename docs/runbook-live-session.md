@@ -74,11 +74,12 @@ reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `c
   options selected — plus one read per reveal and two per poll tick. Only the **10 answerable
   questions** generate submissions, so the arithmetic is not over all 14. Predicted **~32.4k per
   event**, against ~26.8k after S-03.
-  **⚠ Predicted, not measured.** The counter reading for this slice has not been taken. Take it as
-  `context/changes/host-participation-and-distribution/participation-cost-report.md` describes, then
-  replace the two figures in this bullet and the next **from the measured delta**, not from the
-  prediction. A predicted figure quoted as a measured one is how this section understated the cost
-  before.
+  **Measured 2026-08-09: the model is confirmed, the per-event figure is extrapolated from it.** A
+  150-client harness run plus a 14-question stage pass spent an observed **3,184** commands against a
+  **3,210–3,310** prediction written down beforehand — **0.8% under**. So nothing is issuing commands
+  nobody counted, and ~32.4k is built from per-command counts that hold. It remains an extrapolation:
+  no 150-attendee event has been measured end to end, and it never will be before one happens. See
+  `context/changes/host-participation-and-distribution/participation-cost-report.md`.
 - **Ten events a month reaches ~324k, about 65% of the 500K ceiling** — up from ~54% after S-03 and
   roughly 1% before. Not a blocker and not an incident; it is simply no longer noise, and every slice
   from here (S-05 through S-08) adds another per-attendee path on top of this one.
