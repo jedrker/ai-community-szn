@@ -646,33 +646,33 @@ and is the only thing that can see the orphan.
 
 #### Automated
 
-- [x] 1.1 Type checking passes: `bun run type-check`
-- [x] 1.2 Test suite passes: `bun run test`
-- [x] 1.3 `keys.test.ts` passes with the new key registered, and still fails if the literal is moved out
-- [x] 1.4 `store.test.ts`: increments exactly once per accepted answer and per selected option
-- [x] 1.5 `store.test.ts`: no increment on any rejection path
-- [x] 1.6 `store.test.ts`: `readAnsweredCount` and `readQuestionTallies` each return zeros vs `null`
-- [x] 1.7 `tallies.test.ts`: field formats and non-collision
+- [x] 1.1 Type checking passes: `bun run type-check` — 73cdce9
+- [x] 1.2 Test suite passes: `bun run test` — 73cdce9
+- [x] 1.3 `keys.test.ts` passes with the new key registered, and still fails if the literal is moved out — 73cdce9
+- [x] 1.4 `store.test.ts`: increments exactly once per accepted answer and per selected option — 73cdce9
+- [x] 1.5 `store.test.ts`: no increment on any rejection path — 73cdce9
+- [x] 1.6 `store.test.ts`: `readAnsweredCount` and `readQuestionTallies` each return zeros vs `null` — 73cdce9
+- [x] 1.7 `tallies.test.ts`: field formats and non-collision — 73cdce9
 
 #### Manual
 
-- [x] 1.8 A single local answer leaves exactly the expected fields in `livequiz:tallies`
+- [x] 1.8 A single local answer leaves exactly the expected fields in `livequiz:tallies` — 73cdce9
 
 ### Phase 2: The participation endpoint
 
 #### Automated
 
-- [ ] 2.1 Type checking passes: `bun run type-check`
-- [ ] 2.2 `participation.test.ts`: 200 with the correct count, echoing the requested `questionId`
-- [ ] 2.3 `participation.test.ts`: 401 without and with a wrong secret; 400 for absent, empty and unknown `questionId`
-- [ ] 2.4 `participation.test.ts`: the 200 body's key set is exactly `questionId`, `answered`, `playerCount`
-- [ ] 2.5 Test asserting the handler calls no write path
-- [ ] 2.6 `keys.test.ts` still passes
+- [x] 2.1 Type checking passes: `bun run type-check`
+- [x] 2.2 `participation.test.ts`: 200 with the correct count, echoing the requested `questionId`
+- [x] 2.3 `participation.test.ts`: 401 without and with a wrong secret; 400 for absent, empty and unknown `questionId`
+- [x] 2.4 `participation.test.ts`: the 200 body's key set is exactly `questionId`, `answered`, `playerCount`
+- [x] 2.5 Test asserting the handler calls no write path
+- [x] 2.6 `keys.test.ts` still passes
 
 #### Manual
 
-- [ ] 2.6 `curl` without the secret returns 401; with it returns the count
-- [ ] 2.7 Answering from one phone raises the number the next `curl` returns
+- [x] 2.6 `curl` without the secret returns 401; with it returns the count
+- [x] 2.7 Answering from one phone raises the number the next `curl` returns
 
 ### Phase 3: Distribution on the snapshot
 
