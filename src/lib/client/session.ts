@@ -52,13 +52,60 @@ export type SnapshotSource = "fetch" | "realtime" | "http";
  */
 export type ConnectionStatus = "connecting" | "connected" | "lost";
 
+/**
+ * *Why* the transport is unhealthy, which is a different question from *that* it is.
+ *
+ * `"account-limit"` means Ably refused because this account has hit a ceiling — most
+ * plausibly the free tier's 200 peak connections in a room larger than ~180
+ * (`context/foundation/infrastructure.md`). `"transient"` is everything else that lands
+ * on `lost`: the venue network, a dropped socket, a device that walked out of range.
+ *
+ * The distinction is not cosmetic. A transient drop is something the SDK retries and an
+ * attendee can wait out; an exhausted account limit is not, and the only person who can
+ * act on it is the host. Rendering both as one red "reconnecting" line tells the room a
+ * device is broken when the account is full, and tells the host nothing they can use.
+ *
+ * `null` on a healthy or still-opening connection — there is no cause to report.
+ */
+export type ConnectionCause = "account-limit" | "transient" | null;
+
+/** Everything a view needs to describe the connection beyond its status. */
+export type ConnectionInfo = {
+  /**
+   * Ably's own state name, verbatim. The host view prints it, so it stays a raw
+   * transport word rather than something translated or folded.
+   */
+  readonly detail: string;
+  readonly cause: ConnectionCause;
+  /**
+   * The Ably error code behind `cause`, or `null` when the transition carried none.
+   * Surfaced so the host's screen can be matched against Ably's dashboard — an
+   * unexplained red line is what this whole classification exists to remove.
+   */
+  readonly code: number | null;
+};
+
+/**
+ * Ably error codes that mean "this account has hit a ceiling", not "the network
+ * wobbled". Spelled out because the numbers are unreadable otherwise, and because the
+ * set is the entire definition of `"account-limit"`.
+ *
+ * @see https://ably.com/docs/platform/errors/codes
+ */
+const ACCOUNT_LIMIT_CODES = new Set([
+  40111, // Connection limits exceeded — the hard peak-connection ceiling
+  40115, // Account restricted (request limit exceeded)
+  42910, // Rate limit exceeded; request rejected
+  42911, // Rate limit exceeded; connection closed
+]);
+
 export type SessionClientOptions = {
   /** From `define:vars`, never imported — see the module docstring. */
   readonly channelName: string;
   readonly snapshotEvent: string;
   /** Called for every snapshot that wins the version check, and only those. */
   readonly onSnapshot: (state: Snapshot, source: SnapshotSource) => void;
-  readonly onConnection?: (status: ConnectionStatus, detail: string) => void;
+  readonly onConnection?: (status: ConnectionStatus, info: ConnectionInfo) => void;
   /**
    * The live join count from `/api/quiz/state`, called on every successful fetch —
    * **including one whose snapshot the version check dropped.**
@@ -90,17 +137,52 @@ export type SessionClient = {
 };
 
 /**
- * Ably's connection states, folded into the three a view can render.
+ * Ably's connection state and error code, folded into what a view can render.
  *
- * `initialized` and `connecting` are the opening moments; `connected` is the only
- * healthy one; everything else — `disconnected`, `suspended`, `closing`, `closed`,
- * `failed` — is a device that is not receiving snapshots, which from the attendee's
- * side is one situation with one message.
+ * The status half is unchanged and deliberately coarse: `initialized` and `connecting`
+ * are the opening moments; `connected` is the only healthy one; everything else —
+ * `disconnected`, `suspended`, `closing`, `closed`, `failed` — is a device that is not
+ * receiving snapshots, which from the attendee's side is one situation.
+ *
+ * **The cause is read from the error code, never from the state.** Ably's documentation
+ * does not commit `40111` to a particular connection state — a limit rejection may
+ * arrive as `failed` or as `disconnected` depending on where in the handshake it lands —
+ * so branching on the state would be a guess dressed as a rule. The code is exact.
+ *
+ * Pure and exported so the mapping can be tested without an Ably instance: it is a
+ * lookup table of magic numbers, which is precisely the kind of thing that rots without
+ * anything failing.
  */
-function toStatus(state: string): ConnectionStatus {
-  if (state === "connected") return "connected";
-  if (state === "initialized" || state === "connecting") return "connecting";
-  return "lost";
+export function classifyConnection(
+  state: string,
+  code: number | undefined
+): { status: ConnectionStatus; info: ConnectionInfo } {
+  const status: ConnectionStatus =
+    state === "connected"
+      ? "connected"
+      : state === "initialized" || state === "connecting"
+        ? "connecting"
+        : "lost";
+
+  /**
+   * **A healthy connection has no cause, whatever code came with the transition.** Ably
+   * reports the *previous* failure's reason on the change that recovers from it, so
+   * without this guard a room that briefly hit its limit and then recovered would keep
+   * rendering the limit message over a working connection.
+   *
+   * `connecting` is deliberately *not* guarded the same way: a retry loop carrying an
+   * account-limit code is exactly when naming the cause is most useful to the host.
+   */
+  const cause: ConnectionCause =
+    status === "connected"
+      ? null
+      : code !== undefined && ACCOUNT_LIMIT_CODES.has(code)
+        ? "account-limit"
+        : status === "lost"
+          ? "transient"
+          : null;
+
+  return { status, info: { detail: state, cause, code: code ?? null } };
 }
 
 function describe(err: unknown): string {
@@ -159,7 +241,13 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
     try {
       await refresh();
     } catch (err) {
-      options.onConnection?.("connecting", describe(err));
+      // Not a transport verdict — the subscription has not been opened yet. Reported as
+      // still-opening with no cause, because nothing about a failed prime says why.
+      options.onConnection?.("connecting", {
+        detail: describe(err),
+        cause: null,
+        code: null,
+      });
     }
 
     // authUrl, never a key: the browser exchanges a short-lived subscribe-only token
@@ -167,7 +255,16 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
     realtime = new Ably.Realtime({ authUrl: "/api/quiz/token" });
 
     realtime.connection.on((change) => {
-      options.onConnection?.(toStatus(change.current), change.current);
+      /**
+       * **`errorReason` is a fallback, not the primary source, and the order matters.**
+       * The reason for *this* transition rides on the change; `connection.errorReason`
+       * holds the last error the connection saw, which on a later transition may be
+       * stale. Read only when the change carries nothing, so a transition that explains
+       * itself always wins.
+       */
+      const code = change.reason?.code ?? realtime?.connection.errorReason?.code;
+      const { status, info } = classifyConnection(change.current, code);
+      options.onConnection?.(status, info);
     });
 
     const channel = realtime.channels.get(options.channelName);

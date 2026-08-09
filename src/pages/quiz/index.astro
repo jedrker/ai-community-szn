@@ -212,6 +212,7 @@ import { publicQuiz } from "../../quiz/public";
     <script>
       import {
         createSessionClient,
+        type ConnectionCause,
         type ConnectionStatus,
         type SessionClient,
       } from "../../lib/client/session";
@@ -262,6 +263,12 @@ import { publicQuiz } from "../../quiz/public";
       const resultPanel = el("result");
 
       let connection: ConnectionStatus = "connecting";
+      /**
+       * Why the connection is unhealthy, held beside the status because the `lost` branch
+       * picks its wording from it. Deliberately not folded into `connection`: the status
+       * decides what is on screen, the cause decides only what it says.
+       */
+      let connectionCause: ConnectionCause = null;
       let joined = false;
       let player: { id: string; displayName: string } | null = null;
 
@@ -292,8 +299,9 @@ import { publicQuiz } from "../../quiz/public";
         channelName: config.channelName,
         snapshotEvent: config.snapshotEvent,
         onSnapshot: () => render(),
-        onConnection: (status) => {
+        onConnection: (status, info) => {
           connection = status;
+          connectionCause = info.cause;
           render();
         },
       });
@@ -316,7 +324,23 @@ import { publicQuiz } from "../../quiz/public";
         // known to be current, and saying so is the difference between a quiet room and
         // a broken phone. The three states `ended` exists to separate are exactly these.
         if (connection === "lost") {
-          setText("follow-status", "Utracono połączenie. Próbujemy połączyć ponownie…");
+          /**
+           * **Two causes, two sentences, and the difference is a promise we can keep.**
+           * "Próbujemy połączyć ponownie" is true of a network wobble, which the SDK
+           * retries on its own. It is not true of an exhausted account limit: there may be
+           * no retry, and the wait is on someone else's action, not this phone's.
+           *
+           * The limit itself is deliberately unnamed. An attendee can do nothing with
+           * "the account's connection ceiling is full", and a message that reads as "there
+           * is no room for you" invites them to put the phone away. The diagnosis belongs
+           * on the host's screen, where someone can act on it.
+           */
+          setText(
+            "follow-status",
+            connectionCause === "account-limit"
+              ? "Nie możemy Cię teraz podłączyć na żywo. Spróbuj odświeżyć stronę za chwilę."
+              : "Utracono połączenie. Próbujemy połączyć ponownie…"
+          );
           el("follow-status").className = "text-xl font-semibold text-red-400";
           hideAnswerControls();
           return;

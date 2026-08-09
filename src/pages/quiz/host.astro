@@ -226,7 +226,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
     </script>
 
     <script>
-      import { createSessionClient, type ConnectionStatus } from "../../lib/client/session";
+      import {
+        createSessionClient,
+        type ConnectionInfo,
+        type ConnectionStatus,
+      } from "../../lib/client/session";
       import {
         el,
         renderDistribution,
@@ -363,8 +367,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           if (count !== null) liveCount = count;
           render();
         },
-        onConnection: (status: ConnectionStatus, detail: string) => {
-          setText("connection", `połączenie: ${detail}`);
+        onConnection: (status: ConnectionStatus, info: ConnectionInfo) => {
+          /**
+           * **This is the one screen where the cause is named outright, code included.**
+           * The host is the only person who can act on an exhausted Ably limit — the fix
+           * is a plan upgrade, not patience — and `połączenie: disconnected` says nothing
+           * about which of the two situations they are in. The code travels so it can be
+           * matched against Ably's dashboard without guessing.
+           *
+           * Attendee phones get the neutral wording instead; see `index.astro`.
+           */
+          setText(
+            "connection",
+            info.cause === "account-limit"
+              ? `połączenie: limit Ably wyczerpany (${info.code ?? "?"}) — sala pełna, potrzebny wyższy plan`
+              : `połączenie: ${info.detail}`
+          );
           el("connection").className =
             status === "connected"
               ? "text-text-secondary text-base"
