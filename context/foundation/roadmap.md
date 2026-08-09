@@ -118,6 +118,14 @@ and do NOT re-scaffold them.
   CLAUDE.md. `points: null` marks an unscored question (FR-017); scoring rules themselves are S-03's
   and S-06's. A malformed definition fails `astro build` via the `quiz-definition-gate` integration,
   so it cannot deploy.
+  **Updated 2026-08-09 (S-05 delivered):** `src/quiz/normalize.ts` now carries **two** folds, and the
+  distinction is load-bearing. `normalizeAnswer` (case, spacing, diacritics, trailing punctuation) is
+  the FR-011 answer fold, shared by `scoreTextAnswer` and by the build-time accepted-variant collision
+  check so the two cannot drift. `normalizePolish` (the same minus punctuation) is the **display-name
+  claim key** in `src/lib/session/players.ts` and must keep punctuation — `.` is a legal name
+  character and the stored keys were written with it, so merging the two would let two visually
+  identical names onto the leaderboard mid-deploy. S-06 extends the answer fold's *scorer*, not the
+  name fold. For a text question, `acceptedAnswers[0]` is the variant published to the room.
 - **Observability:** absent — `src/lib/slack.ts` is an outbound notification webhook, not error
   tracking. No alerting; `infrastructure.md` rates "a failure is discovered by attendees" as
   high-likelihood, high-impact.

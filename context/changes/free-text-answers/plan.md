@@ -831,32 +831,32 @@ a document written by this build parses under the old one.
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 `boundary.test.ts` passes for the new `<script>` code
-- [x] 4.4 client `answer.test.ts` covers the text submission path including 5xx as `failed`
-- [x] 4.5 client `answer.test.ts` still passes its `withBrokenWrite` localStorage cases
-- [x] 4.6 `render.test.ts` still passes unchanged
+- [x] 4.1 Unit tests pass: `bun run test` — e3279a9
+- [x] 4.2 Type checking passes: `bun run type-check` — e3279a9
+- [x] 4.3 `boundary.test.ts` passes for the new `<script>` code — e3279a9
+- [x] 4.4 client `answer.test.ts` covers the text submission path including 5xx as `failed` — e3279a9
+- [x] 4.5 client `answer.test.ts` still passes its `withBrokenWrite` localStorage cases — e3279a9
+- [x] 4.6 `render.test.ts` still passes unchanged — e3279a9
 
 #### Manual
 
-- [x] 4.7 Phone-sized viewport: usable field, keyboard does not cover the submit button
-- [x] 4.8 Submitting locks the control and shows the saved note
-- [x] 4.9 Reload mid-question keeps the clock; reload after submitting keeps the lock
-- [x] 4.10 At reveal: accepted answer, typed answer, verdict and running total all appear
-- [x] 4.11 With `/api/quiz/result` failing, the accepted answer is still on screen and no error shows
-- [x] 4.12 A correct answer with a capital letter and a trailing full stop scores correct
+- [x] 4.7 Phone-sized viewport: usable field, keyboard does not cover the submit button — e3279a9
+- [x] 4.8 Submitting locks the control and shows the saved note — e3279a9
+- [x] 4.9 Reload mid-question keeps the clock; reload after submitting keeps the lock — e3279a9
+- [x] 4.10 At reveal: accepted answer, typed answer, verdict and running total all appear — e3279a9
+- [x] 4.11 With `/api/quiz/result` failing, the accepted answer is still on screen and no error shows — e3279a9
+- [x] 4.12 A correct answer with a capital letter and a trailing full stop scores correct — e3279a9
 
 ### Phase 5: The host view and the docs
 
 #### Automated
 
-- [ ] 5.1 Unit tests pass: `bun run test`
-- [ ] 5.2 Type checking passes: `bun run type-check`
-- [ ] 5.3 Production build succeeds: `bun run build`
+- [x] 5.1 Unit tests pass: `bun run test`
+- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.3 Production build succeeds: `bun run build`
 
 #### Manual
 
-- [ ] 5.4 Projector-sized window: accepted answer legible at reveal, absent in every other phase
-- [ ] 5.5 Full two-device run through the text question
-- [ ] 5.6 `docs/runbook-live-session.md` still describes reality
+- [x] 5.4 Projector-sized window: accepted answer legible at reveal, absent in every other phase
+- [x] 5.5 Full two-device run through the text question
+- [x] 5.6 `docs/runbook-live-session.md` still describes reality

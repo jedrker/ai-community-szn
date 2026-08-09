@@ -131,6 +131,25 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       <section id="question" class="flex flex-col gap-5"></section>
 
       <!--
+        The accepted answer for a free-text question, at reveal (roadmap S-05, FR-016).
+
+        A choice question marks its correct option in the list above; a text question has
+        no list to mark, so without this the room sees the answer on 150 phones and
+        nothing on the projector — the failure the host notices from the stage.
+
+        Sized to be read from the back, and hidden whenever the field is null, which the
+        schema guarantees for every phase but `question-revealed`.
+      -->
+      <section
+        id="accepted-answer"
+        hidden
+        class="rounded-xl border-2 border-emerald-400 bg-emerald-500/15 px-6 py-5"
+      >
+        <p class="text-text-secondary text-lg uppercase tracking-wide">Poprawna odpowiedź</p>
+        <p id="accepted-answer-value" class="text-6xl font-bold leading-tight"></p>
+      </section>
+
+      <!--
         The participation panel (roadmap S-04, FR-005).
 
         `answered / joined` while a question is open, the room's answers once it is
@@ -248,6 +267,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const countBox = el("participation-count-box");
       const staleMark = el("participation-stale");
       const distributionBox = el("distribution");
+      const acceptedAnswerBox = el("accepted-answer");
 
       const actionButtons = (): HTMLButtonElement[] =>
         Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-action]"));
@@ -433,6 +453,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           setText("version", "—");
           liveCount = null;
           setHidden(participationBox, true);
+          setHidden(acceptedAnswerBox, true);
           stopPolling();
           renderQuestion(questionBox, undefined, { prompt: "text-4xl font-bold leading-tight" });
           return;
@@ -470,6 +491,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             optionCorrect: "border-emerald-400",
           }
         );
+
+        /**
+         * The accepted answer, straight off the snapshot (roadmap S-05).
+         *
+         * The schema already refuses a non-null value outside `question-revealed`, so
+         * the null check is the whole condition — no phase test is needed here, and
+         * adding one would be a second place for the rule to live.
+         */
+        const accepted = state.revealedAnswerText;
+        setHidden(acceptedAnswerBox, accepted === null || accepted.length === 0);
+        if (accepted) setText("accepted-answer-value", accepted);
 
         renderParticipation(state);
 

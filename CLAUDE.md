@@ -144,9 +144,33 @@ Polish diacritic decomposes under NFD and is removed by `\p{Diacritic}`, but `ł
 codepoint with no decomposition, so the idiomatic fold leaves it untouched — `"żółć łódź"` becomes
 `"zołc łodz"`.
 
+**`normalize.ts` exports TWO folds, and merging them back into one is a bug with no visible symptom
+until a live session.** They differ by exactly one rule — trailing sentence punctuation — and they
+have different jobs:
+
+| | `normalizePolish` | `normalizeAnswer` |
+| --- | --- | --- |
+| Folds | case, whitespace, diacritics | the same, plus trailing `. ! ? , ; :` |
+| Used by | the display-name claim key (`src/lib/session/players.ts`) | answer matching (`scoreTextAnswer`) **and** the authoring-collision check in `schema.ts` |
+| Owns | FR-008 name uniqueness | FR-011 answer matching |
+
+The narrower one must keep punctuation because `.` is a legal display-name character
+(`players.ts`'s `ALLOWED_CHARACTERS`), and the claim keys already stored in `livequiz:players` were
+written with it — so widening it in place would merge `"Ania."` and `"Ania"` into one claim and,
+mid-deploy, let two visually identical names onto the leaderboard. `normalize.test.ts` asserts
+`normalizePolish("Ania.") !== normalizePolish("Ania")`; that assertion is the tripwire.
+
+Answer matching and the build-time collision check deliberately share **one** function, so an author
+cannot ship two accepted variants the schema allows and the scorer treats as identical. Matching
+stops at case, spacing, diacritics and trailing punctuation — **no fuzzy or edit-distance matching**,
+because a threshold is something the host would have to defend out loud in front of the room.
+
+For a text question, **`acceptedAnswers[0]` is the variant the room sees**: `reveal.ts` publishes it
+as the accepted answer to every phone and the projector. Order there is not arbitrary.
+
 Scoring rules deliberately do **not** live here. `points` (a number, or `null` for an unscored
-question per FR-017) is the only scoring field; the speed weighting and the numeric-closeness curve
-belong to later roadmap slices.
+question per FR-017) is the only scoring field; the speed weighting, the answer-length bound
+(`MAX_TEXT_ANSWER_LENGTH`) and the numeric-closeness curve live in `src/lib/session/scoring.ts`.
 
 ## Styling
 
@@ -241,6 +265,21 @@ contract forbids, so the count reaches the room on the host's next action instea
 
 S-07 still owns the open half — a leaderboard needs names on 150 screens. See
 `context/archive/2026-08-07-join-and-follow-host/join-contract.md`.
+
+**`SessionState` now has one decoration field and three transition fields, and they behave
+oppositely.** `playerCount` is decoration: `applyHostAction` overwrites it on every action and a
+stale value costs nothing. `revealedOptionIds`, `revealedDistribution` and `revealedAnswerText` are
+*part of* the reveal transition — each is set by `reveal.ts` alone, nulled by every other
+constructor, and guarded by its own `superRefine` clause so the failure names the field. **Never
+inject one of the three in `applyHostAction`**, which is where a reader who pattern-matched on
+"aggregate fact about the room" would naturally put them: that publishes one question's answer key,
+bar chart or accepted answer while the *next* question is open, and it looks entirely correct on
+screen. Each carries `.default(null)` so a document written before it shipped still parses — required,
+the host's next action 409s mid-segment.
+
+All three carry quiz content about a question the host has already closed, so none of them touches
+the retention reasoning above. What an attendee *typed* is per-player and travels on
+`/api/quiz/result`, never on the snapshot.
 
 ## API route conventions
 
