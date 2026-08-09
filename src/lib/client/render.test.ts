@@ -283,12 +283,10 @@ describe("renderDistribution", () => {
     );
 
   it("draws one bar per option, in definition order, with counts and shares", () => {
-    renderDistribution(
-      container,
-      single,
-      { answered: 10, options: { a: 5, b: 3, c: 2 } },
-      ["a"]
-    );
+    renderDistribution(container, single, {
+      distribution: { answered: 10, options: { a: 5, b: 3, c: 2 } },
+      correctOptionIds: ["a"],
+    });
 
     expect(rows()).toHaveLength(3);
     // Definition order, not sorted by count: the bars sit under a question whose options
@@ -303,7 +301,9 @@ describe("renderDistribution", () => {
   });
 
   it("marks the correct option in the DOM as well as by class", () => {
-    renderDistribution(container, single, { answered: 4, options: { a: 4 } }, ["a"], {
+    renderDistribution(container, single, {
+      distribution: { answered: 4, options: { a: 4 } },
+      correctOptionIds: ["a"],
       rowCorrect: "right",
     });
 
@@ -314,7 +314,10 @@ describe("renderDistribution", () => {
   });
 
   it("shows an option nobody picked as zero rather than dropping its row", () => {
-    renderDistribution(container, single, { answered: 4, options: { a: 4 } }, ["a"]);
+    renderDistribution(container, single, {
+      distribution: { answered: 4, options: { a: 4 } },
+      correctOptionIds: ["a"],
+    });
 
     // A missing row would leave the bars unreadable against the question on screen.
     expect(rows()).toHaveLength(3);
@@ -329,10 +332,10 @@ describe("renderDistribution", () => {
    * "fixed".
    */
   it("renders multiple-choice shares unnormalized, against answered", () => {
-    renderDistribution(container, multi, { answered: 10, options: { a: 8, b: 7, c: 1 } }, [
-      "a",
-      "b",
-    ]);
+    renderDistribution(container, multi, {
+      distribution: { answered: 10, options: { a: 8, b: 7, c: 1 } },
+      correctOptionIds: ["a", "b"],
+    });
 
     expect(rows().map((row) => row.textContent)).toEqual([
       "Large Language Model8 · 80%",
@@ -344,7 +347,9 @@ describe("renderDistribution", () => {
   });
 
   it("renders no bars and no NaN when nobody has answered", () => {
-    renderDistribution(container, single, { answered: 0, options: {} }, ["a"], {
+    renderDistribution(container, single, {
+      distribution: { answered: 0, options: {} },
+      correctOptionIds: ["a"],
       empty: "muted",
     });
 
@@ -361,7 +366,7 @@ describe("renderDistribution", () => {
    * that nobody answered.
    */
   it("renders nothing at all for a null distribution", () => {
-    renderDistribution(container, single, null, ["a"]);
+    renderDistribution(container, single, { distribution: null, correctOptionIds: ["a"] });
 
     expect(container.children).toHaveLength(0);
   });
@@ -369,7 +374,7 @@ describe("renderDistribution", () => {
   it("renders nothing for a kind with no options", () => {
     const text: PublicQuestion = { id: "t", kind: "text", prompt: "Coś", scored: true };
 
-    renderDistribution(container, text, { answered: 3, options: {} }, null);
+    renderDistribution(container, text, { distribution: { answered: 3, options: {} } });
 
     expect(container.children).toHaveLength(0);
   });
@@ -380,7 +385,7 @@ describe("renderDistribution", () => {
       options: [{ id: "a", text: "<img src=x onerror=alert(1)>" }],
     };
 
-    renderDistribution(container, hostile, { answered: 1, options: { a: 1 } }, null);
+    renderDistribution(container, hostile, { distribution: { answered: 1, options: { a: 1 } } });
 
     // S-08 will feed this module attendee-supplied strings. `textContent`, never
     // `innerHTML` — the same rule `renderQuestion` follows, asserted the same way.
@@ -391,7 +396,7 @@ describe("renderDistribution", () => {
   it("clears whatever was there before", () => {
     container.append(document.createElement("p"));
 
-    renderDistribution(container, single, { answered: 2, options: { a: 2 } }, null);
+    renderDistribution(container, single, { distribution: { answered: 2, options: { a: 2 } } });
 
     expect(container.querySelectorAll("p")).toHaveLength(0);
   });

@@ -301,9 +301,29 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        */
       const POLL_BASE_MS = 2_500;
       const POLL_MAX_MS = 20_000;
+      /**
+       * How many consecutive `401`s keep the fast interval before the loop starts backing
+       * off. Five ticks is ~12.5 s — comfortably longer than a host takes to type the
+       * secret, and short enough that a page which is never going to be authorised stops
+       * hammering. See the `401` branch in `runPoll` for what this is protecting.
+       */
+      const UNAUTHORIZED_FAST_RETRIES = 5;
 
       let pollTimer: number | null = null;
       let pollDelay = POLL_BASE_MS;
+      let unauthorizedPolls = 0;
+      /**
+       * Whether a request is in flight.
+       *
+       * **`pollTimer` alone does not answer this**, and that gap is the bug this exists to
+       * close: the timer callback clears the handle *before* awaiting, so for the whole
+       * duration of a fetch there is no timer — and `render` runs on every snapshot, which
+       * means every host action. Without this flag each such render scheduled another
+       * tick, and a slow venue network could hold several requests open at once. Worst
+       * exactly when the network is worst, which is when the backoff was meant to be
+       * reducing load rather than racing it.
+       */
+      let polling = false;
       /** The last count the endpoint gave us. `null` means it has not answered yet. */
       let answered: number | null = null;
       let answeredStale = false;
@@ -389,9 +409,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         renderDistribution(
           distributionBox,
           state.currentQuestionId === null ? undefined : questionFor(state),
-          distribution,
-          state.revealedOptionIds,
           {
+            distribution,
+            correctOptionIds: state.revealedOptionIds,
             list: "flex flex-col gap-3",
             row: "grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 rounded-xl border border-surface-border bg-surface-secondary px-5 py-4",
             rowCorrect: "border-emerald-400",
@@ -469,10 +489,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       function schedulePoll(): void {
-        // Never two timers. `render` runs on every snapshot, and a snapshot arriving
-        // mid-question would otherwise add a second loop each time — the count would
-        // still look right while the command spend doubled, then quadrupled.
-        if (pollTimer !== null) return;
+        // Never two timers, and never a timer stacked behind a request that has not come
+        // back. `render` runs on every snapshot, and a snapshot arriving mid-question
+        // would otherwise add a second loop each time — the count would still look right
+        // while the command spend doubled, then quadrupled.
+        if (pollTimer !== null || polling) return;
         if (document.visibilityState === "hidden") return;
         pollTimer = window.setTimeout(() => {
           pollTimer = null;
@@ -502,6 +523,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const questionId = state.currentQuestionId;
         if (questionId === null) return;
 
+        // Nothing may open a second request while one is open — including the secret
+        // field's immediate retry, which is otherwise one keystroke away from a burst.
+        if (polling) return;
+        polling = true;
+
         try {
           const response = await fetch(
             `/api/quiz/host/participation?questionId=${encodeURIComponent(questionId)}`,
@@ -519,9 +545,30 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            */
           if (response.status === 401) {
             say("Wpisz sekret hosta, żeby zobaczyć liczbę odpowiedzi.", true);
-            schedulePoll();
+
+            /**
+             * **The fast retries are bounded, and that bound is about a different threat
+             * from the backoff above.** `/quiz/host` is deliberately unprotected — there
+             * is nothing on it worth guarding — so an attendee who opens it during a
+             * choice question would otherwise poll every 2.5 s for the whole segment.
+             * Each of those requests emits a `session.auth.rejected` line, and `log.ts`
+             * calls that the only security-relevant signal this system emits: a real
+             * unauthorized attempt would sit buried among them. Backing off after the
+             * window a host actually needs costs the honest case nothing, because the
+             * `input` handler below resets this the moment the secret is typed.
+             */
+            unauthorizedPolls += 1;
+            if (unauthorizedPolls > UNAUTHORIZED_FAST_RETRIES) {
+              pollDelay = Math.min(pollDelay * 2, POLL_MAX_MS);
+            }
+
             return;
           }
+
+          // Reaching here means the secret is working, whatever else went wrong. Reset the
+          // 401 counter but NOT `pollDelay` — a 503 below still needs to back off, and the
+          // success path further down is what returns the interval to base.
+          unauthorizedPolls = 0;
 
           if (!response.ok) {
             pollFailed();
@@ -541,7 +588,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            * guard.
            */
           if (payload.questionId !== client.current()?.currentQuestionId) {
-            schedulePoll();
             return;
           }
 
@@ -554,7 +600,15 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           // The venue network. Not an error worth a message — the marker says it.
           pollFailed();
         } finally {
-          schedulePoll();
+          polling = false;
+          /**
+           * The single place a tick is re-armed, so every branch above simply returns.
+           * **Conditional**, because `render` may have called `stopPolling` while this
+           * request was open — the host revealing mid-fetch is the ordinary way that
+           * happens — and re-arming there would leave a timer running for a panel that
+           * is no longer on screen.
+           */
+          if (participationApplies(client.current())) schedulePoll();
         }
       }
 
@@ -655,14 +709,24 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         else render();
       });
       window.addEventListener("pagehide", stopPolling);
+      /**
+       * The other half of `pagehide`. A back-forward-cache restore does not re-run this
+       * script, so without this the page comes back showing whatever count it froze on,
+       * with no poll running and no staleness marker — the exact "a stale number that
+       * looks live" failure the marker exists to prevent. It self-heals on the host's next
+       * action, but the gap is silent, and `render` re-arms everything.
+       */
+      window.addEventListener("pageshow", () => render());
 
       secretField.value = readSecret();
       secretField.addEventListener("input", () => {
         storeSecret(secretField.value);
         setText("secret-note", secretField.value.length > 0 ? "zapamiętany w tej karcie" : "");
-        // The 401 recovery path. A poll refused for a missing secret left the interval
-        // alone precisely so this could retry at once rather than after a backed-off
-        // wait — typing the secret is the fix, so it should be the trigger.
+        // The 401 recovery path. Typing the secret is the fix, so it is the trigger —
+        // and it clears the backoff a run of refused polls may have built up, so a host
+        // who took their time typing does not then wait out a lengthened interval.
+        unauthorizedPolls = 0;
+        pollDelay = POLL_BASE_MS;
         stopPolling();
         void runPoll();
       });

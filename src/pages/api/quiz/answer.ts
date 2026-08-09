@@ -14,10 +14,13 @@ import { getQuestionById } from "../../../quiz/index";
  * and `/api/quiz/token`: the room is trusted for the length of one session, there are
  * no accounts, and an IP-keyed throttle was rejected because a venue network puts many
  * attendees behind one address. That reasoning was formed when the whole room cost ~8
- * store commands; this route bills 8 per call (a `readSession` plus a 7-command
- * `EVAL`), so a loop against it is now a bill rather than a nuisance. What keeps it a
- * nuisance and not an exploit is that a submission needs an unguessable player id and
- * can only ever write one answer per question. Recorded as an accepted risk in
+ * store commands; this route bills **11** per call for a single-choice answer (a
+ * `readSession` plus a 10-command `EVAL`), plus one more for each additional option a
+ * multiple-choice answer selects — S-04 added the participation counters to the same
+ * script, taking the `EVAL` from 7 billed commands to `9 + k`. So a loop against it is a
+ * bill rather than a nuisance, and a larger one than when this paragraph was written.
+ * What keeps it a nuisance and not an exploit is that a submission needs an unguessable
+ * player id and can only ever write one answer per question. Recorded as an accepted risk in
  * `answer-contract.md`, not left to be inferred.
  *
  * **The response carries no verdict.** Not `correct`, not `awarded`, and not the new

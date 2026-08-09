@@ -65,7 +65,12 @@ export const GET: APIRoute = async ({ request, url }) => {
    */
   const secret = await extractSecret(request);
   if (!authorizeHost(secret).ok) {
-    return json(401, unauthorized().body);
+    // The status comes from the outcome rather than being retyped beside it: every other
+    // host route reaches this through `toResponse`, and a hardcoded 401 here is a second
+    // copy that can drift from the first. `json` rather than `toResponse` only because
+    // this route's every reply must carry `Cache-Control: no-store`.
+    const refusal = unauthorized();
+    return json(refusal.status, refusal.body);
   }
 
   /**
@@ -91,7 +96,26 @@ export const GET: APIRoute = async ({ request, url }) => {
    * question changed mid-flight discards the reply instead of painting a stale count
    * under a new prompt.
    */
-  const answered = await readAnsweredCount(questionId);
+  /**
+   * **Issued together, and deliberately NOT folded into one `EVAL`.**
+   *
+   * `READ_PLAYER_BY_ID` and `READ_ANSWER` in `store.ts` combine their reads into a script
+   * because a round trip is the expense there. Here the opposite holds: Upstash bills the
+   * `EVAL` *and* every call inside it, so a script would turn two billed commands into
+   * three — a 50% rise on the one path this slice intends to poll. `Promise.all` buys the
+   * single-round-trip latency without buying the extra command. Stated because "two
+   * billed commands" reads like an invitation to combine them, and combining them is the
+   * one change that would make the number wrong.
+   */
+  const [answered, playerCount] = await Promise.all([
+    readAnsweredCount(questionId),
+    /**
+     * The denominator, so the panel's `answered / joined` needs no second request and the
+     * join count stops needing a manual refresh while a question is open. `null` when the
+     * store could not answer — distinct from `0`, so the page keeps the number it has.
+     */
+    readPlayerCount(),
+  ]);
 
   if (answered === null) {
     // `null` is "the store could not say", never "nobody answered" — the whole reason
@@ -101,15 +125,6 @@ export const GET: APIRoute = async ({ request, url }) => {
     console.error("Participation read failed for question:", questionId);
     return json(503, { error: MESSAGES.storeFailed });
   }
-
-  /**
-   * The denominator, so the panel's `answered / joined` needs no second request and the
-   * join count stops needing a manual refresh while a question is open. `null` when the
-   * store could not answer — distinct from `0`, so the page keeps the number it has.
-   * Returned beside the count for the reason `/api/quiz/state` returns it beside the
-   * document.
-   */
-  const playerCount = await readPlayerCount();
 
   return json(200, { questionId, answered, playerCount });
 };

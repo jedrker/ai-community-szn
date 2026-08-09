@@ -207,6 +207,16 @@ export type Distribution = {
   readonly options: Readonly<Record<string, number>>;
 };
 
+export type RenderDistributionOptions = DistributionClassNames & {
+  /**
+   * From `state.revealedDistribution`. `null` is what a failed tally read publishes, and
+   * it renders nothing at all — see the note on the function.
+   */
+  readonly distribution?: Distribution | null;
+  /** From `state.revealedOptionIds`. `null` or `[]` means nothing to mark. */
+  readonly correctOptionIds?: readonly string[] | null;
+};
+
 export type DistributionClassNames = {
   readonly list?: string;
   readonly row?: string;
@@ -234,9 +244,11 @@ const NO_ANSWERS_TEXT = "Nikt jeszcze nie odpowiedział.";
  * because it reads as a bug: normalizing would misreport what share of the room chose
  * each option, which is the question the display exists to answer.
  *
- * An `answered` of zero renders every bar at zero width rather than dividing by it, and
- * says so in words — a screen of empty bars with no explanation reads as broken rather
- * than as unanswered.
+ * **An `answered` of zero draws no bars at all — it says so in a sentence instead.** The
+ * plan called for every bar at zero width; a row of empty bars turned out to read, on a
+ * projector, as a broken render rather than as a room that has not answered yet, and the
+ * difference matters most in the seconds right after a question opens. Nothing divides by
+ * zero on either route; this is about which of the two an audience can interpret.
  *
  * Built with `createElement` and `textContent`, never `innerHTML`, and a correct option
  * is marked with `data-correct` as well as by class, so both survive a stylesheet that
@@ -246,11 +258,16 @@ const NO_ANSWERS_TEXT = "Nikt jeszcze nie odpowiedział.";
 export function renderDistribution(
   container: HTMLElement,
   question: PublicQuestion | undefined,
-  distribution: Distribution | null,
-  correctOptionIds: readonly string[] | null,
-  classNames: DistributionClassNames = {}
+  options: RenderDistributionOptions = {}
 ): void {
   container.replaceChildren();
+
+  // One options bag, matching `renderQuestion` — not four positional parameters. Two of
+  // them were nullable and adjacent, so a call site could transpose the distribution and
+  // the correct ids and still type-check.
+  const distribution = options.distribution ?? null;
+  const correctOptionIds = options.correctOptionIds ?? null;
+  const classNames = options;
 
   // No question, no options, or no distribution — the last being what a failed tally
   // read publishes. Rendering nothing is the point: zeroed bars would claim the room
