@@ -427,17 +427,17 @@ client-only plus documentation, and either can be reverted by reverting its comm
 
 #### Automated
 
-- [x] 2.1 Test suite passes: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 `boundary.test.ts` passes — no forbidden import or env read in either `<script>` block
-- [x] 2.4 `session.test.ts` asserts timer cancellation on `connected`, on `close()`, and on `ended`
+- [x] 2.1 Test suite passes: `bun run test` — 903a8e9
+- [x] 2.2 Type checking passes: `bun run type-check` — 903a8e9
+- [x] 2.3 `boundary.test.ts` passes — no forbidden import or env read in either `<script>` block — 903a8e9
+- [x] 2.4 `session.test.ts` asserts timer cancellation on `connected`, on `close()`, and on `ended` — 903a8e9
 
 #### Manual
 
-- [x] 2.5 Blocked device shows the amber banner, receives questions within ~7 s, and submits an answer the host's count registers
-- [x] 2.6 Blocked device's reveal panel shows a verdict and a running total
-- [x] 2.7 A partly typed text answer survives a poll and a question change
-- [x] 2.8 Unblocking returns the device to normal and clears the banner
-- [x] 2.9 Backgrounding stops the polling; returning resumes it
-- [x] 2.10 After the host ends the session, no further `/api/quiz/state` requests are issued
-- [x] 2.11 Upstash command counter after a rehearsal is within the recorded budget
+- [x] 2.5 Blocked device shows the amber banner, receives questions within ~7 s, and submits an answer the host's count registers — 903a8e9
+- [x] 2.6 Blocked device's reveal panel shows a verdict and a running total — 903a8e9
+- [x] 2.7 A partly typed text answer survives a poll and a question change — 903a8e9
+- [x] 2.8 Unblocking returns the device to normal and clears the banner — 903a8e9
+- [x] 2.9 Backgrounding stops the polling; returning resumes it — 903a8e9
+- [x] 2.10 After the host ends the session, no further `/api/quiz/state` requests are issued — 903a8e9
+- [x] 2.11 Upstash command counter after a rehearsal is within the recorded budget — 903a8e9
