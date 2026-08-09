@@ -27,3 +27,44 @@
   behaviour on `null`, `""` and `[]` differs from its behaviour on garbage. Assert the outcome for the
   absent case in a test, not just the rejection for the hostile one.
 - **Applies to**: plan, implement, impl-review
+
+## Grep every caller before editing a shared pure function
+
+- **Context**: Any change that modifies a shared pure function in place — normalization, folding,
+  hashing, formatting, comparison — rather than adding one beside it. Sharpest when the function's
+  output is used as a storage key or an identity.
+- **Problem**: S-05's plan widened `normalizePolish` to fold trailing punctuation for answer
+  matching, naming `src/quiz/schema.ts:128` as its only other caller.
+  `src/lib/session/players.ts:100` uses the same function as the display-name claim key, and `.` is a
+  legal name character — so the change would have merged `"Ania."` and `"Ania"` into one claim and,
+  mid-deploy, let two visually identical names onto the leaderboard, because the stored keys in
+  `livequiz:players` were written with the old fold. Caught in plan review, not by a test.
+- **Rule**: Before changing a shared pure function, grep every non-test caller and name what each one
+  uses the output FOR. A fold used as an identity or storage key is not the same function as a fold
+  used for comparison, even when the code is identical — widen it beside, not in place. Pin the
+  original's behaviour with a test so a later edit cannot quietly recombine them.
+- **Applies to**: plan, plan-review, implement, impl-review
+
+## Prove the fixture reaches the branch the test names
+
+- **Context**: Any test written for a *specific* branch — an absent or hostile input, a
+  skip path, an error path — where the fixture comes from a destructuring default, a
+  spread of a shared base object, or an index into real project data (`questions[0]`,
+  the first row of a seed file). Sharpest when one fixture is shared across a file, so
+  the branch a given test reaches is decided somewhere other than the test.
+- **Problem**: S-04 shipped two of these in one session, both green. A route test passed
+  `questionId: undefined` for the "parameter absent" case; the helper's destructuring
+  default replaced it with the valid id, so the test exercised the *present* case and
+  would have passed against a route with no guard at all — the exact input class
+  `lessons.md` already has an entry about, defeated by the test helper rather than by
+  the code. A reveal test built its fixture from `quiz.questions[0]`, which is the
+  word-cloud opener, so every distribution assertion ran through the non-choice *skip*
+  branch while reading as though it covered the tally read. In both, the assertion was
+  right and the fixture pointed it at the wrong branch; a passing suite was evidence of
+  nothing.
+- **Rule**: For any test that names a specific branch, prove the fixture reaches it —
+  assert something only that branch produces, or verify the test fails when the branch
+  is removed. Never spell an absent value as `undefined` where a default can silently
+  replace it, and never build a branch-specific fixture from a shared base or a
+  positional index into real data without checking what that datum actually is.
+- **Applies to**: plan, plan-review, implement, impl-review
