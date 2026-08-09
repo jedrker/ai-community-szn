@@ -9,6 +9,7 @@ import {
   markSeen,
   markSubmitted,
   submitAnswer,
+  submittedText,
   type AnswerPayload,
 } from "./answer";
 
@@ -137,7 +138,7 @@ describe("markSubmitted / hasSubmitted", () => {
 
   it("keeps the original paint time, so the clock is not restarted by answering", () => {
     markSeen(SEEN_KEY, "q1", NOW);
-    markSubmitted(SEEN_KEY, "q1", NOW + 5_000);
+    markSubmitted(SEEN_KEY, "q1", { now: NOW + 5_000 });
 
     expect(markSeen(SEEN_KEY, "q1", NOW + 9_000)).toBe(NOW);
   });
@@ -178,6 +179,82 @@ describe("markSubmitted / hasSubmitted", () => {
     withBrokenWrite(() => {
       expect(() => markSubmitted(SEEN_KEY, "q1")).not.toThrow();
     });
+  });
+});
+
+/**
+ * The free-text answer this device sent (roadmap S-05, impl-review F1).
+ *
+ * **This exists because of a specific failure.** The view holds the typed value in
+ * memory, and `/api/quiz/result` will not serve a device its own answer back until the
+ * reveal — so without a stored copy, an attendee who reloads a locked text question
+ * sees an empty disabled field under "Odpowiedź zapisana". The plan promised the field
+ * stays visible precisely so they can still see what they sent.
+ */
+describe("submittedText", () => {
+  it("gives back the text an accepted answer was sent with", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+    markSubmitted(SEEN_KEY, "q1", { text: "Halucynacje." });
+
+    expect(submittedText(SEEN_KEY, "q1")).toBe("Halucynacje.");
+  });
+
+  /** THE RELOAD, which is the whole point — a fresh read of the same storage. */
+  it("survives a reload", () => {
+    markSubmitted(SEEN_KEY, "q1", { text: "Halucynacje." });
+
+    // Nothing in memory carries over a reload; only what `readSeen` finds does.
+    const raw = window.localStorage.getItem(SEEN_KEY);
+    window.localStorage.clear();
+    window.localStorage.setItem(SEEN_KEY, raw!);
+
+    expect(submittedText(SEEN_KEY, "q1")).toBe("Halucynacje.");
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
+  });
+
+  it("is null for a choice answer, which passes no text", () => {
+    markSubmitted(SEEN_KEY, "q1");
+
+    // Submitted, but nothing to put back in a field — the two are different questions.
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
+    expect(submittedText(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  it("is null for a question this device stayed silent on", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+
+    expect(submittedText(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  it("is null for an entry written before the field existed", () => {
+    // The mid-deploy shape: submitted, but with no text recorded.
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify({ q1: { at: NOW, submitted: true } }));
+
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
+    expect(submittedText(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  it("ignores a non-string text rather than returning it", () => {
+    window.localStorage.setItem(
+      SEEN_KEY,
+      JSON.stringify({ q1: { at: NOW, submitted: true, text: 42 } })
+    );
+
+    expect(submittedText(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  it("keeps the original paint time when recording the text", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+    markSubmitted(SEEN_KEY, "q1", { text: "halucynacje", now: NOW + 5_000 });
+
+    expect(markSeen(SEEN_KEY, "q1", NOW + 9_000)).toBe(NOW);
+  });
+
+  it("is cleared with the rest of the store, so it does not outlive the session", () => {
+    markSubmitted(SEEN_KEY, "q1", { text: "halucynacje" });
+    clearSeen(SEEN_KEY);
+
+    expect(submittedText(SEEN_KEY, "q1")).toBeNull();
   });
 });
 

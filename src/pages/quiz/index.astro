@@ -17,10 +17,12 @@ import { publicQuiz } from "../../quiz/public";
  *
  * **Reads no secret of any kind.** Everything below reaches the browser deliberately:
  * the channel and event names (which a subscribe-only token already grants access to),
- * the `localStorage` key, the answer-length bound, and the *public* quiz projection —
- * prompts and option text, never an answer. The bound comes through frontmatter for the
- * reason the storage key does: the `<script>` block may not value-import from
- * `src/lib/session/`, so the server hands it down.
+ * the `localStorage` key, the answer-length bound on the text input, and the *public*
+ * quiz projection — prompts and option text, never an answer. The bound is read in
+ * frontmatter and written straight into the markup's `maxlength`, so the `<script>`
+ * block never needs it — which matters because that block may not value-import from
+ * `src/lib/session/`. The server-side refusal in `/api/quiz/answer` is the real bound;
+ * `maxlength` is only there to stop a phone typing past it.
  * `src/lib/client/boundary.test.ts` scans the `<script>` blocks below
  * and fails the suite if one reads env or value-imports `src/quiz/` or
  * `src/lib/session/`; this frontmatter is excluded from that scan because it runs
@@ -173,18 +175,10 @@ import { publicQuiz } from "../../quiz/public";
         snapshotEvent: SNAPSHOT_EVENT,
         storageKey: PLAYER_STORAGE_KEY,
         seenStorageKey: QUESTION_SEEN_STORAGE_KEY,
-        maxTextLength: MAX_TEXT_ANSWER_LENGTH,
         questions: publicQuiz.questions,
       }}
     >
-      window.__liveQuiz = {
-        channelName,
-        snapshotEvent,
-        storageKey,
-        seenStorageKey,
-        maxTextLength,
-        questions,
-      };
+      window.__liveQuiz = { channelName, snapshotEvent, storageKey, seenStorageKey, questions };
     </script>
 
     <script>
@@ -201,6 +195,7 @@ import { publicQuiz } from "../../quiz/public";
         markSeen,
         markSubmitted,
         submitAnswer,
+        submittedText,
         type AnswerPayload,
         type OwnResult,
       } from "../../lib/client/answer";
@@ -212,8 +207,6 @@ import { publicQuiz } from "../../quiz/public";
         snapshotEvent: string;
         storageKey: string;
         seenStorageKey: string;
-        /** From `MAX_TEXT_ANSWER_LENGTH`, via frontmatter — see the module docstring. */
-        maxTextLength: number;
         questions: PublicQuestion[];
       };
 
@@ -313,6 +306,24 @@ import { publicQuiz } from "../../quiz/public";
           // would be read back by the next one and score this device at the floor.
           // This is the one moment every still-watching device agrees it is over.
           clearSeen(config.seenStorageKey);
+          /**
+           * The in-memory half of the same cleanup, for the same reason.
+           *
+           * `clearSeen` only reaches storage. A host who purges and restarts mid-event
+           * while this device stays on the page would otherwise re-open a question with
+           * the previous answer still in the field and the previous result still in the
+           * panel — question ids being stable is exactly what makes them line up again.
+           * A reload happens to clear all four, which is why this went unnoticed.
+           */
+          typed.clear();
+          selections.clear();
+          results.clear();
+          resultRequested.clear();
+          // The field itself is a live DOM element and holds its own value; without
+          // this the reconciliation guard sees an unchanged question id and never
+          // rewrites it.
+          answerText.value = "";
+          delete answerText.dataset.questionId;
           return;
         }
 
@@ -473,14 +484,18 @@ import { publicQuiz } from "../../quiz/public";
          */
         if (answerText.dataset.questionId !== question.id) {
           answerText.dataset.questionId = question.id;
-          answerText.value = typed.get(question.id) ?? "";
+          // Storage first, memory second. The Map does not survive a reload, and the
+          // server will not serve this device its own answer back until the reveal — so
+          // without the stored copy a reloaded, locked field would sit empty under
+          // "Odpowiedź zapisana", which is the one moment it needs to show something.
+          answerText.value =
+            submittedText(config.seenStorageKey, question.id) ?? typed.get(question.id) ?? "";
         }
 
         setHidden(answerText, false);
         // Disabled rather than hidden once locked: the attendee should still see what
         // they sent.
         answerText.disabled = locked;
-        answerText.maxLength = config.maxTextLength;
 
         setHidden(answerNote, false);
         if (locked) {
@@ -687,8 +702,12 @@ import { publicQuiz } from "../../quiz/public";
 
         answerSubmit.textContent = "Wyślij odpowiedź";
 
+        // Only a text answer has anything to keep; a choice answer passes nothing and
+        // the stored entry stays exactly as it was before.
+        const sentText = payload.kind === "text" ? payload.text : undefined;
+
         if (outcome.outcome === "accepted") {
-          markSubmitted(config.seenStorageKey, questionId);
+          markSubmitted(config.seenStorageKey, questionId, { text: sentText });
           render();
           return;
         }
@@ -696,7 +715,7 @@ import { publicQuiz } from "../../quiz/public";
         if (outcome.outcome === "rejected") {
           // The server's own Polish message — "already answered", "no longer open".
           // Treated as final: the answer is not going to be accepted by retrying.
-          markSubmitted(config.seenStorageKey, questionId);
+          markSubmitted(config.seenStorageKey, questionId, { text: sentText });
           setText("answer-error", outcome.error);
           render();
           return;

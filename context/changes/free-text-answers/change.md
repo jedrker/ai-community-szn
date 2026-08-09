@@ -1,7 +1,7 @@
 ---
 change_id: free-text-answers
 title: Free-text answers
-status: implemented
+status: impl_reviewed
 created: 2026-08-09
 updated: 2026-08-09
 archived_at: null

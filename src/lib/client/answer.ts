@@ -54,8 +54,15 @@ export type AnswerPayload =
  * question was accepted — it lives here rather than in a second storage key because the
  * two have exactly the same lifetime and the same reason to be cleared, and a second
  * key would be a second thing to register, plumb through `define:vars`, and forget.
+ *
+ * `text` is the free-text answer this device sent, and it is here for the same reason
+ * and with the same lifetime. **Without it the locked field is empty after a reload**:
+ * the view holds the typed value in memory only, and the server will not serve it back
+ * until the reveal, so an attendee who reloads sees a disabled empty box above
+ * "Odpowiedź zapisana". `clearSeen` wipes it on the `ended` transition, so it does not
+ * outlive the session on the device.
  */
-type SeenEntry = { at: number; submitted?: boolean };
+type SeenEntry = { at: number; submitted?: boolean; text?: string };
 
 type SeenMap = Record<string, SeenEntry>;
 
@@ -78,9 +85,16 @@ function readSeen(storageKey: string): SeenMap {
       }
 
       if (typeof value === "object" && value !== null) {
-        const entry = value as { at?: unknown; submitted?: unknown };
+        const entry = value as { at?: unknown; submitted?: unknown; text?: unknown };
         if (typeof entry.at === "number" && Number.isFinite(entry.at) && entry.at > 0) {
-          map[questionId] = { at: entry.at, submitted: entry.submitted === true };
+          map[questionId] = {
+            at: entry.at,
+            submitted: entry.submitted === true,
+            // Absent on every entry written before this shipped, and on every choice
+            // answer — both read back as `undefined`, which is the same as "nothing to
+            // restore".
+            ...(typeof entry.text === "string" ? { text: entry.text } : {}),
+          };
         }
       }
     }
@@ -142,17 +156,39 @@ export function markSeen(storageKey: string, questionId: string, now = Date.now(
  * Keeps the fan-in gate intact: a device that genuinely stayed silent still has no entry
  * here, so it still issues no request.
  */
-export function markSubmitted(storageKey: string, questionId: string, now = Date.now()): void {
+export function markSubmitted(
+  storageKey: string,
+  questionId: string,
+  options: { text?: string; now?: number } = {}
+): void {
   const seen = readSeen(storageKey);
   const existing = seen[questionId];
+  const now = options.now ?? Date.now();
 
-  seen[questionId] = { at: existing?.at ?? now, submitted: true };
+  seen[questionId] = {
+    at: existing?.at ?? now,
+    submitted: true,
+    // Only for a free-text answer. A choice answer passes nothing and the key stays
+    // absent, so the record does not grow a field it has no use for.
+    ...(options.text === undefined ? {} : { text: options.text }),
+  };
   writeSeen(storageKey, seen);
 }
 
 /** Whether this device already has an accepted answer for this question. */
 export function hasSubmitted(storageKey: string, questionId: string): boolean {
   return readSeen(storageKey)[questionId]?.submitted === true;
+}
+
+/**
+ * The free-text answer this device sent for this question, or `null`.
+ *
+ * `null` for a choice answer, for a question this device never answered, and for an
+ * answer submitted before this was persisted — the view treats all three the same way:
+ * there is nothing to put back in the field.
+ */
+export function submittedText(storageKey: string, questionId: string): string | null {
+  return readSeen(storageKey)[questionId]?.text ?? null;
 }
 
 /**

@@ -76,9 +76,14 @@ and its correctness is verifiable on stage in one beat.
   name character (`players.ts:41`), and the stored keys in `livequiz:players` / `livequiz:player-ids`
   were written with whatever fold was live at join time. This slice therefore adds `normalizeAnswer`
   beside it rather than widening it — see Phase 1.
-- **`host.astro:300` never passes `correctOptionIds`,** so the large screen does not mark the correct
-  option at reveal for choice questions either. That is a pre-existing choice-question gap in S-04's
-  territory and is explicitly not fixed here.
+- ~~**`host.astro:300` never passes `correctOptionIds`,** so the large screen does not mark the
+  correct option at reveal for choice questions either. That is a pre-existing choice-question gap in
+  S-04's territory and is explicitly not fixed here.~~
+  **Updated 2026-08-09 — no longer true.** S-04 landed and was archived before this slice began, and
+  it closed that gap: `host.astro`'s `render()` now passes `mode: "revealed"`, `correctOptionIds` and
+  `optionCorrect`. So the large screen marks the correct *option* for a choice question, and this
+  slice adds the accepted *answer* panel for a text question, which has no option list to mark. The
+  two sit side by side rather than one substituting for the other.
 
 ## Desired End State
 
@@ -106,8 +111,9 @@ question against a real session.
   hyphen or apostrophe inside an answer is content.
 - **Not S-06's number question and not S-08's word cloud.** The route keeps refusing those kinds with
   the same message, and that refusal stays the seam.
-- **Not the choice-question reveal marker on the host screen** (`host.astro` never passes
-  `correctOptionIds`). Pre-existing, S-04's territory.
+- ~~**Not the choice-question reveal marker on the host screen** (`host.astro` never passes
+  `correctOptionIds`). Pre-existing, S-04's territory.~~ **Moot as of 2026-08-09** — S-04 shipped that
+  marker before this slice began. Nothing here was in or out of scope for it.
 - **Not S-04's participation count or answer distribution.** A text-answer distribution is a
   different shape from a choice one and is not designed here.
 - **No throttle on `/api/quiz/answer`.** The accepted risk stands as recorded in `answer-contract.md`;
