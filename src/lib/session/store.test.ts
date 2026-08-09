@@ -676,8 +676,10 @@ describe("submitAnswer", () => {
     playerId: "player-abc",
     questionId: quiz.questions[0]!.id,
     optionIds: ["a"],
-    // A choice answer, so no typed text. The text path is covered in `answer.test.ts`.
+    // A choice answer, so neither a typed text nor a guess. Those paths are covered
+    // in `answer.test.ts`.
     text: null,
+    value: null,
     elapsedMs: 3_200,
     correct: true,
     awarded: 920,
@@ -1036,11 +1038,11 @@ describe("readOwnResult", () => {
   beforeEach(configure);
 
   /**
-   * Deliberately written **without** `text` — this is the shape a record written
-   * before S-05 shipped has, and a session live across that deploy holds them. The
-   * assertion below is that it still parses, defaulting the new field, rather than
-   * coming back `null` and reporting `answered: false` to a device that watched its
-   * answer land.
+   * Deliberately written **without** `text` or `value` — this is the shape a record
+   * written before S-05 and S-06 shipped has, and a session live across either deploy
+   * holds them. The assertion below is that it still parses, defaulting the new
+   * fields, rather than coming back `null` and reporting `answered: false` to a device
+   * that watched its answer land.
    */
   const stored = {
     playerId: "player-abc",
@@ -1062,8 +1064,8 @@ describe("readOwnResult", () => {
     await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
       outcome: "ok",
       state: firstQuestionOpen,
-      // The pre-S-05 record, plus the field it did not carry.
-      answer: { ...stored, text: null },
+      // The pre-S-05/S-06 record, plus the fields it did not carry.
+      answer: { ...stored, text: null, value: null },
       total: 920,
     });
 

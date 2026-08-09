@@ -673,31 +673,31 @@ will not type-check.
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 `scoring.test.ts` asserts every band against both 67 and 10,000
-- [x] 1.4 `scoring.test.ts` asserts the exact edges at 5%, 10% and 25% from both sides
-- [x] 1.5 `scoring.test.ts` asserts an exact hit gives `correct: true` and full closeness
-- [x] 1.6 `scoring.test.ts` asserts a near-miss gives `correct: false` with a positive award
-- [x] 1.7 `scoring.test.ts` asserts an unscored number question yields no award
-- [x] 1.8 `scoring.test.ts` asserts a zero `correctValue` yields no award, not `Infinity` or `NaN`
-- [x] 1.9 `scoring.test.ts` asserts number and choice awards agree at equal closeness and `elapsedMs`
-- [x] 1.10 `schema.test.ts` asserts `correctValue: 0` is rejected with a message naming the id
-- [x] 1.11 `definition.test.ts` still passes
+- [x] 1.1 Unit tests pass: `bun run test` — a99048b
+- [x] 1.2 Type checking passes: `bun run type-check` — a99048b
+- [x] 1.3 `scoring.test.ts` asserts every band against both 67 and 10,000 — a99048b
+- [x] 1.4 `scoring.test.ts` asserts the exact edges at 5%, 10% and 25% from both sides — a99048b
+- [x] 1.5 `scoring.test.ts` asserts an exact hit gives `correct: true` and full closeness — a99048b
+- [x] 1.6 `scoring.test.ts` asserts a near-miss gives `correct: false` with a positive award — a99048b
+- [x] 1.7 `scoring.test.ts` asserts an unscored number question yields no award — a99048b
+- [x] 1.8 `scoring.test.ts` asserts a zero `correctValue` yields no award, not `Infinity` or `NaN` — a99048b
+- [x] 1.9 `scoring.test.ts` asserts number and choice awards agree at equal closeness and `elapsedMs` — a99048b
+- [x] 1.10 `schema.test.ts` asserts `correctValue: 0` is rejected with a message naming the id — a99048b
+- [x] 1.11 `definition.test.ts` still passes — a99048b
 
 ### Phase 2: The record field and the reveal value
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 `answers.test.ts` asserts a record without `value` parses to `null`
-- [ ] 2.4 `answers.test.ts` asserts a non-finite `value` is rejected
-- [ ] 2.5 `routes.test.ts` asserts revealing each number question sets the pl-PL-formatted value, expected string built from the formatter
-- [ ] 2.6 `routes.test.ts` asserts revealing a number question leaves `revealedOptionIds` empty
-- [ ] 2.7 `routes.test.ts` asserts advancing clears `revealedAnswerText`
-- [ ] 2.8 `state.test.ts` still passes
-- [ ] 2.9 `keys.test.ts` still passes
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 `answers.test.ts` asserts a record without `value` parses to `null`
+- [x] 2.4 `answers.test.ts` asserts a non-finite `value` is rejected
+- [x] 2.5 `routes.test.ts` asserts revealing each number question sets the pl-PL-formatted value, expected string built from the formatter
+- [x] 2.6 `routes.test.ts` asserts revealing a number question leaves `revealedOptionIds` empty
+- [x] 2.7 `routes.test.ts` asserts advancing clears `revealedAnswerText`
+- [x] 2.8 `state.test.ts` still passes
+- [x] 2.9 `keys.test.ts` still passes
 
 ### Phase 3: The route and the result payload
 

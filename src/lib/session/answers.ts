@@ -51,6 +51,21 @@ export const answerRecordSchema = z.object({
    * `null`, and report `answered: false` to a device that watched its answer land.
    */
   text: z.string().max(MAX_TEXT_ANSWER_LENGTH).nullable().default(null),
+  /**
+   * The parsed numeric guess for a number question (roadmap S-06), stored as a
+   * number rather than as the raw string — the reveal shows it back, and a future
+   * histogram or a stage dispute should read a value, not re-parse one.
+   *
+   * `null` for every other kind, exactly as `text` is.
+   *
+   * **`.finite()` matters here specifically.** This is the only field whose value
+   * comes out of arithmetic on untrusted input, and `Infinity` serialises to `null`
+   * through `JSON.stringify` — so without it a record could round-trip, parse
+   * cleanly, and have silently lost the answer it was written to hold.
+   *
+   * `.default(null)` for the same mid-session-deploy reason `text` carries one.
+   */
+  value: z.number().finite().nullable().default(null),
   /** The clamped elapsed time, in milliseconds, that produced `awarded`. */
   elapsedMs: z.number().int().nonnegative(),
   correct: z.boolean(),

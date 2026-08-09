@@ -43,7 +43,7 @@ vi.mock("../../../../lib/session/realtime", () => ({
 
 const { POST: start } = await import("./start");
 const { POST: advance } = await import("./advance");
-const { POST: reveal } = await import("./reveal");
+const { POST: reveal, formatCorrectValue } = await import("./reveal");
 const { POST: end } = await import("./end");
 const { POST: purge } = await import("./purge");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
@@ -891,14 +891,79 @@ describe("the reveal payload (roadmap S-03)", () => {
       expect(next.revealedAnswerText).toBeNull();
     });
 
-    it("is null for a kind S-06 and S-08 still own", async () => {
+    it("is null for the word-cloud kind, which has no correct answer to state", async () => {
       await call(reveal);
 
-      // `ai-devs-absolwenci` is a number question; `smieszne-slowo-ai` is the
-      // word-cloud opener. Neither has a text answer to publish yet.
-      expect(
-        (await transitionFrom()(open("ai-devs-absolwenci"), NOW)).revealedAnswerText
-      ).toBeNull();
+      // The one remaining kind (S-08). FR-015 lets its aggregate display live
+      // precisely because there is nothing correct to leak.
+      const wordCloud = quiz.questions.find((question) => question.kind === "word-cloud");
+      if (wordCloud === undefined) throw new Error("expected a word-cloud question");
+
+      expect((await transitionFrom()(open(wordCloud.id), NOW)).revealedAnswerText).toBeNull();
+    });
+
+    /**
+     * The numeric half of the same job (roadmap S-06, FR-013).
+     *
+     * Both live number questions, because their true values are two orders of
+     * magnitude apart and only the larger one exercises thousands grouping at all.
+     */
+    describe("a number question's true value", () => {
+      const numberQuestions = quiz.questions.filter((question) => question.kind === "number");
+
+      it("covers both drafted number questions", () => {
+        // The table below is only worth what its fixtures are. If a question is
+        // removed or retyped, fail here rather than passing on a shrunken set.
+        expect(numberQuestions.map((question) => question.id)).toEqual([
+          "lyro-automatyzacja",
+          "ai-devs-absolwenci",
+        ]);
+      });
+
+      it.each(numberQuestions)("publishes $id formatted for pl-PL", async (question) => {
+        if (question.kind !== "number") throw new Error("expected a number question");
+
+        await call(reveal);
+
+        const next = await transitionFrom()(open(question.id), NOW + 5_000);
+
+        // Built from the formatter, never typed: pl-PL groups with U+00A0, and a
+        // hand-typed "10 000" fails with a diff in which both sides look identical.
+        expect(next.revealedAnswerText).toBe(formatCorrectValue(question.correctValue));
+      });
+
+      it("groups thousands with a non-breaking space, not an ordinary one", async () => {
+        // The trap stated as its own assertion, so the reason the expectation above
+        // is built rather than typed survives in the suite.
+        expect(formatCorrectValue(10000)).toBe("10\u00A0000");
+        expect(formatCorrectValue(10000)).not.toBe("10 000");
+      });
+
+      it("leaves revealedOptionIds empty — a number question has none to highlight", async () => {
+        await call(reveal);
+
+        const next = await transitionFrom()(open("ai-devs-absolwenci"), NOW + 5_000);
+
+        expect(next.revealedOptionIds).toEqual([]);
+      });
+
+      it("advance clears it, so a true value cannot outlive its question", async () => {
+        await call(advance);
+
+        // `lyro-automatyzacja`, not `ai-devs-absolwenci`: the latter is the last
+        // question in the definition, so `advance` past it is a no-op that returns
+        // no state at all and the assertion would never reach the transition.
+        const next = transitionFrom()(
+          {
+            ...open("lyro-automatyzacja"),
+            phase: "question-revealed",
+            revealedAnswerText: formatCorrectValue(67),
+          },
+          NOW + 9_000
+        );
+
+        expect(next.revealedAnswerText).toBeNull();
+      });
     });
 
     it("advance clears it, so an accepted answer cannot outlive its question", async () => {

@@ -8,7 +8,31 @@ import {
   unauthorized,
 } from "../../../../lib/session/host";
 import { readQuestionTallies } from "../../../../lib/session/store";
-import { getQuestionById } from "../../../../quiz/index";
+import { getQuestionById, type Question } from "../../../../quiz/index";
+
+/**
+ * How a number question's true value reads on a projector (roadmap S-06).
+ *
+ * **Formatted here, once, rather than per device.** That is a consequence of reusing
+ * `revealedAnswerText` — the field is a string — and it is the right side of the trade
+ * anyway: the host's screen and 150 phones must show the same characters, and a
+ * per-device locale would let them disagree at the moment the room is comparing.
+ *
+ * `Intl.NumberFormat("pl-PL")` groups thousands with **U+00A0**, not an ordinary
+ * space, on this project's Node (22.12, full ICU). A test that types the expected
+ * string by hand fails with a diff in which both sides look identical — build the
+ * expectation from this function instead.
+ */
+export function formatCorrectValue(value: number): string {
+  return new Intl.NumberFormat("pl-PL").format(value);
+}
+
+/** What the room is told the answer was, for the kinds that have one to state. */
+function revealedAnswerTextFor(question: Question | undefined): string | null {
+  if (question?.kind === "text") return question.acceptedAnswers[0] ?? null;
+  if (question?.kind === "number") return formatCorrectValue(question.correctValue);
+  return null;
+}
 
 /**
  * Reveals the current question's result.
@@ -106,10 +130,17 @@ export const POST: APIRoute = async ({ request }) => {
        * author can accept spellings and synonyms, but the room should see one answer.
        * A list reads as though several different answers were expected.
        *
+       * A number question (roadmap S-06) formats its true value into this **same**
+       * field rather than adding a third sibling to a family whose two existing
+       * members already need a long docstring explaining that they behave oppositely.
+       * It also means the large screen needs no change at all: the branch that renders
+       * this field renders a number through it unaltered.
+       *
        * `null` for every other kind — including choice, where `revealedOptionIds`
-       * already carries the answer. S-06 will format a number into this same field.
+       * already carries the answer, and word-cloud, which has no correct answer to
+       * carry (S-08).
        */
-      revealedAnswerText: question?.kind === "text" ? (question.acceptedAnswers[0] ?? null) : null,
+      revealedAnswerText: revealedAnswerTextFor(question),
     };
   }, Date.now());
 

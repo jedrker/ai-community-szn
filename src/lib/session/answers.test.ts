@@ -123,6 +123,48 @@ describe("the typed-answer field (roadmap S-05)", () => {
   });
 });
 
+describe("the numeric-guess field (roadmap S-06)", () => {
+  it("accepts a record carrying a guess and no selection or text", () => {
+    const parsed = answerRecordSchema.safeParse({
+      ...valid,
+      optionIds: [],
+      text: null,
+      value: 67.5,
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.value).toBe(67.5);
+  });
+
+  /** The same mid-session-deploy case `text` documents; `valid` predates both fields. */
+  it("defaults to null for a record written before the field existed", () => {
+    expect("value" in valid).toBe(false);
+
+    const parsed = answerRecordSchema.safeParse(valid);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.value).toBeNull();
+  });
+
+  it.each([
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+    ["NaN", Number.NaN],
+  ])("refuses a non-finite value (%s)", (_label, value) => {
+    // `Infinity` serialises to `null` through JSON, so a record holding one would
+    // round-trip into a record that parses and has lost its answer.
+    expect(answerRecordSchema.safeParse({ ...valid, value }).success).toBe(false);
+  });
+
+  it("accepts a negative guess — wrong is not malformed", () => {
+    expect(answerRecordSchema.safeParse({ ...valid, value: -12 }).success).toBe(true);
+  });
+
+  it("refuses a non-number, non-null value", () => {
+    expect(answerRecordSchema.safeParse({ ...valid, value: "67" }).success).toBe(false);
+  });
+});
+
 describe("parseAnswerRecord never throws", () => {
   it("returns the record for valid input", () => {
     expect(parseAnswerRecord(valid)?.awarded).toBe(valid.awarded);

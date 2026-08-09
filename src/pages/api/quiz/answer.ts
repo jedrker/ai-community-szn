@@ -166,6 +166,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   let selectedOptionIds: string[] = [];
   let answerText: string | null = null;
+  let guessValue: number | null = null;
   let correct: boolean;
   let awarded: number;
 
@@ -229,6 +230,8 @@ export const POST: APIRoute = async ({ request }) => {
     questionId,
     optionIds: selectedOptionIds,
     text: answerText,
+    // The numeric branch (roadmap S-06) fills this; every other kind leaves it null.
+    value: guessValue,
     elapsedMs,
     correct,
     awarded,
