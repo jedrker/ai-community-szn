@@ -168,9 +168,51 @@ because a threshold is something the host would have to defend out loud in front
 For a text question, **`acceptedAnswers[0]` is the variant the room sees**: `reveal.ts` publishes it
 as the accepted answer to every phone and the projector. Order there is not arbitrary.
 
+A number question's `correctValue` **may not be zero**, and the schema refuses one at the build gate
+alongside a non-finite value. The closeness rule divides by the true value, and there is no reading of
+"within 5% of zero".
+
 Scoring rules deliberately do **not** live here. `points` (a number, or `null` for an unscored
 question per FR-017) is the only scoring field; the speed weighting, the answer-length bound
 (`MAX_TEXT_ANSWER_LENGTH`) and the numeric-closeness curve live in `src/lib/session/scoring.ts`.
+
+## Numeric answers carry partial credit, and one flag lies about it
+
+A guess is worth `points × closeness × speedWeight`, where closeness is banded on **relative error**
+— `|guess − correctValue| / |correctValue|`, so the rule behaves identically on an answer of 67 and
+one of 10,000, which is the whole of FR-013's resolution and the reason there is no per-question
+tolerance knob:
+
+| Relative error | Closeness |
+| --- | --- |
+| exactly 0 | 1.00 |
+| ≤ 0.05 | 0.80 |
+| ≤ 0.10 | 0.60 |
+| ≤ 0.25 | 0.30 |
+| > 0.25 | 0 |
+
+These five rows exist **once**, as `CLOSENESS_BANDS` in `src/lib/session/scoring.ts`; this table and
+the plan quote it. Comparisons carry a small epsilon so a guess engineered onto a band edge does not
+fall through by floating-point luck — four of the twelve exact-edge cases across the two live
+questions do overshoot in binary, and `scoring.test.ts` asserts every one of them.
+
+**`AnswerRecord.correct` is exact-hit-only for a number question, so it is `false` on an answer that
+scored 800 of 1000.** No consumer may read that flag as "scored nothing" — S-07's leaderboard is the
+likeliest place to get this wrong. The attendee reveal branches on question **kind before** it
+branches on `correct`, because a kind-blind branch renders "Tym razem nie." beside a positive award.
+
+The true value reaches the room formatted **server-side** into `revealedAnswerText`, the same field
+S-05 added, via `Intl.NumberFormat("pl-PL")` — so the host view needed no change at all, and 150
+phones and the projector cannot disagree about the string. **Its group separator is U+00A0**: a test
+that types `"10 000"` by hand fails with a diff in which both sides look identical, so build the
+expectation from the formatter.
+
+There is exactly **one parser** for a typed guess, `parseGuess` in `src/lib/session/guess.ts`, and it
+is server-side. The attendee view gates its submit button on "contains a digit" rather than parsing —
+a client-side parser would either duplicate this one or cross the boundary `boundary.test.ts`
+enforces, and two parsers that disagree is a scoring dispute on stage. A comma is the **decimal**
+separator (`67,5` is 67.5, never 675) and spaces are grouping; the consequence, accepted deliberately,
+is that `10,000` reads as ten. An absent, empty or unparseable field is refused, never coerced.
 
 ## Styling
 

@@ -726,34 +726,34 @@ will not type-check.
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 `boundary.test.ts` passes for the new script code
-- [x] 4.4 client `answer.test.ts` covers the numeric submission path including 5xx as `failed`
-- [x] 4.5 client `answer.test.ts` still passes its `withBrokenWrite` localStorage cases
-- [x] 4.6 `render.test.ts` still passes unchanged
+- [x] 4.1 Unit tests pass: `bun run test` — 942039c
+- [x] 4.2 Type checking passes: `bun run type-check` — 942039c
+- [x] 4.3 `boundary.test.ts` passes for the new script code — 942039c
+- [x] 4.4 client `answer.test.ts` covers the numeric submission path including 5xx as `failed` — 942039c
+- [x] 4.5 client `answer.test.ts` still passes its `withBrokenWrite` localStorage cases — 942039c
+- [x] 4.6 `render.test.ts` still passes unchanged — 942039c
 
 #### Manual
 
-- [x] 4.7 Phone-sized viewport: numeric keypad appears, keyboard does not cover the submit button
-- [x] 4.8 `67,5` accepted; letters leave the submit button disabled
-- [x] 4.9 Submitting locks the control and shows the saved note
-- [x] 4.10 Reload mid-question keeps the clock; reload after submitting keeps the lock
-- [x] 4.11 A guess of 65 shows answer, guess, positive award, and copy that does not say wrong
-- [x] 4.12 A guess of 50 shows zero points without implying a failure
-- [x] 4.13 With `/api/quiz/result` failing, the correct value is still on screen and no error shows
+- [x] 4.7 Phone-sized viewport: numeric keypad appears, keyboard does not cover the submit button — 942039c
+- [x] 4.8 `67,5` accepted; letters leave the submit button disabled — 942039c
+- [x] 4.9 Submitting locks the control and shows the saved note — 942039c
+- [x] 4.10 Reload mid-question keeps the clock; reload after submitting keeps the lock — 942039c
+- [x] 4.11 A guess of 65 shows answer, guess, positive award, and copy that does not say wrong — 942039c
+- [x] 4.12 A guess of 50 shows zero points without implying a failure — 942039c
+- [x] 4.13 With `/api/quiz/result` failing, the correct value is still on screen and no error shows — 942039c
 
 ### Phase 5: Docs and the room run
 
 #### Automated
 
-- [ ] 5.1 Unit tests pass: `bun run test`
-- [ ] 5.2 Type checking passes: `bun run type-check`
-- [ ] 5.3 Production build succeeds: `bun run build`
+- [x] 5.1 Unit tests pass: `bun run test`
+- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.3 Production build succeeds: `bun run build`
 
 #### Manual
 
-- [ ] 5.4 Two-device run through both number questions
-- [ ] 5.5 On `ai-devs-absolwenci`, 9,800 scores well and 7,000 scores nothing
-- [ ] 5.6 The large screen shows the formatted correct value with no `host.astro` change
-- [ ] 5.7 `docs/runbook-live-session.md` still describes reality
+- [x] 5.4 Two-device run through both number questions
+- [x] 5.5 On `ai-devs-absolwenci`, 9,800 scores well and 7,000 scores nothing
+- [x] 5.6 The large screen shows the formatted correct value with no `host.astro` change
+- [x] 5.7 `docs/runbook-live-session.md` still describes reality

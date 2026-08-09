@@ -55,7 +55,7 @@ an attendee is scoring on their own device.
 | S-03  | `answer-choice-question-and-reveal`   | Attendee can answer a choice question and see if they were right and what they scored  | S-02          | US-01, US-02, FR-004, FR-010, FR-016, FR-019                              | done     |
 | S-04  | `host-participation-and-distribution` | Host can show the room how many have answered, then the distribution at reveal         | S-03          | US-02, FR-005                                                             | done     |
 | S-05  | `free-text-answers`                   | Attendee can answer a free-text question without being punished for diacritics         | S-03          | US-01, FR-011                                                             | done     |
-| S-06  | `guess-the-number-answers`            | Attendee can guess a number and score by how close they were                           | S-03          | US-01, FR-013                                                             | proposed |
+| S-06  | `guess-the-number-answers`            | Attendee can guess a number and score by how close they were                           | S-03          | US-01, FR-013                                                             | done     |
 | S-07  | `leaderboard-beat`                    | Host can show the leaderboard between questions, and attendees can find themselves on it | S-03        | US-01, US-02, FR-014                                                      | proposed |
 | S-08  | `word-cloud-question`                 | Attendee can submit one word and watch the cloud fill on the large screen               | S-03          | US-01, US-02, FR-012, FR-015                                              | proposed |
 | S-09  | `resilient-join`                      | Attendee can reload or unlock their phone and resume as the same player                 | S-02          | US-01, FR-009, FR-018                                                     | proposed |
@@ -126,6 +126,12 @@ and do NOT re-scaffold them.
   character and the stored keys were written with it, so merging the two would let two visually
   identical names onto the leaderboard mid-deploy. S-06 extends the answer fold's *scorer*, not the
   name fold. For a text question, `acceptedAnswers[0]` is the variant published to the room.
+  **Updated 2026-08-09 (S-06 delivered):** scoring is no longer all-or-nothing. `scoring.ts` carries
+  a banded relative-error curve (`CLOSENESS_BANDS`) multiplied by the same `speedWeight`, so a guess
+  can earn part of a question's points — and `AnswerRecord.correct` is **exact-hit-only** for a
+  number question, therefore `false` on an answer that scored 800 of 1000. No consumer may read that
+  flag as "scored nothing"; S-07's leaderboard is the most likely place to get this wrong. The schema
+  now also refuses `correctValue: 0` at the build gate, because the rule divides by the true value.
 - **Observability:** absent — `src/lib/slack.ts` is an outbound notification webhook, not error
   tracking. No alerting; `infrastructure.md` rates "a failure is discovered by attendees" as
   high-likelihood, high-impact.
@@ -418,7 +424,7 @@ and do NOT re-scaffold them.
 - **Risk:** Independent of the other mechanics. The rule is magnitude-independent by design so one rule
   covers both drafted questions; the risk is an award curve that hands almost-full points to a wild
   guess, which would quietly flatten the leaderboard the whole segment builds toward.
-- **Status:** proposed
+- **Status:** done
 
 ### S-07: Host shows the leaderboard between questions
 
@@ -503,7 +509,7 @@ and do NOT re-scaffold them.
 | S-03       | `answer-choice-question-and-reveal`   | Answer a choice question and see result and points at reveal       | no                    | North star. Needs S-02                                        |
 | S-04       | `host-participation-and-distribution` | Large screen: answer count while open, distribution at reveal      | no                    | Needs S-03                                                    |
 | S-05       | `free-text-answers`                   | Free-text answers matched ignoring case, spacing and diacritics    | no                    | Needs S-03                                                    |
-| S-06       | `guess-the-number-answers`            | Numeric guesses scored by relative error                           | no                    | Needs S-03                                                    |
+| S-06       | `guess-the-number-answers`            | Numeric guesses scored by relative error                           | done                  | **Delivered 2026-08-09.** First partial-credit answer: `AnswerRecord.correct` is exact-hit-only for this kind |
 | S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | no                    | Needs S-03. Broadcast standings; do not use presence           |
 | S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | no                    | Needs S-03; run after F-04 measures headroom                  |
 | S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | no                    | Needs S-02                                                    |
@@ -809,3 +815,21 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   memory only and a reload emptied it; caught in implementation review as an instance of the existing
   "check the data path can deliver a promised UI affordance" rule, and fixed by persisting the answer
   beside `submitted` in the already-registered seen map.
+
+- **S-06: Attendee can submit a numeric guess and earn points scaled by how close it was, on the same
+  relative-error rule whether the true answer is 67 or 10,000.** — Delivered 2026-08-09. **The first
+  partial-credit answer in the system**, and that is the fact with the longest reach: `correct` is
+  exact-hit-only for this kind, so a guess worth 800 of 1000 points returns `{ correct: false,
+  awarded: 800 }` and the reveal copy is selected by question **kind before** it is selected by
+  `correct` — a kind-blind branch would render "Tym razem nie." beside a positive award. The bands
+  (1.00 / 0.80 / 0.60 / 0.30 / 0 at 0%, 5%, 10%, 25% relative error) live in one exported constant
+  with an epsilon on the comparisons, because four of the twelve exact-edge cases across the two live
+  questions overshoot their band in binary floating point. `speedWeight` is reused unchanged, pinned
+  by an assertion that a number and a choice answer at equal closeness and elapsed receive identical
+  awards. **Nothing new on the wire and no host-view change**: the true value is formatted server-side
+  into S-05's `revealedAnswerText` (pl-PL, grouping with U+00A0), so the large screen renders it
+  through the branch that already existed. The parser is server-side and singular
+  (`src/lib/session/guess.ts`) — the attendee view gates its submit button on "contains a digit"
+  rather than growing a second parser across the boundary — and it refuses an absent, empty or
+  unparseable field instead of coercing it, per `lessons.md` rule 2. Suite 766 → 831; no new
+  `livequiz:` key; `AnswerRecord.value` carries `.default(null)` for the mid-session deploy.
