@@ -16,7 +16,7 @@ export type {
   TextQuestion,
   WordCloudQuestion,
 } from "./schema";
-export { normalizePolish } from "./normalize";
+export { normalizeAnswer, normalizePolish } from "./normalize";
 
 import type { Question, Quiz } from "./schema";
 

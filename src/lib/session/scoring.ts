@@ -1,4 +1,9 @@
-import type { MultipleChoiceQuestion, SingleChoiceQuestion } from "../../quiz/index";
+import {
+  normalizeAnswer,
+  type MultipleChoiceQuestion,
+  type SingleChoiceQuestion,
+  type TextQuestion,
+} from "../../quiz/index";
 
 /**
  * The project's first domain rule: what a correct answer is, and what a timely one
@@ -7,7 +12,9 @@ import type { MultipleChoiceQuestion, SingleChoiceQuestion } from "../../quiz/in
  * Pure — no store access, no `import.meta.env`, no route. That is what makes the rule
  * testable on its own, and it is also the seam S-05 (text) and S-06 (number) extend:
  * they add a *correctness* function beside `scoreChoiceAnswer` and reuse
- * `speedWeight` unchanged. The timing rule is global and applies to every scored
+ * `speedWeight` unchanged. **S-05 has taken that seam** — see `scoreTextAnswer`;
+ * S-06's numeric curve is the remaining one, and it multiplies the same weight
+ * against a partial-credit base. The timing rule is global and applies to every scored
  * answer regardless of kind, so it is exported separately rather than buried inside
  * the choice scorer — a second implementation of the curve would be a second thing to
  * get wrong.
@@ -17,8 +24,26 @@ import type { MultipleChoiceQuestion, SingleChoiceQuestion } from "../../quiz/in
  * that need them. `src/quiz/` stays a data contract; this is the rule that reads it.
  */
 
-/** The two kinds this slice scores. Text, number and word-cloud are S-05/S-06/S-08. */
+/** The two kinds `scoreChoiceAnswer` handles. Number and word-cloud are S-06/S-08. */
 export type ChoiceQuestion = SingleChoiceQuestion | MultipleChoiceQuestion;
+
+/**
+ * The longest free-text answer the system accepts (roadmap S-05).
+ *
+ * A domain bound rather than a route detail, which is why it lives here beside
+ * `SPEED_WINDOW_MS` rather than in the handler. **It has three readers and they must
+ * not drift**: `answerRecordSchema`'s `.max()`, the route's visible refusal, and the
+ * input's `maxlength`.
+ *
+ * The third reader carries a plumbing constraint worth stating at the constant rather
+ * than only at the call site: `index.astro`'s `<script>` block may not value-import
+ * from `src/lib/session/` (`boundary.test.ts`), so this reaches the input the way
+ * `PLAYER_STORAGE_KEY` does — imported in frontmatter, passed down via `define:vars`.
+ *
+ * 80 is a judgement call, comfortably above the longest accepted variant in the
+ * drafted quiz. Enforced in one place, it stays cheap to change.
+ */
+export const MAX_TEXT_ANSWER_LENGTH = 80;
 
 /**
  * How long an answer keeps decaying before it is worth the floor.
@@ -97,6 +122,46 @@ export function scoreChoiceAnswer(
   // Rounded to the nearest integer. With POINTS = 1000 this lands in 500–1000, so
   // two attendees tie only if their clocks agreed to the millisecond-ish — which is
   // what FR-019 was added for.
+  return { correct: true, awarded: Math.round(question.points * speedWeight(elapsedMs, windowMs)) };
+}
+
+/**
+ * Free-text correctness (FR-011), weighted by the same speed curve.
+ *
+ * Correct when the folded answer equals any folded accepted variant. **Both sides are
+ * folded** — folding only the input would make a variant the author capitalised
+ * unmatchable, which is the kind of bug that looks like a wrong answer on stage.
+ *
+ * `normalizeAnswer`, never `normalizePolish`: the latter is the display-name claim
+ * key and must not acquire a second job. See `src/quiz/normalize.ts`.
+ *
+ * **An unscored question yields `{ correct: false, awarded: 0 }`**, exactly as
+ * `scoreChoiceAnswer` does and for the same reason — it has no correct answer to
+ * match, and the view tells a warm-up apart from a wrong answer via
+ * `PublicQuestion.scored`, never via `awarded === 0`.
+ *
+ * `speedWeight` is reused, not reimplemented. A second copy of the curve would be a
+ * second thing to get wrong, which is why it is exported separately at all.
+ */
+export function scoreTextAnswer(
+  question: TextQuestion,
+  answerText: string,
+  elapsedMs: number,
+  windowMs: number = SPEED_WINDOW_MS
+): ChoiceScore {
+  if (question.points === null) return { correct: false, awarded: 0 };
+
+  const folded = normalizeAnswer(answerText);
+
+  // An answer that folds to nothing matches nothing — including an accepted variant
+  // that somehow folded to nothing too. The schema forbids an empty variant, so this
+  // is the belt to that braces: whitespace is not an answer.
+  if (folded.length === 0) return { correct: false, awarded: 0 };
+
+  const correct = question.acceptedAnswers.some((variant) => normalizeAnswer(variant) === folded);
+
+  if (!correct) return { correct: false, awarded: 0 };
+
   return { correct: true, awarded: Math.round(question.points * speedWeight(elapsedMs, windowMs)) };
 }
 

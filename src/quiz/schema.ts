@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizePolish } from "./normalize";
+import { normalizeAnswer } from "./normalize";
 
 /**
  * The quiz definition's shape and its domain invariants (PRD FR-001, FR-017).
@@ -125,7 +125,12 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
 
     // A variant that folds onto another is dead weight the author meant to be
     // distinct — surfacing it is cheaper than wondering why it never matches.
-    const collapsed = findDuplicates(question.acceptedAnswers.map(normalizePolish));
+    //
+    // `normalizeAnswer`, the same fold that scores an answer at runtime. Using the
+    // narrower `normalizePolish` here would let an author ship "halucynacje" and
+    // "halucynacje." as two variants the schema accepts and the scorer treats as
+    // one.
+    const collapsed = findDuplicates(question.acceptedAnswers.map(normalizeAnswer));
     if (collapsed.length > 0) {
       ctx.addIssue({
         code: "custom",

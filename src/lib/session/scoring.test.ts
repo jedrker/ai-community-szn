@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import { quiz } from "../../quiz/index";
 import {
   clampElapsed,
+  MAX_TEXT_ANSWER_LENGTH,
   scoreChoiceAnswer,
+  scoreTextAnswer,
   speedWeight,
   SPEED_WINDOW_MS,
   type ChoiceQuestion,
 } from "./scoring";
+import type { TextQuestion } from "../../quiz/index";
 
 /**
  * The first domain rule this project has (roadmap S-03, FR-010 and FR-019).
@@ -49,6 +52,20 @@ const unscored: ChoiceQuestion = {
   id: "fixture-unscored",
   points: null,
   correctOptionIds: [],
+};
+
+const scoredText: TextQuestion = {
+  kind: "text",
+  id: "fixture-text",
+  prompt: "?",
+  points: 1000,
+  acceptedAnswers: ["halucynacje", "hallucinations"],
+};
+
+const unscoredText: TextQuestion = {
+  ...scoredText,
+  id: "fixture-text-unscored",
+  points: null,
 };
 
 describe("choice correctness is all-or-nothing (FR-010)", () => {
@@ -105,6 +122,109 @@ describe("an unscored question awards nothing and claims nothing (FR-017)", () =
 
     expect(gather.points).toBeNull();
     expect(scoreChoiceAnswer(gather, ["gotowy"], 0).awarded).toBe(0);
+  });
+});
+
+describe("free-text correctness folds case, spacing, diacritics and punctuation (FR-011)", () => {
+  it("matches an exact accepted variant", () => {
+    expect(scoreTextAnswer(scoredText, "halucynacje", 0)).toEqual({
+      correct: true,
+      awarded: 1000,
+    });
+  });
+
+  it("matches any variant, not just the first", () => {
+    expect(scoreTextAnswer(scoredText, "hallucinations", 0).correct).toBe(true);
+  });
+
+  it.each([
+    ["case", "HALUCYNACJE"],
+    ["surrounding whitespace", "  halucynacje  "],
+    ["a trailing full stop", "halucynacje."],
+    ["repeated terminators", "halucynacje?!"],
+    ["everything at once", "  Halucynacje...  "],
+  ])("folds %s", (_dimension, input) => {
+    expect(scoreTextAnswer(scoredText, input, 0).correct).toBe(true);
+  });
+
+  it("collapses repeated internal whitespace", () => {
+    const phrase: TextQuestion = { ...scoredText, acceptedAnswers: ["large language model"] };
+
+    expect(scoreTextAnswer(phrase, "large   language\tmodel", 0).correct).toBe(true);
+  });
+
+  it("folds diacritics — including the stroked ł a bare NFD pass misses", () => {
+    const diacritics: TextQuestion = { ...scoredText, acceptedAnswers: ["żółć łódź"] };
+
+    expect(scoreTextAnswer(diacritics, "ZOLC LODZ", 0).correct).toBe(true);
+  });
+
+  it("does not tolerate a misspelling", () => {
+    // The scoping line: fuzzy matching is a threshold the host would have to defend
+    // out loud, so it is out of scope by decision.
+    expect(scoreTextAnswer(scoredText, "halucynajce", 0)).toEqual({
+      correct: false,
+      awarded: 0,
+    });
+  });
+
+  it("scores an empty or whitespace-only answer as wrong, never as a match", () => {
+    for (const input of ["", "   ", "..."]) {
+      expect(scoreTextAnswer(scoredText, input, 0)).toEqual({ correct: false, awarded: 0 });
+    }
+  });
+
+  it("returns correct: false and awarded: 0 for an unscored question", () => {
+    // Same rule as the choice path: no correct answer to match, so no fabricated
+    // `correct: true` for the reveal copy to work around.
+    expect(scoreTextAnswer(unscoredText, "halucynacje", 0)).toEqual({
+      correct: false,
+      awarded: 0,
+    });
+  });
+
+  it("holds for the real text question, which is the one this ships", () => {
+    const real = quiz.questions.find((question) => question.id === "zmyslanie-faktow");
+    if (real?.kind !== "text") throw new Error("expected the text question");
+
+    for (const variant of real.acceptedAnswers) {
+      expect(scoreTextAnswer(real, variant, 0).correct).toBe(true);
+    }
+    // The case the manual run types on a phone.
+    expect(scoreTextAnswer(real, "Halucynacje.", 0).correct).toBe(true);
+  });
+});
+
+describe("the speed curve is shared, not reimplemented per kind (FR-019)", () => {
+  it("awards a correct text answer exactly what a correct choice answer gets", () => {
+    // **The assertion that fails if the curve is copied rather than reused.** Both
+    // questions carry 1000 points, so at equal elapsed the awards must be identical.
+    for (const elapsed of [0, 3_333, SPEED_WINDOW_MS / 2, SPEED_WINDOW_MS, SPEED_WINDOW_MS * 3]) {
+      const text = scoreTextAnswer(scoredText, "halucynacje", elapsed).awarded;
+      const choice = scoreChoiceAnswer(scoredSingle, ["a"], elapsed).awarded;
+
+      expect(text).toBe(choice);
+    }
+  });
+
+  it("gives the faster of two correct text answers strictly more", () => {
+    const fast = scoreTextAnswer(scoredText, "halucynacje", 2_000).awarded;
+    const slow = scoreTextAnswer(scoredText, "halucynacje", 12_000).awarded;
+
+    expect(fast).toBeGreaterThan(slow);
+  });
+});
+
+describe("the text answer bound", () => {
+  it("is long enough for every accepted variant in the drafted quiz", () => {
+    // The bound is enforced in three places (schema, route, input `maxlength`). This
+    // asserts the value itself is not set below something the quiz already needs.
+    for (const question of quiz.questions) {
+      if (question.kind !== "text") continue;
+      for (const variant of question.acceptedAnswers) {
+        expect(variant.length).toBeLessThanOrEqual(MAX_TEXT_ANSWER_LENGTH);
+      }
+    }
   });
 });
 
