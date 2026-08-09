@@ -148,11 +148,24 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
     }
   }
 
-  if (question.kind === "number" && !Number.isFinite(question.correctValue)) {
-    ctx.addIssue({
-      code: "custom",
-      message: `${where}: correctValue musi być skończoną liczbą.`,
-    });
+  if (question.kind === "number") {
+    if (!Number.isFinite(question.correctValue)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `${where}: correctValue musi być skończoną liczbą.`,
+      });
+    }
+
+    // FR-013 scores a guess by its *relative* error, so the true value is the
+    // denominator — and there is no sensible reading of "within 5% of zero". Caught
+    // here, at the build gate, rather than as a zero award nobody can explain on
+    // stage. See `closeness` in `src/lib/session/scoring.ts`.
+    if (question.correctValue === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `${where}: correctValue nie może wynosić 0 — punktacja liczbowa opiera się na błędzie względnym.`,
+      });
+    }
   }
 
   // FR-015 lets the word cloud's aggregate display live precisely because it has

@@ -1,6 +1,7 @@
 import {
   normalizeAnswer,
   type MultipleChoiceQuestion,
+  type NumberQuestion,
   type SingleChoiceQuestion,
   type TextQuestion,
 } from "../../quiz/index";
@@ -12,12 +13,11 @@ import {
  * Pure — no store access, no `import.meta.env`, no route. That is what makes the rule
  * testable on its own, and it is also the seam S-05 (text) and S-06 (number) extend:
  * they add a *correctness* function beside `scoreChoiceAnswer` and reuse
- * `speedWeight` unchanged. **S-05 has taken that seam** — see `scoreTextAnswer`;
- * S-06's numeric curve is the remaining one, and it multiplies the same weight
- * against a partial-credit base. The timing rule is global and applies to every scored
- * answer regardless of kind, so it is exported separately rather than buried inside
- * the choice scorer — a second implementation of the curve would be a second thing to
- * get wrong.
+ * `speedWeight` unchanged. **Both have now taken that seam** — see `scoreTextAnswer`
+ * and `scoreNumberAnswer`; S-08's word cloud is unscored and takes none of it. The
+ * timing rule is global and applies to every scored answer regardless of kind, so it
+ * is exported separately rather than buried inside the choice scorer — a second
+ * implementation of the curve would be a second thing to get wrong.
  *
  * **Deliberately not in `src/quiz/`.** CLAUDE.md records that `points` is the only
  * scoring field the definition carries and that scoring rules belong to the slices
@@ -163,6 +163,111 @@ export function scoreTextAnswer(
   if (!correct) return { correct: false, awarded: 0 };
 
   return { correct: true, awarded: Math.round(question.points * speedWeight(elapsedMs, windowMs)) };
+}
+
+/**
+ * The relative-error bands (FR-013), highest closeness first.
+ *
+ * **The one place the thresholds exist.** The plan, the tests and the CLAUDE.md note
+ * all quote these five rows; three copies of a threshold is how one of them ends up
+ * different. `maxRelativeError` is inclusive at its upper edge, and the terminal
+ * `Infinity` row is what makes the lookup total rather than a fall-through nobody
+ * reads.
+ *
+ * **Banded, not linear, and not per-question tunable.** A host has to be able to state
+ * the whole rule from the stage in one sentence — the same test that made S-05 reject
+ * fuzzy text matching. And a linear curve with a generous tolerance hands most of a
+ * question's points to a shrug, which flattens the leaderboard: the roadmap names that
+ * as this slice's risk.
+ */
+export const CLOSENESS_BANDS = [
+  { maxRelativeError: 0, closeness: 1 },
+  { maxRelativeError: 0.05, closeness: 0.8 },
+  { maxRelativeError: 0.1, closeness: 0.6 },
+  { maxRelativeError: 0.25, closeness: 0.3 },
+  { maxRelativeError: Number.POSITIVE_INFINITY, closeness: 0 },
+] as const;
+
+/**
+ * Slack on the band comparisons, so a guess engineered to sit exactly on an edge does
+ * not fall through it by floating-point luck.
+ *
+ * `|63.65 - 67| / 67` is not exactly `0.05` in binary, and which side it lands on
+ * depends on the order of the arithmetic. The epsilon makes the edge fall consistently
+ * on the generous side; it is many orders of magnitude larger than the representation
+ * error at these magnitudes and many smaller than the gap between two bands, so it can
+ * only ever decide an exact-edge case.
+ */
+const BAND_EPSILON = 1e-9;
+
+/**
+ * How much of a scored number question a guess is worth, in `[0, 1]` (FR-013).
+ *
+ * Relative error — `|guess − correctValue| / |correctValue|` — so the rule behaves
+ * identically whether the true answer is 67 or 10,000. That magnitude-independence is
+ * the PRD's whole resolution of the "30 off is catastrophic on one and a bullseye on
+ * the other" objection, and it is why there is no per-question tolerance knob.
+ *
+ * `Math.abs` on the denominator so a future negative true value does not invert the
+ * rule. A `correctValue` of zero has no relative error to speak of and yields 0 rather
+ * than dividing; the schema refuses one at build time, so this is the floor under an
+ * author's typo, not the guard.
+ */
+export function closeness(guess: number, correctValue: number): number {
+  if (!Number.isFinite(guess) || !Number.isFinite(correctValue)) return 0;
+  if (correctValue === 0) return 0;
+
+  const relativeError = Math.abs(guess - correctValue) / Math.abs(correctValue);
+  const band = CLOSENESS_BANDS.find((row) => relativeError <= row.maxRelativeError + BAND_EPSILON);
+
+  // The terminal row matches everything finite, so this is unreachable — but `find`
+  // is typed as possibly-undefined and a fabricated `1` here would be catastrophic.
+  return band?.closeness ?? 0;
+}
+
+/**
+ * Numeric closeness (FR-013), weighted by the same speed curve.
+ *
+ * **The first partial-credit answer in the system**, and the consequence is in the
+ * return value: `correct` is true *only* on an exact hit, so a guess that earned 800
+ * of 1000 points comes back `{ correct: false, awarded: 800 }`. No consumer may read
+ * that flag as "scored nothing" — the reveal copy for this kind branches on question
+ * kind and on the two numbers, never on the flag alone.
+ *
+ * **An unscored question yields `{ correct: false, awarded: 0 }`**, exactly as both
+ * siblings do and for the same reason.
+ *
+ * A non-finite `guess` yields nothing. The route refuses those before they reach here
+ * (one parser, server-side), so this is the defensive floor rather than the guard —
+ * but `Math.round(1000 * NaN)` is `NaN` and it would be stored as an integer.
+ *
+ * `speedWeight` is reused, not reimplemented — that reuse is why it is exported on its
+ * own at all, and `scoring.test.ts` asserts a number and a choice answer at equal
+ * closeness and elapsed receive the identical award.
+ */
+export function scoreNumberAnswer(
+  question: NumberQuestion,
+  guess: number,
+  elapsedMs: number,
+  windowMs: number = SPEED_WINDOW_MS
+): ChoiceScore {
+  if (question.points === null) return { correct: false, awarded: 0 };
+  if (!Number.isFinite(guess)) return { correct: false, awarded: 0 };
+
+  // A zero or non-finite `correctValue` is a question the rule cannot score, so it
+  // claims nothing either: `{ correct: true, awarded: 0 }` for a guess of 0 against a
+  // `correctValue` of 0 would be exactly the fabricated flag both siblings refuse to
+  // produce. The schema refuses both at build time; this is the floor under a typo.
+  if (!Number.isFinite(question.correctValue) || question.correctValue === 0) {
+    return { correct: false, awarded: 0 };
+  }
+
+  const fraction = closeness(guess, question.correctValue);
+
+  return {
+    correct: guess === question.correctValue,
+    awarded: Math.round(question.points * fraction * speedWeight(elapsedMs, windowMs)),
+  };
 }
 
 /**

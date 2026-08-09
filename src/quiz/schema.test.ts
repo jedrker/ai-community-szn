@@ -170,6 +170,15 @@ describe("rejects a violation of every domain invariant", () => {
     expect(message).toContain("skończoną liczbą");
   });
 
+  it("rejects a correctValue of zero, naming the question", () => {
+    // Zero is finite, so the sibling refinement above does not catch it — and a
+    // relative-error rule divides by it. This is the gate that stops such a question
+    // from deploying at all.
+    const message = rejectionMessage(quizOf({ ...number, correctValue: 0 }));
+    expect(message).toContain("lyro-procent");
+    expect(message).toContain("nie może wynosić 0");
+  });
+
   it("rejects a correctValue that is not a number at all", () => {
     expect(quizSchema.safeParse(quizOf({ ...number, correctValue: "67" })).success).toBe(false);
   });

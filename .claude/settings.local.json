@@ -19,7 +19,14 @@
       "Bash(pkill -f qrcode-terminal)",
       "Bash(lsof -ti:4333,4334,4335)",
       "Bash(xargs -r kill)",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "Bash(awk \"/^## Phase 3:/,/^---$/\" plan.md)",
+      "Bash(awk '/^#### \\(Automated|Manual\\) Verification:/{f=1;print \"  [\"$0\"]\";next} /^#### [0-9]/{f=0} /^\\\\*\\\\*Implementation Note/{f=0} f&&/^- /')",
+      "Bash(awk '/^#### \\(Automated|Manual\\) Verification:/{f=1;print \"[\"$0\"]\";next} /^#### [0-9]/{f=0} /^\\\\*\\\\*Implementation Note/{f=0} f&&/^- /')",
+      "Bash(bunx vitest *)",
+      "Bash(bunx tsc *)",
+      "Bash(bun scripts/rehearse-room.ts --clients=2)",
+      "Bash(vercel ls *)"
     ]
   },
   "enabledPlugins": {
