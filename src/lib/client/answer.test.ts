@@ -344,6 +344,57 @@ describe("submitAnswer", () => {
     expect(body.getAll("optionIds")).toEqual([]);
   });
 
+  it("sends a numeric guess raw, leaving the parse to the server", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // A Polish decimal comma and a grouping space — exactly what a phone keypad and a
+    // paste produce. `parseGuess` is the only thing that decides what this means.
+    await submitAnswer("p1", "q1", { kind: "number", value: " 9 800,5 " }, 3_200);
+
+    const body = fetchMock.mock.calls[0]![1].body as FormData;
+    expect(body.get("value")).toBe(" 9 800,5 ");
+    // And nothing that would send the route down another kind's branch.
+    expect(body.get("text")).toBeNull();
+    expect(body.getAll("optionIds")).toEqual([]);
+  });
+
+  it("sends no value field on a choice or text answer", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitAnswer("p1", "q1", choice(["a"]), 3_200);
+    await submitAnswer("p1", "q2", { kind: "text", text: "halucynacje" }, 3_200);
+
+    expect((fetchMock.mock.calls[0]![1].body as FormData).get("value")).toBeNull();
+    expect((fetchMock.mock.calls[1]![1].body as FormData).get("value")).toBeNull();
+  });
+
+  it("treats a 5xx on a numeric guess as failed, never as a refusal", async () => {
+    // Same distinction as the text path, asserted for this kind too: `rejected` is
+    // final and costs the attendee the control, so a store blip must not read as one.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({ error: "Nie udało się zapisać odpowiedzi." }),
+      })
+    );
+
+    await expect(
+      submitAnswer("p1", "q1", { kind: "number", value: "9800" }, 1_000)
+    ).resolves.toEqual({ outcome: "failed" });
+  });
+
+  it("still reports a refused guess as a refusal, with the server's message", async () => {
+    respond(false, { error: "Wpisz liczbę." });
+
+    await expect(
+      submitAnswer("p1", "q1", { kind: "number", value: "abc" }, 1_000)
+    ).resolves.toEqual({ outcome: "rejected", error: "Wpisz liczbę." });
+  });
+
   it("sends no text field on a choice answer", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);

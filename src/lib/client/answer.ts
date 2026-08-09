@@ -36,16 +36,32 @@ export type OwnResult = {
    * words beside the accepted answer at reveal.
    */
   readonly text: string | null;
+  /**
+   * What this device guessed, for a number question; `null` for every other kind
+   * (roadmap S-06).
+   *
+   * From the server for the same reason `text` is — memory does not survive a reload —
+   * and it is load-bearing rather than decorative here: for this kind `correct` is
+   * exact-hit-only, so the reveal copy cannot tell a near miss from a zero without
+   * both this and the award.
+   */
+  readonly value: number | null;
   readonly total: number;
 };
 
 /**
  * What is being submitted, discriminated so "a selection *and* typed text" is not a
- * representable call. S-06 adds its own arm here rather than a fourth parameter.
+ * representable call.
+ *
+ * The `number` arm carries the **raw string**, not a parsed number: the server is the
+ * only parser (`src/lib/session/guess.ts`), and a client-side one would either
+ * duplicate it or cross the boundary `boundary.test.ts` enforces. Two parsers that
+ * disagree is a scoring dispute on stage.
  */
 export type AnswerPayload =
   | { readonly kind: "choice"; readonly optionIds: readonly string[] }
-  | { readonly kind: "text"; readonly text: string };
+  | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "number"; readonly value: string };
 
 /**
  * What this device knows about one question, across reloads.
@@ -55,8 +71,11 @@ export type AnswerPayload =
  * two have exactly the same lifetime and the same reason to be cleared, and a second
  * key would be a second thing to register, plumb through `define:vars`, and forget.
  *
- * `text` is the free-text answer this device sent, and it is here for the same reason
- * and with the same lifetime. **Without it the locked field is empty after a reload**:
+ * `text` is what this device typed — the free-text answer, or the **raw** numeric guess
+ * (roadmap S-06), which is the same thing from this module's point of view: a string
+ * the attendee typed into a field that has to look the same after a reload. It is here
+ * for the same reason and with the same lifetime. **Without it the locked field is
+ * empty after a reload**:
  * the view holds the typed value in memory only, and the server will not serve it back
  * until the reveal, so an attendee who reloads sees a disabled empty box above
  * "Odpowiedź zapisana". `clearSeen` wipes it on the `ended` transition, so it does not
@@ -267,6 +286,10 @@ export async function submitAnswer(
 
   if (payload.kind === "text") {
     body.set("text", payload.text);
+  } else if (payload.kind === "number") {
+    // Raw, exactly as typed — commas, spaces and all. `parseGuess` on the server owns
+    // every decision about what that string means.
+    body.set("value", payload.value);
   } else {
     // Repeated field, so a multiple-choice answer needs no encoding scheme.
     for (const id of payload.optionIds) body.append("optionIds", id);

@@ -703,45 +703,45 @@ will not type-check.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 Parser tests cover the separator matrix including U+00A0, and that `67,5` is 67.5 not 675
-- [x] 3.4 Parser tests assert the refusal set: absent, empty, whitespace, alphabetic, trailing garbage, non-finite
-- [x] 3.5 `answer.test.ts` asserts an absent `value` field is refused, by outcome
-- [x] 3.6 `answer.test.ts` asserts a correct guess is stored with the parsed number, empty `optionIds`, null `text`
-- [x] 3.7 `answer.test.ts` asserts a near-miss is accepted with a positive award and `correct: false`
-- [x] 3.8 `answer.test.ts` asserts an over-magnitude value is refused and nothing is written
-- [x] 3.9 `answer.test.ts` asserts a negative guess is accepted and scores zero
-- [x] 3.10 `answer.test.ts` asserts `word-cloud` still receives `unsupportedKind`
-- [x] 3.11 `answer.test.ts` asserts the existing choice and text cases are unchanged
-- [x] 3.12 `result.test.ts` asserts `value` returned when answered, null when silent
-- [x] 3.13 `result.test.ts` asserts the phase gate still refuses an unrevealed number question
+- [x] 3.1 Unit tests pass: `bun run test` — 4db9aad
+- [x] 3.2 Type checking passes: `bun run type-check` — 4db9aad
+- [x] 3.3 Parser tests cover the separator matrix including U+00A0, and that `67,5` is 67.5 not 675 — 4db9aad
+- [x] 3.4 Parser tests assert the refusal set: absent, empty, whitespace, alphabetic, trailing garbage, non-finite — 4db9aad
+- [x] 3.5 `answer.test.ts` asserts an absent `value` field is refused, by outcome — 4db9aad
+- [x] 3.6 `answer.test.ts` asserts a correct guess is stored with the parsed number, empty `optionIds`, null `text` — 4db9aad
+- [x] 3.7 `answer.test.ts` asserts a near-miss is accepted with a positive award and `correct: false` — 4db9aad
+- [x] 3.8 `answer.test.ts` asserts an over-magnitude value is refused and nothing is written — 4db9aad
+- [x] 3.9 `answer.test.ts` asserts a negative guess is accepted and scores zero — 4db9aad
+- [x] 3.10 `answer.test.ts` asserts `word-cloud` still receives `unsupportedKind` — 4db9aad
+- [x] 3.11 `answer.test.ts` asserts the existing choice and text cases are unchanged — 4db9aad
+- [x] 3.12 `result.test.ts` asserts `value` returned when answered, null when silent — 4db9aad
+- [x] 3.13 `result.test.ts` asserts the phase gate still refuses an unrevealed number question — 4db9aad
 
 #### Manual
 
-- [x] 3.14 `curl` `value=1e300`: refused, nothing written
-- [x] 3.15 `curl` `value=67,5`: accepted and scored as 67.5
+- [x] 3.14 `curl` `value=1e300`: refused, nothing written — 4db9aad
+- [x] 3.15 `curl` `value=67,5`: accepted and scored as 67.5 — 4db9aad
 
 ### Phase 4: The attendee view
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 `boundary.test.ts` passes for the new script code
-- [ ] 4.4 client `answer.test.ts` covers the numeric submission path including 5xx as `failed`
-- [ ] 4.5 client `answer.test.ts` still passes its `withBrokenWrite` localStorage cases
-- [ ] 4.6 `render.test.ts` still passes unchanged
+- [x] 4.1 Unit tests pass: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 `boundary.test.ts` passes for the new script code
+- [x] 4.4 client `answer.test.ts` covers the numeric submission path including 5xx as `failed`
+- [x] 4.5 client `answer.test.ts` still passes its `withBrokenWrite` localStorage cases
+- [x] 4.6 `render.test.ts` still passes unchanged
 
 #### Manual
 
-- [ ] 4.7 Phone-sized viewport: numeric keypad appears, keyboard does not cover the submit button
-- [ ] 4.8 `67,5` accepted; letters leave the submit button disabled
-- [ ] 4.9 Submitting locks the control and shows the saved note
-- [ ] 4.10 Reload mid-question keeps the clock; reload after submitting keeps the lock
-- [ ] 4.11 A guess of 65 shows answer, guess, positive award, and copy that does not say wrong
-- [ ] 4.12 A guess of 50 shows zero points without implying a failure
-- [ ] 4.13 With `/api/quiz/result` failing, the correct value is still on screen and no error shows
+- [x] 4.7 Phone-sized viewport: numeric keypad appears, keyboard does not cover the submit button
+- [x] 4.8 `67,5` accepted; letters leave the submit button disabled
+- [x] 4.9 Submitting locks the control and shows the saved note
+- [x] 4.10 Reload mid-question keeps the clock; reload after submitting keeps the lock
+- [x] 4.11 A guess of 65 shows answer, guess, positive award, and copy that does not say wrong
+- [x] 4.12 A guess of 50 shows zero points without implying a failure
+- [x] 4.13 With `/api/quiz/result` failing, the correct value is still on screen and no error shows
 
 ### Phase 5: Docs and the room run
 

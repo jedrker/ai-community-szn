@@ -128,6 +128,34 @@ import { publicQuiz } from "../../quiz/public";
           placeholder="Wpisz odpowiedź"
         />
 
+        <!-- The numeric field (S-06). Static and sibling to the text one, for exactly
+             the same reason: `render()` runs on every snapshot and would otherwise
+             destroy it mid-keystroke.
+
+             **`type="text"` with `inputmode="decimal"`, and that is the decision.**
+             `type="number"` picks its accepted decimal separator from the browser
+             locale, so the same typed characters parse differently on two phones in
+             the same room; and it reports an empty string for any value it considers
+             invalid, which is precisely the absent-versus-hostile confusion
+             `lessons.md` rule 2 is about. `inputmode` gets the numeric keypad with
+             neither problem. -->
+        <input
+          id="answer-number"
+          type="text"
+          hidden
+          inputmode="decimal"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          maxlength="20"
+          class="w-full rounded-xl border border-surface-border bg-surface-secondary
+                 px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
+                 focus:border-brand-purple-light focus:outline-none
+                 disabled:opacity-60"
+          placeholder="Wpisz liczbę"
+        />
+
         <button
           id="answer-submit"
           type="button"
@@ -227,6 +255,7 @@ import { publicQuiz } from "../../quiz/public";
       const form = el("join-form") as HTMLFormElement;
       const answerSubmit = el("answer-submit") as HTMLButtonElement;
       const answerText = el("answer-text") as HTMLInputElement;
+      const answerNumber = el("answer-number") as HTMLInputElement;
       const answerNote = el("answer-note");
       const answerError = el("answer-error");
       const answerAccepted = el("answer-accepted");
@@ -324,6 +353,8 @@ import { publicQuiz } from "../../quiz/public";
           // rewrites it.
           answerText.value = "";
           delete answerText.dataset.questionId;
+          answerNumber.value = "";
+          delete answerNumber.dataset.questionId;
           return;
         }
 
@@ -368,6 +399,7 @@ import { publicQuiz } from "../../quiz/public";
       function hideAnswerControls(): void {
         setHidden(answerSubmit, true);
         setHidden(answerText, true);
+        setHidden(answerNumber, true);
         setHidden(answerNote, true);
         setHidden(answerAccepted, true);
         setHidden(resultPanel, true);
@@ -389,11 +421,12 @@ import { publicQuiz } from "../../quiz/public";
           question !== undefined &&
           (question.kind === "single-choice" ||
             question.kind === "multiple-choice" ||
-            question.kind === "text");
+            question.kind === "text" ||
+            question.kind === "number");
 
         if (!question || !answerable) {
-          // Number and word cloud are S-06 and S-08. Static text, and no control —
-          // something tappable that does nothing reads as a broken quiz.
+          // The word cloud is S-08. Static text, and no control — something tappable
+          // that does nothing reads as a broken quiz.
           renderQuestion(questionBox, question, {
             prompt: "text-3xl font-bold leading-tight",
             list: "flex flex-col gap-3",
@@ -408,9 +441,15 @@ import { publicQuiz } from "../../quiz/public";
           return;
         }
 
+        if (question.kind === "number") {
+          renderOpenNumber(question);
+          return;
+        }
+
         // A choice question has no field. Hidden explicitly because this branch does not
         // call `hideAnswerControls`.
         setHidden(answerText, true);
+        setHidden(answerNumber, true);
 
         markSeen(config.seenStorageKey, question.id);
 
@@ -493,6 +532,7 @@ import { publicQuiz } from "../../quiz/public";
         }
 
         setHidden(answerText, false);
+        setHidden(answerNumber, true);
         // Disabled rather than hidden once locked: the attendee should still see what
         // they sent.
         answerText.disabled = locked;
@@ -514,9 +554,77 @@ import { publicQuiz } from "../../quiz/public";
         answerSubmit.disabled = !hasTypedAnswer();
       }
 
+      /**
+       * `question-open` for a number question (roadmap S-06, FR-013).
+       *
+       * The text path with one field swapped and one rule changed — the submit gate is
+       * "contains a digit" rather than "contains anything". Kept as its own function
+       * rather than parameterising `renderOpenText`, because the two differ in the note
+       * copy, the enable rule and the element, which is most of the body.
+       */
+      function renderOpenNumber(question: PublicQuestion): void {
+        // Prompt only; the field lives outside the container that `render()` rebuilds.
+        renderQuestion(questionBox, question, {
+          prompt: "text-3xl font-bold leading-tight",
+        });
+
+        markSeen(config.seenStorageKey, question.id);
+
+        const locked = hasSubmitted(config.seenStorageKey, question.id);
+
+        // The same reconciliation rule as the text field, and for the same reason —
+        // see `renderOpenText`. Written only when the element is holding a different
+        // question, so a snapshot mid-keystroke cannot clobber what is being typed.
+        if (answerNumber.dataset.questionId !== question.id) {
+          answerNumber.dataset.questionId = question.id;
+          answerNumber.value =
+            submittedText(config.seenStorageKey, question.id) ?? typed.get(question.id) ?? "";
+        }
+
+        setHidden(answerNumber, false);
+        setHidden(answerText, true);
+        // Disabled rather than hidden once locked, so the attendee still sees the
+        // number they sent.
+        answerNumber.disabled = locked;
+
+        setHidden(answerNote, false);
+        if (locked) {
+          answerNote.textContent = "Odpowiedź zapisana. Czekamy na prowadzącego…";
+          setHidden(answerSubmit, true);
+          return;
+        }
+
+        /**
+         * FR-017 as everywhere else, driven by `scored`. The scored line says closeness
+         * counts **without naming a threshold**: the bands are deliberately not exposed
+         * to the attendee, because a number on screen is something to argue with at the
+         * busiest moment of the beat.
+         */
+        answerNote.textContent = question.scored
+          ? "Nie musisz trafić idealnie — im bliżej, tym więcej punktów. Liczy się też czas."
+          : "To pytanie na rozgrzewkę — bez punktów.";
+
+        setHidden(answerSubmit, false);
+        answerSubmit.disabled = !hasTypedGuess();
+      }
+
       /** Whether the field holds anything but whitespace. The server is the real judge. */
       function hasTypedAnswer(): boolean {
         return answerText.value.trim().length > 0;
+      }
+
+      /**
+       * Whether the numeric field holds anything that could be a number.
+       *
+       * **A loose test, deliberately not a parse.** `src/lib/session/guess.ts` is the
+       * only parser and it is server-side; a client-side one would either duplicate it
+       * or cross the boundary `boundary.test.ts` enforces, and two parsers that
+       * disagree is a scoring dispute on stage. All this decides is whether the submit
+       * button is tappable — an over-permissive gate costs a refusal the attendee can
+       * read, while an over-strict one silently blocks a legitimate answer.
+       */
+      function hasTypedGuess(): boolean {
+        return /\d/.test(answerNumber.value);
       }
 
       /**
@@ -528,6 +636,14 @@ import { publicQuiz } from "../../quiz/public";
         if (questionId) typed.set(questionId, answerText.value);
 
         answerSubmit.disabled = answerText.disabled || !hasTypedAnswer();
+      });
+
+      /** The same, for the numeric field. Same reason it bypasses `render()`. */
+      answerNumber.addEventListener("input", () => {
+        const questionId = answerNumber.dataset.questionId;
+        if (questionId) typed.set(questionId, answerNumber.value);
+
+        answerSubmit.disabled = answerNumber.disabled || !hasTypedGuess();
       });
 
       /**
@@ -545,6 +661,7 @@ import { publicQuiz } from "../../quiz/public";
       ): void {
         setHidden(answerSubmit, true);
         setHidden(answerText, true);
+        setHidden(answerNumber, true);
         setHidden(answerNote, true);
         setText("answer-error", "");
 
@@ -599,7 +716,7 @@ import { publicQuiz } from "../../quiz/public";
 
         const known = results.get(question.id);
         if (known) {
-          showResult(known);
+          showResult(known, question);
           return;
         }
 
@@ -621,7 +738,7 @@ import { publicQuiz } from "../../quiz/public";
         }
       }
 
-      function showResult(own: OwnResult): void {
+      function showResult(own: OwnResult, question: PublicQuestion): void {
         setHidden(resultPanel, false);
 
         /**
@@ -643,6 +760,21 @@ import { publicQuiz } from "../../quiz/public";
           return;
         }
 
+        /**
+         * **Selected by question KIND before it is selected by `correct`** (roadmap
+         * S-06), and the order is the whole point.
+         *
+         * For a number question `correct` is exact-hit-only, so a guess that earned 800
+         * of 1000 points comes back `correct: false`. A kind-blind branch renders "Tym
+         * razem nie." beside a positive award — the conflation the exact-hit definition
+         * was chosen to avoid. Partial credit is the first of its kind in the system;
+         * every other kind is still binary and reads correctly through the branch below.
+         */
+        if (question.kind === "number") {
+          showNumberResult(own);
+          return;
+        }
+
         setText("result-verdict", own.correct ? "Dobrze!" : "Tym razem nie.");
         setText("result-award", own.correct ? `+${own.awarded ?? 0} pkt` : "+0 pkt");
         /**
@@ -654,6 +786,40 @@ import { publicQuiz } from "../../quiz/public";
          * choice question's panel is unchanged.
          */
         setText("result-answer", own.text ? `Twoja odpowiedź: ${own.text}` : "");
+        setText("result-total", `Twój wynik: ${own.total} pkt`);
+      }
+
+      /**
+       * The reveal copy for a guess (roadmap S-06, FR-013).
+       *
+       * Three readings, not two: an exact hit, a guess that scored something, and one
+       * that scored nothing. The middle one is the reason this function exists — it is
+       * `correct: false` with a positive award, and the ordinary copy would call it
+       * wrong.
+       *
+       * **The relative error and the band are deliberately not on screen.** The panel
+       * shows the answer, the guess and the award; an arithmetic breakdown invites a
+       * dispute at the busiest moment of the beat, and the thresholds are not something
+       * an attendee was ever told.
+       *
+       * The correct value itself is not repeated here — it is already on screen above,
+       * from the snapshot, where it reaches a device whose fetch failed too.
+       */
+      function showNumberResult(own: OwnResult): void {
+        const awarded = own.awarded ?? 0;
+
+        setText(
+          "result-verdict",
+          own.correct ? "Dokładnie!" : awarded > 0 ? "Blisko!" : "Tym razem daleko."
+        );
+        setText("result-award", `+${awarded} pkt`);
+        // The guess from the server, not from the field — a reload empties the field
+        // and the attendee should still see what they sent. `null` only if the record
+        // predates this shipping, in which case there is nothing honest to show.
+        setText(
+          "result-answer",
+          own.value === null ? "" : `Twoja odpowiedź: ${own.value.toLocaleString("pl-PL")}`
+        );
         setText("result-total", `Twój wynik: ${own.total} pkt`);
       }
 
@@ -684,6 +850,13 @@ import { publicQuiz } from "../../quiz/public";
           if (value.trim().length === 0) return;
           // Sent raw: the server trims, bounds and folds. One implementation of each.
           payload = { kind: "text", text: value };
+        } else if (question.kind === "number") {
+          const value = answerNumber.value;
+          // The same loose gate the button uses. A parse here would be the second
+          // parser this design exists to avoid.
+          if (!/\d/.test(value)) return;
+          // Raw, commas and spaces included — `parseGuess` decides what it means.
+          payload = { kind: "number", value };
         } else {
           const selected = selections.get(questionId) ?? [];
           if (selected.length === 0) return;
@@ -702,9 +875,15 @@ import { publicQuiz } from "../../quiz/public";
 
         answerSubmit.textContent = "Wyślij odpowiedź";
 
-        // Only a text answer has anything to keep; a choice answer passes nothing and
-        // the stored entry stays exactly as it was before.
-        const sentText = payload.kind === "text" ? payload.text : undefined;
+        // A typed answer — free text or a raw guess — is kept so a reload can put it
+        // back in the locked field. A choice answer passes nothing and the stored entry
+        // stays exactly as it was before.
+        const sentText =
+          payload.kind === "text"
+            ? payload.text
+            : payload.kind === "number"
+              ? payload.value
+              : undefined;
 
         if (outcome.outcome === "accepted") {
           markSubmitted(config.seenStorageKey, questionId, { text: sentText });
