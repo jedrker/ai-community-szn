@@ -33,14 +33,29 @@ function state(phase: "lobby" | "question-open" | "question-revealed" | "ended",
   };
 }
 
+/**
+ * A choice answer. `text: null` is spelled out rather than omitted because that is what
+ * `readOwnResult` actually returns — it parses through `answerRecordSchema`, which
+ * defaults the field — and a fixture that left it `undefined` would make the route drop
+ * the key from its JSON entirely, so the assertions below would pass without the field
+ * ever being wired.
+ */
 const answered = {
   playerId: "player-abc",
   questionId: QUESTION,
   optionIds: ["large-language-model"],
+  text: null,
   elapsedMs: 3_200,
   correct: true,
   awarded: 920,
   answeredAt: NOW,
+};
+
+/** The same device, on a free-text question. */
+const answeredText = {
+  ...answered,
+  optionIds: [],
+  text: "Halucynacje.",
 };
 
 function ask(questionId = QUESTION, playerId = "player-abc"): Promise<Response> {
@@ -119,8 +134,60 @@ describe("the phase gate", () => {
       answered: true,
       correct: true,
       awarded: 920,
+      text: null,
       total: 2_740,
     });
+  });
+});
+
+/**
+ * The device's own typed answer (roadmap S-05).
+ *
+ * Returned here rather than read from the view's memory, which a reload loses — an
+ * attendee who answered and then reloaded should still see their own words beside the
+ * accepted answer at reveal.
+ */
+describe("the typed answer travels back to its own device", () => {
+  it("returns what this device typed for a text question", async () => {
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: state("question-revealed"),
+      answer: answeredText,
+      total: 2_740,
+    });
+
+    expect(await body(await ask())).toMatchObject({
+      answered: true,
+      // Raw and trimmed, exactly as stored — not the fold.
+      text: "Halucynacje.",
+    });
+  });
+
+  it("returns null for a device that stayed silent", async () => {
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: state("question-revealed"),
+      answer: null,
+      total: 2_740,
+    });
+
+    expect(await body(await ask())).toMatchObject({ answered: false, text: null });
+  });
+
+  it("stays behind the phase gate, like the verdict it travels with", async () => {
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: state("question-open"),
+      answer: answeredText,
+      total: 2_740,
+    });
+
+    const response = await ask();
+
+    // Served while the question is open, this is a cheat sheet reachable with one
+    // `curl` — the reason this endpoint has a gate at all.
+    expect(response.status).toBe(409);
+    expect(JSON.stringify(await body(response))).not.toContain("Halucynacje");
   });
 });
 
@@ -143,6 +210,7 @@ describe("the ended-phase exception", () => {
       answered: false,
       correct: null,
       awarded: null,
+      text: null,
       total: 8_420,
     });
   });

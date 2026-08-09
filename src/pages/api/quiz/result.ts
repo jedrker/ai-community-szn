@@ -100,7 +100,13 @@ export const POST: APIRoute = async ({ request }) => {
 
   // The closing exception: the total alone, with no verdict attached to it.
   if (state?.phase === "ended") {
-    return json(200, { answered: false, correct: null, awarded: null, total: result.total });
+    return json(200, {
+      answered: false,
+      correct: null,
+      awarded: null,
+      text: null,
+      total: result.total,
+    });
   }
 
   // THE GATE. Both halves matter: the phase, and that it is *this* question being
@@ -112,13 +118,31 @@ export const POST: APIRoute = async ({ request }) => {
   // A device that stayed silent. Normal, and reported as a 200 so the client can tell
   // it apart from the 503 above without inspecting a message.
   if (result.answer === null) {
-    return json(200, { answered: false, correct: null, awarded: null, total: result.total });
+    return json(200, {
+      answered: false,
+      correct: null,
+      awarded: null,
+      text: null,
+      total: result.total,
+    });
   }
 
   return json(200, {
     answered: true,
     correct: result.answer.correct,
     awarded: result.answer.awarded,
+    /**
+     * What this device typed, for a free-text question — `null` for every other kind
+     * (roadmap S-05).
+     *
+     * Returned here rather than read from the view's memory because that memory does
+     * not survive a reload, and an attendee who answered and then reloaded should still
+     * see their own answer beside the accepted one at reveal.
+     *
+     * No new leak: this is the requesting player's own answer, protected by the same
+     * phase gate that already protects `correct` and `awarded` above.
+     */
+    text: result.answer.text,
     total: result.total,
   });
 };

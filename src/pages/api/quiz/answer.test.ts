@@ -20,7 +20,7 @@ vi.mock("../../../lib/session/store", () => ({
 
 const { POST: answer } = await import("./answer");
 const { quiz } = await import("../../../quiz/index");
-const { SPEED_WINDOW_MS } = await import("../../../lib/session/scoring");
+const { SPEED_WINDOW_MS, MAX_TEXT_ANSWER_LENGTH } = await import("../../../lib/session/scoring");
 
 const NOW = 1_785_000_000_000;
 
@@ -28,6 +28,9 @@ const single = quiz.questions.find((question) => question.id === "llm-skrot")!;
 const multi = quiz.questions.find((question) => question.id === "summer-tour-zakonczenie")!;
 const text = quiz.questions.find((question) => question.id === "zmyslanie-faktow")!;
 const unscored = quiz.questions.find((question) => question.id === "czy-wszyscy-gotowi")!;
+/** The two kinds S-06 and S-08 still own — the seam this slice did not take. */
+const number = quiz.questions.find((question) => question.id === "ai-devs-absolwenci")!;
+const wordCloud = quiz.questions.find((question) => question.id === "smieszne-slowo-ai")!;
 
 function openOn(questionId: string, openedAt = NOW - 4_000) {
   return {
@@ -239,14 +242,150 @@ describe("the response carries no verdict", () => {
   });
 });
 
-describe("refusals", () => {
-  it("refuses a kind this slice does not handle, with a message rather than a crash", async () => {
+/**
+ * The free-text branch (roadmap S-05, FR-011).
+ *
+ * The fold itself is `normalize.test.ts`'s and the rule is `scoring.test.ts`'s. What is
+ * under test here is what the route accepts, what it refuses, and what it hands the
+ * store.
+ */
+describe("text answers", () => {
+  /**
+   * Sends a text submission. **`text` is omitted entirely when `answerText` is
+   * undefined**, rather than set to the string `"undefined"` — the absent-field case is
+   * the one `lessons.md` rule 2 is about, and a helper that quietly supplies a value
+   * would test the present case while reading as though it covered the absent one.
+   */
+  function submitText(answerText?: string, elapsedMs = 4_000): Promise<Response> {
+    const fields: Record<string, string> = {
+      playerId: "player-abc",
+      questionId: text.id,
+      elapsedMs: String(elapsedMs),
+    };
+    if (answerText !== undefined) fields.text = answerText;
+
+    return answer({ request: request(fields) } as Parameters<typeof answer>[0]) as Promise<Response>;
+  }
+
+  beforeEach(() => {
     readSessionMock.mockResolvedValue(openOn(text.id));
+  });
 
-    const response = await submit(text.id, []);
+  it("accepts a correct answer and stores the raw trimmed text", async () => {
+    const response = await submitText("  Halucynacje.  ");
 
-    // The seam S-05 and S-06 extend.
+    expect(response.status).toBe(200);
+    // Trimmed, but NOT folded — the fold is a comparison artefact, and the reveal shows
+    // the attendee what they actually typed.
+    expect(submitted().text).toBe("Halucynacje.");
+    expect(submitted().optionIds).toEqual([]);
+    expect(submitted().correct).toBe(true);
+    expect(submitted().awarded).toBeGreaterThan(0);
+  });
+
+  it("accepts a wrong answer as a recorded answer worth nothing", async () => {
+    const response = await submitText("halucynajce");
+
+    expect(response.status).toBe(200);
+    expect(submitted().correct).toBe(false);
+    expect(submitted().awarded).toBe(0);
+    expect(submitted().text).toBe("halucynajce");
+  });
+
+  it("carries no verdict in the response, exactly as the choice path does not", async () => {
+    const serialized = JSON.stringify(await body(await submitText("halucynacje")));
+
+    expect(serialized).not.toContain("correct");
+    expect(serialized).not.toContain("awarded");
+    expect(serialized).not.toContain("total");
+  });
+
+  /**
+   * **THE ABSENT-FIELD CASE** (`lessons.md` rule 2). A submission that simply omits
+   * `text` must be refused, not scored as an empty answer — which would burn FR-004's
+   * one-answer-per-question lock on nothing. Asserted by *outcome*: nothing reached the
+   * store, and the status is a refusal.
+   */
+  it("refuses a submission with no text field at all", async () => {
+    const response = await submitText();
+
+    expect(response.status).toBe(400);
+    expect((await body(response)).error).toBe("Brak odpowiedzi.");
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["empty", ""],
+    ["whitespace only", "   "],
+    ["tabs and newlines only", "\t\n "],
+  ])("refuses a %s answer", async (_label, value) => {
+    const response = await submitText(value);
+
+    expect(response.status).toBe(400);
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an over-length answer and writes nothing", async () => {
+    // `curl` ignores an input's `maxlength`, which is why this bound is server-side.
+    const response = await submitText("a".repeat(MAX_TEXT_ANSWER_LENGTH + 1));
+
+    expect(response.status).toBe(400);
+    expect((await body(response)).error).toContain(String(MAX_TEXT_ANSWER_LENGTH));
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts an answer exactly at the bound", async () => {
+    const response = await submitText("a".repeat(MAX_TEXT_ANSWER_LENGTH));
+
+    expect(response.status).toBe(200);
+    expect(submitAnswerMock).toHaveBeenCalled();
+  });
+
+  it("bounds the trimmed length, so surrounding whitespace does not push it over", async () => {
+    // The stored value is what the bound protects, and the stored value is trimmed.
+    const response = await submitText(`   ${"a".repeat(MAX_TEXT_ANSWER_LENGTH)}   `);
+
+    expect(response.status).toBe(200);
+    expect((submitted().text as string).length).toBe(MAX_TEXT_ANSWER_LENGTH);
+  });
+
+  it("weights a text answer by speed on the same curve as a choice answer", async () => {
+    await submitText("halucynacje", 0);
+    const fast = submitted().awarded as number;
+
+    submitAnswerMock.mockClear();
+    await submitText("halucynacje", SPEED_WINDOW_MS);
+    const slow = submitted().awarded as number;
+
+    expect(fast).toBeGreaterThan(slow);
+  });
+
+  it("never lets the typed answer reach a log line", async () => {
+    const log = vi.spyOn(console, "log");
+
+    await submitText("halucynacje");
+
+    // `LogFields` is closed and has no field this fits in — that closure is the
+    // enforcement. This asserts the enforcement held.
+    for (const call of log.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain("halucynacje");
+    }
+  });
+});
+
+describe("refusals", () => {
+  it.each([
+    ["number", () => number],
+    ["word-cloud", () => wordCloud],
+  ])("refuses a %s question, with a message rather than a crash", async (_kind, pick) => {
+    const question = pick();
+    readSessionMock.mockResolvedValue(openOn(question.id));
+
+    const response = await submit(question.id, []);
+
+    // The seam S-06 and S-08 still extend. S-05 took the text half of it.
     expect(response.status).toBe(409);
+    expect((await body(response)).error).toBe("Ten typ pytania nie przyjmuje jeszcze odpowiedzi.");
     expect(submitAnswerMock).not.toHaveBeenCalled();
   });
 

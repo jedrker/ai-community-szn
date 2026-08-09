@@ -798,34 +798,34 @@ a document written by this build parses under the old one.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 `state.test.ts` asserts non-null `revealedAnswerText` refused outside `question-revealed`
-- [x] 2.4 `state.test.ts` asserts a document without the field parses to `null`
-- [x] 2.5 `answers.test.ts` asserts a record without `text` parses to `null`
-- [x] 2.6 `routes.test.ts` asserts revealing a text question sets the field to the first accepted variant
-- [x] 2.7 `routes.test.ts` asserts revealing a choice question leaves it null
-- [x] 2.8 `routes.test.ts` asserts advancing clears it
-- [x] 2.9 `keys.test.ts` still passes
+- [x] 2.1 Unit tests pass: `bun run test` — 3cd25f2
+- [x] 2.2 Type checking passes: `bun run type-check` — 3cd25f2
+- [x] 2.3 `state.test.ts` asserts non-null `revealedAnswerText` refused outside `question-revealed` — 3cd25f2
+- [x] 2.4 `state.test.ts` asserts a document without the field parses to `null` — 3cd25f2
+- [x] 2.5 `answers.test.ts` asserts a record without `text` parses to `null` — 3cd25f2
+- [x] 2.6 `routes.test.ts` asserts revealing a text question sets the field to the first accepted variant — 3cd25f2
+- [x] 2.7 `routes.test.ts` asserts revealing a choice question leaves it null — 3cd25f2
+- [x] 2.8 `routes.test.ts` asserts advancing clears it — 3cd25f2
+- [x] 2.9 `keys.test.ts` still passes — 3cd25f2
 
 ### Phase 3: The submission route and the result payload
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 `answer.test.ts` asserts a correct text submission is accepted and stored with raw trimmed text
-- [ ] 3.4 `answer.test.ts` asserts an absent `text` field is refused, by outcome
-- [ ] 3.5 `answer.test.ts` asserts empty and whitespace-only `text` are refused
-- [ ] 3.6 `answer.test.ts` asserts an over-length `text` is refused and nothing is written
-- [ ] 3.7 `answer.test.ts` asserts `number` and `word-cloud` still receive `unsupportedKind`
-- [ ] 3.8 `answer.test.ts` asserts the existing choice-path cases are unchanged
-- [ ] 3.9 `result.test.ts` asserts `text` returned when answered, null when silent
-- [ ] 3.10 `result.test.ts` asserts the phase gate still refuses an unrevealed text question
+- [x] 3.1 Unit tests pass: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 `answer.test.ts` asserts a correct text submission is accepted and stored with raw trimmed text
+- [x] 3.4 `answer.test.ts` asserts an absent `text` field is refused, by outcome
+- [x] 3.5 `answer.test.ts` asserts empty and whitespace-only `text` are refused
+- [x] 3.6 `answer.test.ts` asserts an over-length `text` is refused and nothing is written
+- [x] 3.7 `answer.test.ts` asserts `number` and `word-cloud` still receive `unsupportedKind`
+- [x] 3.8 `answer.test.ts` asserts the existing choice-path cases are unchanged
+- [x] 3.9 `result.test.ts` asserts `text` returned when answered, null when silent
+- [x] 3.10 `result.test.ts` asserts the phase gate still refuses an unrevealed text question
 
 #### Manual
 
-- [ ] 3.11 `curl` an over-length text body: 400 with a Polish message, nothing written to the store
+- [x] 3.11 `curl` an over-length text body: 400 with a Polish message, nothing written to the store
 
 ### Phase 4: The attendee view
 

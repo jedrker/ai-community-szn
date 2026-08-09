@@ -1,12 +1,18 @@
 import type { APIRoute } from "astro";
 
 import { logSessionEvent } from "../../../lib/session/log";
-import { clampElapsed, scoreChoiceAnswer } from "../../../lib/session/scoring";
+import {
+  clampElapsed,
+  MAX_TEXT_ANSWER_LENGTH,
+  scoreChoiceAnswer,
+  scoreTextAnswer,
+} from "../../../lib/session/scoring";
 import { readSession, submitAnswer } from "../../../lib/session/store";
 import { getQuestionById } from "../../../quiz/index";
 
 /**
- * Submits one attendee's answer to the open question (roadmap S-03, PRD FR-004/FR-010).
+ * Submits one attendee's answer to the open question
+ * (roadmap S-03/S-05, PRD FR-004/FR-010/FR-011).
  *
  * On demand — no `prerender` export, per the project's rendering convention.
  *
@@ -36,6 +42,7 @@ const MESSAGES = {
   notStarted: "Sesja jeszcze się nie rozpoczęła.",
   unknownPlayer: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie.",
   unsupportedKind: "Ten typ pytania nie przyjmuje jeszcze odpowiedzi.",
+  tooLong: `Odpowiedź może mieć najwyżej ${MAX_TEXT_ANSWER_LENGTH} znaków.`,
   unconfigured: "Sesja nie jest skonfigurowana.",
   failed: "Nie udało się zapisać odpowiedzi. Spróbuj ponownie.",
 } as const;
@@ -129,10 +136,14 @@ export const POST: APIRoute = async ({ request }) => {
     return json(409, { error: MESSAGES.notOpen });
   }
 
-  // The seam S-05 (text), S-06 (number) and S-08 (word cloud) extend: a refusal with a
-  // message rather than a crash, so a host who advances to a question this slice does
-  // not handle sees a phone that says so.
-  if (question.kind !== "single-choice" && question.kind !== "multiple-choice") {
+  // The seam S-06 (number) and S-08 (word cloud) still extend: a refusal with a message
+  // rather than a crash, so a host who advances to a question this slice does not handle
+  // sees a phone that says so. S-05 took the `text` half of it.
+  if (
+    question.kind !== "single-choice" &&
+    question.kind !== "multiple-choice" &&
+    question.kind !== "text"
+  ) {
     logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
     return json(409, { error: MESSAGES.unsupportedKind });
   }
@@ -146,34 +157,78 @@ export const POST: APIRoute = async ({ request }) => {
    * quietly: the day a slice adds a host action that fires while a question is open
    * (a live participation count, say), this bound silently shortens and every clamp
    * after it hands out more speed weight than it should.
-   */
-  /**
-   * **Only ids this question actually has.**
    *
-   * `getAll` returns whatever the request sent — any count, any length, any content —
-   * and the array is stored verbatim in the answers hash. Unknown ids change no award
-   * (an unrecognised id fails the all-or-nothing match anyway), so the cost is not a
-   * wrong score: it is that an open endpoint would let anyone holding a player id write
-   * a value of their choosing, at a size of their choosing, into the store. Bounding it
-   * against the definition costs one pass and removes the whole class.
-   *
-   * `join.ts` runs `validateDisplayName` before touching the store for the same reason.
-   * This is that step for this route.
+   * Computed above the kind branch because the timing rule is global — every scored
+   * answer is weighted the same way regardless of what it is made of.
    */
-  const knownOptionIds = new Set(question.options.map((option) => option.id));
-  const selectedOptionIds = [...new Set(optionIds.filter((id) => knownOptionIds.has(id)))];
-
   const now = Date.now();
   const elapsedMs = clampElapsed(rawElapsed, now - session.state.updatedAt);
-  const { correct, awarded } = scoreChoiceAnswer(question, selectedOptionIds, elapsedMs);
+
+  let selectedOptionIds: string[] = [];
+  let answerText: string | null = null;
+  let correct: boolean;
+  let awarded: number;
+
+  if (question.kind === "text") {
+    /**
+     * **Parsed explicitly, never coerced** — `lessons.md` rule 2, and the same care the
+     * `elapsedMs` block above takes. Decide what "said nothing" means before deciding
+     * what "lied" means: an absent field, a non-string (a file part, a repeated field),
+     * and a string that is only whitespace are all *refusals*, not empty-but-valid
+     * answers. Scored as an answer, an empty submission would burn FR-004's
+     * one-answer-per-question lock on nothing.
+     */
+    const rawText = form.get("text");
+    const trimmed = typeof rawText === "string" ? rawText.trim() : "";
+
+    if (trimmed.length === 0) {
+      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      return json(400, { error: MESSAGES.missing });
+    }
+
+    /**
+     * **Bounded before the store is touched**, and refused rather than truncated —
+     * scoring a prefix the attendee did not type is worse than a clean no.
+     *
+     * The same reasoning that bounds `optionIds` against the definition below: this
+     * endpoint is open, takes `formData`, and `curl` ignores an input's `maxlength`.
+     * `join.ts` runs `validateDisplayName` before touching the store for this reason.
+     *
+     * Measured on the trimmed string because that is what gets stored, so this and
+     * `answerRecordSchema`'s `.max()` bound the same value. That schema check is the
+     * backstop; this one is what produces a message an attendee can read.
+     */
+    if (trimmed.length > MAX_TEXT_ANSWER_LENGTH) {
+      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      return json(400, { error: MESSAGES.tooLong });
+    }
+
+    // The raw trimmed text, not the fold: the fold is a comparison artefact, and the
+    // reveal shows the attendee what they actually typed.
+    answerText = trimmed;
+    ({ correct, awarded } = scoreTextAnswer(question, trimmed, elapsedMs));
+  } else {
+    /**
+     * **Only ids this question actually has.**
+     *
+     * `getAll` returns whatever the request sent — any count, any length, any content —
+     * and the array is stored verbatim in the answers hash. Unknown ids change no award
+     * (an unrecognised id fails the all-or-nothing match anyway), so the cost is not a
+     * wrong score: it is that an open endpoint would let anyone holding a player id write
+     * a value of their choosing, at a size of their choosing, into the store. Bounding it
+     * against the definition costs one pass and removes the whole class.
+     */
+    const knownOptionIds = new Set(question.options.map((option) => option.id));
+    selectedOptionIds = [...new Set(optionIds.filter((id) => knownOptionIds.has(id)))];
+
+    ({ correct, awarded } = scoreChoiceAnswer(question, selectedOptionIds, elapsedMs));
+  }
 
   const result = await submitAnswer({
     playerId,
     questionId,
     optionIds: selectedOptionIds,
-    // This route only reaches here for the two choice kinds, which have no typed
-    // answer. S-05 Phase 3 adds the text branch that populates it.
-    text: null,
+    text: answerText,
     elapsedMs,
     correct,
     awarded,
