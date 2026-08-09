@@ -1,9 +1,10 @@
 ---
 change_id: answer-choice-question-and-reveal
 title: Attendee answers a choice question and learns their result
-status: impl_reviewed
+status: archived
 created: 2026-08-08
-updated: 2026-08-08
+updated: 2026-08-09
+archived_at: 2026-08-09T14:58:34Z
 ---
 
 ## Notes

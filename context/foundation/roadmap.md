@@ -3,7 +3,7 @@ project: "LiveQuiz"
 version: 3
 status: draft
 created: 2026-08-05
-updated: 2026-08-08
+updated: 2026-08-09
 prd_version: 1
 main_goal: quality
 top_blocker: decisions
@@ -733,3 +733,24 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   docstring all described the hook. It surfaced only by breaking an invariant and reading the real
   failure output, not by re-reading the reasoning. S-02 onward: `src/quiz/index.ts` is the import site
   (`quiz`, `getQuestionById`, `normalizePolish`, the types) — never `definition.ts`.
+
+- **S-03: Attendee can answer a single- or multiple-choice question on their phone and, when the host
+  reveals it, see whether they were right and how many points they earned — including the speed
+  component measured from when the question appeared on their own device.** — Archived 2026-08-09 →
+  `context/archive/2026-08-08-answer-choice-question-and-reveal/`. **The named trap is retired:** speed
+  is measured from the device's own first paint, persisted per question, so a reload keeps its clock
+  instead of restarting it at full weight. **The submission path holds at room scale:** 150/150
+  accepted in 401 ms against production, 150 answers stored with zero duplicates, a repeat submission
+  refused 409 — `HSETNX` is what makes the first answer final. End-to-end p95 449 ms against the 1 s
+  budget. **Cost is confirmed, and it is the finding that outlives this slice:** 8 commands per
+  submission and 4 per result read, measured to **+0.4%** of prediction (observed +2,489 against
+  ~2,480), which puts a real event at ~27k and ten events a month at **~54% of the 500K ceiling**, up
+  from ~1%. The runbook's per-run tripwire is unchanged at 200K; its margin fell from ~125× to ~7×.
+  S-04, S-07 and S-08 each add another per-attendee path on top of this one. Lessons: (1) **Absent
+  untrusted input must fail toward the safe end, not the favourable one** — `Number(null)` is `0`, so
+  a submission omitting `elapsedMs` scored as an instant answer and took full speed weight; recorded in
+  `context/foundation/lessons.md`, and three further instances of the same shape (a 5xx read as a
+  refusal, a nonsense clamp window, an unread `answered: false`) were caught by the implementation
+  review *after* the lesson was written. (2) **Archived with 9 manual rows unverified** — the
+  two-device run this plan names as its end state was never performed, so every browser-side fix from
+  the review is deployed and unexercised. S-09 inherits that gap.
