@@ -193,3 +193,122 @@ export function renderQuestion(
 
   container.append(list);
 }
+
+/**
+ * What the room chose (roadmap S-04, PRD FR-005).
+ *
+ * Shape of `state.revealedDistribution`: how many people answered, and how many chose
+ * each option. Kept in this module rather than inline in `host.astro` for the reason
+ * the module exists — hand-written DOM is the accepted cost of having no framework, and
+ * it is paid once.
+ */
+export type Distribution = {
+  readonly answered: number;
+  readonly options: Readonly<Record<string, number>>;
+};
+
+export type DistributionClassNames = {
+  readonly list?: string;
+  readonly row?: string;
+  /** Appended to the row of an option that was correct. */
+  readonly rowCorrect?: string;
+  readonly label?: string;
+  readonly count?: string;
+  /** The track the filled bar sits in. */
+  readonly bar?: string;
+  /** The filled portion, whose inline width carries the share. */
+  readonly barFill?: string;
+  readonly empty?: string;
+};
+
+/** Polish, because it renders directly. */
+const NO_ANSWERS_TEXT = "Nikt jeszcze nie odpowiedział.";
+
+/**
+ * Renders one bar per option: its text, its absolute count, its share of the room, and
+ * whether it was the right answer.
+ *
+ * **Shares are computed against `answered` — people, not selections — and are never
+ * normalized to 100%.** On the two multiple-choice questions they will therefore sum
+ * past 100%, because someone who picked two options is counted in two bars. Stated here
+ * because it reads as a bug: normalizing would misreport what share of the room chose
+ * each option, which is the question the display exists to answer.
+ *
+ * An `answered` of zero renders every bar at zero width rather than dividing by it, and
+ * says so in words — a screen of empty bars with no explanation reads as broken rather
+ * than as unanswered.
+ *
+ * Built with `createElement` and `textContent`, never `innerHTML`, and a correct option
+ * is marked with `data-correct` as well as by class, so both survive a stylesheet that
+ * fails to load on a venue network. Both rules are `renderQuestion`'s and are followed
+ * here for the same reasons.
+ */
+export function renderDistribution(
+  container: HTMLElement,
+  question: PublicQuestion | undefined,
+  distribution: Distribution | null,
+  correctOptionIds: readonly string[] | null,
+  classNames: DistributionClassNames = {}
+): void {
+  container.replaceChildren();
+
+  // No question, no options, or no distribution — the last being what a failed tally
+  // read publishes. Rendering nothing is the point: zeroed bars would claim the room
+  // did not answer, which is the specific wrong message `reveal.ts` sends `null` to
+  // avoid.
+  if (!question?.options?.length || distribution === null) return;
+
+  const { answered } = distribution;
+
+  if (answered === 0) {
+    const empty = document.createElement("p");
+    if (classNames.empty) empty.className = classNames.empty;
+    empty.textContent = NO_ANSWERS_TEXT;
+    container.append(empty);
+    return;
+  }
+
+  const list = document.createElement("ul");
+  if (classNames.list) list.className = classNames.list;
+
+  for (const option of question.options) {
+    // A missing key is zero: an option nobody picked is a fact about the room, and
+    // dropping its row would leave the bars unreadable against the question on screen.
+    const count = distribution.options[option.id] ?? 0;
+    const share = Math.round((count / answered) * 100);
+    const isCorrect = correctOptionIds !== null && correctOptionIds.includes(option.id);
+
+    const row = document.createElement("li");
+    row.className = optionClassName([
+      classNames.row,
+      isCorrect ? classNames.rowCorrect : undefined,
+    ]);
+    // Addressable by id, like `renderQuestion`'s options, and marked in the DOM rather
+    // than by class alone.
+    row.dataset.optionId = option.id;
+    if (isCorrect) row.dataset.correct = "true";
+
+    const label = document.createElement("span");
+    if (classNames.label) label.className = classNames.label;
+    label.textContent = option.text;
+
+    const figures = document.createElement("span");
+    if (classNames.count) figures.className = classNames.count;
+    // Both numbers, because neither answers the other's question: the share is what the
+    // room compares, and the count is what makes it trustworthy.
+    figures.textContent = `${count} · ${share}%`;
+
+    const bar = document.createElement("div");
+    if (classNames.bar) bar.className = classNames.bar;
+
+    const fill = document.createElement("div");
+    if (classNames.barFill) fill.className = classNames.barFill;
+    fill.style.width = `${share}%`;
+
+    bar.append(fill);
+    row.append(label, figures, bar);
+    list.append(row);
+  }
+
+  container.append(list);
+}

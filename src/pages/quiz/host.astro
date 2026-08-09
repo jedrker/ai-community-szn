@@ -129,6 +129,32 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       </section>
 
       <section id="question" class="flex flex-col gap-5"></section>
+
+      <!--
+        The participation panel (roadmap S-04, FR-005).
+
+        `answered / joined` while a question is open, the room's answers once it is
+        revealed, and nothing at all for a question kind that cannot be answered.
+
+        **Below the prompt, deliberately.** The prompt is what the room is reading; a
+        panel above it pushes the question down the projector and makes the screen about
+        the count rather than about the question.
+
+        Hidden with the `hidden` attribute, which needs no CSS to work — the same reason
+        `setHidden` exists.
+      -->
+      <section id="participation" hidden class="flex flex-col gap-3">
+        <div id="participation-count-box" class="flex items-baseline gap-4">
+          <p class="text-text-secondary text-lg uppercase tracking-wide">Odpowiedzi</p>
+          <p id="participation-count" class="text-7xl font-bold leading-none">—</p>
+          <!-- Beside the number, not in place of it: the count keeps its last value on a
+               failed poll, and this is what says the value is not fresh. -->
+          <span id="participation-stale" hidden class="text-amber-400 text-lg">
+            (nieaktualne)
+          </span>
+        </div>
+        <div id="distribution"></div>
+      </section>
     </main>
 
     <footer class="flex flex-col gap-4">
@@ -182,7 +208,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
     <script>
       import { createSessionClient, type ConnectionStatus } from "../../lib/client/session";
-      import { el, renderQuestion, setText } from "../../lib/client/render";
+      import {
+        el,
+        renderDistribution,
+        renderQuestion,
+        setHidden,
+        setText,
+      } from "../../lib/client/render";
       import type { PublicQuestion } from "../../quiz/public";
 
       type Config = {
@@ -212,6 +244,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const secretField = el("secret") as HTMLInputElement;
       const questionBox = el("question");
       const refresh = el("refresh") as HTMLButtonElement;
+      const participationBox = el("participation");
+      const countBox = el("participation-count-box");
+      const staleMark = el("participation-stale");
+      const distributionBox = el("distribution");
 
       const actionButtons = (): HTMLButtonElement[] =>
         Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-action]"));
@@ -249,6 +285,31 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        */
       let liveCount: number | null = null;
 
+      /**
+       * THE PROJECT'S ONE SANCTIONED POLLING LOOP (roadmap S-04, FR-005).
+       *
+       * Nothing else in this project polls, and the runbook's command tripwire is
+       * described there as a polling detector. This is the exception, and it is bounded
+       * on purpose: **one device**, only while a choice question is open, ~2.5s — so an
+       * unexpected pattern in the command counter is still detectable as one.
+       *
+       * It is a read. `/api/quiz/host/participation` writes nothing, and that is
+       * load-bearing rather than incidental: during `question-open` the session
+       * document's `updatedAt` is the moment the question opened and bounds the speed
+       * clamp, so a host-side write here would inflate every award after it. See the
+       * warning in `src/pages/api/quiz/answer.ts`.
+       */
+      const POLL_BASE_MS = 2_500;
+      const POLL_MAX_MS = 20_000;
+
+      let pollTimer: number | null = null;
+      let pollDelay = POLL_BASE_MS;
+      /** The last count the endpoint gave us. `null` means it has not answered yet. */
+      let answered: number | null = null;
+      let answeredStale = false;
+      /** Which question the panel's numbers belong to, so a new one resets them. */
+      let panelQuestionId: string | null = null;
+
       const client = createSessionClient({
         channelName: config.channelName,
         snapshotEvent: config.snapshotEvent,
@@ -278,6 +339,71 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         ended: "zakończona",
       };
 
+      type State = NonNullable<ReturnType<typeof client.current>>;
+
+      function questionFor(state: State): PublicQuestion | undefined {
+        return config.questions.find((candidate) => candidate.id === state.currentQuestionId);
+      }
+
+      /**
+       * **ONE predicate governs both the panel and the poll**, and it is written once.
+       *
+       * Two conditions here would mean the poll runs for the four drafted questions
+       * `/api/quiz/answer` refuses — feeding a panel that is not rendered, from an
+       * endpoint that can only ever return zero. A data path with no affordance is the
+       * mirror of `lessons.md`'s first rule, and it fails just as quietly: nothing is
+       * wrong on screen, and the command counter climbs.
+       */
+      function participationApplies(state: State | null): state is State {
+        if (state === null || state.phase !== "question-open") return false;
+        const kind = questionFor(state)?.kind;
+        return kind === "single-choice" || kind === "multiple-choice";
+      }
+
+      function renderParticipation(state: State): void {
+        // A new question means the previous one's numbers are meaningless. Reset before
+        // anything renders, or the first paint under a new prompt carries the last
+        // question's count — plausible, and wrong.
+        if (state.currentQuestionId !== panelQuestionId) {
+          panelQuestionId = state.currentQuestionId;
+          answered = null;
+          answeredStale = false;
+          pollDelay = POLL_BASE_MS;
+        }
+
+        const distribution =
+          state.phase === "question-revealed" ? state.revealedDistribution : null;
+        const showCount = participationApplies(state);
+
+        setHidden(participationBox, !showCount && distribution === null);
+        setHidden(countBox, !showCount);
+        setHidden(staleMark, !answeredStale);
+
+        if (showCount) {
+          // The denominator is the join count the page already maintains, which the
+          // poll's own `playerCount` keeps fresh — so the join figure stops needing a
+          // manual refresh while a question is open.
+          setText("participation-count", `${answered ?? "—"} / ${liveCount ?? state.playerCount}`);
+        }
+
+        renderDistribution(
+          distributionBox,
+          state.currentQuestionId === null ? undefined : questionFor(state),
+          distribution,
+          state.revealedOptionIds,
+          {
+            list: "flex flex-col gap-3",
+            row: "grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 rounded-xl border border-surface-border bg-surface-secondary px-5 py-4",
+            rowCorrect: "border-emerald-400",
+            label: "text-3xl",
+            count: "text-3xl font-bold tabular-nums",
+            bar: "col-span-2 h-3 rounded-full bg-surface-primary",
+            barFill: "h-full rounded-full bg-brand-purple-light",
+            empty: "text-text-secondary text-2xl",
+          }
+        );
+      }
+
       function render(): void {
         const state = client.current();
 
@@ -286,6 +412,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           setText("player-count", "—");
           setText("version", "—");
           liveCount = null;
+          setHidden(participationBox, true);
+          stopPolling();
           renderQuestion(questionBox, undefined, { prompt: "text-4xl font-bold leading-tight" });
           return;
         }
@@ -294,20 +422,140 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         setText("player-count", liveCount ?? state.playerCount);
         setText("version", state.version);
 
-        const question = config.questions.find(
-          (candidate) => candidate.id === state.currentQuestionId
+        const question = questionFor(state);
+        const distribution =
+          state.phase === "question-revealed" ? state.revealedDistribution : null;
+
+        /**
+         * At a reveal with bars to show, **the option list is replaced by them** — the
+         * bars carry the same option text with a count against it, so drawing both puts
+         * the options on the projector twice. With no distribution (a failed tally read,
+         * or a non-choice kind) the ordinary revealed rendering stands, so
+         * `revealedOptionIds` still marks the correct answer and FR-016 holds either way.
+         */
+        renderQuestion(
+          questionBox,
+          state.currentQuestionId === null
+            ? undefined
+            : distribution !== null && question
+              ? { ...question, options: undefined }
+              : question,
+          {
+            prompt: "text-6xl font-bold leading-tight",
+            list: "grid gap-3 sm:grid-cols-2",
+            option:
+              "rounded-xl border border-surface-border bg-surface-secondary px-5 py-4 text-3xl",
+            mode: state.phase === "question-revealed" ? "revealed" : "static",
+            correctOptionIds: state.revealedOptionIds,
+            optionCorrect: "border-emerald-400",
+          }
         );
-        renderQuestion(questionBox, state.currentQuestionId === null ? undefined : question, {
-          prompt: "text-6xl font-bold leading-tight",
-          list: "grid gap-3 sm:grid-cols-2",
-          option:
-            "rounded-xl border border-surface-border bg-surface-secondary px-5 py-4 text-3xl",
-        });
+
+        renderParticipation(state);
+
+        if (participationApplies(state)) schedulePoll();
+        else stopPolling();
       }
 
       function say(text: string, bad: boolean): void {
         setText("message", text);
         el("message").className = bad ? "text-xl text-red-400" : "text-xl text-emerald-400";
+      }
+
+      function stopPolling(): void {
+        if (pollTimer === null) return;
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+
+      function schedulePoll(): void {
+        // Never two timers. `render` runs on every snapshot, and a snapshot arriving
+        // mid-question would otherwise add a second loop each time — the count would
+        // still look right while the command spend doubled, then quadrupled.
+        if (pollTimer !== null) return;
+        if (document.visibilityState === "hidden") return;
+        pollTimer = window.setTimeout(() => {
+          pollTimer = null;
+          void runPoll();
+        }, pollDelay);
+      }
+
+      /**
+       * A poll that could not be answered.
+       *
+       * **Keep the last count and back off; never zero it.** `readPlayerCount`'s
+       * discipline, for the same reason: on a projector a number that drops to zero
+       * reads to the room as everyone having stopped answering, and a host who cannot
+       * read the count is in a different situation from one whose room has gone quiet.
+       * The staleness marker is what says which.
+       */
+      function pollFailed(): void {
+        answeredStale = true;
+        pollDelay = Math.min(pollDelay * 2, POLL_MAX_MS);
+        render();
+      }
+
+      async function runPoll(): Promise<void> {
+        const state = client.current();
+        if (!participationApplies(state)) return;
+
+        const questionId = state.currentQuestionId;
+        if (questionId === null) return;
+
+        try {
+          const response = await fetch(
+            `/api/quiz/host/participation?questionId=${encodeURIComponent(questionId)}`,
+            { headers: { [config.secretHeader]: secretField.value } }
+          );
+
+          /**
+           * **A 401 is not a network failure and must not take that path.** The ordinary
+           * cause is a host who has opened the page and not yet typed the secret — the
+           * first thirty seconds of every session. Backing off would leave the projector
+           * showing a staleness marker that says nothing about what is actually wrong,
+           * and would then delay recovery by up to the backed-off interval after the
+           * secret is finally typed. So: report it as what it is, leave the interval
+           * alone, and let the `input` handler on the secret field retry immediately.
+           */
+          if (response.status === 401) {
+            say("Wpisz sekret hosta, żeby zobaczyć liczbę odpowiedzi.", true);
+            schedulePoll();
+            return;
+          }
+
+          if (!response.ok) {
+            pollFailed();
+            return;
+          }
+
+          const payload = (await response.json()) as {
+            questionId?: string;
+            answered?: number;
+            playerCount?: number | null;
+          };
+
+          /**
+           * The host is free to advance at any moment, so a reply can arrive after the
+           * question changed. Discarded rather than painted: the count would look
+           * entirely plausible under the new prompt, which is what makes it worth a
+           * guard.
+           */
+          if (payload.questionId !== client.current()?.currentQuestionId) {
+            schedulePoll();
+            return;
+          }
+
+          answered = typeof payload.answered === "number" ? payload.answered : answered;
+          if (typeof payload.playerCount === "number") liveCount = payload.playerCount;
+          answeredStale = false;
+          pollDelay = POLL_BASE_MS;
+          render();
+        } catch {
+          // The venue network. Not an error worth a message — the marker says it.
+          pollFailed();
+        } finally {
+          schedulePoll();
+        }
       }
 
       /**
@@ -397,10 +645,26 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           });
       });
 
+      /**
+       * The poll stops when nobody can see it and when the page goes away — a projector
+       * tab left in the background must not keep spending commands, and a timer that
+       * outlives the page is a request fired at a document that is gone.
+       */
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") stopPolling();
+        else render();
+      });
+      window.addEventListener("pagehide", stopPolling);
+
       secretField.value = readSecret();
       secretField.addEventListener("input", () => {
         storeSecret(secretField.value);
         setText("secret-note", secretField.value.length > 0 ? "zapamiętany w tej karcie" : "");
+        // The 401 recovery path. A poll refused for a missing secret left the interval
+        // alone precisely so this could retry at once rather than after a backed-off
+        // wait — typing the secret is the fix, so it should be the trigger.
+        stopPolling();
+        void runPoll();
       });
       setText("secret-note", secretField.value.length > 0 ? "zapamiętany w tej karcie" : "");
 

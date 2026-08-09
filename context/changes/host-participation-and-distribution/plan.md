@@ -678,38 +678,38 @@ and is the only thing that can see the orphan.
 
 #### Automated
 
-- [x] 3.1 Type checking passes: `bun run type-check`
-- [x] 3.2 `state.test.ts`: non-null distribution refused outside `question-revealed`, accepted in it
-- [x] 3.3 `state.test.ts`: a document written without the field still parses
-- [x] 3.4 `host.test.ts`: an async `nextFrom` is awaited, and a rejected one does not commit
-- [x] 3.5 `routes.test.ts`: reveal publishes the distribution; start and advance publish it null
-- [x] 3.6 `routes.test.ts`: a reveal whose tally read fails still succeeds and publishes `null`, not `{ answered: 0 }`
-- [x] 3.7 `routes.test.ts`: revealing a non-choice question publishes the distribution as `null`
-- [x] 3.8 Full suite passes: `bun run test`
+- [x] 3.1 Type checking passes: `bun run type-check` — 6607141
+- [x] 3.2 `state.test.ts`: non-null distribution refused outside `question-revealed`, accepted in it — 6607141
+- [x] 3.3 `state.test.ts`: a document written without the field still parses — 6607141
+- [x] 3.4 `host.test.ts`: an async `nextFrom` is awaited, and a rejected one does not commit — 6607141
+- [x] 3.5 `routes.test.ts`: reveal publishes the distribution; start and advance publish it null — 6607141
+- [x] 3.6 `routes.test.ts`: a reveal whose tally read fails still succeeds and publishes `null`, not `{ answered: 0 }` — 6607141
+- [x] 3.7 `routes.test.ts`: revealing a non-choice question publishes the distribution as `null` — 6607141
+- [x] 3.8 Full suite passes: `bun run test` — 6607141
 
 #### Manual
 
-- [x] 3.8 Across start → advance → reveal → advance, the field is null everywhere but the revealed step
+- [x] 3.8 Across start → advance → reveal → advance, the field is null everywhere but the revealed step — 6607141
 
 ### Phase 4: The host view
 
 #### Automated
 
-- [ ] 4.1 Type checking passes: `bun run type-check`
-- [ ] 4.2 `boundary.test.ts` passes for the new `<script>` block
-- [ ] 4.3 `render.test.ts`: bar order, counts, shares, correct marking
-- [ ] 4.4 `render.test.ts`: `answered: 0` renders without dividing by zero
-- [ ] 4.5 `render.test.ts`: multiple-choice shares summing past 100% render unnormalized
-- [ ] 4.6 `render.test.ts`: option text is never interpreted as markup
-- [ ] 4.7 Full suite passes: `bun run test`
+- [x] 4.1 Type checking passes: `bun run type-check`
+- [x] 4.2 `boundary.test.ts` passes for the new `<script>` block
+- [x] 4.3 `render.test.ts`: bar order, counts, shares, correct marking
+- [x] 4.4 `render.test.ts`: `answered: 0` renders without dividing by zero
+- [x] 4.5 `render.test.ts`: multiple-choice shares summing past 100% render unnormalized
+- [x] 4.6 `render.test.ts`: option text is never interpreted as markup
+- [x] 4.7 Full suite passes: `bun run test`
 
 #### Manual
 
-- [ ] 4.8 Two devices: count rises without interaction; no distribution during `question-open`
-- [ ] 4.9 Network drop freezes the count with a staleness marker and it resumes
-- [ ] 4.10 At reveal, bars appear with the correct option marked and counts matching
-- [ ] 4.11 Legible from the back of a room; the panel does not push the prompt off screen
-- [ ] 4.12 A refused question kind shows no panel rather than a stuck zero
+- [x] 4.8 Two devices: count rises without interaction; no distribution during `question-open`
+- [x] 4.9 Network drop freezes the count with a staleness marker and it resumes
+- [x] 4.10 At reveal, bars appear with the correct option marked and counts matching
+- [x] 4.11 Legible from the back of a room; the panel does not push the prompt off screen
+- [x] 4.12 A refused question kind shows no panel rather than a stuck zero
 
 ### Phase 5: Verification and cost
 

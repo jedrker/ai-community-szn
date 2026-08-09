@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { renderQuestion } from "./render";
+import { renderDistribution, renderQuestion } from "./render";
 import type { PublicQuestion } from "../../quiz/public";
 
 /**
@@ -266,5 +266,133 @@ describe("revealed mode", () => {
 
     expect(options()[0]!.className).toContain("right");
     expect(options().some((item) => item.dataset.selected === "true")).toBe(false);
+  });
+});
+
+/**
+ * The distribution bars (roadmap S-04, FR-005).
+ *
+ * Read from the back of a room, so what is under test is what the numbers *say* —
+ * order, counts, shares, and which option is marked — rather than that elements exist.
+ */
+describe("renderDistribution", () => {
+  const rows = (): HTMLElement[] => Array.from(container.querySelectorAll("li"));
+  const fillWidths = (): string[] =>
+    Array.from(container.querySelectorAll("li div div")).map(
+      (node) => (node as HTMLElement).style.width
+    );
+
+  it("draws one bar per option, in definition order, with counts and shares", () => {
+    renderDistribution(
+      container,
+      single,
+      { answered: 10, options: { a: 5, b: 3, c: 2 } },
+      ["a"]
+    );
+
+    expect(rows()).toHaveLength(3);
+    // Definition order, not sorted by count: the bars sit under a question whose options
+    // the room is reading in that order, and re-ordering them makes the two disagree.
+    expect(rows().map((row) => row.dataset.optionId)).toEqual(["a", "b", "c"]);
+    expect(rows().map((row) => row.textContent)).toEqual([
+      "Large Language Model5 · 50%",
+      "Long Learning Machine3 · 30%",
+      "Layered Logic Module2 · 20%",
+    ]);
+    expect(fillWidths()).toEqual(["50%", "30%", "20%"]);
+  });
+
+  it("marks the correct option in the DOM as well as by class", () => {
+    renderDistribution(container, single, { answered: 4, options: { a: 4 } }, ["a"], {
+      rowCorrect: "right",
+    });
+
+    // Both, so the marking survives a stylesheet that fails to load on a venue network.
+    expect(rows()[0]!.dataset.correct).toBe("true");
+    expect(rows()[0]!.className).toContain("right");
+    expect(rows()[1]!.dataset.correct).toBeUndefined();
+  });
+
+  it("shows an option nobody picked as zero rather than dropping its row", () => {
+    renderDistribution(container, single, { answered: 4, options: { a: 4 } }, ["a"]);
+
+    // A missing row would leave the bars unreadable against the question on screen.
+    expect(rows()).toHaveLength(3);
+    expect(rows()[1]!.textContent).toContain("0 · 0%");
+  });
+
+  /**
+   * **The shares sum past 100% and that is correct.** The denominator counts people, not
+   * selections, so someone who picked two options is in two bars. Normalizing would
+   * misreport what share of the room chose each option, which is the question the
+   * display answers — asserted here because it reads as a bug and would otherwise be
+   * "fixed".
+   */
+  it("renders multiple-choice shares unnormalized, against answered", () => {
+    renderDistribution(container, multi, { answered: 10, options: { a: 8, b: 7, c: 1 } }, [
+      "a",
+      "b",
+    ]);
+
+    expect(rows().map((row) => row.textContent)).toEqual([
+      "Large Language Model8 · 80%",
+      "Long Learning Machine7 · 70%",
+      "Layered Logic Module1 · 10%",
+    ]);
+    // 160%, deliberately.
+    expect(fillWidths()).toEqual(["80%", "70%", "10%"]);
+  });
+
+  it("renders no bars and no NaN when nobody has answered", () => {
+    renderDistribution(container, single, { answered: 0, options: {} }, ["a"], {
+      empty: "muted",
+    });
+
+    // Dividing by zero would put "NaN%" on a projector. A sentence is what a room can
+    // read; a screen of empty bars with no explanation reads as broken.
+    expect(rows()).toHaveLength(0);
+    expect(container.textContent).not.toContain("NaN");
+    expect(container.textContent).toContain("Nikt jeszcze nie odpowiedział");
+  });
+
+  /**
+   * `null` is what `reveal.ts` publishes when the tally read failed, and it must render
+   * as nothing at all — never as a set of zeroed bars, which on a projector is the claim
+   * that nobody answered.
+   */
+  it("renders nothing at all for a null distribution", () => {
+    renderDistribution(container, single, null, ["a"]);
+
+    expect(container.children).toHaveLength(0);
+  });
+
+  it("renders nothing for a kind with no options", () => {
+    const text: PublicQuestion = { id: "t", kind: "text", prompt: "Coś", scored: true };
+
+    renderDistribution(container, text, { answered: 3, options: {} }, null);
+
+    expect(container.children).toHaveLength(0);
+  });
+
+  it("never interprets option text as markup", () => {
+    const hostile: PublicQuestion = {
+      ...single,
+      options: [{ id: "a", text: "<img src=x onerror=alert(1)>" }],
+    };
+
+    renderDistribution(container, hostile, { answered: 1, options: { a: 1 } }, null);
+
+    // S-08 will feed this module attendee-supplied strings. `textContent`, never
+    // `innerHTML` — the same rule `renderQuestion` follows, asserted the same way.
+    expect(container.querySelector("img")).toBeNull();
+    expect(rows()[0]!.textContent).toContain("<img");
+  });
+
+  it("clears whatever was there before", () => {
+    container.append(document.createElement("p"));
+
+    renderDistribution(container, single, { answered: 2, options: { a: 2 } }, null);
+
+    expect(container.querySelectorAll("p")).toHaveLength(0);
   });
 });
