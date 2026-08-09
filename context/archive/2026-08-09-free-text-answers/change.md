@@ -1,10 +1,10 @@
 ---
 change_id: free-text-answers
 title: Free-text answers
-status: impl_reviewed
+status: archived
 created: 2026-08-09
 updated: 2026-08-09
-archived_at: null
+archived_at: 2026-08-09T21:04:09Z
 ---
 
 ## Notes

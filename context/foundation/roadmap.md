@@ -54,7 +54,7 @@ an attendee is scoring on their own device.
 | S-02  | `join-and-follow-host`                | Attendee can join a started session by name and see the host's current question        | S-01, F-02    | US-01, US-02, FR-002, FR-003, FR-007, FR-008                              | done     |
 | S-03  | `answer-choice-question-and-reveal`   | Attendee can answer a choice question and see if they were right and what they scored  | S-02          | US-01, US-02, FR-004, FR-010, FR-016, FR-019                              | done     |
 | S-04  | `host-participation-and-distribution` | Host can show the room how many have answered, then the distribution at reveal         | S-03          | US-02, FR-005                                                             | done     |
-| S-05  | `free-text-answers`                   | Attendee can answer a free-text question without being punished for diacritics         | S-03          | US-01, FR-011                                                             | proposed |
+| S-05  | `free-text-answers`                   | Attendee can answer a free-text question without being punished for diacritics         | S-03          | US-01, FR-011                                                             | done     |
 | S-06  | `guess-the-number-answers`            | Attendee can guess a number and score by how close they were                           | S-03          | US-01, FR-013                                                             | proposed |
 | S-07  | `leaderboard-beat`                    | Host can show the leaderboard between questions, and attendees can find themselves on it | S-03        | US-01, US-02, FR-014                                                      | proposed |
 | S-08  | `word-cloud-question`                 | Attendee can submit one word and watch the cloud fill on the large screen               | S-03          | US-01, US-02, FR-012, FR-015                                              | proposed |
@@ -403,7 +403,7 @@ and do NOT re-scaffold them.
   matters: normalisation stops at case, spacing and diacritics and deliberately does not tolerate
   misspellings, because a fuzzy threshold is something the host would have to defend out loud in front
   of the room.
-- **Status:** proposed
+- **Status:** done
 
 ### S-06: Attendee guesses a number
 
@@ -784,3 +784,28 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   skip path); recorded in `context/foundation/lessons.md`. (2) **The untested component is where the
   findings were** — the implementation review put three of five warnings in the poll loop, the only
   new runtime shape with no automated coverage, while every structurally-enforced invariant held.
+
+- **S-05: Attendee can type a free-text answer and have it judged correct if it matches any accepted
+  variant, regardless of letter case, surrounding spaces, or Polish diacritics.** — Archived
+  2026-08-09 → `context/archive/2026-08-09-free-text-answers/`. Delivered with **trailing sentence
+  punctuation folded too**, which the plan added and the roadmap had not: a phone keyboard's
+  auto-inserted full stop was turning a correct answer into a zero the host would have had to explain
+  from the stage. **The load-bearing decision was to split the fold, not widen it.** Plan review
+  caught that `normalizePolish` has a second non-test caller — `players.ts`, where the folded display
+  name *is* the FR-008 uniqueness key and `.` is a legal name character — so widening it in place
+  would have merged `"Ania."` and `"Ania"` into one claim and, mid-deploy, let two visually identical
+  names onto the leaderboard, because the stored keys were written with the old fold. `normalizeAnswer`
+  was added beside it instead; `normalize.test.ts` pins the original with
+  `normalizePolish("Ania.") !== normalizePolish("Ania")`, and `schema.ts` moved to the new fold so the
+  authoring-collision check and the runtime scorer still cannot drift. **`SessionState` now carries one
+  decoration field against three transition fields** — `revealedAnswerText` joined `revealedOptionIds`
+  and S-04's `revealedDistribution`, each set only by `reveal.ts` and each with its own invariant
+  clause. **S-06 reuses this field for numbers rather than adding a fourth.** Suite 657 → 701; no new
+  `livequiz:` key; nothing but quiz content on the snapshot. Lessons: (1) **Grep every caller before
+  editing a shared pure function** — a fold used as an identity is not the same function as a fold
+  used for comparison, even when the code is identical; recorded in `context/foundation/lessons.md`.
+  (2) **The promise the data path could not keep was in the view, not the rule** — the plan said a
+  locked text field stays visible "so the attendee still sees what they sent", but the value lived in
+  memory only and a reload emptied it; caught in implementation review as an instance of the existing
+  "check the data path can deliver a promised UI affordance" rule, and fixed by persisting the answer
+  beside `submitted` in the already-registered seen map.
