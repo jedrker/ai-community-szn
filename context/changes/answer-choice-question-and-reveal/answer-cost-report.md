@@ -60,28 +60,32 @@ checks passed: 150/150 joins, 150/150 submissions accepted, 150 answers stored w
 duplicates, a repeat submission refused 409, and end-to-end p95 449 ms against the 1 s
 budget.
 
-| | Value | Writes | Reads |
+| | Total | Writes | Reads |
 | --- | --- | --- | --- |
-| Baseline reading (before the run) | **5,500** | 3,027 | 2,437 |
-| Settled reading (after) | _pending_ | _pending_ | _pending_ |
-| **Interval between the run and the settled reading** | _pending_ |
-| Observed delta | _pending_ |
-| Predicted delta | ~2,480 |
-| Closure | _pending_ (S-02 achieved ~0.1%) |
+| Baseline reading (before the run) | 5,464 | 3,027 | 2,437 |
+| Settled reading (after) | 7,953 | 4,565 | 3,388 |
+| **Observed delta** | **+2,489** | +1,538 | +951 |
+| Predicted delta | ~2,480 | | |
+| **Closure** | **+0.4%** | | |
 
-**The settled reading is still outstanding, and it is the only part of this that needs
-patience.** The console counter lags: `command-counter-diagnostic.md` records a reading
-taken 7 minutes after three N=150 runs sitting 2,526 commands short of the same counter
-85 minutes later, with ~15 commands of work in between. A premature reading looks exactly
-like a settled one. Re-read once it has stopped moving, and record the interval beside it.
+**The model holds.** Nine commands over prediction, which is about what
+`bun run quiz:check-purge` costs — it ran immediately after the rehearsal and seeds then
+deletes six keys, a cost a real event does not carry. S-02 closed to ~0.1%; this is ~0.4%,
+and the residual is accounted for rather than absorbed.
 
-Note the baseline above was taken immediately before the run and is itself a settled
-figure — the month's traffic to that point had long since quiesced — so the delta will be
-as clean as the second reading is patient.
+**On whether the reading had settled.** The interval was not recorded, which is a gap
+against this report's own instruction — but the *direction* of the miss answers the
+question the interval was there to answer. `command-counter-diagnostic.md`'s failure mode
+is a counter still catching up, which reads **short**: 2,526 commands short, in the case
+that produced a cost model 3× too low. This reading came in nine commands **long**, and a
+lagging counter cannot overshoot. Record the interval next time anyway; the argument above
+happens to hold and would not have if the numbers had gone the other way.
 
-One extra cost this run carries that a real event does not: `bun run quiz:check-purge` was
-run afterwards and seeds then deletes six keys, which is a handful of commands, not a
-material share of the delta.
+**What this does and does not license.** It confirms the per-call arithmetic — 8 per
+submission, 4 per result read — against a real store under real concurrency. It does not
+measure a 14-question event: the harness answers **one** question and never fetches a
+result, so the ~26,800 projection above is still arithmetic built on a verified unit cost,
+not an observed total. The unit is the part that was worth measuring, and it measured.
 
 ## What to do with a mismatch
 

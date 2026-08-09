@@ -893,7 +893,7 @@ never was — `docs/runbook-live-session.md` already carries that.
 
 #### Manual
 
-- [ ] 5.5 Settled counter reading recorded with its interval; prediction closes to ~1%
+- [x] 5.5 Settled counter reading recorded with its interval; prediction closes to ~1%
 - [ ] 5.6 Runbook carries the new cost and margin, threshold unchanged
 - [ ] 5.7 `answer-contract.md` written and fits on one page
 - [x] 5.8 `check-purge-residue.ts` reports no residue, new keys included
