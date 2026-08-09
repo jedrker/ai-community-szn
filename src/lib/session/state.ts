@@ -107,6 +107,42 @@ export const sessionStateSchema = z
      * the host's next action 409s mid-segment.
      */
     revealedOptionIds: z.array(z.string()).nullable().default(null),
+    /**
+     * What the room chose, published once the question is over (roadmap S-04, FR-005).
+     *
+     * **The third field in the "read this before editing either" comparison above, and
+     * it sits on `revealedOptionIds`' side of it, not `playerCount`'s.** Like the answer
+     * key, it is *part of* the transition rather than decoration on it: it is set by
+     * `reveal.ts` alone and is null in every other phase. Injecting it in
+     * `applyHostAction` beside `playerCount` — which is where a reader who pattern-matched
+     * on "aggregate number about the room" would naturally put it — would carry the
+     * previous question's distribution into the next question and publish it to 150
+     * devices while that question is being answered. FR-005 was revised during shaping
+     * precisely to stop that, and on screen it would look entirely correct.
+     *
+     * The `superRefine` clause below is the enforcement; this comment is not.
+     *
+     * `answered` counts people and `options` counts choices, so **on a multiple-choice
+     * question the option counts sum past `answered`, and that is correct** — someone who
+     * picked two options is in two of them. Anything rendering this divides by
+     * `answered` and does not normalize.
+     *
+     * Aggregate, so it carries nothing about who played and needs none of the care
+     * `playerCount`'s note describes around Ably's ~120s retention floor. It reaches
+     * attendee phones on the snapshot even though nothing renders it there — a field on
+     * the wire with no consumer until a later slice wants one.
+     *
+     * `.default(null)` for the same load-bearing reason the two fields above carry
+     * defaults: a session document written before this ships must still parse, or the
+     * host's next action 409s mid-segment.
+     */
+    revealedDistribution: z
+      .object({
+        answered: z.number().int().nonnegative(),
+        options: z.record(z.string(), z.number().int().nonnegative()),
+      })
+      .nullable()
+      .default(null),
   })
   .superRefine((state, ctx) => {
     // A question id is only ever assigned server-side from the quiz definition,
@@ -155,6 +191,19 @@ export const sessionStateSchema = z
         message: `W fazie "${state.phase}" nie można ujawniać poprawnych odpowiedzi.`,
       });
     }
+
+    // The same invariant for the distribution, and stated as its own clause rather than
+    // folded into the one above so that each field's failure names itself. A
+    // distribution published while a question is open is a cheat sheet on the projector
+    // for anyone who glances up — the leak FR-005 was revised to prevent. This clause,
+    // not the comment on the field, is what makes "set only by reveal.ts" true.
+    if (state.phase !== "question-revealed" && state.revealedDistribution !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["revealedDistribution"],
+        message: `W fazie "${state.phase}" nie można pokazywać rozkładu odpowiedzi.`,
+      });
+    }
   });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;
@@ -173,6 +222,8 @@ export function initialSessionState(now: number): SessionState {
     // Nothing is revealed in the lobby, and unlike `playerCount` this is NOT
     // overwritten downstream — every constructor but `reveal.ts` owns its own null.
     revealedOptionIds: null,
+    // Same posture, same reason: owned here, not injected downstream.
+    revealedDistribution: null,
   };
 }
 
@@ -216,6 +267,10 @@ export function endedSessionState(current: SessionState, now: number): SessionSt
     // whichever question happened to be revealed when the host closed it. The
     // schema refuses a non-null value outside `question-revealed` anyway.
     revealedOptionIds: null,
+    // Cleared for the same reason, and it matters slightly more: the closing screen
+    // showing the last question's bars would make the segment look like it ended
+    // mid-question.
+    revealedDistribution: null,
   };
 }
 

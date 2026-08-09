@@ -7,6 +7,7 @@ import {
   toResponse,
   unauthorized,
 } from "../../../../lib/session/host";
+import { readQuestionTallies } from "../../../../lib/session/store";
 import { getQuestionById } from "../../../../quiz/index";
 
 /**
@@ -27,7 +28,7 @@ export const POST: APIRoute = async ({ request }) => {
   const secret = await extractSecret(request);
   if (!authorizeHost(secret).ok) return toResponse(unauthorized());
 
-  const outcome = await applyHostAction((current, now) => {
+  const outcome = await applyHostAction(async (current, now) => {
     if (current.phase === "lobby" || current.phase === "ended") {
       // Signalled as a no-op with the unchanged state; the route below turns both
       // into an explicit rejection so the host gets told why. `ended` needs its own
@@ -40,6 +41,41 @@ export const POST: APIRoute = async ({ request }) => {
     if (current.phase === "question-revealed") return null;
 
     const question = getQuestionById(current.currentQuestionId ?? "");
+    const isChoice =
+      question !== undefined &&
+      (question.kind === "single-choice" || question.kind === "multiple-choice");
+
+    /**
+     * The room's answers, read HERE and for the same reason `revealedOptionIds` is set
+     * here (roadmap S-04, FR-005). Reading it in `applyHostAction` beside `playerCount`
+     * would attach a distribution to every action — including the `advance` that opens
+     * the next question, publishing the previous question's bars to 150 devices while
+     * that question is being answered.
+     *
+     * **A failed read publishes `null`, never `{ answered: 0, options: {} }`.** The
+     * reveal still succeeds: it is the beat that must not break, and `revealedOptionIds`
+     * still marks the correct answer, so FR-016 is unaffected. But zeroes would render
+     * as every bar empty, which on a projector reads as "nobody answered" — the strongest
+     * possible wrong claim, at the moment the room is looking. `null` is the field's own
+     * vocabulary for "there is nothing to show", and the view draws nothing.
+     *
+     * **The race is accepted and documented**: this read sits outside the version guard,
+     * so an answer landing between it and the compare-and-set is counted in the hash but
+     * not in the published distribution — at most a one-answer drift, at the instant the
+     * question closes. The same asymmetry `playerCount` documents in `host.ts`: the
+     * count needs no serialization, the version does.
+     */
+    const revealedDistribution = isChoice
+      ? await readQuestionTallies(
+          current.currentQuestionId!,
+          question.options.map((option) => option.id)
+        )
+      : // For a non-choice kind the read is skipped entirely — no submission for one can
+        // exist today, and Phase 4 hides the panel for them. **This is the one place the
+        // distribution and `revealedOptionIds` diverge**: that field yields `[]` here,
+        // because "no options are correct" is a fact about the question, while "no
+        // distribution" is an absence.
+        null;
 
     return {
       version: current.version + 1,
@@ -60,10 +96,8 @@ export const POST: APIRoute = async ({ request }) => {
        * an error, which is what an unscored warm-up should look like. Text and number
        * questions get their own reveal in S-05/S-06.
        */
-      revealedOptionIds:
-        question && (question.kind === "single-choice" || question.kind === "multiple-choice")
-          ? question.correctOptionIds
-          : [],
+      revealedOptionIds: isChoice ? question.correctOptionIds : [],
+      revealedDistribution,
     };
   }, Date.now());
 

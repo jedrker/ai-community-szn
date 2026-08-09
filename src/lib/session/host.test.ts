@@ -34,6 +34,7 @@ const lobby = {
   updatedAt: NOW,
   playerCount: COUNT,
   revealedOptionIds: null,
+  revealedDistribution: null,
 };
 
 function opened(version: number, playerCount = COUNT) {
@@ -45,6 +46,7 @@ function opened(version: number, playerCount = COUNT) {
     updatedAt: NOW + 100,
     playerCount,
     revealedOptionIds: null,
+    revealedDistribution: null,
   };
 }
 
@@ -349,5 +351,62 @@ describe("applyHostAction with a caller-confirmed version", () => {
 
     expect(outcome.status).toBe(200);
     expect(writeSessionMock).toHaveBeenCalled();
+  });
+});
+
+/**
+ * `nextFrom` became awaitable in S-04 so `reveal.ts` could read the question's tallies
+ * inside its own transition, rather than in the shared body where the read would apply
+ * to every action — and would carry the previous question's distribution into the next
+ * question.
+ */
+describe("an async nextFrom", () => {
+  it("is awaited, not spread as a pending Promise", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(3) });
+    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(4) });
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+
+    const outcome = await applyHostAction(
+      async (current: SessionState) => opened(current.version + 1),
+      NOW,
+      writeSessionMock
+    );
+
+    expect(outcome.status).toBe(200);
+    // The assertion that matters. Un-awaited, `{ ...computed, playerCount }` spreads a
+    // Promise — which has no own enumerable properties — so the committed document
+    // would be `{ playerCount }` and nothing else. It would type-check, and the schema
+    // rejection it produced would name `version`, pointing at the wrong thing entirely.
+    expect(writeSessionMock).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ version: 4, phase: "question-open" })
+    );
+  });
+
+  it("still treats an async null as a no-op rather than a write", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(3) });
+
+    const outcome = await applyHostAction(async () => null, NOW, writeSessionMock);
+
+    expect(outcome.status).toBe(200);
+    expect(outcome.body).toMatchObject({ applied: false, note: "no-op" });
+    expect(writeSessionMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A rejection must not commit. `reveal.ts` handles its own read failure by publishing
+   * a null distribution, so this path should not arise there — but the signature now
+   * admits any Promise, and the answer for the next caller must not be "half a
+   * transition reaches the store".
+   */
+  it("does not commit when the transition rejects", async () => {
+    readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(3) });
+
+    await expect(
+      applyHostAction(async () => Promise.reject(new Error("tally read exploded")), NOW, writeSessionMock)
+    ).rejects.toThrow("tally read exploded");
+
+    expect(writeSessionMock).not.toHaveBeenCalled();
+    expect(publishSnapshotMock).not.toHaveBeenCalled();
   });
 });

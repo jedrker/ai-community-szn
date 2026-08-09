@@ -662,34 +662,34 @@ and is the only thing that can see the orphan.
 
 #### Automated
 
-- [x] 2.1 Type checking passes: `bun run type-check`
-- [x] 2.2 `participation.test.ts`: 200 with the correct count, echoing the requested `questionId`
-- [x] 2.3 `participation.test.ts`: 401 without and with a wrong secret; 400 for absent, empty and unknown `questionId`
-- [x] 2.4 `participation.test.ts`: the 200 body's key set is exactly `questionId`, `answered`, `playerCount`
-- [x] 2.5 Test asserting the handler calls no write path
-- [x] 2.6 `keys.test.ts` still passes
+- [x] 2.1 Type checking passes: `bun run type-check` — d414ed4
+- [x] 2.2 `participation.test.ts`: 200 with the correct count, echoing the requested `questionId` — d414ed4
+- [x] 2.3 `participation.test.ts`: 401 without and with a wrong secret; 400 for absent, empty and unknown `questionId` — d414ed4
+- [x] 2.4 `participation.test.ts`: the 200 body's key set is exactly `questionId`, `answered`, `playerCount` — d414ed4
+- [x] 2.5 Test asserting the handler calls no write path — d414ed4
+- [x] 2.6 `keys.test.ts` still passes — d414ed4
 
 #### Manual
 
-- [x] 2.6 `curl` without the secret returns 401; with it returns the count
-- [x] 2.7 Answering from one phone raises the number the next `curl` returns
+- [x] 2.6 `curl` without the secret returns 401; with it returns the count — d414ed4
+- [x] 2.7 Answering from one phone raises the number the next `curl` returns — d414ed4
 
 ### Phase 3: Distribution on the snapshot
 
 #### Automated
 
-- [ ] 3.1 Type checking passes: `bun run type-check`
-- [ ] 3.2 `state.test.ts`: non-null distribution refused outside `question-revealed`, accepted in it
-- [ ] 3.3 `state.test.ts`: a document written without the field still parses
-- [ ] 3.4 `host.test.ts`: an async `nextFrom` is awaited, and a rejected one does not commit
-- [ ] 3.5 `routes.test.ts`: reveal publishes the distribution; start and advance publish it null
-- [ ] 3.6 `routes.test.ts`: a reveal whose tally read fails still succeeds and publishes `null`, not `{ answered: 0 }`
-- [ ] 3.7 `routes.test.ts`: revealing a non-choice question publishes the distribution as `null`
-- [ ] 3.8 Full suite passes: `bun run test`
+- [x] 3.1 Type checking passes: `bun run type-check`
+- [x] 3.2 `state.test.ts`: non-null distribution refused outside `question-revealed`, accepted in it
+- [x] 3.3 `state.test.ts`: a document written without the field still parses
+- [x] 3.4 `host.test.ts`: an async `nextFrom` is awaited, and a rejected one does not commit
+- [x] 3.5 `routes.test.ts`: reveal publishes the distribution; start and advance publish it null
+- [x] 3.6 `routes.test.ts`: a reveal whose tally read fails still succeeds and publishes `null`, not `{ answered: 0 }`
+- [x] 3.7 `routes.test.ts`: revealing a non-choice question publishes the distribution as `null`
+- [x] 3.8 Full suite passes: `bun run test`
 
 #### Manual
 
-- [ ] 3.8 Across start → advance → reveal → advance, the field is null everywhere but the revealed step
+- [x] 3.8 Across start → advance → reveal → advance, the field is null everywhere but the revealed step
 
 ### Phase 4: The host view
 

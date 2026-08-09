@@ -140,9 +140,20 @@ export function unauthorized(): HostActionOutcome {
  * `advance` returning the current state unchanged is how "past the last
  * question" is expressed — a no-op, not an error. A host who taps advance once
  * more at the end has not done anything wrong.
+ *
+ * **`nextFrom` may be async** (roadmap S-04). It became so for exactly one caller:
+ * `reveal.ts` needs to read the question's tallies to build the revealed state, and the
+ * alternative was reading them *here*, beside `playerCount` — which would attach a
+ * distribution to every action, including the `advance` that opens the next question.
+ * Widening this signature keeps that read where it belongs, in the one transition the
+ * distribution is part of. The shared body below is unchanged and still applies to
+ * every verb; `start.ts` and `advance.ts` stayed synchronous and needed no edit.
  */
 export async function applyHostAction(
-  nextFrom: (current: SessionState, now: number) => SessionState | null,
+  nextFrom: (
+    current: SessionState,
+    now: number
+  ) => SessionState | null | Promise<SessionState | null>,
   now: number,
   /**
    * How the computed state is committed. Defaults to the ordinary
@@ -201,7 +212,10 @@ export async function applyHostAction(
     };
   }
 
-  const computed = nextFrom(current.state, now);
+  // Awaited, so a `nextFrom` that throws or rejects propagates to the route rather than
+  // being committed as a pending Promise — which is what an un-awaited call would have
+  // spread into the state literal, silently.
+  const computed = await nextFrom(current.state, now);
 
   /**
    * THE ONE PLACE THE JOIN COUNT IS INJECTED (roadmap S-02).

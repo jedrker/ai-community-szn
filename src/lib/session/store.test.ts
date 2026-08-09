@@ -56,6 +56,7 @@ const lobby = {
   updatedAt: NOW,
   playerCount: 0,
   revealedOptionIds: null,
+  revealedDistribution: null,
 };
 
 const firstQuestionOpen = {
@@ -66,6 +67,7 @@ const firstQuestionOpen = {
   updatedAt: NOW + 500,
   playerCount: 0,
   revealedOptionIds: null,
+  revealedDistribution: null,
 };
 
 const player = { id: "player-abc", displayName: "Anna", joinedAt: NOW };
@@ -299,6 +301,7 @@ describe("endSession", () => {
     updatedAt: NOW + 5_000,
     playerCount: 0,
     revealedOptionIds: null,
+    revealedDistribution: null,
   };
 
   it("applies an end whose expected version matches", async () => {

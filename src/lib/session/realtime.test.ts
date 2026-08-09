@@ -25,6 +25,7 @@ const state = {
   updatedAt: 1_785_000_001_000,
   playerCount: 12,
   revealedOptionIds: null,
+  revealedDistribution: null,
 };
 
 beforeEach(() => {

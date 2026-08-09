@@ -17,6 +17,7 @@ const publishSnapshotMock = vi.fn();
 const readSessionMock = vi.fn();
 const endSessionMock = vi.fn();
 const purgeSessionMock = vi.fn();
+const readQuestionTalliesMock = vi.fn();
 
 const SECRET = "a-very-long-test-secret-value";
 
@@ -32,6 +33,7 @@ vi.mock("../../../../lib/session/store", () => ({
   readSession: readSessionMock,
   endSession: endSessionMock,
   purgeSession: purgeSessionMock,
+  readQuestionTallies: readQuestionTalliesMock,
 }));
 vi.mock("../../../../lib/session/realtime", () => ({
   publishSnapshot: publishSnapshotMock,
@@ -45,6 +47,7 @@ const { POST: reveal } = await import("./reveal");
 const { POST: end } = await import("./end");
 const { POST: purge } = await import("./purge");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
+const { initialSessionState } = await import("../../../../lib/session/state");
 const { quiz } = await import("../../../../quiz/index");
 
 const NOW = 1_785_000_000_000;
@@ -105,6 +108,8 @@ beforeEach(() => {
   readSessionMock.mockReset();
   endSessionMock.mockReset();
   purgeSessionMock.mockReset();
+  readQuestionTalliesMock.mockReset();
+  readQuestionTalliesMock.mockResolvedValue({ answered: 0, options: {} });
   vi.stubEnv("LIVEQUIZ_HOST_SECRET", SECRET);
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -267,7 +272,9 @@ describe("reveal", () => {
 
     const [transition] = applyHostActionMock.mock.calls[0]!;
     const open = { ...revealed, phase: "question-open" as const, version: 3 };
-    expect(transition(open, NOW)).toMatchObject({
+    // Awaited: the transition became async in S-04 so it can read the tallies here
+    // rather than in `applyHostAction`, where the read would apply to every action.
+    await expect(transition(open, NOW)).resolves.toMatchObject({
       version: 4,
       phase: "question-revealed",
       currentQuestionId: open.currentQuestionId,
@@ -283,8 +290,110 @@ describe("reveal", () => {
     await call(reveal);
 
     const [transition] = applyHostActionMock.mock.calls[0]!;
-    expect(transition(lobby, NOW)).toBeNull();
-    expect(transition(revealed, NOW)).toBeNull();
+    await expect(transition(lobby, NOW)).resolves.toBeNull();
+    await expect(transition(revealed, NOW)).resolves.toBeNull();
+  });
+
+  /**
+   * THE DISTRIBUTION, which is the payload S-04 adds to this transition and to no
+   * other. These assertions run the transition directly rather than reading a mocked
+   * outcome, because what is under test is what the closure *builds* — the store and
+   * the publish are somebody else's tests.
+   */
+  it("attaches the room's answers to the revealed state", async () => {
+    readQuestionTalliesMock.mockResolvedValue({ answered: 9, options: { a: 5, b: 4 } });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: revealed, applied: true },
+    });
+
+    await call(reveal);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    // A choice question specifically — `quiz.questions[0]` is the word-cloud opener, and
+    // building this fixture from it would have exercised the skip path while looking
+    // like it exercised the read.
+    const choice = quiz.questions.find((question) => question.kind === "single-choice")!;
+    const open = {
+      ...revealed,
+      phase: "question-open" as const,
+      currentQuestionId: choice.id,
+      version: 3,
+    };
+    const next = await transition(open, NOW);
+
+    expect(next.revealedDistribution).toEqual({ answered: 9, options: { a: 5, b: 4 } });
+    // Read for the question being revealed, and asked for that question's own option
+    // ids — not for whatever the previous reveal happened to look at.
+    expect(readQuestionTalliesMock).toHaveBeenCalledWith(
+      choice.id,
+      choice.options.map((option) => option.id)
+    );
+  });
+
+  /**
+   * **A failed read publishes `null`, never `{ answered: 0 }`.** The reveal itself must
+   * still succeed — it is the beat that must not break, and `revealedOptionIds` still
+   * marks the right answer, so FR-016 holds. But zeroes render as every bar empty,
+   * which on a projector is the claim "nobody answered", made to a room that just
+   * answered. Asserted against the *value*, because a test that only checked the reveal
+   * succeeded would pass against exactly that bug.
+   */
+  it("still reveals when the tally read fails, with the distribution null rather than zeroed", async () => {
+    readQuestionTalliesMock.mockResolvedValue(null);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: revealed, applied: true },
+    });
+
+    const response = await call(reveal);
+    expect(response.status).toBe(200);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    const choice = quiz.questions.find((question) => question.kind === "single-choice")!;
+    const open = {
+      ...revealed,
+      phase: "question-open" as const,
+      currentQuestionId: choice.id,
+      version: 3,
+    };
+    const next = await transition(open, NOW);
+
+    expect(next.revealedDistribution).toBeNull();
+    expect(next.revealedDistribution).not.toEqual({ answered: 0, options: {} });
+    // The answer key is unaffected — the two fields fail independently on purpose.
+    expect(next.revealedOptionIds).not.toBeNull();
+  });
+
+  /**
+   * The one place the distribution and `revealedOptionIds` diverge: that field yields
+   * `[]` for a non-choice kind, because "no options are correct" is a fact about the
+   * question, while "no distribution" is an absence. The panel is hidden for these
+   * kinds anyway, and no submission for one can exist today.
+   */
+  it("publishes a null distribution for a non-choice question, and spends no read on it", async () => {
+    const nonChoice = quiz.questions.find(
+      (question) => question.kind !== "single-choice" && question.kind !== "multiple-choice"
+    )!;
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: revealed, applied: true },
+    });
+
+    await call(reveal);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    const open = {
+      ...revealed,
+      phase: "question-open" as const,
+      currentQuestionId: nonChoice.id,
+      version: 3,
+    };
+    const next = await transition(open, NOW);
+
+    expect(next.revealedDistribution).toBeNull();
+    expect(next.revealedOptionIds).toEqual([]);
+    expect(readQuestionTalliesMock).not.toHaveBeenCalled();
   });
 });
 
@@ -654,6 +763,7 @@ describe("the reveal payload (roadmap S-03)", () => {
     updatedAt: NOW + 500,
     playerCount: 6,
     revealedOptionIds: null,
+    revealedDistribution: null,
   });
 
   beforeEach(() => {
@@ -666,7 +776,7 @@ describe("the reveal payload (roadmap S-03)", () => {
   it("puts the correct option ids on the revealed state", async () => {
     await call(reveal);
 
-    const next = transitionFrom()(open("llm-skrot"), NOW + 5_000);
+    const next = await transitionFrom()(open("llm-skrot"), NOW + 5_000);
 
     expect(next.revealedOptionIds).toEqual(["large-language-model"]);
   });
@@ -674,7 +784,7 @@ describe("the reveal payload (roadmap S-03)", () => {
   it("carries every correct id for a multi-answer question", async () => {
     await call(reveal);
 
-    const next = transitionFrom()(open("summer-tour-zakonczenie"), NOW + 5_000);
+    const next = await transitionFrom()(open("summer-tour-zakonczenie"), NOW + 5_000);
 
     expect(next.revealedOptionIds).toEqual(["kino", "networking"]);
   });
@@ -684,14 +794,14 @@ describe("the reveal payload (roadmap S-03)", () => {
 
     // Nothing to highlight, and the client must read that as a warm-up rather than
     // as an error — this is the gather beat that welcomes latecomers.
-    expect(transitionFrom()(open("czy-wszyscy-gotowi"), NOW).revealedOptionIds).toEqual([]);
+    expect((await transitionFrom()(open("czy-wszyscy-gotowi"), NOW)).revealedOptionIds).toEqual([]);
   });
 
   it("reveals an empty array for a kind this slice does not answer", async () => {
     // Text, number and word-cloud get their own reveal in S-05/S-06/S-08.
     await call(reveal);
 
-    expect(transitionFrom()(open("zmyslanie-faktow"), NOW).revealedOptionIds).toEqual([]);
+    expect((await transitionFrom()(open("zmyslanie-faktow"), NOW)).revealedOptionIds).toEqual([]);
   });
 
   it("advance clears it, so an answer key cannot outlive its question", async () => {
@@ -705,5 +815,41 @@ describe("the reveal payload (roadmap S-03)", () => {
     // THE ONE THAT MATTERS. A carried value publishes the previous question's answer
     // key alongside the new question, to every phone in the room.
     expect(next.revealedOptionIds).toBeNull();
+  });
+
+  /**
+   * The same for the distribution, and it is the sharper of the two: a carried value
+   * puts the previous question's bars on the projector while the new question is being
+   * answered — a running tally of what the room is choosing, which is exactly what
+   * FR-005 was revised to keep off the screen.
+   */
+  it("advance clears the distribution too, and spends no tally read doing it", async () => {
+    await call(advance);
+
+    const next = transitionFrom()(
+      {
+        ...open("llm-skrot"),
+        phase: "question-revealed",
+        revealedOptionIds: ["large-language-model"],
+        revealedDistribution: { answered: 12, options: { "large-language-model": 12 } },
+      },
+      NOW + 9_000
+    );
+
+    expect(next.revealedDistribution).toBeNull();
+    // `advance` stayed synchronous and reads nothing. The read lives in `reveal.ts`
+    // alone — putting it in `applyHostAction` is what would have attached a
+    // distribution to this transition.
+    expect(readQuestionTalliesMock).not.toHaveBeenCalled();
+  });
+
+  it("start publishes a lobby with the distribution null", async () => {
+    createSessionMock.mockResolvedValue({ outcome: "created", state: initialSessionState(NOW) });
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+
+    await call(start);
+
+    const [published] = publishSnapshotMock.mock.calls[0]!;
+    expect(published.revealedDistribution).toBeNull();
   });
 });

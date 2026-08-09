@@ -23,6 +23,7 @@ describe("initialSessionState", () => {
       updatedAt: NOW,
       playerCount: 0,
       revealedOptionIds: null,
+      revealedDistribution: null,
     });
   });
 
@@ -156,6 +157,7 @@ describe("endedSessionState", () => {
     updatedAt: NOW + 5_000,
     playerCount: 9,
     revealedOptionIds: null,
+    revealedDistribution: null,
   };
 
   it("bumps the version, so the terminal snapshot is newer than anything devices hold", () => {
@@ -238,6 +240,7 @@ describe("revealedOptionIds", () => {
     updatedAt: NOW + 1_000,
     playerCount: 5,
     revealedOptionIds: null,
+    revealedDistribution: null,
   };
 
   /**
@@ -294,7 +297,7 @@ describe("revealedOptionIds", () => {
     }
   );
 
-  it("is null on every constructor that is not a reveal", () => {
+  it("is null on every constructor that is not a reveal (option ids)", () => {
     expect(initialSessionState(NOW).revealedOptionIds).toBeNull();
 
     const revealed = {
@@ -305,5 +308,113 @@ describe("revealedOptionIds", () => {
     // Cleared, not carried: the ending snapshot is about the session, not about
     // whichever question was on screen when the host closed it.
     expect(endedSessionState(revealed, NOW + 9_000).revealedOptionIds).toBeNull();
+  });
+});
+
+/**
+ * The distribution (roadmap S-04, FR-005).
+ *
+ * Deliberately a mirror of the `revealedOptionIds` block above rather than a merged
+ * one: the two fields hold the same *shape* of invariant for different reasons, and a
+ * shared block would let one of them lose its assertions to a refactor without the
+ * failure naming which field stopped being protected.
+ */
+describe("revealedDistribution", () => {
+  const open = {
+    version: 3,
+    phase: "question-open" as const,
+    currentQuestionId: quiz.questions[1]!.id,
+    startedAt: NOW,
+    updatedAt: NOW + 1_000,
+    playerCount: 5,
+    revealedOptionIds: null,
+    revealedDistribution: null,
+  };
+
+  const distribution = { answered: 9, options: { kino: 5, networking: 4 } };
+
+  /**
+   * THE MID-DEPLOY TEST, a third time. A session running when S-04 ships holds a
+   * document written before this field existed; required, it would fail the next read
+   * and 409 the host's next action on stage.
+   */
+  it("defaults to null so a pre-deploy document still parses", () => {
+    const { revealedDistribution: _omitted, ...preDeploy } = open;
+
+    const result = sessionStateSchema.safeParse(preDeploy);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.revealedDistribution).toBeNull();
+  });
+
+  it("accepts a distribution in question-revealed", () => {
+    const revealed = {
+      ...open,
+      phase: "question-revealed" as const,
+      revealedDistribution: distribution,
+    };
+
+    expect(sessionStateSchema.safeParse(revealed).success).toBe(true);
+  });
+
+  it("accepts a distribution nobody answered, since zero is a fact about the room", () => {
+    const revealed = {
+      ...open,
+      phase: "question-revealed" as const,
+      revealedDistribution: { answered: 0, options: {} },
+    };
+
+    // The schema permits it; what refuses to *publish* it is `reveal.ts`, which sends
+    // `null` on a failed read. The two are different questions and only one of them
+    // belongs here.
+    expect(sessionStateSchema.safeParse(revealed).success).toBe(true);
+  });
+
+  /**
+   * THE INVARIANT FR-005 WAS REVISED TO CREATE.
+   *
+   * A non-null value in `question-open` is a live tally of what the room is choosing,
+   * on the projector, while people are still answering — a cheat sheet for anyone who
+   * glances up. This clause, not the comment on the field, is what makes "set only by
+   * reveal.ts" true.
+   */
+  it.each(["lobby", "question-open", "ended"] as const)(
+    "refuses a non-null value in %s",
+    (phase) => {
+      const questionless = phase === "lobby" || phase === "ended";
+      const candidate = {
+        ...open,
+        phase,
+        currentQuestionId: questionless ? null : open.currentQuestionId,
+        revealedDistribution: distribution,
+      };
+
+      expect(sessionStateSchema.safeParse(candidate).success).toBe(false);
+    }
+  );
+
+  it("names itself when it is the field at fault", () => {
+    const candidate = { ...open, revealedDistribution: distribution };
+
+    const result = sessionStateSchema.safeParse(candidate);
+
+    // Its own superRefine clause rather than one shared with `revealedOptionIds`, so a
+    // host reading the 409 learns which field broke.
+    expect(result.error?.issues.some((issue) => issue.path[0] === "revealedDistribution")).toBe(
+      true
+    );
+  });
+
+  it("is null on every constructor that is not a reveal", () => {
+    expect(initialSessionState(NOW).revealedDistribution).toBeNull();
+
+    const revealed = {
+      ...open,
+      phase: "question-revealed" as const,
+      revealedDistribution: distribution,
+    };
+    // Cleared, not carried — the closing screen showing the last question's bars would
+    // make the segment look like it ended mid-question.
+    expect(endedSessionState(revealed, NOW + 9_000).revealedDistribution).toBeNull();
   });
 });

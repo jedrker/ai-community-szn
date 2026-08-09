@@ -48,6 +48,14 @@ export const POST: APIRoute = async ({ request }) => {
       // would publish the previous question's answer key alongside the new
       // question. See the field's note in `state.ts`.
       revealedOptionIds: null,
+      // Cleared for the same reason and it is the sharper of the two: a carried
+      // distribution would put the previous question's bars on the projector while
+      // the new question is being answered — a running tally of what the room is
+      // choosing, which is precisely what FR-005 was revised to keep off the screen.
+      // The schema refuses a non-null value outside `question-revealed`, so this is
+      // belt and braces; the null is written explicitly anyway, because a reader
+      // scanning the three transitions should see all three fields in each of them.
+      revealedDistribution: null,
     };
   }, Date.now());
 
