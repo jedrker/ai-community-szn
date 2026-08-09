@@ -1,10 +1,10 @@
 ---
 change_id: guess-the-number-answers
 title: Guess-the-number answers
-status: impl_reviewed
+status: archived
 created: 2026-08-09
 updated: 2026-08-09
-archived_at: null
+archived_at: 2026-08-09T22:09:50Z
 ---
 
 ## Notes

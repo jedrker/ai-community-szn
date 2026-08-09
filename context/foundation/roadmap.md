@@ -817,7 +817,8 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   beside `submitted` in the already-registered seen map.
 
 - **S-06: Attendee can submit a numeric guess and earn points scaled by how close it was, on the same
-  relative-error rule whether the true answer is 67 or 10,000.** — Delivered 2026-08-09. **The first
+  relative-error rule whether the true answer is 67 or 10,000.** — Archived 2026-08-09 →
+  `context/archive/2026-08-09-guess-the-number-answers/`. **The first
   partial-credit answer in the system**, and that is the fact with the longest reach: `correct` is
   exact-hit-only for this kind, so a guess worth 800 of 1000 points returns `{ correct: false,
   awarded: 800 }` and the reveal copy is selected by question **kind before** it is selected by
@@ -833,3 +834,8 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   rather than growing a second parser across the boundary — and it refuses an absent, empty or
   unparseable field instead of coercing it, per `lessons.md` rule 2. Suite 766 → 831; no new
   `livequiz:` key; `AnswerRecord.value` carries `.default(null)` for the mid-session deploy.
+  Lesson: **a client gate looser than the server's refusal turns a validation 400 into a lock** — the
+  view treated every non-5xx refusal as final and marked the question submitted, which was safe only
+  while the client gates made a 400 unreachable; the loose "contains a digit" gate made it reachable
+  and locked attendees out of a question nothing had been written for. Caught in implementation
+  review, fixed by splitting `invalid` from `rejected` so only a 409 is final.
