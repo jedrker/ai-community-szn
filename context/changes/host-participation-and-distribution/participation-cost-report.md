@@ -68,21 +68,46 @@ section came to understate the cost by 3×. Measured precedent: a reading 7 minu
 runs was 2,526 commands short of the same counter 85 minutes later. **Wait at least ~90 minutes,
 re-read, and only quote a figure that has stopped moving.**
 
-To fill this section:
+### The run
 
-1. Note the month's `commands` in the Upstash console.
-2. `bun run quiz:rehearse --base=<production> --clients=150`. Record the check count, and in
-   particular the two new tally findings.
-3. Wait ≥90 minutes. Re-read the counter. Re-read again a few minutes later and confirm it has not
-   moved.
+Performed **2026-08-09** against production (`fra1`), `--clients=150`, immediately after deploying
+S-04 and resetting the namespace. **31/31 harness checks passed**, including the two this slice
+added:
+
+| Finding | Result |
+| --- | --- |
+| the answered tally agrees with the answers hash | tally 150, hash 150 for `llm-skrot` |
+| the option tallies sum to the selections in the answers hash | tallies 150, records carry 150 option ids |
+
+**This is the finding the test suite structurally cannot produce.** The increments live inside
+`SUBMIT_ANSWER`'s Lua, so `store.test.ts` can only assert that the right fields are sent and that
+they sit below the `HSETNX`; whether 150 simultaneous submissions land 150 increments is invisible
+to a mocked client. They did, in both counters, with no drift.
+
+Also observed: 150/150 joins in 1,192 ms, 150/150 submissions accepted in 791 ms, a repeat
+submission refused 409, worst end-to-end p95 446 ms against the 1,000 ms budget, and the
+`question-open` snapshot carrying no answer key.
+
+### The counter
 
 | | Value |
 | --- | --- |
-| Counter before | _pending_ |
+| Counter before | **8,073** (writes 4,617 + reads 3,456; console rounded it to 8.1k) |
 | Counter after (settled, ≥90 min) | _pending_ |
 | Observed delta | _pending_ |
 | Predicted delta | ~2,930 |
 | Disagreement | _pending_ |
+
+Two things that bias the "before" figure, both small and both stated rather than discovered later:
+
+- A `quiz:reset` and a `quiz:check-purge` ran shortly before the reading, ~25 commands between them.
+  If they had not yet surfaced in the console, they will land inside the measured window and inflate
+  the delta by well under 1%.
+- The console figure was read as writes + reads rather than from the rounded `8.1k` headline, so the
+  baseline is exact to the command.
+
+Re-read the counter at least ~90 minutes after the run, then again a few minutes later, and only
+record a figure that has stopped moving.
 
 **If the observed delta disagrees with the prediction by more than a few percent, that disagreement
 is the finding.** Do not reconcile it by adjusting the model after the fact — the model is stated in

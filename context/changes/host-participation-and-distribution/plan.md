@@ -719,8 +719,8 @@ and is the only thing that can see the orphan.
 - [x] 5.2 Type checking passes: `bun run type-check` — 4531793
 - [x] 5.3 `bun audit` reports no new advisories — 4531793
 - [x] 5.4 `bun run build` succeeds — 4531793
-- [ ] 5.5 `bun run quiz:rehearse`: 150/150 accepted, zero lost or doubled writes, both tally findings ok
-- [ ] 5.6 `bun run quiz:check-purge` reports no residue, including the new key
+- [x] 5.5 `bun run quiz:rehearse`: 150/150 accepted, zero lost or doubled writes, both tally findings ok
+- [x] 5.6 `bun run quiz:check-purge` reports no residue, including the new key
 
 #### Manual
 
