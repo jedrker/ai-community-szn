@@ -851,12 +851,12 @@ a document written by this build parses under the old one.
 
 #### Automated
 
-- [x] 5.1 Unit tests pass: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
-- [x] 5.3 Production build succeeds: `bun run build`
+- [x] 5.1 Unit tests pass: `bun run test` — 83fd5b7
+- [x] 5.2 Type checking passes: `bun run type-check` — 83fd5b7
+- [x] 5.3 Production build succeeds: `bun run build` — 83fd5b7
 
 #### Manual
 
-- [x] 5.4 Projector-sized window: accepted answer legible at reveal, absent in every other phase
-- [x] 5.5 Full two-device run through the text question
-- [x] 5.6 `docs/runbook-live-session.md` still describes reality
+- [x] 5.4 Projector-sized window: accepted answer legible at reveal, absent in every other phase — 83fd5b7
+- [x] 5.5 Full two-device run through the text question — 83fd5b7
+- [x] 5.6 `docs/runbook-live-session.md` still describes reality — 83fd5b7
