@@ -37,6 +37,16 @@ describe("what a Polish attendee actually types", () => {
     expect(parseGuess("67,5")).not.toBe(675);
   });
 
+  it("keeps an ungrouped long number, which is what most people actually type", () => {
+    // The grouping rule must not become a requirement — nobody types separators into a
+    // phone keypad, and this is the input the drafted 10,000-answer question expects.
+    expect(parseGuess("1000000")).toBe(1_000_000);
+  });
+
+  it("parses a grouped number with a decimal part", () => {
+    expect(parseGuess("1 234,5")).toBe(1234.5);
+  });
+
   it("reads `10,000` as ten, the documented consequence of that rule", () => {
     // Accepted deliberately rather than guessed at: Polish groups thousands with a
     // space, and a parser that decided between the two readings would be a rule the
@@ -51,6 +61,26 @@ describe("what it refuses", () => {
     // rule was written about — asserted by the returned value, not by a status code.
     expect(parseGuess(null)).toBeNaN();
     expect(parseGuess(undefined)).toBeNaN();
+  });
+
+  /**
+   * **The separator's POSITION is checked, not just its presence.**
+   *
+   * Stripping every space wherever it appeared turned `"6 7"` into 67 — a stray keypad
+   * space became a silently different number, stored and scored with nothing on either
+   * screen to say so. These cases fail against that implementation and pass against
+   * this one, which is the only reason the "space as a thousands separator" cases above
+   * mean anything: on their own they pass either way.
+   */
+  it.each([
+    ["a space between single digits", "6 7"],
+    ["spaces scattered through the digits", "1 2 3"],
+    ["a group of the wrong length", "10 00"],
+    ["a trailing group that is too long", "1 2345"],
+    ["a space after the sign", "- 5"],
+    ["a leading group longer than three digits", "1234 567"],
+  ])("refuses %s rather than silently removing the space", (_label, input) => {
+    expect(parseGuess(input)).toBeNaN();
   });
 
   it.each([

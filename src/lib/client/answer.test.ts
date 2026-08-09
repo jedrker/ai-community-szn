@@ -291,10 +291,15 @@ describe("clearSeen", () => {
 });
 
 describe("submitAnswer", () => {
-  function respond(ok: boolean, payload: unknown = {}): void {
+  /**
+   * `status` is not optional in spirit, even though it has a default: the outcome now
+   * turns on it — `409` is the only final refusal — so a test that omits it is
+   * asserting against a status it did not choose.
+   */
+  function respond(ok: boolean, payload: unknown = {}, status = ok ? 200 : 409): void {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok, json: () => Promise.resolve(payload) })
+      vi.fn().mockResolvedValue({ ok, status, json: () => Promise.resolve(payload) })
     );
   }
 
@@ -387,12 +392,41 @@ describe("submitAnswer", () => {
     ).resolves.toEqual({ outcome: "failed" });
   });
 
-  it("still reports a refused guess as a refusal, with the server's message", async () => {
-    respond(false, { error: "Wpisz liczbę." });
+  /**
+   * **The one that stops a validation refusal from locking a question nobody
+   * answered.** The numeric submit gate is deliberately loose ("contains a digit"), so
+   * a 400 is reachable by an ordinary attendee typing `50-60` or `12 tys` — and the
+   * caller treats `rejected` as final and takes the control away. Nothing was written,
+   * so this must come back as `invalid` and keep the message without the lock.
+   */
+  it("reports a 400 validation refusal as invalid, never as a final refusal", async () => {
+    respond(false, { error: "Wpisz liczbę." }, 400);
 
     await expect(
-      submitAnswer("p1", "q1", { kind: "number", value: "abc" }, 1_000)
-    ).resolves.toEqual({ outcome: "rejected", error: "Wpisz liczbę." });
+      submitAnswer("p1", "q1", { kind: "number", value: "50-60" }, 1_000)
+    ).resolves.toEqual({ outcome: "invalid", error: "Wpisz liczbę." });
+  });
+
+  it("reports a 409 as the final refusal it is", async () => {
+    // The two 409 causes — already answered, question closed — are the only ones for
+    // which locking the control is the right thing to do.
+    respond(false, { error: "Odpowiedź została już zapisana." }, 409);
+
+    await expect(
+      submitAnswer("p1", "q1", { kind: "number", value: "9800" }, 1_000)
+    ).resolves.toEqual({ outcome: "rejected", error: "Odpowiedź została już zapisana." });
+  });
+
+  it("reports an unrecognised device as invalid too, since nothing was written", async () => {
+    // A 404 is not final in the sense that matters here: it cannot be fixed by
+    // retrying, but claiming the answer was saved is still a lie, and the attendee
+    // needs the message rather than a disabled field.
+    respond(false, { error: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie." }, 404);
+
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({
+      outcome: "invalid",
+      error: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie.",
+    });
   });
 
   it("sends no text field on a choice answer", async () => {

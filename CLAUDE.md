@@ -193,7 +193,7 @@ tolerance knob:
 
 These five rows exist **once**, as `CLOSENESS_BANDS` in `src/lib/session/scoring.ts`; this table and
 the plan quote it. Comparisons carry a small epsilon so a guess engineered onto a band edge does not
-fall through by floating-point luck — four of the twelve exact-edge cases across the two live
+fall through by floating-point luck — three of the twelve exact-edge cases across the two live
 questions do overshoot in binary, and `scoring.test.ts` asserts every one of them.
 
 **`AnswerRecord.correct` is exact-hit-only for a number question, so it is `false` on an answer that
@@ -211,8 +211,10 @@ There is exactly **one parser** for a typed guess, `parseGuess` in `src/lib/sess
 is server-side. The attendee view gates its submit button on "contains a digit" rather than parsing —
 a client-side parser would either duplicate this one or cross the boundary `boundary.test.ts`
 enforces, and two parsers that disagree is a scoring dispute on stage. A comma is the **decimal**
-separator (`67,5` is 67.5, never 675) and spaces are grouping; the consequence, accepted deliberately,
-is that `10,000` reads as ten. An absent, empty or unparseable field is refused, never coerced.
+separator (`67,5` is 67.5, never 675) and spaces are grouping **in grouping positions only** — the
+shape is validated before the separators are stripped, so `6 7` is refused rather than read as 67. The
+consequence of the comma rule, accepted deliberately, is that `10,000` reads as ten. An absent, empty
+or unparseable field is refused, never coerced.
 
 ## Styling
 

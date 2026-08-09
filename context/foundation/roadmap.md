@@ -823,7 +823,7 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   awarded: 800 }` and the reveal copy is selected by question **kind before** it is selected by
   `correct` — a kind-blind branch would render "Tym razem nie." beside a positive award. The bands
   (1.00 / 0.80 / 0.60 / 0.30 / 0 at 0%, 5%, 10%, 25% relative error) live in one exported constant
-  with an epsilon on the comparisons, because four of the twelve exact-edge cases across the two live
+  with an epsilon on the comparisons, because three of the twelve exact-edge cases across the two live
   questions overshoot their band in binary floating point. `speedWeight` is reused unchanged, pinned
   by an assertion that a number and a choice answer at equal closeness and elapsed receive identical
   awards. **Nothing new on the wire and no host-view change**: the true value is formatted server-side

@@ -26,14 +26,49 @@
 export const MAX_GUESS_MAGNITUDE = 1e12;
 
 /**
+ * How many characters the numeric input accepts, **derived from the bound above**.
+ *
+ * The text field beside it takes `MAX_TEXT_ANSWER_LENGTH` through frontmatter for
+ * exactly this reason — a hand-picked `maxlength` drifts from the server bound, and the
+ * drift shows up as an input that invites characters the route unconditionally refuses.
+ * It reaches the markup the same way, imported in `index.astro`'s frontmatter, because
+ * the `<script>` block may not value-import from `src/lib/session/`.
+ *
+ * The longest string the route can accept is the bound written with grouping, a sign
+ * and a decimal part: `-1 000 000 000 000,00`.
+ */
+const MAX_GUESS_DIGITS = `${MAX_GUESS_MAGNITUDE}`.length;
+export const MAX_GUESS_INPUT_LENGTH =
+  MAX_GUESS_DIGITS + // the digits themselves
+  Math.floor((MAX_GUESS_DIGITS - 1) / 3) + // one separator per thousands group
+  1 + // a leading sign
+  3; // a decimal separator and two decimals
+
+/**
  * Characters a Polish attendee (or a paste from a formatted source) may use to group
  * thousands. U+00A0 is what `Intl.NumberFormat("pl-PL")` itself emits, so a value
  * copied off the projector round-trips.
  */
 const GROUPING = /[\s\u00A0\u202F]/g;
 
-/** Digits, an optional sign, and at most one decimal point. No exponent, by design. */
-const NUMERIC = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+/** The same characters, anchored, so surrounding whitespace can be trimmed first. */
+const OUTER_WHITESPACE = /^[\s\u00A0\u202F]+|[\s\u00A0\u202F]+$/g;
+
+/**
+ * A number written with its thousands **grouped** \u2014 and the position is checked, not
+ * just the characters.
+ *
+ * Stripping every space wherever it appeared was the earlier shape, and it turned
+ * `"6 7"` into 67 and `"1 2 3"` into 123: a stray space on a phone keypad became a
+ * silently different number, stored and scored with nothing on either screen to say a
+ * transformation had happened. That is the coercion this module's own docstring
+ * promises not to do. A separator is legal only between a leading 1\u20133 digit group and
+ * further groups of exactly 3.
+ */
+const GROUPED = /^[+-]?\d{1,3}(?:[\s\u00A0\u202F]\d{3})+(?:[.,]\d+)?$/;
+
+/** A number written without grouping: sign, digits, at most one decimal separator. */
+const PLAIN = /^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)$/;
 
 /**
  * Parses what a phone sent into a number, or `NaN` for "that was not a number".
@@ -57,13 +92,16 @@ const NUMERIC = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 export function parseGuess(raw: unknown): number {
   if (typeof raw !== "string") return Number.NaN;
 
-  const compact = raw.replace(GROUPING, "");
-  if (compact.length === 0) return Number.NaN;
+  const trimmed = raw.replace(OUTER_WHITESPACE, "");
+  if (trimmed.length === 0) return Number.NaN;
 
-  // Only the first comma — a second one means the input was never a single number,
-  // and the pattern below then refuses the whole thing rather than guessing.
-  const normalized = compact.replace(",", ".");
-  if (!NUMERIC.test(normalized)) return Number.NaN;
+  // **Shape first, strip second.** Validating what is left after removing every space
+  // would accept `"6 7"`, because by then it is indistinguishable from `"67"`.
+  if (!GROUPED.test(trimmed) && !PLAIN.test(trimmed)) return Number.NaN;
+
+  // Only the first comma is a decimal separator; the patterns above have already
+  // refused anything carrying a second one, so this cannot silently drop a digit.
+  const normalized = trimmed.replace(GROUPING, "").replace(",", ".");
 
   const value = Number(normalized);
   return Number.isFinite(value) ? value : Number.NaN;

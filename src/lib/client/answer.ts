@@ -16,11 +16,27 @@
 export type SubmitOutcome =
   | { outcome: "accepted" }
   /**
-   * The server refused, with a Polish message the view renders directly. Kept apart
-   * from `failed` because the two mean opposite things to an attendee: this one is an
-   * answer about their answer, the other is "we do not know".
+   * The server refused **finally**, with a Polish message the view renders directly.
+   * Kept apart from `failed` because the two mean opposite things to an attendee: this
+   * one is an answer about their answer, the other is "we do not know".
+   *
+   * **`409` only.** Both of its causes are genuinely final: the answer is already
+   * recorded, or the question has closed. The caller locks the question on this, so
+   * anything that is *not* final must not arrive here — see `invalid`.
    */
   | { outcome: "rejected"; error: string }
+  /**
+   * The submission was malformed and **nothing was written** — a validation refusal
+   * (`4xx` that is not `409`), which S-06 made reachable for the first time.
+   *
+   * Split out because the caller treats `rejected` as final and takes the control
+   * away. The numeric gate on the input is deliberately loose ("contains a digit"),
+   * so an attendee typing `50-60` or `12 tys` gets a 400 — and folded into `rejected`
+   * that told them their answer was saved, disabled the field, and left them unable to
+   * answer a question they had never answered. The message is worth showing; the lock
+   * is not.
+   */
+  | { outcome: "invalid"; error: string }
   | { outcome: "failed" };
 
 export type OwnResult = {
@@ -316,9 +332,14 @@ export async function submitAnswer(
     if (response.status >= 500) return { outcome: "failed" };
 
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    return payload.error
+    if (!payload.error) return { outcome: "failed" };
+
+    // **Only a 409 is final.** It means the answer is already recorded or the question
+    // has closed — the two cases where taking the control away is correct. Every other
+    // 4xx wrote nothing, so the attendee must keep the field and be able to try again.
+    return response.status === 409
       ? { outcome: "rejected", error: payload.error }
-      : { outcome: "failed" };
+      : { outcome: "invalid", error: payload.error };
   } catch {
     // Includes the timeout above: an abandoned request is a failure, not a refusal, so
     // the attendee keeps the control and can try again.

@@ -265,6 +265,14 @@ export function scoreNumberAnswer(
   const fraction = closeness(guess, question.correctValue);
 
   return {
+    // **Strict, while the band above it is generous — and the asymmetry is deliberate.**
+    // `closeness` carries `BAND_EPSILON` so a guess engineered onto an edge does not
+    // fall through by floating-point luck; `correct` carries none, because it is a
+    // claim about what the attendee typed, not about arithmetic. The gap between them
+    // is a guess within 1e-9 relative error that is not equal: full award, `correct:
+    // false`, and the reveal reads "Blisko!". That needs ~10 significant digits of
+    // agreement, so no keypad reaches it — but the two lines disagree about "exact"
+    // and this is the one saying so.
     correct: guess === question.correctValue,
     awarded: Math.round(question.points * fraction * speedWeight(elapsedMs, windowMs)),
   };

@@ -3,6 +3,7 @@ import "../../styles/global.css";
 
 import { PLAYER_STORAGE_KEY, QUESTION_SEEN_STORAGE_KEY } from "../../lib/session/keys";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
+import { MAX_GUESS_INPUT_LENGTH } from "../../lib/session/guess";
 import { MAX_TEXT_ANSWER_LENGTH } from "../../lib/session/scoring";
 import { publicQuiz } from "../../quiz/public";
 
@@ -169,7 +170,7 @@ import { publicQuiz } from "../../quiz/public";
           autocapitalize="off"
           autocorrect="off"
           spellcheck="false"
-          maxlength="20"
+          maxlength={MAX_GUESS_INPUT_LENGTH}
           class="w-full rounded-xl border border-surface-border bg-surface-secondary
                  px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
                  focus:border-brand-purple-light focus:outline-none
@@ -881,13 +882,19 @@ import { publicQuiz } from "../../quiz/public";
           own.correct ? "Dokładnie!" : awarded > 0 ? "Blisko!" : "Tym razem daleko."
         );
         setText("result-award", `+${awarded} pkt`);
-        // The guess from the server, not from the field — a reload empties the field
-        // and the attendee should still see what they sent. `null` only if the record
-        // predates this shipping, in which case there is nothing honest to show.
-        setText(
-          "result-answer",
-          own.value === null ? "" : `Twoja odpowiedź: ${own.value.toLocaleString("pl-PL")}`
-        );
+        /**
+         * The guess from the server, not from the field — a reload empties the field
+         * and the attendee should still see what they sent. `null` only if the record
+         * predates this shipping, in which case there is nothing honest to show.
+         *
+         * **Rendered, not re-formatted.** `toLocaleString` was wrong here twice: it
+         * runs per device, one line below a value `reveal.ts` formats on the *server*
+         * precisely so 150 phones and the projector cannot disagree; and its default
+         * `maximumFractionDigits` is 3, so a guess of `9800,5678` came back as
+         * `9800,568` — a number the attendee did not type, shown at the exact moment a
+         * scoring dispute would start.
+         */
+        setText("result-answer", own.value === null ? "" : `Twoja odpowiedź: ${own.value}`);
         setText("result-total", `Twój wynik: ${own.total} pkt`);
       }
 
@@ -956,6 +963,20 @@ import { publicQuiz } from "../../quiz/public";
         if (outcome.outcome === "accepted") {
           markSubmitted(config.seenStorageKey, questionId, { text: sentText });
           render();
+          return;
+        }
+
+        /**
+         * **Nothing was written, so nothing is locked.** A validation refusal is the
+         * one 4xx the attendee can act on: show the server's message, re-arm the
+         * button, leave the field exactly as they typed it.
+         *
+         * `render()` is deliberately not called — it would rebuild the question
+         * container and fight the field the attendee is about to correct.
+         */
+        if (outcome.outcome === "invalid") {
+          setText("answer-error", outcome.error);
+          answerSubmit.disabled = false;
           return;
         }
 
