@@ -55,14 +55,33 @@ reading taken minutes after a burst looks exactly like a settled one — that is
 of the runbook's cost section understated the cost by 3×. Wait until it has stopped moving, and
 record the interval.
 
-| | Value |
-| --- | --- |
-| Baseline reading (before the run) | _pending_ |
-| Settled reading (after) | _pending_ |
+Run performed **2026-08-09** against production (`fra1`), `--clients=150`, 29/29 harness
+checks passed: 150/150 joins, 150/150 submissions accepted, 150 answers stored with zero
+duplicates, a repeat submission refused 409, and end-to-end p95 449 ms against the 1 s
+budget.
+
+| | Value | Writes | Reads |
+| --- | --- | --- | --- |
+| Baseline reading (before the run) | **5,500** | 3,027 | 2,437 |
+| Settled reading (after) | _pending_ | _pending_ | _pending_ |
 | **Interval between the run and the settled reading** | _pending_ |
 | Observed delta | _pending_ |
 | Predicted delta | ~2,480 |
 | Closure | _pending_ (S-02 achieved ~0.1%) |
+
+**The settled reading is still outstanding, and it is the only part of this that needs
+patience.** The console counter lags: `command-counter-diagnostic.md` records a reading
+taken 7 minutes after three N=150 runs sitting 2,526 commands short of the same counter
+85 minutes later, with ~15 commands of work in between. A premature reading looks exactly
+like a settled one. Re-read once it has stopped moving, and record the interval beside it.
+
+Note the baseline above was taken immediately before the run and is itself a settled
+figure — the month's traffic to that point had long since quiesced — so the delta will be
+as clean as the second reading is patient.
+
+One extra cost this run carries that a real event does not: `bun run quiz:check-purge` was
+run afterwards and seeds then deletes six keys, which is a handful of commands, not a
+material share of the delta.
 
 ## What to do with a mismatch
 

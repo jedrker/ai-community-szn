@@ -889,12 +889,12 @@ never was — `docs/runbook-live-session.md` already carries that.
 - [x] 5.1 Full suite passes: `bun run test` — ae1078c
 - [x] 5.2 Type checking passes: `bun run type-check` — ae1078c
 - [x] 5.3 `bun run build` succeeds — ae1078c
-- [ ] 5.4 Harness at `--clients=150`: 150/150 accepted, zero duplicate answers
+- [x] 5.4 Harness at `--clients=150`: 150/150 accepted, zero duplicate answers
 
 #### Manual
 
 - [ ] 5.5 Settled counter reading recorded with its interval; prediction closes to ~1%
 - [ ] 5.6 Runbook carries the new cost and margin, threshold unchanged
 - [ ] 5.7 `answer-contract.md` written and fits on one page
-- [ ] 5.8 `check-purge-residue.ts` reports no residue, new keys included
+- [x] 5.8 `check-purge-residue.ts` reports no residue, new keys included
 - [ ] 5.9 Roadmap S-03 marked done; `lessons.md` updated only if something recurring appeared
