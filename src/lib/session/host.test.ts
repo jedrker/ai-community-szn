@@ -35,6 +35,7 @@ const lobby = {
   playerCount: COUNT,
   revealedOptionIds: null,
   revealedDistribution: null,
+  revealedAnswerText: null,
 };
 
 function opened(version: number, playerCount = COUNT) {
@@ -47,6 +48,7 @@ function opened(version: number, playerCount = COUNT) {
     playerCount,
     revealedOptionIds: null,
     revealedDistribution: null,
+    revealedAnswerText: null,
   };
 }
 

@@ -24,6 +24,7 @@ describe("initialSessionState", () => {
       playerCount: 0,
       revealedOptionIds: null,
       revealedDistribution: null,
+      revealedAnswerText: null,
     });
   });
 
@@ -158,6 +159,7 @@ describe("endedSessionState", () => {
     playerCount: 9,
     revealedOptionIds: null,
     revealedDistribution: null,
+    revealedAnswerText: null,
   };
 
   it("bumps the version, so the terminal snapshot is newer than anything devices hold", () => {
@@ -241,6 +243,7 @@ describe("revealedOptionIds", () => {
     playerCount: 5,
     revealedOptionIds: null,
     revealedDistribution: null,
+    revealedAnswerText: null,
   };
 
   /**
@@ -329,6 +332,7 @@ describe("revealedDistribution", () => {
     playerCount: 5,
     revealedOptionIds: null,
     revealedDistribution: null,
+    revealedAnswerText: null,
   };
 
   const distribution = { answered: 9, options: { kino: 5, networking: 4 } };
@@ -416,5 +420,89 @@ describe("revealedDistribution", () => {
     // Cleared, not carried — the closing screen showing the last question's bars would
     // make the segment look like it ended mid-question.
     expect(endedSessionState(revealed, NOW + 9_000).revealedDistribution).toBeNull();
+  });
+});
+
+/**
+ * The free-text answer (roadmap S-05, FR-016).
+ *
+ * A third mirror of the `revealedOptionIds` block, kept separate for the reason the
+ * distribution block above states: same shape of invariant, different reasons, and a
+ * merged block would let one field lose its assertions without the failure naming it.
+ */
+describe("revealedAnswerText", () => {
+  const open = {
+    version: 3,
+    phase: "question-open" as const,
+    currentQuestionId: quiz.questions[1]!.id,
+    startedAt: NOW,
+    updatedAt: NOW + 1_000,
+    playerCount: 5,
+    revealedOptionIds: null,
+    revealedDistribution: null,
+    revealedAnswerText: null,
+  };
+
+  const accepted = "halucynacje";
+
+  /** THE MID-DEPLOY TEST, a fourth time. Same reasoning as its three siblings. */
+  it("defaults to null so a pre-deploy document still parses", () => {
+    const { revealedAnswerText: _omitted, ...preDeploy } = open;
+
+    const result = sessionStateSchema.safeParse(preDeploy);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.revealedAnswerText).toBeNull();
+  });
+
+  it("accepts an accepted answer in question-revealed", () => {
+    const revealed = {
+      ...open,
+      phase: "question-revealed" as const,
+      revealedAnswerText: accepted,
+    };
+
+    expect(sessionStateSchema.safeParse(revealed).success).toBe(true);
+  });
+
+  /**
+   * THE INVARIANT. A non-null value outside the reveal is the accepted answer to a
+   * question the room is still typing into — the free-text equivalent of publishing
+   * the answer key early, and it would look entirely correct on screen.
+   */
+  it.each(["lobby", "question-open", "ended"] as const)(
+    "refuses a non-null value in %s",
+    (phase) => {
+      const questionless = phase === "lobby" || phase === "ended";
+      const candidate = {
+        ...open,
+        phase,
+        currentQuestionId: questionless ? null : open.currentQuestionId,
+        revealedAnswerText: accepted,
+      };
+
+      expect(sessionStateSchema.safeParse(candidate).success).toBe(false);
+    }
+  );
+
+  it("names itself when it is the field at fault", () => {
+    const candidate = { ...open, revealedAnswerText: accepted };
+
+    const result = sessionStateSchema.safeParse(candidate);
+
+    expect(result.error?.issues.some((issue) => issue.path[0] === "revealedAnswerText")).toBe(
+      true
+    );
+  });
+
+  it("is null on every constructor that is not a reveal", () => {
+    expect(initialSessionState(NOW).revealedAnswerText).toBeNull();
+
+    const revealed = {
+      ...open,
+      phase: "question-revealed" as const,
+      revealedAnswerText: accepted,
+    };
+    expect(endedSessionState(revealed, NOW + 9_000).revealedAnswerText).toBeNull();
   });
 });

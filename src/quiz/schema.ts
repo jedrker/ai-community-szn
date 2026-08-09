@@ -41,6 +41,15 @@ const multipleChoiceSchema = z.object({ kind: z.literal("multiple-choice"), ...c
 const textSchema = z.object({
   kind: z.literal("text"),
   ...baseFields,
+  /**
+   * Every spelling that counts as correct, folded by `normalizeAnswer` before
+   * comparison (FR-011).
+   *
+   * **The first entry is the one the room sees.** `reveal.ts` publishes
+   * `acceptedAnswers[0]` as the accepted answer on every phone and the large screen,
+   * so order is not arbitrary here — put the canonical form first and the variants
+   * after it.
+   */
   acceptedAnswers: z.array(z.string().min(1)),
 });
 const numberSchema = z.object({

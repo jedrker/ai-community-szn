@@ -143,6 +143,37 @@ export const sessionStateSchema = z
       })
       .nullable()
       .default(null),
+    /**
+     * The accepted answer for the free-text question being revealed (roadmap S-05,
+     * FR-016).
+     *
+     * **Fourth field in the comparison above, and on `revealedOptionIds`' side of it.**
+     * It is *part of* the reveal transition, so `reveal.ts` sets it and every other
+     * constructor nulls it. Injected in `applyHostAction` beside `playerCount`, it would
+     * carry one question's answer into the next and publish it to the room while that
+     * question is still being answered. The `superRefine` clause below is the
+     * enforcement; this comment is not.
+     *
+     * A *second* reveal field rather than a generalisation of `revealedOptionIds` into a
+     * union type: that rewrite was considered and rejected because it would rewrite a
+     * field S-03 had just hardened, break session documents in flight, and touch three
+     * test files for no user-visible gain. **S-06 reuses this one for numbers** —
+     * formatting the correct value into it — rather than adding a fifth.
+     *
+     * It rides the snapshot for the reason `revealedOptionIds` does: the accepted answer
+     * is quiz content about a question the host has already closed, so it carries nothing
+     * about who played and needs none of the care `playerCount`'s note describes around
+     * Ably's ~120s retention floor. What an attendee *typed* is per-player and travels on
+     * `/api/quiz/result` instead — never here.
+     *
+     * Carries the **first** accepted variant, not all of them: a list on screen reads as
+     * though several different answers were expected.
+     *
+     * `.default(null)` for the same load-bearing reason the three fields above carry
+     * defaults: a session document written before this ships must still parse, or the
+     * host's next action 409s mid-segment.
+     */
+    revealedAnswerText: z.string().nullable().default(null),
   })
   .superRefine((state, ctx) => {
     // A question id is only ever assigned server-side from the quiz definition,
@@ -204,6 +235,18 @@ export const sessionStateSchema = z
         message: `W fazie "${state.phase}" nie można pokazywać rozkładu odpowiedzi.`,
       });
     }
+
+    // And again for the text answer, as its own clause for the same reason: each field's
+    // failure should name itself. A non-null value here outside the reveal is the
+    // accepted answer to a question the room is still typing into — the free-text
+    // equivalent of publishing the answer key early.
+    if (state.phase !== "question-revealed" && state.revealedAnswerText !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["revealedAnswerText"],
+        message: `W fazie "${state.phase}" nie można ujawniać poprawnej odpowiedzi tekstowej.`,
+      });
+    }
   });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;
@@ -224,6 +267,7 @@ export function initialSessionState(now: number): SessionState {
     revealedOptionIds: null,
     // Same posture, same reason: owned here, not injected downstream.
     revealedDistribution: null,
+    revealedAnswerText: null,
   };
 }
 
@@ -271,6 +315,7 @@ export function endedSessionState(current: SessionState, now: number): SessionSt
     // showing the last question's bars would make the segment look like it ended
     // mid-question.
     revealedDistribution: null,
+    revealedAnswerText: null,
   };
 }
 

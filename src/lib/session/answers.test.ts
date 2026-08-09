@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { answerField, answerRecordSchema, parseAnswerRecord } from "./answers";
+import { MAX_TEXT_ANSWER_LENGTH } from "./scoring";
 
 /**
  * The shape the answers hash holds, and the field name both paths must agree on
@@ -73,6 +74,52 @@ describe("the answer record schema", () => {
 
   it("refuses a negative elapsed time", () => {
     expect(answerRecordSchema.safeParse({ ...valid, elapsedMs: -1 }).success).toBe(false);
+  });
+});
+
+describe("the typed-answer field (roadmap S-05)", () => {
+  it("accepts a record carrying typed text and no selection", () => {
+    const parsed = answerRecordSchema.safeParse({
+      ...valid,
+      optionIds: [],
+      text: "halucynacje",
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.text).toBe("halucynacje");
+  });
+
+  /**
+   * **The mid-session deploy case.** `valid` is the pre-S-05 shape — it has no `text`
+   * — so this proves the field defaults rather than failing the parse. Required, a
+   * record written before the deploy would come back `null` from `parseAnswerRecord`
+   * and the result route would tell a device it never answered.
+   */
+  it("defaults to null for a record written before the field existed", () => {
+    expect("text" in valid).toBe(false);
+
+    const parsed = answerRecordSchema.safeParse(valid);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.text).toBeNull();
+  });
+
+  it("refuses text longer than the bound the route enforces", () => {
+    // The backstop to the route's visible refusal — the last point at which a record
+    // that breaks its own shape can be stopped from being stored.
+    const tooLong = "a".repeat(MAX_TEXT_ANSWER_LENGTH + 1);
+
+    expect(answerRecordSchema.safeParse({ ...valid, text: tooLong }).success).toBe(false);
+  });
+
+  it("accepts text exactly at the bound", () => {
+    const atBound = "a".repeat(MAX_TEXT_ANSWER_LENGTH);
+
+    expect(answerRecordSchema.safeParse({ ...valid, text: atBound }).success).toBe(true);
+  });
+
+  it("refuses a non-string, non-null text", () => {
+    expect(answerRecordSchema.safeParse({ ...valid, text: 42 }).success).toBe(false);
   });
 });
 

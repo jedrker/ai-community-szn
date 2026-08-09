@@ -56,6 +56,10 @@ export const POST: APIRoute = async ({ request }) => {
       // belt and braces; the null is written explicitly anyway, because a reader
       // scanning the three transitions should see all three fields in each of them.
       revealedDistribution: null,
+      // And the free-text answer, for exactly the same reason — carried, it would put
+      // the previous question's accepted answer on 150 phones while the new question
+      // is open. Written explicitly so the reader sees all four here too.
+      revealedAnswerText: null,
     };
   }, Date.now());
 

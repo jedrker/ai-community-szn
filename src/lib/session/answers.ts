@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MAX_TEXT_ANSWER_LENGTH } from "./scoring";
+
 /**
  * What the store holds per answer, and how the answers hash is keyed (roadmap S-03).
  *
@@ -26,6 +28,29 @@ export const answerRecordSchema = z.object({
   playerId: z.string().min(1),
   questionId: z.string().min(1),
   optionIds: z.array(z.string()),
+  /**
+   * What the attendee typed for a free-text question (roadmap S-05), raw and
+   * trimmed — not folded. The fold is a comparison artefact; showing it back at
+   * reveal would confuse, and a scoring dispute on stage needs the real input.
+   *
+   * `null` for every other kind, which leave `optionIds` populated instead.
+   *
+   * **This is attendee-authored free text — the most identifying payload in the
+   * store — and it must never reach `logSessionEvent`.** `LogFields` has no field
+   * it fits, and that closure is the enforcement rather than this comment.
+   *
+   * `.max()` is deliberately not redundant with the route's refusal. The route's
+   * bound is what produces a *visible* Polish message; this one is the backstop
+   * `submitAnswer` already leans on ("the last point at which a record that breaks
+   * its own shape can be stopped from becoming a stored value"). Without it a
+   * future writer of this record bypasses the bound and the failure is silent.
+   *
+   * `.default(null)` is load-bearing: a session running when this ships holds
+   * records written before the field existed, and `readOwnResult` parses what it
+   * reads. Required, those records would fail `parseAnswerRecord`, come back
+   * `null`, and report `answered: false` to a device that watched its answer land.
+   */
+  text: z.string().max(MAX_TEXT_ANSWER_LENGTH).nullable().default(null),
   /** The clamped elapsed time, in milliseconds, that produced `awarded`. */
   elapsedMs: z.number().int().nonnegative(),
   correct: z.boolean(),

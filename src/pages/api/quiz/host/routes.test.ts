@@ -764,6 +764,7 @@ describe("the reveal payload (roadmap S-03)", () => {
     playerCount: 6,
     revealedOptionIds: null,
     revealedDistribution: null,
+    revealedAnswerText: null,
   });
 
   beforeEach(() => {
@@ -797,8 +798,10 @@ describe("the reveal payload (roadmap S-03)", () => {
     expect((await transitionFrom()(open("czy-wszyscy-gotowi"), NOW)).revealedOptionIds).toEqual([]);
   });
 
-  it("reveals an empty array for a kind this slice does not answer", async () => {
-    // Text, number and word-cloud get their own reveal in S-05/S-06/S-08.
+  it("reveals an empty array for a kind with no options", async () => {
+    // A text question has no options to highlight — its answer travels on
+    // `revealedAnswerText` instead (see the S-05 block below). Number and word-cloud
+    // are still S-06/S-08.
     await call(reveal);
 
     expect((await transitionFrom()(open("zmyslanie-faktow"), NOW)).revealedOptionIds).toEqual([]);
@@ -851,5 +854,78 @@ describe("the reveal payload (roadmap S-03)", () => {
 
     const [published] = publishSnapshotMock.mock.calls[0]!;
     expect(published.revealedDistribution).toBeNull();
+  });
+
+  /**
+   * The free-text answer on the wire (roadmap S-05, FR-016).
+   *
+   * The accepted answer rides the snapshot for the reason `revealedOptionIds` does:
+   * it reaches 150 phones and the projector without 150 requests, and a device whose
+   * own result fetch fails still sees the right answer.
+   */
+  describe("revealedAnswerText", () => {
+    /**
+     * Read from the definition rather than hardcoded, so an edit to the question's
+     * accepted variants fails here instead of silently passing against a stale
+     * literal. Guarded by kind, so this cannot quietly become a non-text question.
+     */
+    const textQuestion = quiz.questions.find((question) => question.id === "zmyslanie-faktow");
+    if (textQuestion?.kind !== "text") throw new Error("expected a text question");
+
+    it("publishes the first accepted variant for a text question", async () => {
+      await call(reveal);
+
+      const next = await transitionFrom()(open("zmyslanie-faktow"), NOW + 5_000);
+
+      // The first variant specifically — a list of all four would read as though
+      // several different answers were expected.
+      expect(next.revealedAnswerText).toBe(textQuestion.acceptedAnswers[0]);
+      expect(next.revealedAnswerText).not.toBeNull();
+    });
+
+    it("is null for a choice question, whose answer travels as option ids", async () => {
+      await call(reveal);
+
+      const next = await transitionFrom()(open("llm-skrot"), NOW + 5_000);
+
+      expect(next.revealedAnswerText).toBeNull();
+    });
+
+    it("is null for a kind S-06 and S-08 still own", async () => {
+      await call(reveal);
+
+      // `ai-devs-absolwenci` is a number question; `smieszne-slowo-ai` is the
+      // word-cloud opener. Neither has a text answer to publish yet.
+      expect(
+        (await transitionFrom()(open("ai-devs-absolwenci"), NOW)).revealedAnswerText
+      ).toBeNull();
+    });
+
+    it("advance clears it, so an accepted answer cannot outlive its question", async () => {
+      await call(advance);
+
+      const next = transitionFrom()(
+        {
+          ...open("zmyslanie-faktow"),
+          phase: "question-revealed",
+          revealedAnswerText: textQuestion.acceptedAnswers[0],
+        },
+        NOW + 9_000
+      );
+
+      // Carried, it would put the previous question's accepted answer on 150 phones
+      // while the next question is open.
+      expect(next.revealedAnswerText).toBeNull();
+    });
+
+    it("start publishes a lobby with it null", async () => {
+      createSessionMock.mockResolvedValue({ outcome: "created", state: initialSessionState(NOW) });
+      publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+
+      await call(start);
+
+      const [published] = publishSnapshotMock.mock.calls[0]!;
+      expect(published.revealedAnswerText).toBeNull();
+    });
   });
 });

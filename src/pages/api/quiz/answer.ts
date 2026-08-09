@@ -171,6 +171,9 @@ export const POST: APIRoute = async ({ request }) => {
     playerId,
     questionId,
     optionIds: selectedOptionIds,
+    // This route only reaches here for the two choice kinds, which have no typed
+    // answer. S-05 Phase 3 adds the text branch that populates it.
+    text: null,
     elapsedMs,
     correct,
     awarded,

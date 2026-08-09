@@ -14,10 +14,10 @@ import { getQuestionById } from "../../../../quiz/index";
  * Reveals the current question's result.
  *
  * **This is the one route that puts an answer key on the wire**, and it is allowed to
- * because the wire is the room and the question is over. The correct option ids ride
- * the snapshot every device already receives, so correctness lands on 150 phones
- * without 150 requests — and a phone whose own result fetch fails still sees the right
- * answer highlighted, which is what FR-016 is for.
+ * because the wire is the room and the question is over. The correct option ids — and,
+ * for a free-text question, the accepted answer itself — ride the snapshot every device
+ * already receives, so correctness lands on 150 phones without 150 requests, and a phone
+ * whose own result fetch fails still sees the right answer, which is what FR-016 is for.
  *
  * Rejects when no question is open — revealing from the lobby is meaningless, and
  * silently doing nothing would leave the host unsure whether the click landed.
@@ -98,6 +98,18 @@ export const POST: APIRoute = async ({ request }) => {
        */
       revealedOptionIds: isChoice ? question.correctOptionIds : [],
       revealedDistribution,
+      /**
+       * The free-text half of the same job (roadmap S-05, FR-016), set here for the
+       * same reason and under the same rule as the two fields above.
+       *
+       * The **first** accepted variant, not all of them: `acceptedAnswers` exists so an
+       * author can accept spellings and synonyms, but the room should see one answer.
+       * A list reads as though several different answers were expected.
+       *
+       * `null` for every other kind — including choice, where `revealedOptionIds`
+       * already carries the answer. S-06 will format a number into this same field.
+       */
+      revealedAnswerText: question?.kind === "text" ? (question.acceptedAnswers[0] ?? null) : null,
     };
   }, Date.now());
 

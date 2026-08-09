@@ -783,30 +783,30 @@ a document written by this build parses under the old one.
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 `normalize.test.ts` covers `normalizeAnswer`: trailing punctuation, repeated terminators, punctuation with trailing whitespace, internal punctuation preserved
-- [x] 1.4 `normalize.test.ts` still asserts the `ł`/`Ł` cases
-- [x] 1.4b `normalize.test.ts` asserts `normalizePolish` is unchanged — a trailing `.` still survives it
-- [x] 1.4c `players.test.ts` still passes untouched
-- [x] 1.5 `scoring.test.ts` covers variants, all fold dimensions, near-miss, unscored, empty and whitespace-only
-- [x] 1.6 `scoring.test.ts` asserts text and choice awards agree at equal `elapsedMs`
-- [x] 1.7 `schema.test.ts` still passes
-- [x] 1.8 `definition.test.ts` still passes
+- [x] 1.1 Unit tests pass: `bun run test` — bb2a0e8
+- [x] 1.2 Type checking passes: `bun run type-check` — bb2a0e8
+- [x] 1.3 `normalize.test.ts` covers `normalizeAnswer`: trailing punctuation, repeated terminators, punctuation with trailing whitespace, internal punctuation preserved — bb2a0e8
+- [x] 1.4 `normalize.test.ts` still asserts the `ł`/`Ł` cases — bb2a0e8
+- [x] 1.4b `normalize.test.ts` asserts `normalizePolish` is unchanged — a trailing `.` still survives it — bb2a0e8
+- [x] 1.4c `players.test.ts` still passes untouched — bb2a0e8
+- [x] 1.5 `scoring.test.ts` covers variants, all fold dimensions, near-miss, unscored, empty and whitespace-only — bb2a0e8
+- [x] 1.6 `scoring.test.ts` asserts text and choice awards agree at equal `elapsedMs` — bb2a0e8
+- [x] 1.7 `schema.test.ts` still passes — bb2a0e8
+- [x] 1.8 `definition.test.ts` still passes — bb2a0e8
 
 ### Phase 2: The record field and the reveal field
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 `state.test.ts` asserts non-null `revealedAnswerText` refused outside `question-revealed`
-- [ ] 2.4 `state.test.ts` asserts a document without the field parses to `null`
-- [ ] 2.5 `answers.test.ts` asserts a record without `text` parses to `null`
-- [ ] 2.6 `routes.test.ts` asserts revealing a text question sets the field to the first accepted variant
-- [ ] 2.7 `routes.test.ts` asserts revealing a choice question leaves it null
-- [ ] 2.8 `routes.test.ts` asserts advancing clears it
-- [ ] 2.9 `keys.test.ts` still passes
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 `state.test.ts` asserts non-null `revealedAnswerText` refused outside `question-revealed`
+- [x] 2.4 `state.test.ts` asserts a document without the field parses to `null`
+- [x] 2.5 `answers.test.ts` asserts a record without `text` parses to `null`
+- [x] 2.6 `routes.test.ts` asserts revealing a text question sets the field to the first accepted variant
+- [x] 2.7 `routes.test.ts` asserts revealing a choice question leaves it null
+- [x] 2.8 `routes.test.ts` asserts advancing clears it
+- [x] 2.9 `keys.test.ts` still passes
 
 ### Phase 3: The submission route and the result payload
 

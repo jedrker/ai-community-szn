@@ -57,6 +57,7 @@ const lobby = {
   playerCount: 0,
   revealedOptionIds: null,
   revealedDistribution: null,
+  revealedAnswerText: null,
 };
 
 const firstQuestionOpen = {
@@ -68,6 +69,7 @@ const firstQuestionOpen = {
   playerCount: 0,
   revealedOptionIds: null,
   revealedDistribution: null,
+  revealedAnswerText: null,
 };
 
 const player = { id: "player-abc", displayName: "Anna", joinedAt: NOW };
@@ -302,6 +304,7 @@ describe("endSession", () => {
     playerCount: 0,
     revealedOptionIds: null,
     revealedDistribution: null,
+    revealedAnswerText: null,
   };
 
   it("applies an end whose expected version matches", async () => {
@@ -673,6 +676,8 @@ describe("submitAnswer", () => {
     playerId: "player-abc",
     questionId: quiz.questions[0]!.id,
     optionIds: ["a"],
+    // A choice answer, so no typed text. The text path is covered in `answer.test.ts`.
+    text: null,
     elapsedMs: 3_200,
     correct: true,
     awarded: 920,
@@ -1030,6 +1035,13 @@ describe("readQuestionTallies", () => {
 describe("readOwnResult", () => {
   beforeEach(configure);
 
+  /**
+   * Deliberately written **without** `text` — this is the shape a record written
+   * before S-05 shipped has, and a session live across that deploy holds them. The
+   * assertion below is that it still parses, defaulting the new field, rather than
+   * coming back `null` and reporting `answered: false` to a device that watched its
+   * answer land.
+   */
   const stored = {
     playerId: "player-abc",
     questionId: quiz.questions[0]!.id,
@@ -1050,7 +1062,8 @@ describe("readOwnResult", () => {
     await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
       outcome: "ok",
       state: firstQuestionOpen,
-      answer: stored,
+      // The pre-S-05 record, plus the field it did not carry.
+      answer: { ...stored, text: null },
       total: 920,
     });
 

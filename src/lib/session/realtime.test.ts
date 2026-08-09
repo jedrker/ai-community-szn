@@ -26,6 +26,7 @@ const state = {
   playerCount: 12,
   revealedOptionIds: null,
   revealedDistribution: null,
+  revealedAnswerText: null,
 };
 
 beforeEach(() => {
