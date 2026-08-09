@@ -27,8 +27,25 @@ export type OwnResult = {
   readonly answered: boolean;
   readonly correct: boolean | null;
   readonly awarded: number | null;
+  /**
+   * What this device typed, for a free-text question; `null` for every other kind
+   * (roadmap S-05).
+   *
+   * Comes from the server rather than from memory because memory does not survive a
+   * reload, and an attendee who answered and then reloaded should still see their own
+   * words beside the accepted answer at reveal.
+   */
+  readonly text: string | null;
   readonly total: number;
 };
+
+/**
+ * What is being submitted, discriminated so "a selection *and* typed text" is not a
+ * representable call. S-06 adds its own arm here rather than a fourth parameter.
+ */
+export type AnswerPayload =
+  | { readonly kind: "choice"; readonly optionIds: readonly string[] }
+  | { readonly kind: "text"; readonly text: string };
 
 /**
  * What this device knows about one question, across reloads.
@@ -192,11 +209,16 @@ const inFlight = new Set<string>();
  *
  * The response deliberately carries no verdict, so there is nothing to return but
  * whether it landed.
+ *
+ * The payload is sent **raw** — the text arm ships what the attendee typed, untrimmed
+ * and unfolded. The server is the only thing that parses, bounds and folds it, which is
+ * what keeps one implementation of each of those rules. `boundary.test.ts` would fail a
+ * client-side copy anyway, since the fold lives under `src/quiz/`.
  */
 export async function submitAnswer(
   playerId: string,
   questionId: string,
-  optionIds: readonly string[],
+  payload: AnswerPayload,
   elapsedMs: number
 ): Promise<SubmitOutcome> {
   if (inFlight.has(questionId)) return { outcome: "failed" };
@@ -206,8 +228,13 @@ export async function submitAnswer(
   body.set("playerId", playerId);
   body.set("questionId", questionId);
   body.set("elapsedMs", String(Math.round(elapsedMs)));
-  // Repeated field, so a multiple-choice answer needs no encoding scheme.
-  for (const id of optionIds) body.append("optionIds", id);
+
+  if (payload.kind === "text") {
+    body.set("text", payload.text);
+  } else {
+    // Repeated field, so a multiple-choice answer needs no encoding scheme.
+    for (const id of payload.optionIds) body.append("optionIds", id);
+  }
 
   try {
     const response = await fetch("/api/quiz/answer", {
@@ -264,10 +291,10 @@ export async function fetchResult(playerId: string, questionId: string): Promise
     });
     if (!response.ok) return null;
 
-    const payload = (await response.json().catch(() => null)) as OwnResult | null;
-    if (payload === null || typeof payload.answered !== "boolean") return null;
+    const result = (await response.json().catch(() => null)) as OwnResult | null;
+    if (result === null || typeof result.answered !== "boolean") return null;
 
-    return payload;
+    return result;
   } catch {
     return null;
   }

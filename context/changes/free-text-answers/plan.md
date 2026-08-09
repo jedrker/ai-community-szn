@@ -812,40 +812,40 @@ a document written by this build parses under the old one.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 `answer.test.ts` asserts a correct text submission is accepted and stored with raw trimmed text
-- [x] 3.4 `answer.test.ts` asserts an absent `text` field is refused, by outcome
-- [x] 3.5 `answer.test.ts` asserts empty and whitespace-only `text` are refused
-- [x] 3.6 `answer.test.ts` asserts an over-length `text` is refused and nothing is written
-- [x] 3.7 `answer.test.ts` asserts `number` and `word-cloud` still receive `unsupportedKind`
-- [x] 3.8 `answer.test.ts` asserts the existing choice-path cases are unchanged
-- [x] 3.9 `result.test.ts` asserts `text` returned when answered, null when silent
-- [x] 3.10 `result.test.ts` asserts the phase gate still refuses an unrevealed text question
+- [x] 3.1 Unit tests pass: `bun run test` — 37da4d9
+- [x] 3.2 Type checking passes: `bun run type-check` — 37da4d9
+- [x] 3.3 `answer.test.ts` asserts a correct text submission is accepted and stored with raw trimmed text — 37da4d9
+- [x] 3.4 `answer.test.ts` asserts an absent `text` field is refused, by outcome — 37da4d9
+- [x] 3.5 `answer.test.ts` asserts empty and whitespace-only `text` are refused — 37da4d9
+- [x] 3.6 `answer.test.ts` asserts an over-length `text` is refused and nothing is written — 37da4d9
+- [x] 3.7 `answer.test.ts` asserts `number` and `word-cloud` still receive `unsupportedKind` — 37da4d9
+- [x] 3.8 `answer.test.ts` asserts the existing choice-path cases are unchanged — 37da4d9
+- [x] 3.9 `result.test.ts` asserts `text` returned when answered, null when silent — 37da4d9
+- [x] 3.10 `result.test.ts` asserts the phase gate still refuses an unrevealed text question — 37da4d9
 
 #### Manual
 
-- [x] 3.11 `curl` an over-length text body: 400 with a Polish message, nothing written to the store
+- [x] 3.11 `curl` an over-length text body: 400 with a Polish message, nothing written to the store — 37da4d9
 
 ### Phase 4: The attendee view
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 `boundary.test.ts` passes for the new `<script>` code
-- [ ] 4.4 client `answer.test.ts` covers the text submission path including 5xx as `failed`
-- [ ] 4.5 client `answer.test.ts` still passes its `withBrokenWrite` localStorage cases
-- [ ] 4.6 `render.test.ts` still passes unchanged
+- [x] 4.1 Unit tests pass: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 `boundary.test.ts` passes for the new `<script>` code
+- [x] 4.4 client `answer.test.ts` covers the text submission path including 5xx as `failed`
+- [x] 4.5 client `answer.test.ts` still passes its `withBrokenWrite` localStorage cases
+- [x] 4.6 `render.test.ts` still passes unchanged
 
 #### Manual
 
-- [ ] 4.7 Phone-sized viewport: usable field, keyboard does not cover the submit button
-- [ ] 4.8 Submitting locks the control and shows the saved note
-- [ ] 4.9 Reload mid-question keeps the clock; reload after submitting keeps the lock
-- [ ] 4.10 At reveal: accepted answer, typed answer, verdict and running total all appear
-- [ ] 4.11 With `/api/quiz/result` failing, the accepted answer is still on screen and no error shows
-- [ ] 4.12 A correct answer with a capital letter and a trailing full stop scores correct
+- [x] 4.7 Phone-sized viewport: usable field, keyboard does not cover the submit button
+- [x] 4.8 Submitting locks the control and shows the saved note
+- [x] 4.9 Reload mid-question keeps the clock; reload after submitting keeps the lock
+- [x] 4.10 At reveal: accepted answer, typed answer, verdict and running total all appear
+- [x] 4.11 With `/api/quiz/result` failing, the accepted answer is still on screen and no error shows
+- [x] 4.12 A correct answer with a capital letter and a trailing full stop scores correct
 
 ### Phase 5: The host view and the docs
 

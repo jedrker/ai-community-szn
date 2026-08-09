@@ -9,7 +9,11 @@ import {
   markSeen,
   markSubmitted,
   submitAnswer,
+  type AnswerPayload,
 } from "./answer";
+
+/** The choice arm of the payload, so the call sites below stay readable. */
+const choice = (optionIds: string[]): AnswerPayload => ({ kind: "choice", optionIds });
 
 /**
  * The device's half of answering (roadmap S-03).
@@ -224,7 +228,7 @@ describe("submitAnswer", () => {
   it("reports an accepted submission", async () => {
     respond(true, { accepted: true });
 
-    await expect(submitAnswer("p1", "q1", ["a"], 3_200)).resolves.toEqual({
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 3_200)).resolves.toEqual({
       outcome: "accepted",
     });
   });
@@ -233,7 +237,7 @@ describe("submitAnswer", () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
-    await submitAnswer("p1", "q1", ["a", "b"], 3_200);
+    await submitAnswer("p1", "q1", choice(["a", "b"]), 3_200);
 
     const body = fetchMock.mock.calls[0]![1].body as FormData;
     expect(body.getAll("optionIds")).toEqual(["a", "b"]);
@@ -244,15 +248,55 @@ describe("submitAnswer", () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
-    await submitAnswer("p1", "q1", ["a"], 3_200.7);
+    await submitAnswer("p1", "q1", choice(["a"]), 3_200.7);
 
     expect((fetchMock.mock.calls[0]![1].body as FormData).get("elapsedMs")).toBe("3201");
+  });
+
+  it("sends a text answer raw, leaving the trim and the fold to the server", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitAnswer("p1", "q1", { kind: "text", text: "  Halucynacje.  " }, 3_200);
+
+    const body = fetchMock.mock.calls[0]![1].body as FormData;
+    // Untouched: the server is the only parser, and a client-side trim here would be
+    // the first half of a second implementation of the rule.
+    expect(body.get("text")).toBe("  Halucynacje.  ");
+    // And no empty option field alongside it, which the route would read as a choice.
+    expect(body.getAll("optionIds")).toEqual([]);
+  });
+
+  it("sends no text field on a choice answer", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitAnswer("p1", "q1", choice(["a"]), 3_200);
+
+    expect((fetchMock.mock.calls[0]![1].body as FormData).get("text")).toBeNull();
+  });
+
+  it("treats a 5xx on a text answer as failed, never as a refusal", async () => {
+    // The distinction the whole module turns on: `rejected` is final and the attendee
+    // loses the control, so a store blip must not be reported as one.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({ error: "Sesja nie jest skonfigurowana." }),
+      })
+    );
+
+    await expect(
+      submitAnswer("p1", "q1", { kind: "text", text: "halucynacje" }, 1_000)
+    ).resolves.toEqual({ outcome: "failed" });
   });
 
   it("carries the server's own message through on a refusal", async () => {
     respond(false, { error: "Odpowiedź została już zapisana." });
 
-    await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({
       outcome: "rejected",
       error: "Odpowiedź została już zapisana.",
     });
@@ -273,7 +317,7 @@ describe("submitAnswer", () => {
       })
     );
 
-    await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({ outcome: "failed" });
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({ outcome: "failed" });
   });
 
   it("still reports a 409 as a refusal, with the server's message", async () => {
@@ -288,7 +332,7 @@ describe("submitAnswer", () => {
       })
     );
 
-    await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({
       outcome: "rejected",
       error: "Odpowiedź została już zapisana.",
     });
@@ -307,8 +351,8 @@ describe("submitAnswer", () => {
       vi.fn().mockReturnValue(pending.then(() => ({ ok: true, json: () => Promise.resolve({}) })))
     );
 
-    const first = submitAnswer("p1", "q1", ["a"], 1_000);
-    const second = await submitAnswer("p1", "q1", ["a"], 1_000);
+    const first = submitAnswer("p1", "q1", choice(["a"]), 1_000);
+    const second = await submitAnswer("p1", "q1", choice(["a"]), 1_000);
 
     expect(second).toEqual({ outcome: "failed" });
 
@@ -332,9 +376,9 @@ describe("submitAnswer", () => {
       .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
-    const stuck = submitAnswer("p1", "q1", ["a"], 1_000);
+    const stuck = submitAnswer("p1", "q1", choice(["a"]), 1_000);
 
-    await expect(submitAnswer("p1", "q2", ["b"], 1_000)).resolves.toEqual({
+    await expect(submitAnswer("p1", "q2", choice(["b"]), 1_000)).resolves.toEqual({
       outcome: "accepted",
     });
 
@@ -345,10 +389,10 @@ describe("submitAnswer", () => {
   it("releases the guard once the question's submission settles", async () => {
     respond(true, {});
 
-    await submitAnswer("p1", "q1", ["a"], 1_000);
+    await submitAnswer("p1", "q1", choice(["a"]), 1_000);
 
     // Otherwise a failed first attempt would lock the attendee out of retrying.
-    await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({
       outcome: "accepted",
     });
   });
@@ -358,7 +402,7 @@ describe("submitAnswer", () => {
     // answer, a failure is "we do not know" and is worth retrying.
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
-    await expect(submitAnswer("p1", "q1", ["a"], 1_000)).resolves.toEqual({ outcome: "failed" });
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({ outcome: "failed" });
   });
 });
 

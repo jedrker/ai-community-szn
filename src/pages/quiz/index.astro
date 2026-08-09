@@ -3,6 +3,7 @@ import "../../styles/global.css";
 
 import { PLAYER_STORAGE_KEY, QUESTION_SEEN_STORAGE_KEY } from "../../lib/session/keys";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
+import { MAX_TEXT_ANSWER_LENGTH } from "../../lib/session/scoring";
 import { publicQuiz } from "../../quiz/public";
 
 /**
@@ -16,8 +17,11 @@ import { publicQuiz } from "../../quiz/public";
  *
  * **Reads no secret of any kind.** Everything below reaches the browser deliberately:
  * the channel and event names (which a subscribe-only token already grants access to),
- * the `localStorage` key, and the *public* quiz projection — prompts and option text,
- * never an answer. `src/lib/client/boundary.test.ts` scans the `<script>` blocks below
+ * the `localStorage` key, the answer-length bound, and the *public* quiz projection —
+ * prompts and option text, never an answer. The bound comes through frontmatter for the
+ * reason the storage key does: the `<script>` block may not value-import from
+ * `src/lib/session/`, so the server hands it down.
+ * `src/lib/client/boundary.test.ts` scans the `<script>` blocks below
  * and fails the suite if one reads env or value-imports `src/quiz/` or
  * `src/lib/session/`; this frontmatter is excluded from that scan because it runs
  * server-side, which is exactly how these values are fetched.
@@ -98,6 +102,30 @@ import { publicQuiz } from "../../quiz/public";
 
         <!-- The answering controls. Hidden for every phase and kind that cannot be
              answered, so nothing tappable is ever on screen without a purpose. -->
+
+        <!-- The free-text field (S-05). A STATIC element shown and hidden, deliberately
+             not something `renderQuestion` emits: that function calls
+             `replaceChildren()` and `render()` runs on every snapshot, so an input
+             inside the question container would be destroyed and rebuilt while the
+             attendee is typing — losing the value, the focus and the caret. Another
+             attendee joining is enough to trigger it. -->
+        <input
+          id="answer-text"
+          type="text"
+          hidden
+          inputmode="text"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          maxlength={MAX_TEXT_ANSWER_LENGTH}
+          class="w-full rounded-xl border border-surface-border bg-surface-secondary
+                 px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
+                 focus:border-brand-purple-light focus:outline-none
+                 disabled:opacity-60"
+          placeholder="Wpisz odpowiedź"
+        />
+
         <button
           id="answer-submit"
           type="button"
@@ -110,12 +138,24 @@ import { publicQuiz } from "../../quiz/public";
         <p id="answer-note" hidden class="text-text-secondary text-lg"></p>
         <p id="answer-error" role="alert" aria-live="polite" class="text-lg text-red-400"></p>
 
+        <!-- The accepted answer for a free-text question, from the snapshot. Sits
+             OUTSIDE the result panel on purpose: the panel is gated on having answered
+             and on the per-device fetch, while this must reach a device that stayed
+             silent and one whose fetch failed. -->
+        <p
+          id="answer-accepted"
+          hidden
+          class="rounded-xl border border-green-400 bg-green-500/20 px-4 py-3 text-2xl font-semibold"
+        >
+        </p>
+
         <!-- The reveal panel. The verdict line is per device and arrives from
              /api/quiz/result; the correct answer above it came with the snapshot and
              is on screen whether or not that fetch succeeds. -->
         <section id="result" hidden class="flex flex-col gap-1">
           <p id="result-verdict" class="text-2xl font-bold"></p>
           <p id="result-award" class="text-xl"></p>
+          <p id="result-answer" class="text-text-secondary text-lg"></p>
           <p id="result-total" class="text-text-secondary text-lg"></p>
         </section>
       </section>
@@ -133,10 +173,18 @@ import { publicQuiz } from "../../quiz/public";
         snapshotEvent: SNAPSHOT_EVENT,
         storageKey: PLAYER_STORAGE_KEY,
         seenStorageKey: QUESTION_SEEN_STORAGE_KEY,
+        maxTextLength: MAX_TEXT_ANSWER_LENGTH,
         questions: publicQuiz.questions,
       }}
     >
-      window.__liveQuiz = { channelName, snapshotEvent, storageKey, seenStorageKey, questions };
+      window.__liveQuiz = {
+        channelName,
+        snapshotEvent,
+        storageKey,
+        seenStorageKey,
+        maxTextLength,
+        questions,
+      };
     </script>
 
     <script>
@@ -153,6 +201,7 @@ import { publicQuiz } from "../../quiz/public";
         markSeen,
         markSubmitted,
         submitAnswer,
+        type AnswerPayload,
         type OwnResult,
       } from "../../lib/client/answer";
       import { el, renderQuestion, setHidden, setText } from "../../lib/client/render";
@@ -163,6 +212,8 @@ import { publicQuiz } from "../../quiz/public";
         snapshotEvent: string;
         storageKey: string;
         seenStorageKey: string;
+        /** From `MAX_TEXT_ANSWER_LENGTH`, via frontmatter — see the module docstring. */
+        maxTextLength: number;
         questions: PublicQuestion[];
       };
 
@@ -182,8 +233,10 @@ import { publicQuiz } from "../../quiz/public";
       const submit = el("join-submit") as HTMLButtonElement;
       const form = el("join-form") as HTMLFormElement;
       const answerSubmit = el("answer-submit") as HTMLButtonElement;
+      const answerText = el("answer-text") as HTMLInputElement;
       const answerNote = el("answer-note");
       const answerError = el("answer-error");
+      const answerAccepted = el("answer-accepted");
       const resultPanel = el("result");
 
       let connection: ConnectionStatus = "connecting";
@@ -200,6 +253,12 @@ import { publicQuiz } from "../../quiz/public";
        * had and that these additions must not cost.
        */
       const selections = new Map<string, string[]>();
+      /**
+       * What this device has typed, per question — the text equivalent of `selections`,
+       * and keyed for the same reason: the snapshot decides which question is current
+       * and it can move underneath us.
+       */
+      const typed = new Map<string, string>();
       const results = new Map<string, OwnResult>();
       /** Questions whose result fetch has already been issued — one per device, ever. */
       const resultRequested = new Set<string>();
@@ -283,7 +342,11 @@ import { publicQuiz } from "../../quiz/public";
         const question = position === -1 ? undefined : config.questions[position];
 
         if (state.phase === "question-revealed") {
-          renderRevealed(question, state.revealedOptionIds ?? null);
+          renderRevealed(
+            question,
+            state.revealedOptionIds ?? null,
+            state.revealedAnswerText ?? null
+          );
           return;
         }
 
@@ -293,7 +356,9 @@ import { publicQuiz } from "../../quiz/public";
       /** Every answering control off, in one call, so no branch can leave one behind. */
       function hideAnswerControls(): void {
         setHidden(answerSubmit, true);
+        setHidden(answerText, true);
         setHidden(answerNote, true);
+        setHidden(answerAccepted, true);
         setHidden(resultPanel, true);
         setText("answer-error", "");
       }
@@ -307,14 +372,17 @@ import { publicQuiz } from "../../quiz/public";
        */
       function renderOpen(question: PublicQuestion | undefined): void {
         setHidden(resultPanel, true);
+        setHidden(answerAccepted, true);
 
         const answerable =
           question !== undefined &&
-          (question.kind === "single-choice" || question.kind === "multiple-choice");
+          (question.kind === "single-choice" ||
+            question.kind === "multiple-choice" ||
+            question.kind === "text");
 
         if (!question || !answerable) {
-          // Text, number and word cloud are S-05, S-06 and S-08. Static text, and no
-          // control — something tappable that does nothing reads as a broken quiz.
+          // Number and word cloud are S-06 and S-08. Static text, and no control —
+          // something tappable that does nothing reads as a broken quiz.
           renderQuestion(questionBox, question, {
             prompt: "text-3xl font-bold leading-tight",
             list: "flex flex-col gap-3",
@@ -323,6 +391,15 @@ import { publicQuiz } from "../../quiz/public";
           hideAnswerControls();
           return;
         }
+
+        if (question.kind === "text") {
+          renderOpenText(question);
+          return;
+        }
+
+        // A choice question has no field. Hidden explicitly because this branch does not
+        // call `hideAnswerControls`.
+        setHidden(answerText, true);
 
         markSeen(config.seenStorageKey, question.id);
 
@@ -365,6 +442,80 @@ import { publicQuiz } from "../../quiz/public";
       }
 
       /**
+       * `question-open` for a free-text question (roadmap S-05, FR-011).
+       *
+       * Same beats as the choice path — paint clock, lock, note, disabled-until-valid
+       * submit — with a field instead of buttons.
+       */
+      function renderOpenText(question: PublicQuestion): void {
+        // Prompt only. A text question has no options, so `renderQuestion` draws the
+        // prompt and returns; the field lives outside this container on purpose.
+        renderQuestion(questionBox, question, {
+          prompt: "text-3xl font-bold leading-tight",
+        });
+
+        markSeen(config.seenStorageKey, question.id);
+
+        const locked = hasSubmitted(config.seenStorageKey, question.id);
+
+        /**
+         * **The reconciliation rule, and both of the obvious readings are wrong.**
+         *
+         * The input is a live DOM element holding its own value; the Map is the
+         * per-question record. Written from the Map on every `render()`, it would
+         * clobber whatever the attendee is mid-way through typing — and `render()` fires
+         * on every snapshot, so another attendee joining is enough to trigger it.
+         * Written never, advancing between two text questions would leave the previous
+         * answer sitting in the field.
+         *
+         * So: write it only when the question being rendered is not the one the element
+         * currently holds, tracked by `data-question-id` on the element itself.
+         */
+        if (answerText.dataset.questionId !== question.id) {
+          answerText.dataset.questionId = question.id;
+          answerText.value = typed.get(question.id) ?? "";
+        }
+
+        setHidden(answerText, false);
+        // Disabled rather than hidden once locked: the attendee should still see what
+        // they sent.
+        answerText.disabled = locked;
+        answerText.maxLength = config.maxTextLength;
+
+        setHidden(answerNote, false);
+        if (locked) {
+          answerNote.textContent = "Odpowiedź zapisana. Czekamy na prowadzącego…";
+          setHidden(answerSubmit, true);
+          return;
+        }
+
+        // FR-017, same rule as the choice path: driven by `scored`, never inferred from
+        // a zero award.
+        answerNote.textContent = question.scored
+          ? "Wpisz odpowiedź. Liczy się też czas — im szybciej, tym więcej punktów."
+          : "To pytanie na rozgrzewkę — bez punktów.";
+
+        setHidden(answerSubmit, false);
+        answerSubmit.disabled = !hasTypedAnswer();
+      }
+
+      /** Whether the field holds anything but whitespace. The server is the real judge. */
+      function hasTypedAnswer(): boolean {
+        return answerText.value.trim().length > 0;
+      }
+
+      /**
+       * Typing updates the Map and the submit button directly — **never through
+       * `render()`**, which would rebuild the question container and fight the field.
+       */
+      answerText.addEventListener("input", () => {
+        const questionId = answerText.dataset.questionId;
+        if (questionId) typed.set(questionId, answerText.value);
+
+        answerSubmit.disabled = answerText.disabled || !hasTypedAnswer();
+      });
+
+      /**
        * `question-revealed` — the payoff beat.
        *
        * The correct answer comes from the snapshot, so it is on screen before any
@@ -374,9 +525,11 @@ import { publicQuiz } from "../../quiz/public";
        */
       function renderRevealed(
         question: PublicQuestion | undefined,
-        revealedOptionIds: readonly string[] | null
+        revealedOptionIds: readonly string[] | null,
+        revealedAnswerText: string | null
       ): void {
         setHidden(answerSubmit, true);
+        setHidden(answerText, true);
         setHidden(answerNote, true);
         setText("answer-error", "");
 
@@ -391,6 +544,18 @@ import { publicQuiz } from "../../quiz/public";
           selectedOptionIds: selections.get(question?.id ?? "") ?? [],
           correctOptionIds: revealedOptionIds,
         });
+
+        /**
+         * **The accepted answer, and it is rendered before and independently of the
+         * fetch.** That is the whole reason it rides the snapshot: a device that stayed
+         * silent, and one whose per-device fetch fails, must still learn the answer. A
+         * failed fetch costs the score line and the echo, never this.
+         */
+        const hasAccepted = revealedAnswerText !== null && revealedAnswerText.length > 0;
+        setHidden(answerAccepted, !hasAccepted);
+        if (hasAccepted) {
+          answerAccepted.textContent = `Poprawna odpowiedź: ${revealedAnswerText}`;
+        }
 
         if (!question) {
           setHidden(resultPanel, true);
@@ -412,6 +577,7 @@ import { publicQuiz } from "../../quiz/public";
           setHidden(resultPanel, false);
           setText("result-verdict", "Dzięki za odpowiedź!");
           setText("result-award", "To była rozgrzewka — bez punktów.");
+          setText("result-answer", "");
           setText("result-total", "");
           return;
         }
@@ -457,12 +623,22 @@ import { publicQuiz } from "../../quiz/public";
         if (!own.answered) {
           setText("result-verdict", "Bez odpowiedzi");
           setText("result-award", "Tym razem nie zdążyliśmy zapisać Twojej odpowiedzi.");
+          setText("result-answer", "");
           setText("result-total", `Twój wynik: ${own.total} pkt`);
           return;
         }
 
         setText("result-verdict", own.correct ? "Dobrze!" : "Tym razem nie.");
         setText("result-award", own.correct ? `+${own.awarded ?? 0} pkt` : "+0 pkt");
+        /**
+         * The echo, for a free-text answer only — `null` on every other kind.
+         *
+         * From the server, not from the `typed` Map: that map does not survive a reload,
+         * and an attendee who answered and then reloaded should still see their own
+         * words. Omitted rather than rendered empty when there is nothing to echo, so a
+         * choice question's panel is unchanged.
+         */
+        setText("result-answer", own.text ? `Twoja odpowiedź: ${own.text}` : "");
         setText("result-total", `Twój wynik: ${own.total} pkt`);
       }
 
@@ -477,8 +653,27 @@ import { publicQuiz } from "../../quiz/public";
         const questionId = state?.currentQuestionId;
         if (!player || !questionId || state?.phase !== "question-open") return;
 
-        const selected = selections.get(questionId) ?? [];
-        if (selected.length === 0) return;
+        const position = indexOfQuestion(questionId);
+        const question = position === -1 ? undefined : config.questions[position];
+        if (!question) return;
+
+        /**
+         * The payload, decided by kind. Both arms refuse to send an empty answer — the
+         * choice path because a selection of nothing is not an answer, the text path
+         * because whitespace is not one either, and both because a submission that
+         * lands burns FR-004's one-answer-per-question lock.
+         */
+        let payload: AnswerPayload;
+        if (question.kind === "text") {
+          const value = answerText.value;
+          if (value.trim().length === 0) return;
+          // Sent raw: the server trims, bounds and folds. One implementation of each.
+          payload = { kind: "text", text: value };
+        } else {
+          const selected = selections.get(questionId) ?? [];
+          if (selected.length === 0) return;
+          payload = { kind: "choice", optionIds: selected };
+        }
 
         answerSubmit.disabled = true;
         answerSubmit.textContent = "Wysyłanie…";
@@ -488,7 +683,7 @@ import { publicQuiz } from "../../quiz/public";
         // host's advance, and not reset by a reload.
         const elapsedMs = Date.now() - markSeen(config.seenStorageKey, questionId);
 
-        const outcome = await submitAnswer(player.id, questionId, selected, elapsedMs);
+        const outcome = await submitAnswer(player.id, questionId, payload, elapsedMs);
 
         answerSubmit.textContent = "Wyślij odpowiedź";
 
