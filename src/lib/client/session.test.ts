@@ -2,7 +2,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { classifyConnection, createFallbackPoll } from "./session";
+import {
+  advanceLifecycle,
+  classifyConnection,
+  createFallbackPoll,
+  shouldFallbackPoll,
+  INITIAL_LIFECYCLE,
+  type Snapshot,
+} from "./session";
 
 /**
  * The connection classifier (change `connection-limit-degradation`, Phase 1).
@@ -66,7 +73,10 @@ describe("classifyConnection", () => {
     });
 
     it("carries Ably's own state name through as the detail", () => {
-      // The host view prints this verbatim, so it must not be translated or folded.
+      // The host view prints this verbatim, so the classifier must not translate or fold it.
+      // Note the field's documented contract is wider than this — `channel-failed` and a
+      // failed prime's error text also travel in it — so this pins the classifier's output,
+      // not an invariant on the field.
       expect(classifyConnection("suspended", undefined).info.detail).toBe("suspended");
     });
   });
@@ -149,6 +159,20 @@ const JITTER_MS = 1_500;
  */
 const ONE_TICK_MS = BASE_MS;
 
+/** `POLL_MAX_MS`, restated for the same reason as the two above. */
+const MAX_MS = 20_000;
+
+/**
+ * The interval after `n` consecutive failures — the loop doubles from the base and stops at
+ * the ceiling. Computed rather than written out so the sequence in each test reads as
+ * "advance one tick" instead of a column of magic numbers.
+ */
+function delayAfterFailures(n: number): number {
+  let value = BASE_MS;
+  for (let i = 0; i < n; i += 1) value = Math.min(value * 2, MAX_MS);
+  return value;
+}
+
 /**
  * Hide the document, run, and restore by hand.
  *
@@ -187,11 +211,30 @@ describe("createFallbackPoll", () => {
    * A poll harness whose `refresh` succeeds or fails on command, so a test can shape a
    * sequence of outcomes rather than mock the transport.
    */
-  function harness(options?: { shouldPoll?: () => boolean }) {
+  function harness(options?: { shouldPoll?: () => boolean; deferred?: boolean }) {
     let succeed = true;
-    const refresh = vi.fn(() =>
-      succeed ? Promise.resolve() : Promise.reject(new Error("state fetch returned 503"))
-    );
+    /**
+     * Set in deferred mode: resolves the request the loop is currently waiting on.
+     *
+     * **Deferred mode is what makes "mid-flight" mean anything.** With an immediately
+     * resolved `refresh`, advancing fake time runs the tick *and* its `finally` before the
+     * next line of the test, so nothing is ever actually in flight across an assertion —
+     * which is how the first version of this file shipped a test named for the `finally`
+     * guard that could only ever reach the fire-time guard.
+     */
+    let settle: (() => void) | null = null;
+
+    const refresh = vi.fn(() => {
+      if (!options?.deferred) {
+        return succeed
+          ? Promise.resolve()
+          : Promise.reject(new Error("state fetch returned 503"));
+      }
+      return new Promise<void>((resolve, reject) => {
+        settle = () => (succeed ? resolve() : reject(new Error("state fetch returned 503")));
+      });
+    });
+
     const degradedReports: boolean[] = [];
 
     const poll = createFallbackPoll({
@@ -209,6 +252,13 @@ describe("createFallbackPoll", () => {
       },
       recover: () => {
         succeed = true;
+      },
+      /** Resolve the in-flight request and let its `finally` run. */
+      settleInFlight: async () => {
+        if (settle === null) throw new Error("no request is in flight");
+        settle();
+        settle = null;
+        await vi.advanceTimersByTimeAsync(0);
       },
     };
   }
@@ -297,12 +347,12 @@ describe("createFallbackPoll", () => {
       expect(degradedReports).toEqual([true]);
 
       fail();
-      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(0));
       // One failure is an ordinary venue-network blip. Flashing red here is what the
       // two-failure threshold exists to avoid.
       expect(degradedReports).toEqual([true]);
 
-      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(1));
       expect(degradedReports).toEqual([true, false]);
     });
 
@@ -312,12 +362,12 @@ describe("createFallbackPoll", () => {
       poll.arm();
       await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
       fail();
-      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
-      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(0));
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(1));
       expect(degradedReports).toEqual([true, false]);
 
       recover();
-      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(2));
 
       expect(degradedReports).toEqual([true, false, true]);
     });
@@ -327,11 +377,77 @@ describe("createFallbackPoll", () => {
 
       fail();
       poll.arm();
-      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
-      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
-      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(0));
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(1));
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(2));
 
       expect(refresh).toHaveBeenCalledTimes(3);
+    });
+
+    it("lengthens the interval after a failure and resets it on a success", async () => {
+      /**
+       * The backoff, asserted as a *timing* fact rather than trusted from the source: after a
+       * failure, one base interval is no longer enough to fire the next tick. A permanently
+       * unreachable endpoint must not be asked every six seconds for a whole segment.
+       */
+      const { poll, refresh, fail, recover } = harness();
+
+      fail();
+      poll.arm();
+      await vi.advanceTimersByTimeAsync(BASE_MS);
+      expect(refresh).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(BASE_MS);
+      expect(refresh).toHaveBeenCalledTimes(1); // still waiting out the doubled interval
+
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(1) - BASE_MS);
+      expect(refresh).toHaveBeenCalledTimes(2);
+
+      // A success returns the loop to the base interval, so recovery is not penalised by
+      // however long the outage lasted.
+      recover();
+      await vi.advanceTimersByTimeAsync(delayAfterFailures(2));
+      expect(refresh).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(BASE_MS);
+      expect(refresh).toHaveBeenCalledTimes(4);
+    });
+
+    it("caps the backoff at the ceiling", async () => {
+      const { poll, refresh, fail } = harness();
+
+      fail();
+      poll.arm();
+      // Five failures would be 6s → 12 → 24 → 48 → 96 without the cap.
+      for (let i = 0; i < 5; i += 1) {
+        await vi.advanceTimersByTimeAsync(delayAfterFailures(i));
+      }
+      expect(refresh).toHaveBeenCalledTimes(5);
+
+      // The sixth arrives one ceiling later, not one doubling later.
+      await vi.advanceTimersByTimeAsync(MAX_MS);
+      expect(refresh).toHaveBeenCalledTimes(6);
+    });
+
+    it("pause keeps the status, unlike stop", async () => {
+      /**
+       * The distinction a hidden tab depends on. `stop` drops `degraded`, which is right for
+       * a recovered channel and wrong for a backgrounded page: it paints a red "connection
+       * lost" nobody is looking at, then flashes it again on the way back in for a fallback
+       * that was working the whole time.
+       */
+      const { poll, degradedReports } = harness();
+
+      poll.arm();
+      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+      expect(degradedReports).toEqual([true]);
+
+      poll.pause();
+      expect(poll.isArmed()).toBe(false);
+      expect(degradedReports).toEqual([true]);
+
+      poll.arm();
+      await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+      expect(degradedReports).toEqual([true]);
     });
 
     it("reports nothing when polling never worked in the first place", async () => {
@@ -381,10 +497,15 @@ describe("createFallbackPoll", () => {
       expect(refresh).toHaveBeenCalledTimes(1);
     });
 
-    it("stops re-arming once the session has ended mid-flight", async () => {
-      // The session ending while a fetch is open is the ordinary way this happens: the
-      // host reveals or ends, the reply lands afterwards, and the `finally` must not
-      // schedule another tick for a session nobody is waiting on.
+    it("declines to fire a tick scheduled before the session ended", async () => {
+      /**
+       * The **fire-time** guard, not the `finally` one — the distinction this test's earlier
+       * name got wrong. A tick scheduled while the session was live is still queued when the
+       * host ends it; without the re-check at fire time each already-armed timer spends one
+       * more fetch, which is ~220 of them in a full room at the moment the store is purged.
+       *
+       * The `finally` guard has its own tests below, in deferred mode.
+       */
       let ended = false;
       const { poll, refresh } = harness({ shouldPoll: () => !ended });
 
@@ -397,6 +518,64 @@ describe("createFallbackPoll", () => {
 
       expect(refresh).toHaveBeenCalledTimes(1);
       expect(poll.isArmed()).toBe(false);
+    });
+
+    describe("with a request genuinely in flight", () => {
+      it("dispose during an open request leaves the loop dead after it settles", async () => {
+        /**
+         * The bug this mode exists to catch. `stop()` clears the timer but not the in-flight
+         * request, and that request's `finally` calls `arm()` — so a cancel can be undone by
+         * a fetch it never knew about. `dispose()` is terminal precisely so `close()` cannot
+         * be defeated that way, and nothing observable would reveal the difference: the
+         * screen looks identical while a closed client keeps spending commands.
+         */
+        const { poll, refresh, settleInFlight } = harness({ deferred: true });
+
+        poll.arm();
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        expect(refresh).toHaveBeenCalledTimes(1);
+        expect(poll.isArmed()).toBe(false); // in flight, so no timer is pending
+
+        poll.dispose();
+        await settleInFlight();
+
+        expect(poll.isArmed()).toBe(false);
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS * 5);
+        expect(refresh).toHaveBeenCalledTimes(1);
+      });
+
+      it("stop during an open request is resumable, unlike dispose", async () => {
+        // The other half of the distinction: `stop` is what a recovered channel and a
+        // bfcache suspension use, so a later `arm` must work.
+        const { poll, refresh, settleInFlight } = harness({ deferred: true });
+
+        poll.arm();
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        poll.stop();
+        await settleInFlight();
+
+        poll.arm();
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        expect(refresh).toHaveBeenCalledTimes(2);
+      });
+
+      it("does not re-arm from the finally when polling stopped applying mid-request", async () => {
+        // The `finally` guard proper: the host ends the session while the reply is open.
+        let applies = true;
+        const { poll, refresh, settleInFlight } = harness({
+          deferred: true,
+          shouldPoll: () => applies,
+        });
+
+        poll.arm();
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        applies = false;
+        await settleInFlight();
+
+        expect(poll.isArmed()).toBe(false);
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS * 5);
+        expect(refresh).toHaveBeenCalledTimes(1);
+      });
     });
 
     it("does not arm while the tab is hidden", async () => {
@@ -415,5 +594,99 @@ describe("createFallbackPoll", () => {
       poll.arm();
       expect(poll.isArmed()).toBe(true);
     });
+  });
+});
+
+/**
+ * A snapshot stand-in.
+ *
+ * Only `phase` is read by the function under test, so a partial cast is honest here rather
+ * than lazy — building a full `SessionState` would add fields no branch consults and invite
+ * the reader to think one of them matters. `version` is included because `apply`'s guard
+ * reads it, and a fixture that could never survive that guard would be misleading.
+ */
+function snapshot(phase: string): Snapshot {
+  return { version: 1, phase } as unknown as Snapshot;
+}
+
+/**
+ * The two predicates the loop's own tests could not reach, because those tests substitute a
+ * hand-written `shouldPoll`. Both defects the implementation review found lived here.
+ */
+describe("shouldFallbackPoll", () => {
+  it("stays off unless the caller opted in", () => {
+    // `undefined` is the default for every view that has not asked for the fallback, and it
+    // must behave like `false` rather than like "truthy enough".
+    for (const fallbackPolling of [undefined, false]) {
+      expect(
+        shouldFallbackPoll({ fallbackPolling, transportStatus: "lost", sessionOver: false })
+      ).toBe(false);
+    }
+  });
+
+  it("does not poll while the channel is healthy", () => {
+    expect(
+      shouldFallbackPoll({
+        fallbackPolling: true,
+        transportStatus: "connected",
+        sessionOver: false,
+      })
+    ).toBe(false);
+  });
+
+  it.each(["lost", "connecting"] as const)("polls while the transport is %s", (status) => {
+    // `connecting` counts deliberately: Ably passes through it on every retry, and treating
+    // it as healthy would cancel the fallback several times a minute on a device that never
+    // reconnects.
+    expect(
+      shouldFallbackPoll({
+        fallbackPolling: true,
+        transportStatus: status,
+        sessionOver: false,
+      })
+    ).toBe(true);
+  });
+
+  it("stops for good once the session is over", () => {
+    // The bound that makes state.ts's command budget true. Without it a phone left open
+    // after a purge polls forever under a screen reading "To już koniec".
+    expect(
+      shouldFallbackPoll({ fallbackPolling: true, transportStatus: "lost", sessionOver: true })
+    ).toBe(false);
+  });
+});
+
+describe("advanceLifecycle", () => {
+  it("does not treat an absent session as a finished one", () => {
+    // The case a naive `current !== null` fix breaks: a device that arrives before the host
+    // has created a session must still poll, or the fallback strands exactly the device it
+    // exists for.
+    const next = advanceLifecycle(INITIAL_LIFECYCLE, null);
+    expect(next).toEqual({ sawSession: false, sessionOver: false });
+  });
+
+  it("records having seen a live session without ending it", () => {
+    const next = advanceLifecycle(INITIAL_LIFECYCLE, snapshot("lobby"));
+    expect(next).toEqual({ sawSession: true, sessionOver: false });
+  });
+
+  it("ends on a purge — a session seen, then gone", () => {
+    const seen = advanceLifecycle(INITIAL_LIFECYCLE, snapshot("question-open"));
+    expect(advanceLifecycle(seen, null).sessionOver).toBe(true);
+  });
+
+  it("ends on the ended phase", () => {
+    expect(advanceLifecycle(INITIAL_LIFECYCLE, snapshot("ended")).sessionOver).toBe(true);
+  });
+
+  it("is sticky — a later live snapshot does not re-open it", () => {
+    /**
+     * The accepted cost, pinned so nobody removes it by accident while "fixing" the
+     * purge-and-restart case: once over, this client stays over, and a degraded device needs
+     * a reload. Un-sticking it restores the unbounded spend the latch was added to stop,
+     * because a lost device emits Ably transitions for as long as the tab is open.
+     */
+    const over = advanceLifecycle(INITIAL_LIFECYCLE, snapshot("ended"));
+    expect(advanceLifecycle(over, snapshot("lobby")).sessionOver).toBe(true);
   });
 });

@@ -42,15 +42,6 @@ export type Snapshot = SessionState | null;
 export type SnapshotSource = "fetch" | "realtime" | "http";
 
 /**
- * Three states, and the third is the point.
- *
- * A device must be able to tell "waiting for the host" (connected, lobby) from "the
- * segment is over" (connected, `ended`) from "my connection died" (`lost`). The same
- * reasoning that made `ended` a phase rather than an absent session applies to the
- * transport: collapse any two of these and a broken screen is indistinguishable from a
- * quiet one at the moment the segment is meant to land.
- */
-/**
  * Four states, and the fourth is the one that keeps a room playable.
  *
  * A device must be able to tell "waiting for the host" from "the segment is over" from
@@ -87,8 +78,14 @@ export type ConnectionCause = "account-limit" | "transient" | null;
 /** Everything a view needs to describe the connection beyond its status. */
 export type ConnectionInfo = {
   /**
-   * Ably's own state name, verbatim. The host view prints it, so it stays a raw
-   * transport word rather than something translated or folded.
+   * A short technical description of where the transport stands, **for display only — never
+   * parse it.**
+   *
+   * Usually Ably's own state name verbatim (`disconnected`, `suspended`, …). Two other
+   * producers exist and are why this is documented as a display string rather than as a state
+   * name: `channel-failed`, when the connection is up but attaching to the channel was
+   * refused, and the error text of a failed prime fetch, which has no transport state at all.
+   * The host view prints whichever arrives; the *status* is the thing to branch on.
    */
   readonly detail: string;
   readonly cause: ConnectionCause;
@@ -246,11 +243,125 @@ const POLL_JITTER_MS = 1_500;
  */
 const POLL_FAILURES_BEFORE_LOST = 2;
 
+/**
+ * The ceiling the interval backs off to while polls keep failing, doubling from
+ * `POLL_BASE_MS` and resetting on the first success. Mirrors `/quiz/host`'s participation
+ * loop, which uses the same two numbers for the same reason: a permanently unreachable
+ * endpoint must not be asked every six seconds for a whole segment.
+ *
+ * **The cost, stated because it is not free here.** Unlike the host's decorative counter,
+ * this loop carries the question an attendee is trying to answer, so a backed-off device is
+ * further behind the room. That is tolerable only because demotion to `lost` after
+ * `POLL_FAILURES_BEFORE_LOST` failures has already told them the truth — the backoff slows a
+ * device that is *already* being described as disconnected, not one holding an amber banner.
+ */
+const POLL_MAX_MS = 20_000;
+
+/**
+ * How long a state fetch is given before it is abandoned.
+ *
+ * The twin of `answer.ts`'s `REQUEST_TIMEOUT_MS`, same value and same reason: a request
+ * that never returns is worse than one that fails, because nothing downstream can tell the
+ * difference between the two. Restated rather than imported — the transport must not depend
+ * on a feature module for a constant.
+ *
+ * **The bound matters to the fallback loop specifically.** `inFlight` blocks every re-arm,
+ * so without a deadline one hung socket ends the loop permanently: no further ticks, no
+ * failure counted, no demotion out of `degraded` — a device frozen behind a banner
+ * promising a refresh that will never come. Sized under
+ * `POLL_BASE_MS * POLL_FAILURES_BEFORE_LOST` so a hang demotes rather than stalls.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Whether the fallback loop should be running, as a pure predicate.
+ *
+ * Extracted after a review found that this conjunction — the *only* place the opt-in flag and
+ * the end of the session actually bind to the loop — had no test, because the loop's own tests
+ * substitute a hand-written `shouldPoll`. Two defects hid in exactly here.
+ */
+export function shouldFallbackPoll(input: {
+  readonly fallbackPolling: boolean | undefined;
+  readonly transportStatus: ConnectionStatus;
+  readonly sessionOver: boolean;
+}): boolean {
+  return (
+    input.fallbackPolling === true &&
+    input.transportStatus !== "connected" &&
+    !input.sessionOver
+  );
+}
+
+/** Whether this client has seen a session, and whether that session is over for good. */
+export type SessionLifecycle = {
+  readonly sawSession: boolean;
+  readonly sessionOver: boolean;
+};
+
+export const INITIAL_LIFECYCLE: SessionLifecycle = {
+  sawSession: false,
+  sessionOver: false,
+};
+
+/**
+ * Fold one applied snapshot into the lifecycle latch.
+ *
+ * Three rules, and the first is the one a naive fix gets wrong:
+ *
+ * - **`null` before any session is not "over".** It is what a device sees before the host has
+ *   created a session, and treating it as terminal would strand the very device the fallback
+ *   exists for.
+ * - **`null` after a session is over.** That is what a purge produces, and it is the case that
+ *   made the polling spend unbounded: a condition re-derived from the snapshot reads "not
+ *   ended" for a document that no longer exists.
+ * - **`sessionOver` is sticky.** A latch, not a test — re-derived on every arm it would re-open
+ *   on the next Ably transition, and a lost device emits those for as long as the tab is open.
+ *   The accepted cost is recorded at the call site: a purge-and-restart mid-event leaves a
+ *   degraded device needing a reload.
+ */
+export function advanceLifecycle(
+  previous: SessionLifecycle,
+  state: Snapshot
+): SessionLifecycle {
+  if (state === null) {
+    return {
+      sawSession: previous.sawSession,
+      sessionOver: previous.sessionOver || previous.sawSession,
+    };
+  }
+
+  return {
+    sawSession: true,
+    sessionOver: previous.sessionOver || state.phase === "ended",
+  };
+}
+
 export type FallbackPoll = {
   /** Schedule one tick, if every condition for polling currently holds. */
   readonly arm: () => void;
-  /** Cancel any scheduled tick and drop out of `degraded`. */
+  /**
+   * Cancel the scheduled tick and **nothing else** — the status, the failure count and the
+   * backed-off interval all survive.
+   *
+   * This is the right response to the page going quiet: a hidden tab or a bfcache
+   * suspension. `stop` would be wrong there, because dropping out of `degraded` paints a red
+   * "connection lost" on a screen nobody is looking at and then flashes it again on the way
+   * back in, for a fallback that was working the whole time.
+   */
+  readonly pause: () => void;
+  /**
+   * Cancel the scheduled tick, drop out of `degraded`, and reset the failure count and the
+   * interval. **Resumable** — for a channel that recovered, where forgetting the degraded
+   * state is exactly the point.
+   */
   readonly stop: () => void;
+  /**
+   * Cancel for good. **Not resumable**, and that is the difference from `stop`: a tick
+   * already in flight re-arms from its own `finally`, so a cancel that only clears the timer
+   * is undone by a request it never knew about. Nothing is reported — a disposed loop's last
+   * act must not be a status update to a caller that is tearing down.
+   */
+  readonly dispose: () => void;
   /** Whether a tick is scheduled. Exposed so a test can assert the loop's lifecycle. */
   readonly isArmed: () => boolean;
 };
@@ -278,9 +389,19 @@ export function createFallbackPoll(deps: {
   let inFlight = false;
   let failures = 0;
   let degraded = false;
+  let disposed = false;
 
-  /** Symmetric spread around the base, so the average interval stays `POLL_BASE_MS`. */
-  const delay = (): number => POLL_BASE_MS + (Math.random() * 2 - 1) * POLL_JITTER_MS;
+  const clearTimer = (): void => {
+    if (timer === null) return;
+    window.clearTimeout(timer);
+    timer = null;
+  };
+
+  /** The current interval before jitter — doubles on failure, resets on success. */
+  let base = POLL_BASE_MS;
+
+  /** Symmetric spread around the current base, so the average interval stays `base`. */
+  const delay = (): number => base + (Math.random() * 2 - 1) * POLL_JITTER_MS;
 
   const setDegraded = (next: boolean): void => {
     if (degraded === next) return;
@@ -296,6 +417,7 @@ export function createFallbackPoll(deps: {
    * loop uses, and the reason that one has never stacked two timers.
    */
   const arm = (): void => {
+    if (disposed) return;
     // Never two timers, and never a timer stacked behind a request that has not come
     // back. A connection that flaps calls this several times per retry cycle, and each
     // one would otherwise add a loop: the screen would look right while the spend
@@ -321,7 +443,7 @@ export function createFallbackPoll(deps: {
    * loop keeps running either way so a device can climb back.
    */
   const tick = async (): Promise<void> => {
-    if (inFlight) return;
+    if (disposed || inFlight) return;
     /**
      * **Asked again at fire time, not only at arm time, and the difference is one request
      * per device.** A tick scheduled while the session was live is still queued when the
@@ -335,9 +457,11 @@ export function createFallbackPoll(deps: {
     try {
       await deps.refresh();
       failures = 0;
+      base = POLL_BASE_MS;
       setDegraded(true);
     } catch {
       failures += 1;
+      base = Math.min(base * 2, POLL_MAX_MS);
       if (failures >= POLL_FAILURES_BEFORE_LOST) setDegraded(false);
     } finally {
       inFlight = false;
@@ -351,13 +475,16 @@ export function createFallbackPoll(deps: {
   return {
     arm,
     isArmed: () => timer !== null,
+    pause: () => clearTimer(),
     stop: () => {
-      if (timer !== null) {
-        window.clearTimeout(timer);
-        timer = null;
-      }
+      clearTimer();
       failures = 0;
+      base = POLL_BASE_MS;
       setDegraded(false);
+    },
+    dispose: () => {
+      disposed = true;
+      clearTimer();
     },
   };
 }
@@ -365,6 +492,19 @@ export function createFallbackPoll(deps: {
 export function createSessionClient(options: SessionClientOptions): SessionClient {
   let current: Snapshot = null;
   let realtime: Ably.Realtime | null = null;
+
+  /**
+   * The lifecycle latch — the bound that makes `state.ts`'s budget figures true rather than
+   * aspirational. Rules and reasoning live on `advanceLifecycle`.
+   *
+   * **The accepted cost**, stated here because it is a real host workflow: a host who purges
+   * and restarts mid-event (the case `index.astro`'s `ended` branch already contemplates)
+   * leaves a *degraded* device latched — it stays on "To już koniec" until the attendee
+   * reloads. A device with a working channel picks the new session up from the next snapshot
+   * as usual. The alternative was unbounded spend after every session on every phone left
+   * open, which happens at every event rather than at the rare restart.
+   */
+  let lifecycle: SessionLifecycle = INITIAL_LIFECYCLE;
 
   /**
    * The single reconciliation rule: apply whichever snapshot carries the higher
@@ -381,6 +521,9 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
     if (state && current && state.version <= current.version) return false;
 
     current = state;
+
+    lifecycle = advanceLifecycle(lifecycle, state);
+
     options.onSnapshot(state, source);
     return true;
   };
@@ -388,6 +531,7 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
   const refresh = async (): Promise<void> => {
     const response = await fetch("/api/quiz/state", {
       headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new Error(`state fetch returned ${response.status}`);
@@ -412,6 +556,15 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
   let transportStatus: ConnectionStatus = "connecting";
   let transportInfo: ConnectionInfo = { detail: "initialized", cause: null, code: null };
   let degraded = false;
+  /**
+   * Set by `close`, and checked before anything reaches the caller or the network.
+   *
+   * `Realtime.close()` drives the connection through `closing` and `closed`, both delivered
+   * *asynchronously*. Detaching the listener is what stops them arriving, but this flag is
+   * the belt to that braces: a closed client's last observable act must be the close itself,
+   * not a "connection lost" it reports on the way out.
+   */
+  let closed = false;
 
   /**
    * The single place a status reaches the view.
@@ -426,22 +579,24 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
    * the thing views branch on.
    */
   const report = (): void => {
+    if (closed) return;
     const status: ConnectionStatus =
       degraded && transportStatus !== "connected" ? "degraded" : transportStatus;
     options.onConnection?.(status, transportInfo);
   };
 
   /**
-   * The three moving facts that decide whether polling is worth doing, asked fresh on
-   * every arm. `ended` is what bounds the spend of a phone left face-up on a table after
-   * the segment: nothing further will change, so nothing further is fetched.
+   * The three moving facts that decide whether polling is worth doing, asked fresh on every
+   * arm and answered by a predicate with its own tests — see `shouldFallbackPoll`.
    */
   const poll = createFallbackPoll({
     refresh: () => refresh(),
     shouldPoll: () =>
-      options.fallbackPolling === true &&
-      transportStatus !== "connected" &&
-      current?.phase !== "ended",
+      shouldFallbackPoll({
+        fallbackPolling: options.fallbackPolling,
+        transportStatus,
+        sessionOver: lifecycle.sessionOver,
+      }),
     onDegraded: (next) => {
       degraded = next;
       report();
@@ -456,7 +611,76 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
    * check saves.
    */
   const onVisibilityChange = (): void => {
-    if (document.visibilityState === "visible") poll.arm();
+    // Cancel on the way out, not just decline to re-arm: without this a tick already
+    // scheduled fires against a backgrounded tab. `/quiz/host`'s participation loop cancels
+    // for the same reason, and diverging from it here was an oversight rather than a choice.
+    if (document.visibilityState === "hidden") poll.pause();
+    else poll.arm();
+  };
+
+  /**
+   * The page going away, and coming back.
+   *
+   * Same pair, and the same reasoning, as `/quiz/host`'s participation loop: a timer that
+   * outlives the page is a request fired at a document that is gone, and a back-forward-cache
+   * restore does not re-run the script, so something has to re-arm on the way in.
+   *
+   * `pause`, not `dispose` — a `pagehide` may be a bfcache suspension rather than a teardown,
+   * and disposing would leave a restored page with a permanently dead loop and no symptom.
+   * Not `stop` either: that drops the `degraded` status, so a restored page would flash the
+   * red "connection lost" line for one interval before the first poll re-earned the banner.
+   * The Ably connection is deliberately left alone: reopening one on `pageshow` is a bigger
+   * mechanism than the leak it would fix.
+   */
+  const onPageHide = (): void => poll.pause();
+  const onPageShow = (): void => poll.arm();
+
+  /**
+   * Registered together, removed together — see `close`.
+   *
+   * Targets match `/quiz/host`'s existing handlers: `visibilitychange` is dispatched at
+   * `document` and only reaches `window` by bubbling, so it is registered where it is fired.
+   */
+  const lifecycleListeners: readonly [EventTarget, string, () => void][] = [
+    [document, "visibilitychange", onVisibilityChange],
+    [window, "pagehide", onPageHide],
+    [window, "pageshow", onPageShow],
+  ];
+
+  /**
+   * Held so `close` can detach it *before* `Realtime.close()` runs. Without the detach, the
+   * `closing` and `closed` transitions Ably emits during teardown reach this handler, are
+   * folded to `lost` like any other unhealthy state, and re-arm the loop that `close` just
+   * cancelled.
+   */
+  const onConnectionChange = (change: Ably.ConnectionStateChange): void => {
+    /**
+     * **`errorReason` is a fallback, not the primary source, and the order matters.**
+     * The reason for *this* transition rides on the change; `connection.errorReason`
+     * holds the last error the connection saw, which on a later transition may be
+     * stale. Read only when the change carries nothing, so a transition that explains
+     * itself always wins.
+     */
+    const code = change.reason?.code ?? realtime?.connection.errorReason?.code;
+    const { status, info } = classifyConnection(change.current, code);
+    transportStatus = status;
+    transportInfo = info;
+
+    /**
+     * **A recovered channel clears the fallback; anything else arms it.** Only
+     * `connected` stops the loop, deliberately: Ably passes through `connecting` on
+     * every retry, and treating that as recovery would cancel the fallback several
+     * times a minute for a device that never actually reconnects.
+     */
+    if (status === "connected") {
+      // `stop` clears `degraded` through `onDegraded`, which reports on its own; the
+      // report below then carries the recovered status.
+      poll.stop();
+    } else {
+      poll.arm();
+    }
+
+    report();
   };
 
   const start = async (): Promise<void> => {
@@ -483,44 +707,48 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
     // request with Ably itself, so no credential of this project's ever reaches it.
     realtime = new Ably.Realtime({ authUrl: "/api/quiz/token" });
 
-    realtime.connection.on((change) => {
-      /**
-       * **`errorReason` is a fallback, not the primary source, and the order matters.**
-       * The reason for *this* transition rides on the change; `connection.errorReason`
-       * holds the last error the connection saw, which on a later transition may be
-       * stale. Read only when the change carries nothing, so a transition that explains
-       * itself always wins.
-       */
-      const code = change.reason?.code ?? realtime?.connection.errorReason?.code;
-      const { status, info } = classifyConnection(change.current, code);
-      transportStatus = status;
-      transportInfo = info;
-
-      /**
-       * **A recovered channel clears the fallback; anything else arms it.** Only
-       * `connected` stops the loop, deliberately: Ably passes through `connecting` on
-       * every retry, and treating that as recovery would cancel the fallback several
-       * times a minute for a device that never actually reconnects.
-       */
-      if (status === "connected") {
-        // `stop` clears `degraded` through `onDegraded`, which reports on its own; the
-        // report below then carries the recovered status.
-        poll.stop();
-      } else {
-        poll.arm();
-      }
-
-      report();
-    });
+    realtime.connection.on(onConnectionChange);
 
     if (options.fallbackPolling) {
-      document.addEventListener("visibilitychange", onVisibilityChange);
+      for (const [target, event, handler] of lifecycleListeners) {
+        target.addEventListener(event, handler);
+      }
     }
 
     const channel = realtime.channels.get(options.channelName);
-    await channel.subscribe(options.snapshotEvent, (message) => {
-      apply((message.data ?? null) as Snapshot, "realtime");
-    });
+    try {
+      await channel.subscribe(options.snapshotEvent, (message) => {
+        apply((message.data ?? null) as Snapshot, "realtime");
+      });
+    } catch (err) {
+      /**
+       * **A connected connection with a failed channel is the worst state this client can be
+       * in, and until this catch existed it was also the quietest.** Everything about
+       * transport health is derived from *connection* state, so an attach that fails leaves
+       * `transportStatus` at `connected`: the fallback declines to arm, the host's line reads
+       * a neutral grey `połączenie: connected`, and no snapshot ever arrives. A frozen screen
+       * under a healthy label is strictly worse than the `lost` case this module exists to
+       * make legible.
+       *
+       * So: force the status off `connected`, which both tells the views and lets the
+       * fallback arm. `detail` gets a short transport word rather than the error text, which
+       * is the most useful of the three things that field is documented to carry.
+       *
+       * **Not rethrown.** The failure is handled here — reported and mitigated — so a
+       * `start()` that resolved anyway would be the honest description. Note this does not
+       * cover a channel that fails *after* a successful attach; that needs channel-state
+       * subscription, recorded as follow-up work in the review.
+       */
+      const code = (err as { code?: unknown } | null)?.code;
+      const { info } = classifyConnection(
+        "failed",
+        typeof code === "number" ? code : undefined
+      );
+      transportStatus = "lost";
+      transportInfo = { ...info, detail: "channel-failed" };
+      poll.arm();
+      report();
+    }
   };
 
   return {
@@ -528,14 +756,25 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
     apply,
     refresh,
     start,
+    /**
+     * **Order is the whole correctness of this function.**
+     *
+     * `closed` first, so nothing that follows can report a status to a caller that is
+     * tearing down. Then detach the connection listener — *before* `Realtime.close()`, whose
+     * `closing`/`closed` transitions would otherwise arrive at that handler, fold to `lost`
+     * like any other unhealthy state, and re-arm the loop this function is here to stop.
+     * Then `dispose` rather than `stop`, because a tick already in flight re-arms from its
+     * own `finally` and only the terminal flag survives that.
+     */
     close: () => {
+      closed = true;
+      realtime?.connection.off(onConnectionChange);
       realtime?.close();
       realtime = null;
-      // The timer and the listener both outlive the connection unless cancelled here. A
-      // loop left armed after `close` keeps fetching for a client nobody is reading, and
-      // it is the one leak nothing on screen would reveal.
-      poll.stop();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      poll.dispose();
+      for (const [target, event, handler] of lifecycleListeners) {
+        target.removeEventListener(event, handler);
+      }
     },
   };
 }

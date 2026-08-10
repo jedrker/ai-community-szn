@@ -76,7 +76,11 @@ export const GET: APIRoute = async () => {
    * the worst case, Ably unreachable for a whole 220-device room, is ~66k. Against a 500k
    * monthly free tier and the runbook's 200k-per-run tripwire, both are inside the
    * budget. It is bounded on three sides: only while the channel is down, only while the
-   * tab is visible, and never after the session reaches `ended`.
+   * tab is visible, and never once the session is over — `ended` or purged.
+   *
+   * Those figures are an upper bound, not an estimate: the loop also doubles its interval to
+   * a 20 s ceiling while polls keep failing, so the case that would spend the most — an
+   * endpoint that is down rather than slow — is the case that spends least.
    *
    * So the tripwire is still a polling detector — it now has two known, bounded loops to
    * subtract before an anomaly means anything. The other is `/quiz/host`'s participation

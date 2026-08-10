@@ -403,6 +403,34 @@ client-only plus documentation, and either can be reverted by reverting its comm
 - Affordance-versus-data-path lesson: `context/foundation/lessons.md:5-10`
 - Branch-reaching-fixture lesson: `context/foundation/lessons.md:48-70`
 
+## Addenda — decisions taken during implementation and review
+
+Recorded here because the plan is the document the next author reads as ground truth.
+
+1. **The loop lives in an exported `createFallbackPoll`, not inside `createSessionClient`.** The
+   plan put it inside the client; a loop whose only entry point is an Ably callback can be tested
+   only by mocking the SDK, and a mock of a third-party client keeps passing after a real upgrade
+   breaks production. `createSessionClient` wires it up.
+2. **Views compose the wording; the client reports the status.** The Phase 2 contract said `detail`
+   would name the fallback. It does not — `info` passes through untouched and `host.astro` prepends
+   "tryb zapasowy —". The rule is: **`status` is what a view branches on**, and Polish copy stays in
+   the views, which is also what keeps `detail` free to carry Ably's own words. A third view must
+   compose its own wording from the status.
+3. **`detail` is a display string, not a state name.** Three producers: Ably's state name,
+   `channel-failed`, and a failed prime's error text. Never parse it.
+4. **The lifecycle latch is sticky, and the cost is a reload.** Polling stops for good once a
+   session has been seen and then ends or is purged. A host who purges and restarts mid-event
+   leaves a *degraded* device on "To już koniec" until the attendee reloads. Chosen over unbounded
+   command spend after every session on every phone left open. See `advanceLifecycle`.
+5. **`pause` / `stop` / `dispose` are three different things** and substituting one for another is a
+   bug with no visible symptom: `pause` for a quiet page (keeps the status), `stop` for a recovered
+   channel (drops it), `dispose` for teardown (terminal, survives an in-flight tick's re-arm).
+6. **Failure kinds are deliberately not named.** Unlike `answer.ts`, every failure of
+   `/api/quiz/state` means "try again" to this loop, so there is no per-kind action to take.
+7. **A channel that fails after a successful attach is still invisible** — only the attach
+   rejection is caught. Folding channel state into `transportStatus` is follow-up work, not part of
+   this change.
+
 ## Progress
 
 > Convention: `- [ ]` pending, `- [x]` done. Append ` — <commit sha>` when a step lands. Do not
@@ -430,7 +458,7 @@ client-only plus documentation, and either can be reverted by reverting its comm
 - [x] 2.1 Test suite passes: `bun run test` — 903a8e9
 - [x] 2.2 Type checking passes: `bun run type-check` — 903a8e9
 - [x] 2.3 `boundary.test.ts` passes — no forbidden import or env read in either `<script>` block — 903a8e9
-- [x] 2.4 `session.test.ts` asserts timer cancellation on `connected`, on `close()`, and on `ended` — 903a8e9
+- [x] 2.4 `session.test.ts` asserts the loop's cancellation seam (`stop`/`dispose`), plus the `shouldFallbackPoll` and `advanceLifecycle` predicates that bind `fallbackPolling` and the end of the session to it — 903a8e9, corrected during impl review (F5)
 
 #### Manual
 
