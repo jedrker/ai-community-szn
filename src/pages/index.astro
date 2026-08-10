@@ -6,6 +6,7 @@ import Footer from "../components/Footer.astro";
 import HeroSection from "../components/HeroSection.astro";
 import EventCard from "../components/EventCard.astro";
 import EmailSignup from "../components/EmailSignup.astro";
+import { plannedNextEventLabel } from "../lib/next-event";
 
 const allEvents = await getCollection("events");
 const sortedEvents = allEvents.sort(
@@ -68,7 +69,7 @@ const pastEvents = sortedEvents
             <p class="text-xs uppercase tracking-[3px] text-brand-purple mb-4">Kolejny meetup</p>
             <h2 class="text-3xl md:text-4xl font-bold mb-4">Nowe wydarzenie w przygotowaniu</h2>
             <p class="text-text-secondary max-w-2xl mx-auto mb-4 leading-relaxed">
-              Pracujemy nad programem kolejnego spotkania. Przyklep datę — <strong class="text-white">6.08.2026</strong>.
+              Pracujemy nad programem kolejnego spotkania. Przyklep datę — <strong class="text-white">{plannedNextEventLabel}</strong>.
             </p>
             <p class="text-text-secondary max-w-2xl mx-auto mb-8 leading-relaxed">
               Dołącz do nas w social mediach, żeby być na bieżąco i nie przegapić zapisów.

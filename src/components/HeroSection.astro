@@ -1,4 +1,6 @@
 ---
+import { plannedNextEventLabel } from "../lib/next-event";
+
 interface Props {
   event?: {
     title: string;
@@ -70,7 +72,7 @@ const formattedDate = event
           Meetupy o AI dla praktyków ze Szczecina i okolic
         </p>
         <p class="text-lg text-white mb-8">
-          Przyklep datę: <strong>6.08.2026</strong>
+          Przyklep datę: <strong>{plannedNextEventLabel}</strong>
         </p>
       </>
     )
