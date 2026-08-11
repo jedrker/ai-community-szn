@@ -1,3 +1,4 @@
+import type { StandingsRow } from "../session/standings";
 import type { PublicQuestion } from "../../quiz/public";
 
 /**
@@ -324,6 +325,117 @@ export function renderDistribution(
 
     bar.append(fill);
     row.append(label, figures, bar);
+    list.append(row);
+  }
+
+  container.append(list);
+}
+
+/**
+ * One published row of the leaderboard (roadmap S-07, FR-014).
+ *
+ * A **type-only** import from `src/lib/session/standings`, like `PublicQuestion` above and
+ * for the same reason: `import type` is erased, so `boundary.test.ts` allows it, while a
+ * value import would drag `zod` and the server SDKs into a bundle that has to survive a
+ * venue network.
+ *
+ * Note what a row does *not* carry: a player id. See the note in `standings.ts` — the
+ * five most impersonation-worthy attendees in the room are exactly the ones on this list.
+ */
+export type { StandingsRow };
+
+export type StandingsClassNames = {
+  readonly list?: string;
+  readonly row?: string;
+  /** Appended to the row belonging to this device. */
+  readonly rowOwn?: string;
+  readonly rank?: string;
+  readonly name?: string;
+  readonly points?: string;
+  readonly empty?: string;
+};
+
+export type RenderStandingsOptions = StandingsClassNames & {
+  /**
+   * This device's own display name, for the highlight. `null` on the host view, which
+   * belongs to no player.
+   *
+   * Matched by **exact string equality**, which works because the name in a device's
+   * `localStorage` is the one the server returned, and because names are unique by fold
+   * (FR-008) so no two rows can both match. Folding here is not an option anyway:
+   * `normalizePolish` lives in `src/quiz/` and a value import from there is refused.
+   */
+  readonly ownDisplayName?: string | null;
+};
+
+/** Polish, because it renders directly. */
+const NO_STANDINGS_TEXT = "Jeszcze nikt nie zdobył punktów.";
+
+/**
+ * Renders the leaderboard: position, name, points.
+ *
+ * **Rows are rendered in the order given and never sorted here.** That is the whole
+ * mechanism behind the PRD's no-divergence guardrail: the server orders the board once,
+ * publishes it, and every device paints the same sequence. A sort in this function — even
+ * one that agreed today — would put 150 devices back in the business of independently
+ * deciding who is winning.
+ *
+ * The rank is taken from the row rather than from the loop index. They differ exactly when
+ * two players tie, which is the case the whole competition-ranking rule exists for: an
+ * index would number a tied pair 1 and 2, contradicting the number each of them gets from
+ * their own device.
+ *
+ * `createElement` and `textContent`, never `innerHTML` — a display name is attendee-typed
+ * text going onto a projector, and the PRD accepts unmoderated *content* while accepting
+ * nothing about unmoderated markup.
+ */
+export function renderStandings(
+  container: HTMLElement,
+  rows: readonly StandingsRow[] | undefined,
+  options: RenderStandingsOptions = {}
+): void {
+  container.replaceChildren();
+
+  const classNames = options;
+  const own = options.ownDisplayName ?? null;
+
+  // An empty board is a real state — a room where nobody has scored yet — and it says so
+  // in a sentence rather than drawing an empty frame, the same choice `renderDistribution`
+  // makes for a question nobody has answered.
+  if (!rows || rows.length === 0) {
+    const empty = document.createElement("p");
+    if (classNames.empty) empty.className = classNames.empty;
+    empty.textContent = NO_STANDINGS_TEXT;
+    container.append(empty);
+    return;
+  }
+
+  const list = document.createElement("ol");
+  if (classNames.list) list.className = classNames.list;
+
+  for (const entry of rows) {
+    const isOwn = own !== null && entry.displayName === own;
+
+    const row = document.createElement("li");
+    row.className = optionClassName([classNames.row, isOwn ? classNames.rowOwn : undefined]);
+    // Marked in the DOM as well as by class, so the highlight survives a stylesheet that
+    // failed to load on a venue network — `renderDistribution`'s rule for `data-correct`.
+    if (isOwn) row.dataset.own = "true";
+
+    const rank = document.createElement("span");
+    if (classNames.rank) rank.className = classNames.rank;
+    // From the row, not from the index — see the function note.
+    rank.textContent = `${entry.rank}.`;
+
+    const name = document.createElement("span");
+    if (classNames.name) name.className = classNames.name;
+    name.textContent = entry.displayName;
+
+    const points = document.createElement("span");
+    if (classNames.points) points.className = classNames.points;
+    points.textContent = String(entry.points);
+
+    row.append(rank, name, points);
     list.append(row);
   }
 

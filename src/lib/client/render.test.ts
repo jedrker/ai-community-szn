@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { renderDistribution, renderQuestion } from "./render";
+import { renderDistribution, renderQuestion, renderStandings } from "./render";
 import type { PublicQuestion } from "../../quiz/public";
 
 /**
@@ -399,5 +399,130 @@ describe("renderDistribution", () => {
     renderDistribution(container, single, { distribution: { answered: 2, options: { a: 2 } } });
 
     expect(container.querySelectorAll("p")).toHaveLength(0);
+  });
+});
+
+/**
+ * The leaderboard (roadmap S-07, FR-014).
+ *
+ * The rendering half of the no-divergence guardrail. Everything asserted here is about
+ * the renderer NOT making decisions: it does not sort, it does not number, and it does
+ * not decide who is on the board.
+ */
+describe("renderStandings", () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+  });
+
+  function rows(): string[] {
+    return [...container.querySelectorAll("li")].map((node) => node.textContent ?? "");
+  }
+
+  /**
+   * THE GUARDRAIL. The board arrives ordered from the server and is painted as received —
+   * the fixture is deliberately NOT in points order, so a renderer that sorted would
+   * produce the tidier sequence and fail here.
+   */
+  it("paints rows in the order given and never sorts them", () => {
+    renderStandings(container, [
+      { rank: 1, displayName: "Ala", points: 30 },
+      { rank: 2, displayName: "Bartek", points: 30 },
+      { rank: 3, displayName: "Celina", points: 10 },
+    ]);
+
+    // No separators between the spans: the visual spacing is CSS `gap`, so the
+    // concatenated text is what the DOM actually holds.
+    expect(rows()).toEqual(["1.Ala30", "2.Bartek30", "3.Celina10"]);
+  });
+
+  /**
+   * The rank comes from the row, not from the loop index. They differ exactly when two
+   * players tie — so the fixture ties, and the expected sequence is one an index could
+   * not produce.
+   */
+  it("takes the rank from the row, so a tie shows the same number twice", () => {
+    renderStandings(container, [
+      { rank: 1, displayName: "Ala", points: 50 },
+      { rank: 1, displayName: "Bartek", points: 50 },
+      { rank: 3, displayName: "Celina", points: 10 },
+    ]);
+
+    expect([...container.querySelectorAll("li span:first-child")].map((n) => n.textContent)).toEqual(
+      ["1.", "1.", "3."]
+    );
+  });
+
+  it("marks this device's own row, in the DOM as well as by class", () => {
+    renderStandings(
+      container,
+      [
+        { rank: 1, displayName: "Ala", points: 30 },
+        { rank: 2, displayName: "Bartek", points: 10 },
+      ],
+      { ownDisplayName: "Bartek", rowOwn: "is-me" }
+    );
+
+    const own = container.querySelectorAll("li[data-own='true']");
+    expect(own).toHaveLength(1);
+    expect(own[0]?.textContent).toContain("Bartek");
+    expect(own[0]?.className).toContain("is-me");
+  });
+
+  /**
+   * Exact equality, not a fold. `normalizePolish` lives in `src/quiz/` and a value import
+   * from there into a client module is refused by `boundary.test.ts` — so this is what the
+   * highlight can actually do, and the test pins it rather than leaving the limit implied.
+   * Safe in practice because the stored name is the one the server returned, byte for byte.
+   */
+  it("does not match a differently-cased name", () => {
+    renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }], {
+      ownDisplayName: "ALA",
+    });
+
+    expect(container.querySelectorAll("li[data-own='true']")).toHaveLength(0);
+  });
+
+  it("marks nothing when the viewer is not a player", () => {
+    renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }], {
+      ownDisplayName: null,
+    });
+
+    expect(container.querySelectorAll("li[data-own='true']")).toHaveLength(0);
+  });
+
+  it("renders a short board without padding it", () => {
+    renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }]);
+
+    expect(rows()).toHaveLength(1);
+  });
+
+  it("says so in a sentence when nobody has scored, rather than drawing an empty frame", () => {
+    renderStandings(container, []);
+
+    expect(container.querySelectorAll("li")).toHaveLength(0);
+    expect(container.textContent).toContain("Jeszcze nikt");
+  });
+
+  /**
+   * A display name is attendee-typed text going onto a projector. The PRD accepts
+   * unmoderated *content* and says nothing about accepting unmoderated markup.
+   */
+  it("writes a name as text, never as markup", () => {
+    renderStandings(container, [
+      { rank: 1, displayName: "<img src=x onerror=alert(1)>", points: 30 },
+    ]);
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("<img");
+  });
+
+  it("replaces a previous board rather than appending to it", () => {
+    renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }]);
+    renderStandings(container, [{ rank: 1, displayName: "Bartek", points: 40 }]);
+
+    expect(rows()).toHaveLength(1);
+    expect(container.textContent).toContain("Bartek");
   });
 });

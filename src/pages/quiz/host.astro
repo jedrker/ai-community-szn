@@ -174,6 +174,24 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         </div>
         <div id="distribution"></div>
       </section>
+
+      <!--
+        The leaderboard (roadmap S-07, FR-014).
+
+        The published top five, straight off the snapshot — the host's screen sorts
+        nothing, and neither does any phone. That is what makes "no divergence in
+        standings between devices" a property of the design rather than an agreement
+        between four renderers.
+
+        Sized for the back of the room: `MAX_DISPLAY_NAME_LENGTH` is 24 because that is
+        what fits a projected line at this type size, and a name that would still overflow
+        truncates with an ellipsis rather than wrapping — five rows that became seven
+        would push the board off the screen it was measured for.
+      -->
+      <section id="standings" hidden class="flex flex-col gap-3">
+        <p class="text-text-secondary text-lg uppercase tracking-wide">Ranking</p>
+        <div id="standings-board"></div>
+      </section>
     </main>
 
     <footer class="flex flex-col gap-4">
@@ -198,6 +216,16 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
                  disabled:opacity-50"
         >
           pokaż odpowiedź
+        </button>
+        <!-- The FR-014 beat. Reachable only from a reveal, which is why it is disabled
+             everywhere else rather than relying on the route's 409 — the refusal is the
+             backstop, not the interaction. -->
+        <button
+          data-action="standings"
+          class="rounded-xl bg-brand-purple px-6 py-4 text-2xl font-semibold text-white
+                 disabled:opacity-50"
+        >
+          pokaż ranking
         </button>
         <!-- No join publishes anything (that would be the O(N^2) fan-out the spine
              contract forbids), so this is how the host watches the lobby fill. -->
@@ -235,6 +263,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         el,
         renderDistribution,
         renderQuestion,
+        renderStandings,
         setHidden,
         setText,
       } from "../../lib/client/render";
@@ -272,6 +301,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const staleMark = el("participation-stale");
       const distributionBox = el("distribution");
       const acceptedAnswerBox = el("accepted-answer");
+      const standingsBox = el("standings");
+      const standingsBoard = el("standings-board");
+      const standingsButton = document.querySelector<HTMLButtonElement>(
+        '[data-action="standings"]'
+      );
 
       const actionButtons = (): HTMLButtonElement[] =>
         Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-action]"));
@@ -429,6 +463,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         lobby: "poczekalnia",
         "question-open": "pytanie otwarte",
         "question-revealed": "odpowiedź ujawniona",
+        standings: "ranking",
         ended: "zakończona",
       };
 
@@ -497,6 +532,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         );
       }
 
+      /**
+       * The leaderboard beat is reachable only from a reveal (roadmap S-07).
+       *
+       * Disabled elsewhere so the host is not offered an action that will come back 409.
+       * The route's refusal is the backstop; this is the interaction.
+       *
+       * Called from `render` AND from `fire`'s `finally`, because that block re-enables
+       * every button unconditionally — without the second call, showing the standings
+       * would leave its own button enabled in a phase that refuses it.
+       */
+      function syncStandingsButton(): void {
+        if (!standingsButton) return;
+        standingsButton.disabled = client.current()?.phase !== "question-revealed";
+      }
+
       function render(): void {
         const state = client.current();
 
@@ -507,6 +557,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           liveCount = null;
           setHidden(participationBox, true);
           setHidden(acceptedAnswerBox, true);
+          setHidden(standingsBox, true);
           stopPolling();
           renderQuestion(questionBox, undefined, { prompt: "text-4xl font-bold leading-tight" });
           return;
@@ -519,6 +570,38 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const question = questionFor(state);
         const distribution =
           state.phase === "question-revealed" ? state.revealedDistribution : null;
+
+        /**
+         * The leaderboard beat (roadmap S-07, FR-014).
+         *
+         * The schema already refuses a board outside its own phase and a phase without
+         * one, so the null check is the whole condition — the same reasoning the accepted
+         * answer below rests on, and adding a phase test here would be a second place for
+         * the rule to live.
+         *
+         * **Rendered from the snapshot with no sort.** Every device paints the sequence
+         * the server published; see `renderStandings`.
+         *
+         * `ownDisplayName: null` because the host is not a player. The highlight belongs
+         * to the attendee view.
+         */
+        const standings = state.standings;
+        setHidden(standingsBox, standings === null);
+        // The board replaces the question rather than sitting under it. The phase keeps a
+        // `currentQuestionId` — that is what stops `advance` reopening question 1 — so
+        // without this the finished question stays on the projector above the standings.
+        setHidden(questionBox, standings !== null);
+        renderStandings(standingsBoard, standings?.rows, {
+          ownDisplayName: null,
+          list: "flex flex-col gap-3",
+          row: "grid grid-cols-[auto_1fr_auto] items-baseline gap-6 rounded-xl border border-surface-border bg-surface-secondary px-6 py-4",
+          rank: "text-5xl font-bold tabular-nums text-brand-purple-light",
+          // `truncate` rather than a wrap: five rows that became seven would push the
+          // board off the screen this type size was measured for.
+          name: "text-5xl font-bold truncate",
+          points: "text-5xl font-bold tabular-nums",
+          empty: "text-text-secondary text-3xl",
+        });
 
         /**
          * At a reveal with bars to show, **the option list is replaced by them** — the
@@ -557,6 +640,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         if (accepted) setText("accepted-answer-value", accepted);
 
         renderParticipation(state);
+        syncStandingsButton();
 
         if (participationApplies(state)) schedulePoll();
         else stopPolling();
@@ -764,6 +848,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           allButtons().forEach((button) => {
             button.disabled = false;
           });
+          // After the blanket re-enable, not before: the phase rule has to win.
+          syncStandingsButton();
         }
       }
 

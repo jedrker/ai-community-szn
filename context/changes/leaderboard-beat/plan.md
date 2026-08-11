@@ -694,22 +694,22 @@ No store key is added, so `end`, `purge` and `scripts/check-purge-residue.ts` ne
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 `store.test.ts` covers `readStandings` join, null-on-failure, skipped bad record, `readOwnRank` known and unknown id
-- [x] 2.4 `store.test.ts` asserts `readStandings` issues two commands and no `eval`
-- [x] 2.5 Route test: auth, 409 from every wrong phase, no-op from standings, 503 without transition on read failure
-- [x] 2.6 The host-route family test picks up the new route
-- [x] 2.7 `result.test.ts` covers the standings branch, including a non-current `questionId`
-- [x] 2.8 `keys.test.ts` still passes
+- [x] 2.1 Unit tests pass: `bun run test` — 153fa3f
+- [x] 2.2 Type checking passes: `bun run type-check` — 153fa3f
+- [x] 2.3 `store.test.ts` covers `readStandings` join, null-on-failure, skipped bad record, `readOwnRank` known and unknown id — 153fa3f
+- [x] 2.4 `store.test.ts` asserts `readStandings` issues two commands and no `eval` — 153fa3f
+- [x] 2.5 Route test: auth, 409 from every wrong phase, no-op from standings, 503 without transition on read failure — 153fa3f
+- [x] 2.6 The host-route family test picks up the new route — 153fa3f
+- [x] 2.7 `result.test.ts` covers the standings branch, including a non-current `questionId` — 153fa3f
+- [x] 2.8 `keys.test.ts` still passes — 153fa3f
 
 ### Phase 3: The host view
 
 #### Automated
 
-- [ ] 3.1 Type checking passes: `bun run type-check`
-- [ ] 3.2 `boundary.test.ts` passes for `host.astro`
-- [ ] 3.3 Unit tests pass: `bun run test`
+- [x] 3.1 Type checking passes: `bun run type-check`
+- [x] 3.2 `boundary.test.ts` passes for `host.astro`
+- [x] 3.3 Unit tests pass: `bun run test`
 
 #### Manual
 
