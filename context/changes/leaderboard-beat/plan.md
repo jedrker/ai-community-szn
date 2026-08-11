@@ -707,9 +707,9 @@ No store key is added, so `end`, `purge` and `scripts/check-purge-residue.ts` ne
 
 #### Automated
 
-- [x] 3.1 Type checking passes: `bun run type-check`
-- [x] 3.2 `boundary.test.ts` passes for `host.astro`
-- [x] 3.3 Unit tests pass: `bun run test`
+- [x] 3.1 Type checking passes: `bun run type-check` — 1973edf
+- [x] 3.2 `boundary.test.ts` passes for `host.astro` — 1973edf
+- [x] 3.3 Unit tests pass: `bun run test` — 1973edf
 
 #### Manual
 
@@ -722,11 +722,11 @@ No store key is added, so `end`, `purge` and `scripts/check-purge-residue.ts` ne
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 `boundary.test.ts` passes for `render.ts` and `index.astro`
-- [ ] 4.4 `render.test.ts` covers order, the case-sensitive own-row highlight, and a short board
-- [ ] 4.5 A test asserts a failed rank fetch renders neither 0 nor 1
+- [x] 4.1 Unit tests pass: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 `boundary.test.ts` passes for `render.ts` and `index.astro`
+- [x] 4.4 `render.test.ts` covers order, the case-sensitive own-row highlight, and a short board
+- [x] 4.5 A test asserts a failed rank fetch renders neither 0 nor 1
 
 #### Manual
 

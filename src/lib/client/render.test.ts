@@ -2,7 +2,12 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { renderDistribution, renderQuestion, renderStandings } from "./render";
+import {
+  renderDistribution,
+  renderQuestion,
+  renderStandings,
+  standingsPositionText,
+} from "./render";
 import type { PublicQuestion } from "../../quiz/public";
 
 /**
@@ -426,15 +431,21 @@ describe("renderStandings", () => {
    * produce the tidier sequence and fail here.
    */
   it("paints rows in the order given and never sorts them", () => {
+    // **Deliberately NOT in points order.** A published board always is, so this input is
+    // synthetic — and that is the only fixture that can catch a sort. Written in
+    // descending order (as the first version of this test was), a points sort is a no-op
+    // and the test passes against a renderer that sorts, which is the failure
+    // `lessons.md` describes: the assertion was right and the fixture could not reach the
+    // branch it named. Verified by adding a sort and watching this fail.
     renderStandings(container, [
-      { rank: 1, displayName: "Ala", points: 30 },
-      { rank: 2, displayName: "Bartek", points: 30 },
       { rank: 3, displayName: "Celina", points: 10 },
+      { rank: 1, displayName: "Ala", points: 30 },
+      { rank: 1, displayName: "Bartek", points: 30 },
     ]);
 
     // No separators between the spans: the visual spacing is CSS `gap`, so the
     // concatenated text is what the DOM actually holds.
-    expect(rows()).toEqual(["1.Ala30", "2.Bartek30", "3.Celina10"]);
+    expect(rows()).toEqual(["3.Celina10", "1.Ala30", "1.Bartek30"]);
   });
 
   /**
@@ -524,5 +535,40 @@ describe("renderStandings", () => {
 
     expect(rows()).toHaveLength(1);
     expect(container.textContent).toContain("Bartek");
+  });
+});
+
+/**
+ * The own-position line (roadmap S-07).
+ *
+ * Extracted from the attendee page precisely so this branch is reachable by a test: the
+ * page itself has no harness, and the rule it enforces is one `lessons.md` has an entry
+ * about.
+ */
+describe("standingsPositionText", () => {
+  it("states the position out of the room", () => {
+    expect(standingsPositionText(7, 42)).toBe("Twoja pozycja: 7 z 42");
+  });
+
+  /**
+   * THE RULE. Asserted on the absence of any digit rather than on the exact sentence, so
+   * a future rewording cannot quietly turn a missing rank into `0` or `1` — the two values
+   * every plausible coercion of `null` produces, each a confident claim about where this
+   * attendee stands.
+   */
+  it("says nothing numeric when the rank could not be fetched", () => {
+    const text = standingsPositionText(null, 42);
+
+    expect(text).not.toMatch(/\d/);
+    expect(text).toContain("Nie udało się");
+  });
+
+  it("drops the denominator rather than inventing one", () => {
+    expect(standingsPositionText(7, null)).toBe("Twoja pozycja: 7");
+  });
+
+  /** Rank 1 is a real position and must not be confused with the absent case. */
+  it("reports first place as a position, not as a failure", () => {
+    expect(standingsPositionText(1, 42)).toBe("Twoja pozycja: 1 z 42");
   });
 });

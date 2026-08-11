@@ -441,3 +441,28 @@ export function renderStandings(
 
   container.append(list);
 }
+
+/** Polish, because it renders directly. */
+const POSITION_UNAVAILABLE_TEXT = "Nie udało się pobrać Twojej pozycji.";
+
+/**
+ * The attendee's own line under the board (roadmap S-07, FR-014).
+ *
+ * A function rather than three lines inline in the page, because the branch it guards is
+ * the one worth a test: **an absent rank must never become a number.** `null` reaches
+ * here from a failed fetch and from a 503, and any arithmetic over it — `rank ?? 0`,
+ * `rank ?? 1`, a falsy check — renders as a specific, confident claim about where this
+ * attendee stands. `lessons.md`: the absent case fails toward the safe end, not the
+ * favourable one.
+ *
+ * An absent `playerCount` drops the denominator rather than guessing one. A position with
+ * no "of N" is still true; a position out of a made-up total is not.
+ */
+export function standingsPositionText(
+  rank: number | null,
+  playerCount: number | null
+): string {
+  if (rank === null) return POSITION_UNAVAILABLE_TEXT;
+  if (playerCount === null) return `Twoja pozycja: ${rank}`;
+  return `Twoja pozycja: ${rank} z ${playerCount}`;
+}

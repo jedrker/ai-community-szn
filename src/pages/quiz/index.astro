@@ -210,6 +210,23 @@ import { publicQuiz } from "../../quiz/public";
           <p id="result-answer" class="text-text-secondary text-lg"></p>
           <p id="result-total" class="text-text-secondary text-lg"></p>
         </section>
+
+        <!--
+          The leaderboard beat (roadmap S-07, FR-014).
+
+          The same five rows the projector shows, in the same order, because both render
+          the list the server published and neither sorts. Own row highlighted.
+
+          `standings-you` sits OUTSIDE the board for the reason `answer-accepted` sits
+          outside the result panel: the board comes with the snapshot and is on screen
+          whichever way the per-device fetch goes, while this line depends on that fetch
+          and must be able to say nothing without taking the board down with it.
+        -->
+        <section id="standings" hidden class="flex flex-col gap-3">
+          <p class="text-xl font-semibold">Ranking</p>
+          <div id="standings-board"></div>
+          <p id="standings-you" class="text-text-secondary text-lg"></p>
+        </section>
       </section>
     </main>
 
@@ -250,7 +267,14 @@ import { publicQuiz } from "../../quiz/public";
         type AnswerPayload,
         type OwnResult,
       } from "../../lib/client/answer";
-      import { el, renderQuestion, setHidden, setText } from "../../lib/client/render";
+      import {
+        el,
+        renderQuestion,
+        renderStandings,
+        setHidden,
+        setText,
+        standingsPositionText,
+      } from "../../lib/client/render";
       import type { PublicQuestion } from "../../quiz/public";
 
       type Config = {
@@ -281,6 +305,8 @@ import { publicQuiz } from "../../quiz/public";
       const answerNumber = el("answer-number") as HTMLInputElement;
       const answerNote = el("answer-note");
       const answerError = el("answer-error");
+      const standingsBox = el("standings");
+      const standingsBoard = el("standings-board");
       const answerAccepted = el("answer-accepted");
       const degradedNote = el("degraded-note");
       const resultPanel = el("result");
@@ -314,6 +340,22 @@ import { publicQuiz } from "../../quiz/public";
       const results = new Map<string, OwnResult>();
       /** Questions whose result fetch has already been issued — one per device, ever. */
       const resultRequested = new Set<string>();
+
+      /**
+       * This device's own position, and which beat it belongs to (roadmap S-07).
+       *
+       * Keyed by the snapshot **version** rather than by question id, unlike `results`
+       * above. A host may show the standings more than once between the same pair of
+       * questions, and each beat is a fresh board — a question-keyed cache would paint the
+       * first beat's position under the second one's board, which is plausible and wrong.
+       * Every accepted transition bumps the version, so it identifies a beat exactly.
+       *
+       * `rank === null` with `rankVersion` set is the failed-fetch state, and it must stay
+       * distinguishable from "not asked yet": it is the difference between a neutral line
+       * and one more request.
+       */
+      let rank: number | null = null;
+      let rankVersion: number | null = null;
 
       const OPTION_CLASS =
         "rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl";
@@ -393,6 +435,16 @@ import { publicQuiz } from "../../quiz/public";
 
         el("follow-status").className = "text-xl font-semibold";
 
+        /**
+         * Hidden here, once, rather than in each of the branches below (roadmap S-07).
+         *
+         * Every other branch returns early, so a hide placed inside them would be five
+         * copies of one rule and the next branch added would inherit none of them — the
+         * board would then survive into a question and sit under it. The standings branch
+         * unhides it as its first act.
+         */
+        setHidden(standingsBox, state === null || state.phase !== "standings");
+
         // `null` here is what a purge looks like from a phone. Render it as the end of
         // the session, never as the name form — the session really is over, and sending
         // someone back to a form they cannot complete is the worse of the two wrongs.
@@ -417,6 +469,15 @@ import { publicQuiz } from "../../quiz/public";
           selections.clear();
           results.clear();
           resultRequested.clear();
+          /**
+           * The same cleanup for the same reason, and it is not hypothetical (roadmap
+           * S-07). A host who purges and restarts mid-event gets a session whose versions
+           * begin again at 1, so a stale `rankVersion` from the previous room can match a
+           * beat in the new one — and this device would then show a position it earned in
+           * a session that no longer exists, without issuing a fetch that would correct it.
+           */
+          rank = null;
+          rankVersion = null;
           // The field itself is a live DOM element and holds its own value; without
           // this the reconciliation guard sees an unchanged question id and never
           // rewrites it.
@@ -431,6 +492,11 @@ import { publicQuiz } from "../../quiz/public";
           setText("follow-status", "Jesteś w grze. Czekamy na prowadzącego…");
           setHidden(questionBox, true);
           hideAnswerControls();
+          return;
+        }
+
+        if (state.phase === "standings") {
+          renderStandingsBeat(state);
           return;
         }
 
@@ -462,6 +528,85 @@ import { publicQuiz } from "../../quiz/public";
         }
 
         renderOpen(question);
+      }
+
+      /**
+       * The leaderboard beat, on the attendee's own phone (roadmap S-07, FR-014).
+       *
+       * Two halves that fail independently, and keeping them independent is the point:
+       *
+       * - **The board comes with the snapshot** and is painted unconditionally, in the
+       *   order received. Same list, same order, same five names as the projector, because
+       *   neither sorts. A device that never joined, or whose own fetch fails, still sees
+       *   the standings the room is looking at.
+       * - **The position is per device** and arrives from `/api/quiz/result`. A failure
+       *   costs this one line and nothing else — the same split S-03 established for the
+       *   accepted answer and the score, and for the same reason.
+       */
+      function renderStandingsBeat(state: NonNullable<ReturnType<SessionClient["current"]>>): void {
+        setText("follow-status", "Ranking");
+        setHidden(questionBox, true);
+        hideAnswerControls();
+        setHidden(resultPanel, true);
+        setHidden(answerAccepted, true);
+
+        const board = state.standings;
+
+        renderStandings(standingsBoard, board?.rows, {
+          // Its own row, matched on the name this device stored — which is the one the
+          // server returned, so exact equality is enough and no fold is needed. See
+          // `renderStandings`.
+          ownDisplayName: player?.displayName ?? null,
+          list: "flex flex-col gap-2",
+          row: "grid grid-cols-[auto_1fr_auto] items-baseline gap-4 rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl",
+          rowOwn: "border-brand-purple-light bg-brand-purple/20 font-semibold",
+          rank: "tabular-nums text-text-secondary",
+          name: "truncate",
+          points: "tabular-nums font-semibold",
+          empty: "text-text-secondary text-lg",
+        });
+
+        // A device with no claim is a spectator: it can watch the board, and there is no
+        // position to tell it about.
+        if (!player) {
+          setText("standings-you", "");
+          return;
+        }
+
+        // A fresh beat. Keyed by version rather than by question, because the host may
+        // show the standings twice between the same pair of questions and each is a new
+        // board — see the note on `rankVersion`.
+        if (rankVersion !== state.version) {
+          rankVersion = state.version;
+          rank = null;
+          setText("standings-you", "Sprawdzamy Twoją pozycję…");
+
+          void fetchResult(player.id, state.currentQuestionId ?? "").then((own) => {
+            // Discarded if the room has moved on: `render()` is driven by the snapshot,
+            // and a reply landing after the next question opened would paint a position
+            // under a prompt.
+            if (rankVersion !== state.version) return;
+            rank = own?.rank ?? null;
+            renderOwnPosition(board?.playerCount ?? null);
+          });
+          return;
+        }
+
+        renderOwnPosition(board?.playerCount ?? null);
+      }
+
+      /**
+       * The attendee's own line under the board.
+       *
+       * The copy itself lives in `standingsPositionText`, where it is unit-tested — the
+       * absent-rank branch is one `lessons.md` has an entry about, and a page has no
+       * harness to reach it from.
+       *
+       * The denominator is the board's own `playerCount`, not the snapshot's: it was
+       * counted in the same read that produced these rows, so the two cannot disagree.
+       */
+      function renderOwnPosition(playerCount: number | null): void {
+        setText("standings-you", standingsPositionText(rank, playerCount));
       }
 
       /** Every answering control off, in one call, so no branch can leave one behind. */
