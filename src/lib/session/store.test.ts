@@ -58,6 +58,7 @@ const lobby = {
   revealedOptionIds: null,
   revealedDistribution: null,
   revealedAnswerText: null,
+  standings: null,
 };
 
 const firstQuestionOpen = {
@@ -70,6 +71,7 @@ const firstQuestionOpen = {
   revealedOptionIds: null,
   revealedDistribution: null,
   revealedAnswerText: null,
+  standings: null,
 };
 
 const player = { id: "player-abc", displayName: "Anna", joinedAt: NOW };
@@ -305,6 +307,7 @@ describe("endSession", () => {
     revealedOptionIds: null,
     revealedDistribution: null,
     revealedAnswerText: null,
+    standings: null,
   };
 
   it("applies an end whose expected version matches", async () => {

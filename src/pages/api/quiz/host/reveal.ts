@@ -64,6 +64,22 @@ export const POST: APIRoute = async ({ request }) => {
 
     if (current.phase === "question-revealed") return null;
 
+    /**
+     * Refused from the leaderboard beat (roadmap S-07).
+     *
+     * **Without this branch the fall-through is silent and looks correct.** A standings
+     * state keeps its `currentQuestionId` — that is what stops `advance` reopening
+     * question 1 — so it reaches the code below with everything needed to build a valid
+     * `question-revealed` document, and the host who meant to move on re-reveals a
+     * question the room has already finished with. Nothing rejects it; the schema is
+     * satisfied and the snapshot publishes.
+     *
+     * A no-op here, turned into a 409 below, because the honest answer is that there is
+     * nothing left to reveal: the question closed at the previous reveal, and the beat
+     * after it is over too.
+     */
+    if (current.phase === "standings") return null;
+
     const question = getQuestionById(current.currentQuestionId ?? "");
     const isChoice =
       question !== undefined &&
@@ -141,6 +157,13 @@ export const POST: APIRoute = async ({ request }) => {
        * carry (S-08).
        */
       revealedAnswerText: revealedAnswerTextFor(question),
+      /**
+       * Nulled here, unlike the fields above it, because this transition is not the one
+       * that sets it (roadmap S-07). A reveal reached from a standings beat would
+       * otherwise carry that board into `question-revealed`, where the schema refuses it —
+       * but the refusal would be a 503 on stage rather than a null written here.
+       */
+      standings: null,
     };
   }, Date.now());
 
@@ -151,6 +174,13 @@ export const POST: APIRoute = async ({ request }) => {
       return toResponse({
         status: 409,
         body: { error: "Żadne pytanie nie jest otwarte — nie ma czego pokazać." },
+      });
+    }
+
+    if (outcome.body.state.phase === "standings") {
+      return toResponse({
+        status: 409,
+        body: { error: "Ranking jest już pokazany — przejdź do następnego pytania." },
       });
     }
 

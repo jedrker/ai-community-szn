@@ -25,6 +25,7 @@ describe("initialSessionState", () => {
       revealedOptionIds: null,
       revealedDistribution: null,
       revealedAnswerText: null,
+      standings: null,
     });
   });
 
@@ -160,6 +161,7 @@ describe("endedSessionState", () => {
     revealedOptionIds: null,
     revealedDistribution: null,
     revealedAnswerText: null,
+    standings: null,
   };
 
   it("bumps the version, so the terminal snapshot is newer than anything devices hold", () => {
@@ -233,6 +235,50 @@ describe("the ended phase invariant", () => {
   });
 });
 
+/**
+ * The standings phase keeps a question id (roadmap S-07).
+ *
+ * Its own block rather than a line in the block above, because the two phases are
+ * opposites on exactly this point and the reason is worth stating where it fails: `ended`
+ * must NOT carry a question, `standings` must. A standings phase that lost its id would
+ * make `nextQuestionId(null)` return question 1, and advancing from the leaderboard would
+ * reopen the quiz from the start — mid-segment, in front of the room, with the store and
+ * the schema both satisfied.
+ */
+describe("the standings phase invariant", () => {
+  const board = { rows: [{ rank: 1, displayName: "Ala", points: 30 }], playerCount: 4 };
+
+  const standings = {
+    version: 6,
+    phase: "standings" as const,
+    currentQuestionId: quiz.questions[0]!.id,
+    startedAt: NOW,
+    updatedAt: NOW + 7_000,
+    playerCount: 4,
+    revealedOptionIds: null,
+    revealedDistribution: null,
+    revealedAnswerText: null,
+    standings: board,
+  };
+
+  it("accepts a standings phase carrying the question just finished", () => {
+    expect(parseSessionState(standings).ok).toBe(true);
+  });
+
+  /**
+   * THE TEST THAT STOPS THE QUIZ REOPENING. If `standings` is ever added to
+   * `QUESTIONLESS_PHASES`, this is the assertion that fails.
+   */
+  it("rejects a standings phase with no question — advance would reopen question 1", () => {
+    const result = parseSessionState({ ...standings, currentQuestionId: null });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.problems.join(" ")).toContain("standings");
+    }
+  });
+});
+
 describe("revealedOptionIds", () => {
   const open = {
     version: 3,
@@ -244,6 +290,7 @@ describe("revealedOptionIds", () => {
     revealedOptionIds: null,
     revealedDistribution: null,
     revealedAnswerText: null,
+    standings: null,
   };
 
   /**
@@ -333,6 +380,7 @@ describe("revealedDistribution", () => {
     revealedOptionIds: null,
     revealedDistribution: null,
     revealedAnswerText: null,
+    standings: null,
   };
 
   const distribution = { answered: 9, options: { kino: 5, networking: 4 } };
@@ -441,6 +489,7 @@ describe("revealedAnswerText", () => {
     revealedOptionIds: null,
     revealedDistribution: null,
     revealedAnswerText: null,
+    standings: null,
   };
 
   const accepted = "halucynacje";
@@ -504,5 +553,127 @@ describe("revealedAnswerText", () => {
       revealedAnswerText: accepted,
     };
     expect(endedSessionState(revealed, NOW + 9_000).revealedAnswerText).toBeNull();
+  });
+});
+
+/**
+ * The leaderboard (roadmap S-07, FR-014).
+ *
+ * A fifth mirror of the `revealedOptionIds` block, kept separate for the reason its
+ * siblings state — and with one assertion they do not have: this field is *required* in
+ * its own phase. For them a null payload is a reveal missing a decoration; here it is a
+ * blank projector.
+ */
+describe("standings", () => {
+  const open = {
+    version: 3,
+    phase: "question-open" as const,
+    currentQuestionId: quiz.questions[1]!.id,
+    startedAt: NOW,
+    updatedAt: NOW + 1_000,
+    playerCount: 5,
+    revealedOptionIds: null,
+    revealedDistribution: null,
+    revealedAnswerText: null,
+    standings: null,
+  };
+
+  const board = {
+    rows: [
+      { rank: 1, displayName: "Ala", points: 30 },
+      { rank: 2, displayName: "Bartek", points: 20 },
+    ],
+    playerCount: 5,
+  };
+
+  /** THE MID-DEPLOY TEST, a fifth time. Same reasoning as its four siblings. */
+  it("defaults to null so a pre-deploy document still parses", () => {
+    const { standings: _omitted, ...preDeploy } = open;
+
+    const result = sessionStateSchema.safeParse(preDeploy);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.standings).toBeNull();
+  });
+
+  it("accepts a board in the standings phase", () => {
+    const candidate = { ...open, phase: "standings" as const, standings: board };
+
+    expect(sessionStateSchema.safeParse(candidate).success).toBe(true);
+  });
+
+  /**
+   * THE INVARIANT. A board outside its own phase is the previous beat's leaderboard on
+   * 150 phones underneath the question they are being asked to answer.
+   */
+  it.each(["lobby", "question-open", "question-revealed", "ended"] as const)(
+    "refuses a board in %s",
+    (phase) => {
+      const questionless = phase === "lobby" || phase === "ended";
+      const candidate = {
+        ...open,
+        phase,
+        currentQuestionId: questionless ? null : open.currentQuestionId,
+        standings: board,
+      };
+
+      expect(sessionStateSchema.safeParse(candidate).success).toBe(false);
+    }
+  );
+
+  /**
+   * The half the three reveal fields do not have. The route refuses to transition when
+   * the store cannot answer; this clause is what makes that refusal structural rather
+   * than one handler's habit.
+   */
+  it("refuses the standings phase with no board — the board IS the phase", () => {
+    const candidate = { ...open, phase: "standings" as const, standings: null };
+
+    const result = sessionStateSchema.safeParse(candidate);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((issue) => issue.path[0] === "standings")).toBe(true);
+  });
+
+  it("names itself when it is the field at fault", () => {
+    const candidate = { ...open, standings: board };
+
+    const result = sessionStateSchema.safeParse(candidate);
+
+    expect(result.error?.issues.some((issue) => issue.path[0] === "standings")).toBe(true);
+  });
+
+  /**
+   * The reveal fields are refused in the new phase too — and the fixture carries a valid
+   * board so the ONLY thing wrong with each candidate is the reveal field under test. A
+   * candidate with a null board would be rejected by the clause above whether or not the
+   * reveal clauses fired, and would pass against a schema that had stopped protecting
+   * them (`lessons.md`, "Prove the fixture reaches the branch the test names").
+   */
+  it.each([
+    ["revealedOptionIds", { revealedOptionIds: ["a"] }],
+    ["revealedDistribution", { revealedDistribution: { answered: 3, options: { a: 3 } } }],
+    ["revealedAnswerText", { revealedAnswerText: "halucynacje" }],
+  ] as const)("still refuses %s in the standings phase", (field, overlay) => {
+    const candidate = {
+      ...open,
+      phase: "standings" as const,
+      standings: board,
+      ...overlay,
+    };
+
+    const result = sessionStateSchema.safeParse(candidate);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((issue) => issue.path[0] === field)).toBe(true);
+  });
+
+  it("is null on every constructor that is not the standings route", () => {
+    expect(initialSessionState(NOW).standings).toBeNull();
+
+    const showing = { ...open, phase: "standings" as const, standings: board };
+    // Cleared, not carried. S-10 owns what the closing screen shows; until then, ending
+    // from a leaderboard beat should not freeze the room on it.
+    expect(endedSessionState(showing, NOW + 9_000).standings).toBeNull();
   });
 });

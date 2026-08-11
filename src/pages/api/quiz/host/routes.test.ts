@@ -69,6 +69,20 @@ const revealed = {
 };
 
 /**
+ * The leaderboard beat (roadmap S-07). It carries the question the room has just been
+ * through — see the phase's note in `state.ts` — which is exactly what makes an
+ * unguarded `reveal` from here build a valid document instead of failing.
+ */
+const standings = {
+  version: 5,
+  phase: "standings" as const,
+  currentQuestionId: quiz.questions[0]!.id,
+  startedAt: NOW,
+  updatedAt: NOW + 1_200,
+  standings: { rows: [{ rank: 1, displayName: "Ala", points: 30 }], playerCount: 4 },
+};
+
+/**
  * Astro hands the handler a full `APIContext`; these routes read only `request`,
  * so the rest is cast away rather than stubbed. Typed against `APIRoute` so the
  * helper accepts the real handler signature.
@@ -292,6 +306,43 @@ describe("reveal", () => {
     const [transition] = applyHostActionMock.mock.calls[0]!;
     await expect(transition(lobby, NOW)).resolves.toBeNull();
     await expect(transition(revealed, NOW)).resolves.toBeNull();
+  });
+
+  /**
+   * THE SILENT FALL-THROUGH (roadmap S-07).
+   *
+   * A standings state is the one no-op case that does not announce itself. It keeps a
+   * `currentQuestionId` — that is what stops `advance` reopening question 1 — so without
+   * an explicit branch it reaches the builder with everything needed to produce a valid
+   * `question-revealed` document, and the room is sent back to a question it has already
+   * finished with. Nothing rejects it and the snapshot publishes.
+   *
+   * The fixture proves the branch: its phase is none of `lobby`, `ended` or
+   * `question-revealed`, so no pre-existing guard can account for the null.
+   */
+  it("refuses to reveal from the standings beat, which would otherwise re-reveal", async () => {
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: false, note: "no-op" },
+    });
+
+    await call(reveal);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    await expect(transition(standings, NOW)).resolves.toBeNull();
+  });
+
+  it("turns a standings no-op into 409 with a Polish explanation", async () => {
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: false, note: "no-op" },
+    });
+
+    const response = await call(reveal);
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).toContain("Ranking jest już pokazany");
   });
 
   /**

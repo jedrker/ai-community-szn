@@ -27,6 +27,7 @@ const state = {
   revealedOptionIds: null,
   revealedDistribution: null,
   revealedAnswerText: null,
+  standings: null,
 };
 
 beforeEach(() => {

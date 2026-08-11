@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { getQuestionById, quiz } from "../../quiz/index";
+import { standingsSchema } from "./standings";
 
 /**
  * What one live session *is* (roadmap F-02).
@@ -28,6 +29,27 @@ export const SESSION_PHASES = [
   "lobby",
   "question-open",
   "question-revealed",
+  /**
+   * The leaderboard is on the large screen (roadmap S-07, FR-014).
+   *
+   * A host-controlled beat between questions rather than an automatic one after each —
+   * FR-014 was revised during shaping to hand the pacing to the host, so this phase is
+   * entered only by the host asking for it, and only from `question-revealed`.
+   *
+   * **It keeps `currentQuestionId`, and is deliberately NOT in `QUESTIONLESS_PHASES`
+   * below.** That looks wrong at first read: no question is being answered while the
+   * board is up. But a questionless phase carries `currentQuestionId: null`, and
+   * `advance.ts` documents what that means — `nextQuestionId(null)` returns question 1,
+   * so advancing from the board would REOPEN the quiz from the start, on stage, halfway
+   * through the segment. `ended` needs an explicit guard in `advance.ts` for exactly this
+   * reason. Keeping the id means the standings phase needs no such guard: advance reads
+   * the question the room just finished and opens the one after it.
+   *
+   * So the id here means "the question we have just been through", not "the question
+   * that is open". The schema clause below enforces that it is present; this comment is
+   * not what makes it true.
+   */
+  "standings",
   /**
    * The segment is over (roadmap F-03).
    *
@@ -174,6 +196,42 @@ export const sessionStateSchema = z
      * host's next action 409s mid-segment.
      */
     revealedAnswerText: z.string().nullable().default(null),
+    /**
+     * The leaderboard the room is looking at (roadmap S-07, FR-014).
+     *
+     * **Fifth field in the comparison above, and on `revealedOptionIds`' side of it** —
+     * part of a transition, not decoration on one. Set by
+     * `src/pages/api/quiz/host/standings.ts` alone and nulled by every other constructor.
+     * Injected in `applyHostAction` beside `playerCount`, where a reader who
+     * pattern-matched on "aggregate fact about the room" would put it, it would carry one
+     * beat's board into the next question and leave it on 150 phones while that question
+     * is being answered. The `superRefine` clauses below are the enforcement.
+     *
+     * **This is the first snapshot field in the project to carry attendee display names,
+     * and that is a decision rather than an oversight.** S-02 kept every name off the wire
+     * and left the choice to this slice; the retention guardrail's Deviation 2 and
+     * `leaderboard-contract.md` record what was chosen and why. The bound is what makes it
+     * defensible: at most `STANDINGS_SIZE` names, published for the ~2 minutes Ably retains
+     * a snapshot for connection recovery, on a channel whose token endpoint is deliberately
+     * open. Everything else about who played stays where it was — in the players hash,
+     * which `end` re-arms and `purge` deletes. (Named there rather than spelled here: the
+     * registry in `keys.ts` owns every namespaced name, and `keys.test.ts` scans this file
+     * for one, comments included.)
+     *
+     * A row carries no player id. See the note in `standings.ts` for why that is a
+     * security property and not a saving.
+     *
+     * Unlike the three fields above, this one is required to be **non-null in its own
+     * phase**. They decorate a reveal that is meaningful without them — a missing bar chart
+     * beside a visible answer key. Here the board *is* the phase, so a null one is a blank
+     * projector with nothing for the host to say about it; the standings route refuses the
+     * transition on a failed read rather than publishing one.
+     *
+     * `.default(null)` for the same load-bearing reason as its four siblings: a session
+     * document written before this ships must still parse, or the host's next action 409s
+     * mid-segment.
+     */
+    standings: standingsSchema.nullable().default(null),
   })
   .superRefine((state, ctx) => {
     // A question id is only ever assigned server-side from the quiz definition,
@@ -247,6 +305,31 @@ export const sessionStateSchema = z
         message: `W fazie "${state.phase}" nie można ujawniać poprawnej odpowiedzi tekstowej.`,
       });
     }
+
+    // The same shape of invariant as the three above, and its own clause for the same
+    // reason: each field's failure should name itself. A board outside its own phase is
+    // last beat's leaderboard sitting on 150 phones under the next question — visible,
+    // plausible, and wrong.
+    if (state.phase !== "standings" && state.standings !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["standings"],
+        message: `W fazie "${state.phase}" nie można pokazywać rankingu.`,
+      });
+    }
+
+    // The half its three siblings do not have. For them a null payload is a reveal with
+    // something missing; here it is the whole screen missing, so the phase is not allowed
+    // to exist without a board. This is what makes the standings route's "refuse the
+    // transition when the store cannot answer" structural rather than a habit of that one
+    // handler.
+    if (state.phase === "standings" && state.standings === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["standings"],
+        message: 'Faza "standings" wymaga rankingu.',
+      });
+    }
   });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;
@@ -268,6 +351,9 @@ export function initialSessionState(now: number): SessionState {
     // Same posture, same reason: owned here, not injected downstream.
     revealedDistribution: null,
     revealedAnswerText: null,
+    // And the board, for the same reason again — a lobby has no standings to show, and
+    // the schema refuses one here anyway.
+    standings: null,
   };
 }
 
@@ -316,6 +402,10 @@ export function endedSessionState(current: SessionState, now: number): SessionSt
     // mid-question.
     revealedDistribution: null,
     revealedAnswerText: null,
+    // Cleared like the three above. S-10's closing sequence is the slice that decides
+    // what the ended screen shows; until it lands, ending from a standings beat clears
+    // the board rather than freezing the room on a leaderboard the host has finished with.
+    standings: null,
   };
 }
 

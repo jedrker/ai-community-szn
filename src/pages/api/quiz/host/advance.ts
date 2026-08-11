@@ -60,6 +60,11 @@ export const POST: APIRoute = async ({ request }) => {
       // the previous question's accepted answer on 150 phones while the new question
       // is open. Written explicitly so the reader sees all four here too.
       revealedAnswerText: null,
+      // And the leaderboard (roadmap S-07). Carried, it would leave the previous beat's
+      // board on 150 phones under a question they are being asked to answer. Note that
+      // this transition is also the one that reads `currentQuestionId` from a standings
+      // state — which is why that phase keeps one; see its note in `state.ts`.
+      standings: null,
     };
   }, Date.now());
 
