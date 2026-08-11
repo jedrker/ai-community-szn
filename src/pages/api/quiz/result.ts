@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 
-import { readOwnResult } from "../../../lib/session/store";
+import { readOwnRank, readOwnResult } from "../../../lib/session/store";
 
 /**
  * Gives one device its own result for one question (roadmap S-03, PRD FR-016).
@@ -107,6 +107,50 @@ export const POST: APIRoute = async ({ request }) => {
       text: null,
       value: null,
       total: result.total,
+      rank: null,
+    });
+  }
+
+  /**
+   * THE LEADERBOARD BRANCH (roadmap S-07, FR-014).
+   *
+   * What S-07 did with the gate this docstring said it would inherit: it took the phase
+   * check and added a third case rather than standing up a second endpoint. A new route
+   * would have been a second copy of this gate, and two gates on the paths that decide
+   * what a device may learn and when is exactly the pair that drifts.
+   *
+   * **The `questionId` the caller sent is ignored here, deliberately.** A position is not
+   * about a question — the one the standings phase carries is the question the room has
+   * just been through, and an attendee asking "where am I?" is not asking about it. The
+   * field stays required above because every caller has one and rejecting a formless
+   * request is the cheaper contract, not because this branch needs it.
+   *
+   * Every verdict field is null. That is not tidiness: the question is closed, its result
+   * was already served at the reveal, and a branch that answered `correct` here would be
+   * serving a verdict outside the phase the gate exists to confine it to.
+   *
+   * One extra billed command on top of the read above, and it buys the rank from `rankOf`
+   * — the same function that numbered the published board's rows, which is what stops a
+   * tied attendee's phone contradicting the projector.
+   */
+  if (state?.phase === "standings") {
+    const own = await readOwnRank(playerId);
+
+    // "The store could not say" — never a rank of 0 or 1, which would be a claim about
+    // where this attendee stands. The client shows the board and a neutral line.
+    if (own === null) {
+      console.error("Rank read failed for player during standings");
+      return json(503, { error: MESSAGES.failed });
+    }
+
+    return json(200, {
+      answered: false,
+      correct: null,
+      awarded: null,
+      text: null,
+      value: null,
+      total: own.total,
+      rank: own.rank,
     });
   }
 
@@ -126,6 +170,7 @@ export const POST: APIRoute = async ({ request }) => {
       text: null,
       value: null,
       total: result.total,
+      rank: null,
     });
   }
 
@@ -157,5 +202,11 @@ export const POST: APIRoute = async ({ request }) => {
      */
     value: result.answer.value,
     total: result.total,
+    /**
+     * Null on every branch but the standings one (roadmap S-07). Present here so the
+     * client parses one response shape rather than two — a field the reveal path has no
+     * use for costs nothing, while a second shape is a second thing to keep in step.
+     */
+    rank: null,
   });
 };

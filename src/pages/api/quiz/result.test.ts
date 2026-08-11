@@ -8,9 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const readOwnResultMock = vi.fn();
+const readOwnRankMock = vi.fn();
 
 vi.mock("../../../lib/session/store", () => ({
   readOwnResult: readOwnResultMock,
+  readOwnRank: readOwnRankMock,
 }));
 
 const { POST: result } = await import("./result");
@@ -20,7 +22,10 @@ const NOW = 1_785_000_000_000;
 const QUESTION = quiz.questions[2]!.id;
 const OTHER = quiz.questions[4]!.id;
 
-function state(phase: "lobby" | "question-open" | "question-revealed" | "ended", questionId = QUESTION) {
+function state(
+  phase: "lobby" | "question-open" | "question-revealed" | "ended" | "standings",
+  questionId = QUESTION
+) {
   const questionless = phase === "lobby" || phase === "ended";
   return {
     version: 6,
@@ -88,6 +93,7 @@ async function body(response: Response): Promise<Record<string, unknown>> {
 
 beforeEach(() => {
   readOwnResultMock.mockReset();
+  readOwnRankMock.mockReset();
   readOwnResultMock.mockResolvedValue({
     outcome: "ok",
     state: state("question-revealed"),
@@ -150,6 +156,9 @@ describe("the phase gate", () => {
       awarded: 920,
       text: null,
       value: null,
+      // Present and null on every branch but the standings one, so the client parses one
+      // response shape rather than two (roadmap S-07).
+      rank: null,
       total: 2_740,
     });
   });
@@ -278,6 +287,7 @@ describe("the ended-phase exception", () => {
       awarded: null,
       text: null,
       value: null,
+      rank: null,
       total: 8_420,
     });
   });
@@ -346,5 +356,89 @@ describe("input handling", () => {
     expect(serialized).not.toContain("optionIds");
     expect(serialized).not.toContain("displayName");
     expect(serialized).not.toContain("playerId");
+  });
+});
+
+/**
+ * The leaderboard branch (roadmap S-07, PRD FR-014).
+ *
+ * The third case in a gate this route's docstring said S-07 would inherit rather than
+ * rediscover. A separate endpoint would have been a second copy of the phase check, and
+ * two gates deciding what a device may learn is the pair that drifts.
+ */
+describe("the standings branch", () => {
+  beforeEach(() => {
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: state("standings"),
+      answer: answered,
+      total: 2_740,
+    });
+    readOwnRankMock.mockResolvedValue({ rank: 7, total: 2_740 });
+  });
+
+  it("returns this device's own rank and total", async () => {
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    await expect(body(response)).resolves.toMatchObject({ rank: 7, total: 2_740 });
+  });
+
+  /**
+   * Every verdict field null. The question is closed and its result was served at the
+   * reveal; a branch that answered `correct` here would serve a verdict outside the phase
+   * the gate exists to confine it to.
+   */
+  it("serves no verdict, award, text or value", async () => {
+    const payload = await body(await ask());
+
+    expect(payload).toMatchObject({
+      answered: false,
+      correct: null,
+      awarded: null,
+      text: null,
+      value: null,
+    });
+  });
+
+  /**
+   * **A rank is not about a question.** The `questionId` a caller sends is ignored here —
+   * this asks about the question the room has NOT just been through, and it is still
+   * answered. Under the reveal branch the same request is a 409, which is what makes this
+   * assertion about the new branch rather than about the parameter.
+   */
+  it("answers even when the questionId is not the one the session carries", async () => {
+    const response = await ask(OTHER);
+
+    expect(response.status).toBe(200);
+    await expect(body(response)).resolves.toMatchObject({ rank: 7 });
+  });
+
+  /**
+   * "The store could not say" is a 503, never a 200 carrying a rank of 0 or 1 — both of
+   * which are claims about where this attendee stands. Asserted on the status AND on the
+   * absence of a rank, because a handler that fell through to the reveal branch would
+   * return a 200 with `rank: null` and pass a status-only test for the wrong reason.
+   */
+  it("reports a failed rank read as 503 rather than inventing a position", async () => {
+    readOwnRankMock.mockResolvedValue(null);
+
+    const response = await ask();
+
+    expect(response.status).toBe(503);
+    await expect(body(response)).resolves.not.toHaveProperty("rank");
+  });
+
+  it("is the only branch that returns a rank", async () => {
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: state("question-revealed"),
+      answer: answered,
+      total: 2_740,
+    });
+
+    // Present and null rather than absent, so the client parses one shape.
+    await expect(body(await ask())).resolves.toMatchObject({ rank: null });
+    expect(readOwnRankMock).not.toHaveBeenCalled();
   });
 });

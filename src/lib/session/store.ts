@@ -17,6 +17,7 @@ import {
 } from "./keys";
 import { logSessionEvent } from "./log";
 import { parsePlayerRecord, type PlayerRecord } from "./players";
+import { buildStandings, rankOf, type Standings } from "./standings";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
 import { answeredField, optionField } from "./tallies";
 
@@ -1110,6 +1111,99 @@ export async function readOwnResult(playerId: string, questionId: string): Promi
   const total = Number(rawTotal) || 0;
 
   return { outcome: "ok", state, answer, total };
+}
+
+/**
+ * Every player and every total, ordered and cut to the published board (roadmap S-07,
+ * PRD FR-014).
+ *
+ * Read at the host's tap and at no other time — this is the leaderboard beat's own read,
+ * paced by the host rather than by attendees, which is what keeps it away from the
+ * polling shape the command-counter tripwire exists to catch.
+ *
+ * **Two `HGETALL`s through `Promise.all`, deliberately NOT one `EVAL`.** Upstash bills
+ * the `EVAL` *and* every call inside it, so a script would turn two billed commands into
+ * three — the same arithmetic `participation.ts` documents for its own pair. `Promise.all`
+ * buys the single round trip without buying the extra command.
+ *
+ * The join is `scores[record.id]`: the players hash is keyed by folded name but each
+ * record carries its own id, so the reverse index is not needed here.
+ *
+ * **Returns `null` on any failure, never an empty board.** `readPlayerCount`'s discipline
+ * and `readQuestionTallies`' reason, sharpened: an empty leaderboard on a projector is the
+ * claim that nobody in the room has scored, at the moment the room is looking at it. The
+ * caller refuses the transition rather than publishing one.
+ */
+export async function readStandings(): Promise<Standings | null> {
+  const redis = client();
+  if (!redis) return null;
+
+  let rawPlayers: Record<string, unknown> | null;
+  let rawScores: Record<string, unknown> | null;
+  try {
+    [rawPlayers, rawScores] = await Promise.all([
+      redis.hgetall<Record<string, unknown>>(PLAYERS_KEY),
+      redis.hgetall<Record<string, unknown>>(SCORES_KEY),
+    ]);
+  } catch {
+    return null;
+  }
+
+  // `HGETALL` on a hash that does not exist answers `null` for the whole reply. For the
+  // players hash that is an empty room — nobody has joined yet — not a failure, and an
+  // empty board is the honest thing to show. Only the throw above is "could not say".
+  const players = Object.values(rawPlayers ?? {})
+    .map((raw) => parsePlayerRecord(asDocument(raw)))
+    // One corrupt record must not cost the room its leaderboard. Dropped rather than
+    // failing the read, which is the same posture `claimPlayer` takes toward a document
+    // it cannot parse.
+    .filter((record): record is PlayerRecord => record !== null);
+
+  const scores: Record<string, number> = {};
+  for (const [id, raw] of Object.entries(rawScores ?? {})) {
+    scores[id] = Number(raw) || 0;
+  }
+
+  return buildStandings(players, scores);
+}
+
+/**
+ * Where one device stands, and what it has scored (roadmap S-07).
+ *
+ * The per-device half of the beat, and it returns **only the caller's own numbers** — no
+ * name, no other player's total, nothing that would make this route worth calling for
+ * anyone but yourself.
+ *
+ * One billed command. The whole scores hash crosses from Redis to the function — ~150
+ * integers, same region — and `rankOf` runs here rather than in Lua, because a script
+ * would bill the `EVAL` on top of the `HGETALL` it wraps.
+ *
+ * **The rank comes from `rankOf`, the same function the published board numbers its rows
+ * with.** That shared call is the whole reason a tied attendee's phone cannot contradict
+ * the projector; see the note on it in `standings.ts`.
+ *
+ * A player id absent from the hash has scored nothing — the reading `readOwnResult` already
+ * takes of a missing total — so it gets a real position rather than an error. `null` is
+ * reserved for "the store could not say".
+ */
+export async function readOwnRank(
+  playerId: string
+): Promise<{ rank: number; total: number } | null> {
+  const redis = client();
+  if (!redis) return null;
+
+  let raw: Record<string, unknown> | null;
+  try {
+    raw = await redis.hgetall<Record<string, unknown>>(SCORES_KEY);
+  } catch {
+    return null;
+  }
+
+  const entries = Object.entries(raw ?? {});
+  const totals = entries.map(([, value]) => Number(value) || 0);
+  const total = Number(raw?.[playerId]) || 0;
+
+  return { rank: rankOf(total, totals), total };
 }
 
 export type PurgeResult =

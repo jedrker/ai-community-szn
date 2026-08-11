@@ -10,6 +10,7 @@ const redisMock = {
   hlen: vi.fn(),
   hget: vi.fn(),
   hmget: vi.fn(),
+  hgetall: vi.fn(),
 };
 
 // A class rather than `vi.fn(() => redisMock)`: the store calls `new Redis(...)`,
@@ -30,11 +31,13 @@ const {
   endSession,
   purgeSession,
   readAnsweredCount,
+  readOwnRank,
   readOwnResult,
   readPlayerById,
   readPlayerCount,
   readQuestionTallies,
   readSession,
+  readStandings,
   submitAnswer,
   writeSession,
   ENDED_TTL_SECONDS,
@@ -85,6 +88,7 @@ beforeEach(() => {
   redisMock.get.mockReset();
   redisMock.eval.mockReset();
   redisMock.hlen.mockReset();
+  redisMock.hgetall.mockReset();
   redisMock.hget.mockReset();
   redisMock.hmget.mockReset();
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -1156,5 +1160,160 @@ describe("readOwnResult", () => {
       answer: null,
       total: 0,
     });
+  });
+});
+
+/**
+ * The leaderboard reads (roadmap S-07, PRD FR-014).
+ *
+ * Two functions rather than one, and split along the same line the S-04 pair is:
+ * `readStandings` is the host's read and returns everybody, `readOwnRank` is the device's
+ * read and returns only the caller's own numbers. There is no shape in which the second
+ * could hand a phone somebody else's name.
+ */
+describe("readStandings", () => {
+  beforeEach(configure);
+
+  const ala = { id: "id-ala", displayName: "Ala", joinedAt: NOW };
+  const bartek = { id: "id-bartek", displayName: "Bartek", joinedAt: NOW + 1_000 };
+
+  function hashes(
+    players: Record<string, unknown>,
+    scores: Record<string, unknown>
+  ): void {
+    redisMock.hgetall.mockImplementation((key: string) =>
+      Promise.resolve(key === PLAYERS_KEY ? players : scores)
+    );
+  }
+
+  it("joins scores to names through the record's own id", () => {
+    hashes({ ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) }, {
+      "id-ala": 10,
+      "id-bartek": 30,
+    });
+
+    // The players hash is keyed by FOLDED NAME, not by id — so a join that used the hash
+    // field would find nothing in the scores hash and every total would read zero.
+    return expect(readStandings()).resolves.toEqual({
+      rows: [
+        { rank: 1, displayName: "Bartek", points: 30 },
+        { rank: 2, displayName: "Ala", points: 10 },
+      ],
+      playerCount: 2,
+    });
+  });
+
+  it("accepts an already-deserialized record as well as a JSON string", () => {
+    hashes({ ala: ala }, { "id-ala": 5 });
+
+    return expect(readStandings()).resolves.toMatchObject({
+      rows: [{ rank: 1, displayName: "Ala", points: 5 }],
+    });
+  });
+
+  it("counts a player with no score entry rather than dropping them", () => {
+    hashes({ ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) }, { "id-ala": 10 });
+
+    return expect(readStandings()).resolves.toMatchObject({
+      rows: [
+        { rank: 1, displayName: "Ala", points: 10 },
+        { rank: 2, displayName: "Bartek", points: 0 },
+      ],
+      playerCount: 2,
+    });
+  });
+
+  /** One corrupt record must not cost the room its leaderboard. */
+  it("skips a record it cannot parse and keeps the rest", async () => {
+    hashes({ ala: JSON.stringify(ala), broken: "{{{ not json" }, { "id-ala": 10 });
+
+    const standings = await readStandings();
+
+    expect(standings?.rows).toEqual([{ rank: 1, displayName: "Ala", points: 10 }]);
+    // The dropped row is dropped from the count too — a denominator that included a
+    // player with no name would leave the attendee's "position N of M" unreachable at M.
+    expect(standings?.playerCount).toBe(1);
+  });
+
+  it("reads an empty room as an empty board, not as a failure", () => {
+    // `HGETALL` on a hash that does not exist answers null for the whole reply. Nobody
+    // has joined yet; that is a fact, not an outage.
+    hashes(null as never, null as never);
+
+    return expect(readStandings()).resolves.toEqual({ rows: [], playerCount: 0 });
+  });
+
+  /**
+   * **`null`, never an empty board.** An empty leaderboard on a projector is the claim
+   * that nobody in the room has scored, at the moment the room is looking at it. Asserted
+   * against the value rather than against "it did not throw", because a function that
+   * returned `{ rows: [] }` here would pass the weaker test and fail the room.
+   */
+  it("returns null when the store cannot answer", () => {
+    redisMock.hgetall.mockRejectedValue(new Error("upstash unreachable"));
+
+    return expect(readStandings()).resolves.toBeNull();
+  });
+
+  /**
+   * Two billed commands. Folding them into one `EVAL` would make it three — Upstash bills
+   * the script *and* every call inside it — which is the arithmetic `participation.ts`
+   * documents for its own pair.
+   */
+  it("issues two commands and no eval", async () => {
+    hashes({ ala: JSON.stringify(ala) }, { "id-ala": 10 });
+
+    await readStandings();
+
+    expect(redisMock.hgetall).toHaveBeenCalledTimes(2);
+    expect(redisMock.eval).not.toHaveBeenCalled();
+  });
+});
+
+describe("readOwnRank", () => {
+  beforeEach(configure);
+
+  it("returns the caller's rank and total", () => {
+    redisMock.hgetall.mockResolvedValue({ "id-ala": 30, "id-bartek": 50, "id-cela": 10 });
+
+    return expect(readOwnRank("id-ala")).resolves.toEqual({ rank: 2, total: 30 });
+  });
+
+  /**
+   * A device that has scored nothing has never touched the scores hash. It still gets a
+   * position — the whole point of counting everyone who joined — rather than an error.
+   */
+  it("ranks an id absent from the hash at zero rather than failing", () => {
+    redisMock.hgetall.mockResolvedValue({ "id-bartek": 50, "id-cela": 10 });
+
+    return expect(readOwnRank("id-nobody")).resolves.toEqual({ rank: 3, total: 0 });
+  });
+
+  /**
+   * THE AGREEMENT WITH THE PROJECTOR. Two players tied on 50 are both rank 1, and the
+   * board built from the same totals numbers them the same way — because both call
+   * `rankOf`. The fixture ties deliberately: with distinct totals this assertion would
+   * pass against a positional rank too.
+   */
+  it("gives a tied caller the same rank the board shows", () => {
+    redisMock.hgetall.mockResolvedValue({ "id-ala": 50, "id-bartek": 50, "id-cela": 10 });
+
+    return expect(readOwnRank("id-bartek")).resolves.toMatchObject({ rank: 1 });
+  });
+
+  it("returns null when the store cannot answer, never a rank of 1", () => {
+    redisMock.hgetall.mockRejectedValue(new Error("upstash unreachable"));
+
+    return expect(readOwnRank("id-ala")).resolves.toBeNull();
+  });
+
+  it("issues one command", async () => {
+    redisMock.hgetall.mockResolvedValue({ "id-ala": 10 });
+
+    await readOwnRank("id-ala");
+
+    expect(redisMock.hgetall).toHaveBeenCalledTimes(1);
+    expect(redisMock.hgetall).toHaveBeenCalledWith(SCORES_KEY);
+    expect(redisMock.eval).not.toHaveBeenCalled();
   });
 });

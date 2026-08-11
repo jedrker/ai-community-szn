@@ -111,6 +111,28 @@ export const SESSION_EVENTS = [
    * stand out.
    */
   "session.answer.rejected",
+  /**
+   * The leaderboard reached the room (roadmap S-07).
+   *
+   * Carries `playerCount` and nothing else. **Never a name and never a total** — the board
+   * this event reports on is the first thing in this project to put display names on the
+   * wire, and a log stream is the one surface no TTL, no `purge` and no rollback reaches.
+   * There is no field either would fit in, and that closure is the enforcement.
+   *
+   * Host-paced, so a segment writes a handful of these — unlike the answer and join
+   * events, this one is cheap enough to read line by line.
+   */
+  "session.standings.shown",
+  /**
+   * The board could not be read, so the beat did not happen (roadmap S-07).
+   *
+   * Its own event rather than `session.action.stale`, which means a version race — a
+   * benign one the runbook tells the host to ignore. This is neither benign nor a race:
+   * the host tapped, the room did not move, and the reason is that the store did not
+   * answer. Folding it into the event nobody looks at would hide the one failure of this
+   * beat that a host can do something about.
+   */
+  "session.standings.failed",
 ] as const;
 
 export type SessionEvent = (typeof SESSION_EVENTS)[number];

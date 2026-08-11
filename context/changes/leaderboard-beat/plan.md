@@ -683,25 +683,25 @@ No store key is added, so `end`, `purge` and `scripts/check-purge-residue.ts` ne
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 `standings.test.ts` covers order, both tiebreaks, shared competition ranks, zero-score players, a short room, an empty room
-- [x] 1.4 `state.test.ts` asserts the two `superRefine` clauses and that a field-less document parses
-- [x] 1.5 `state.test.ts` asserts a standings phase with `currentQuestionId: null` is rejected
-- [x] 1.6 A test asserts `reveal` from standings is a no-op
+- [x] 1.1 Unit tests pass: `bun run test` — 0766f04
+- [x] 1.2 Type checking passes: `bun run type-check` — 0766f04
+- [x] 1.3 `standings.test.ts` covers order, both tiebreaks, shared competition ranks, zero-score players, a short room, an empty room — 0766f04
+- [x] 1.4 `state.test.ts` asserts the two `superRefine` clauses and that a field-less document parses — 0766f04
+- [x] 1.5 `state.test.ts` asserts a standings phase with `currentQuestionId: null` is rejected — 0766f04
+- [x] 1.6 A test asserts `reveal` from standings is a no-op — 0766f04
 
 ### Phase 2: Store reads, the host verb, and the personal rank
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 `store.test.ts` covers `readStandings` join, null-on-failure, skipped bad record, `readOwnRank` known and unknown id
-- [ ] 2.4 `store.test.ts` asserts `readStandings` issues two commands and no `eval`
-- [ ] 2.5 Route test: auth, 409 from every wrong phase, no-op from standings, 503 without transition on read failure
-- [ ] 2.6 The host-route family test picks up the new route
-- [ ] 2.7 `result.test.ts` covers the standings branch, including a non-current `questionId`
-- [ ] 2.8 `keys.test.ts` still passes
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 `store.test.ts` covers `readStandings` join, null-on-failure, skipped bad record, `readOwnRank` known and unknown id
+- [x] 2.4 `store.test.ts` asserts `readStandings` issues two commands and no `eval`
+- [x] 2.5 Route test: auth, 409 from every wrong phase, no-op from standings, 503 without transition on read failure
+- [x] 2.6 The host-route family test picks up the new route
+- [x] 2.7 `result.test.ts` covers the standings branch, including a non-current `questionId`
+- [x] 2.8 `keys.test.ts` still passes
 
 ### Phase 3: The host view
 

@@ -18,6 +18,7 @@ const readSessionMock = vi.fn();
 const endSessionMock = vi.fn();
 const purgeSessionMock = vi.fn();
 const readQuestionTalliesMock = vi.fn();
+const readStandingsMock = vi.fn();
 
 const SECRET = "a-very-long-test-secret-value";
 
@@ -34,6 +35,7 @@ vi.mock("../../../../lib/session/store", () => ({
   endSession: endSessionMock,
   purgeSession: purgeSessionMock,
   readQuestionTallies: readQuestionTalliesMock,
+  readStandings: readStandingsMock,
 }));
 vi.mock("../../../../lib/session/realtime", () => ({
   publishSnapshot: publishSnapshotMock,
@@ -44,6 +46,7 @@ vi.mock("../../../../lib/session/realtime", () => ({
 const { POST: start } = await import("./start");
 const { POST: advance } = await import("./advance");
 const { POST: reveal, formatCorrectValue } = await import("./reveal");
+const { POST: showStandings } = await import("./standings");
 const { POST: end } = await import("./end");
 const { POST: purge } = await import("./purge");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
@@ -120,6 +123,7 @@ beforeEach(() => {
   createSessionMock.mockReset();
   publishSnapshotMock.mockReset();
   readSessionMock.mockReset();
+  readStandingsMock.mockReset();
   endSessionMock.mockReset();
   purgeSessionMock.mockReset();
   readQuestionTalliesMock.mockReset();
@@ -1043,5 +1047,135 @@ describe("the reveal payload (roadmap S-03)", () => {
       const [published] = publishSnapshotMock.mock.calls[0]!;
       expect(published.revealedAnswerText).toBeNull();
     });
+  });
+});
+
+/**
+ * The leaderboard beat (roadmap S-07, PRD FR-014).
+ *
+ * Same shape of test as `reveal`'s: the transition closure is run directly, because what
+ * is under test is what the closure *builds* and which phases it refuses. The store and
+ * the publish are somebody else's tests.
+ */
+describe("standings", () => {
+  const board = { rows: [{ rank: 1, displayName: "Ala", points: 30 }], playerCount: 4 };
+
+  it("rejects a missing secret with 401 before reading anything", async () => {
+    const response = await call(showStandings, { secret: null });
+
+    expect(response.status).toBe(401);
+    expect(applyHostActionMock).not.toHaveBeenCalled();
+    expect(readStandingsMock).not.toHaveBeenCalled();
+  });
+
+  it("builds a standings state from a revealed question", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: true },
+    });
+
+    await call(showStandings);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    await expect(transition(revealed, NOW)).resolves.toMatchObject({
+      version: 5,
+      phase: "standings",
+      // THE FIELD THAT STOPS ADVANCE REOPENING QUESTION 1. Carried, not cleared.
+      currentQuestionId: revealed.currentQuestionId,
+      standings: board,
+      revealedOptionIds: null,
+      revealedDistribution: null,
+      revealedAnswerText: null,
+    });
+  });
+
+  /**
+   * Reachable only from a reveal. `question-open` is the one that matters most: a board
+   * on the projector while the room is still answering shows a contest mid-move, and it
+   * moves again while they watch.
+   */
+  it.each([
+    ["lobby", lobby],
+    ["question-open", { ...revealed, phase: "question-open" as const }],
+    ["ended", { ...lobby, phase: "ended" as const }],
+    ["standings", standings],
+  ])("refuses to build from %s", async (_name, state) => {
+    readStandingsMock.mockResolvedValue(board);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state, applied: false, note: "no-op" },
+    });
+
+    await call(showStandings);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    await expect(transition(state, NOW)).resolves.toBeNull();
+  });
+
+  it("leaves an already-showing board as a 200 no-op, not an error", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: false, note: "no-op" },
+    });
+
+    const response = await call(showStandings);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ applied: false });
+  });
+
+  it("turns a no-op from the wrong phase into 409 with a Polish explanation", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: lobby, applied: false, note: "no-op" },
+    });
+
+    const response = await call(showStandings);
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).toContain("po ujawnieniu odpowiedzi");
+  });
+
+  it("says the session is over when the no-op came from ended", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: { ...lobby, phase: "ended" as const }, applied: false, note: "no-op" },
+    });
+
+    const response = await call(showStandings);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("zakończona"),
+    });
+  });
+
+  /**
+   * THE DEPARTURE FROM `reveal`, and the reason it is a departure. A failed tally read
+   * still reveals, because the answer key is the beat and the bars are decoration. Here
+   * the board IS the beat, so a transition that completed would put a blank screen in
+   * front of the room. Asserted on the *status* and on the phase not moving, because a
+   * handler that returned 200 with an unchanged state would look fine to a weaker test.
+   */
+  it("refuses the transition when the board cannot be read", async () => {
+    readStandingsMock.mockResolvedValue(null);
+    applyHostActionMock.mockImplementation(async (transition: never) => {
+      const next = await (transition as unknown as (s: unknown, n: number) => Promise<unknown>)(
+        revealed,
+        NOW
+      );
+      return { status: 200, body: { state: revealed, applied: next !== null, note: "no-op" } };
+    });
+
+    const response = await call(showStandings);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toContain("Nie udało się odczytać rankingu");
   });
 });

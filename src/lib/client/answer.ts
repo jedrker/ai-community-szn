@@ -63,6 +63,20 @@ export type OwnResult = {
    */
   readonly value: number | null;
   readonly total: number;
+  /**
+   * Where this device stands in the room — **only during the standings phase**, and
+   * `null` on every other branch (roadmap S-07, FR-014).
+   *
+   * A competition rank, so a tie shares a number and this agrees with the position the
+   * published board shows for the same player. The denominator is not here: the device
+   * already holds `playerCount` on the snapshot, so sending it again would be a second
+   * copy of a number that could then disagree with the first.
+   *
+   * `null` also covers "the store could not say" reaching the client as a failed fetch —
+   * the view must render neither a `0` nor a `1` from an absent rank, both of which are
+   * claims about where the attendee stands.
+   */
+  readonly rank: number | null;
 };
 
 /**
