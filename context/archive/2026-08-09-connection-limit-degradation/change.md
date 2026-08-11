@@ -1,10 +1,10 @@
 ---
 change_id: connection-limit-degradation
 title: Degrade honestly when the Ably connection limit is reached
-status: impl_reviewed
+status: archived
 created: 2026-08-09
-updated: 2026-08-10
-archived_at: null
+updated: 2026-08-11
+archived_at: 2026-08-11T08:09:54Z
 ---
 
 ## Notes
