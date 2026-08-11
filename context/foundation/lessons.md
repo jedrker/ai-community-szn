@@ -68,3 +68,32 @@
   replace it, and never build a branch-specific fixture from a shared base or a
   positional index into real data without checking what that datum actually is.
 - **Applies to**: plan, plan-review, implement, impl-review
+
+## In a timer or async test, the fixture's *timing* decides the branch
+
+- **Context**: Any test of a loop, retry, debounce, backoff, in-flight guard or cleanup path
+  that uses fake timers and a stubbed async dependency. The entry above covers fixtures whose
+  *values* are silently replaced; this is the same failure through a different door — the
+  values are right and the **schedule** points the test at another branch. Sharpest for any
+  test whose name contains "while", "during" or "mid-", because those words are claims about
+  overlap in time and nothing in the test enforces them.
+- **Problem**: The `connection-limit-degradation` fallback loop shipped two of these in one
+  session, both green, and the second hid a real defect. (1) The tests advanced fake time by
+  the loop's *widest* jittered interval, on the assumption that one advance is one tick. Fake
+  time is a single continuous line, so the unused remainder of each advance accumulates and
+  eventually pays for an extra tick — tick counts drifted upward by one around the third
+  advance, and the first fix attempted was to the code. (2) The stubbed `refresh` returned
+  `Promise.resolve()`, so advancing time ran the tick *and* its `finally` before the next line
+  of the test. A test named "stops re-arming once the session has ended **mid-flight**", with a
+  comment about the `finally` guard, therefore only ever reached the *fire-time* guard: no
+  request was ever open across an assertion anywhere in the file. That is precisely why the
+  suite could not see that `stop()` was undone by the `finally` of a request it never knew
+  about — a cancel that silently restarted the loop, found by review rather than by tests.
+- **Rule**: Make time and settlement explicit rather than approximate. Pin the source of
+  interval randomness so one advance is exactly one tick, and give the jitter or backoff its
+  own timing test instead of smuggling it into every other assertion. When a test names an
+  overlap — "during", "while in flight", "mid-request" — hold the promise open with a manually
+  resolved deferred and settle it inside the test; a stub that resolves immediately cannot
+  produce the state such a test claims to exercise. Then verify by breaking the guard: revert
+  it and watch that specific test fail. Naming a timing branch is not reaching it.
+- **Applies to**: plan, plan-review, implement, impl-review
