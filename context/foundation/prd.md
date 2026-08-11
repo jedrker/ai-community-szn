@@ -149,6 +149,39 @@ during an event.
   > is that slice's decision — publish them and accept the window, or publish opaque ids and have each
   > device resolve only itself. S-02 deliberately did not decide it by accident on S-07's behalf. See
   > `context/archive/2026-08-07-join-and-follow-host/join-contract.md`.
+  >
+  > **Amended 2026-08-11 (S-07).** The open half is now decided: **display names are published.** The
+  > sentence above — "No display name is ever published" — remains true about S-02 and is false from
+  > S-07; it is quoted rather than rewritten for the same reason S-02 quoted its own predecessor.
+  >
+  > The session document gained a `standings` field carrying the leaderboard the host shows between
+  > questions: **at most five rows of `{ rank, displayName, points }`, and no player id.** The bound is
+  > what makes it defensible — five names, not 150 — and the id is excluded because publishing the
+  > credential of the five most impersonation-worthy attendees in the room is not a trade anyone can
+  > defend. Nothing else about who played reaches the wire: what an attendee typed, their own total and
+  > their own position are per-device and travel on `/api/quiz/result`.
+  >
+  > *What was rejected, and why.* The alternative was keeping names off the wire and having each device
+  > fetch the board — ~150 requests per beat against a store whose monthly command counter already has
+  > an unexplained baseline two orders of magnitude above what the code accounts for
+  > (`context/archive/2026-08-07-join-and-follow-host/command-counter-diagnostic.md`), on the one
+  > network nobody controls. It also could not hold the guardrail it was meant to serve: 150 independent
+  > fetches can disagree, while one published board cannot.
+  >
+  > *The exposure is NOT the ~2-minute Ably window, and the planning for this slice got that wrong
+  > before implementation review caught it.* The binding surface is **`GET /api/quiz/state`**, which is
+  > deliberately unauthenticated and returns the whole session document. So the five names are readable
+  > by anyone holding the attendee URL for **as long as the host leaves the board up** — the field
+  > survives on the document until the next host action — which is longer than two minutes and is a
+  > different mechanism from the retention floor this deviation was originally about.
+  >
+  > That is accepted rather than mitigated. The board is on a projector in front of the room at the
+  > moment it is readable, this PRD already accepts both an open token endpoint and an unprotected host
+  > view on the same "the room is trusted for one session" reasoning, and the alternative — stripping
+  > the field from that route — would leave any device on the connection-limit polling fallback looking
+  > at a standings phase with no board in it. Names still reach no log line (`LogFields` has no field
+  > one would fit in) and still live in `livequiz:players`, which `end` re-arms and `purge` deletes.
+  > See `context/changes/leaderboard-beat/leaderboard-contract.md`.
 - Every capability the existing site provides today continues to work unchanged: event browsing,
   speaker profiles, both signup forms, and the practice of publishing content by committing Markdown.
 

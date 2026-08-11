@@ -56,7 +56,7 @@ an attendee is scoring on their own device.
 | S-04  | `host-participation-and-distribution` | Host can show the room how many have answered, then the distribution at reveal         | S-03          | US-02, FR-005                                                             | done     |
 | S-05  | `free-text-answers`                   | Attendee can answer a free-text question without being punished for diacritics         | S-03          | US-01, FR-011                                                             | done     |
 | S-06  | `guess-the-number-answers`            | Attendee can guess a number and score by how close they were                           | S-03          | US-01, FR-013                                                             | done     |
-| S-07  | `leaderboard-beat`                    | Host can show the leaderboard between questions, and attendees can find themselves on it | S-03        | US-01, US-02, FR-014                                                      | proposed |
+| S-07  | `leaderboard-beat`                    | Host can show the leaderboard between questions, and attendees can find themselves on it | S-03        | US-01, US-02, FR-014                                                      | done     |
 | S-08  | `word-cloud-question`                 | Attendee can submit one word and watch the cloud fill on the large screen               | S-03          | US-01, US-02, FR-012, FR-015                                              | proposed |
 | S-09  | `resilient-join`                      | Attendee can reload or unlock their phone and resume as the same player                 | S-02          | US-01, FR-009, FR-018                                                     | proposed |
 | S-10  | `final-winner-reveal`                 | Host can close the session with a winner-reveal sequence                                | S-07          | US-02, FR-006                                                             | proposed |
@@ -132,6 +132,19 @@ and do NOT re-scaffold them.
   number question, therefore `false` on an answer that scored 800 of 1000. No consumer may read that
   flag as "scored nothing"; S-07's leaderboard is the most likely place to get this wrong. The schema
   now also refuses `correctValue: 0` at the build gate, because the rule divides by the true value.
+
+  **Updated 2026-08-11 (S-07 delivered):** the session document now carries a fifth transition field,
+  `standings` — at most five `{ rank, displayName, points }` rows — and it is the **first snapshot field
+  in the project to carry attendee display names.** S-02's "no display name is ever published" is true
+  about S-02 and false from here; the reversal, its bound and its real exposure surface (the open
+  `GET /api/quiz/state`, not Ably's ~120 s floor) are recorded in the PRD's Deviation 2 and in
+  `context/changes/leaderboard-beat/leaderboard-contract.md`. **S-08 and S-10 must read that contract
+  before adding a snapshot field or a phase.** Two rules from it that are easy to break by accident:
+  the `standings` phase deliberately keeps `currentQuestionId` (questionless, `advance` would reopen
+  question 1), and row *order* and rank *number* are computed by different rules on purpose — merging
+  them makes a tied attendee's phone contradict the projector. **S-10 inherits the board for the `ended`
+  phase**, which this slice deliberately did not build; `result.ts`'s `ended` branch still serves the
+  running total alone.
 - **Observability:** absent — `src/lib/slack.ts` is an outbound notification webhook, not error
   tracking. No alerting; `infrastructure.md` rates "a failure is discovered by attendees" as
   high-likelihood, high-impact.
@@ -443,7 +456,9 @@ and do NOT re-scaffold them.
   standings from the authoritative state instead. Sequenced after the north star because a leaderboard
   needs scored answers to rank, and it is a host-controlled beat rather than an automatic one so the
   segment stays short.
-- **Status:** proposed
+- **Status:** done — delivered 2026-08-11. The transport risk above held: the board is computed once
+  server-side and broadcast, so no device sorts and presence is not involved. See
+  `context/changes/leaderboard-beat/leaderboard-contract.md`.
 
 ### S-08: Word-cloud question
 
@@ -510,7 +525,7 @@ and do NOT re-scaffold them.
 | S-04       | `host-participation-and-distribution` | Large screen: answer count while open, distribution at reveal      | no                    | Needs S-03                                                    |
 | S-05       | `free-text-answers`                   | Free-text answers matched ignoring case, spacing and diacritics    | no                    | Needs S-03                                                    |
 | S-06       | `guess-the-number-answers`            | Numeric guesses scored by relative error                           | done                  | **Delivered 2026-08-09.** First partial-credit answer: `AnswerRecord.correct` is exact-hit-only for this kind |
-| S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | no                    | Needs S-03. Broadcast standings; do not use presence           |
+| S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | done                  | **Delivered 2026-08-11.** First snapshot field carrying display names — S-08/S-10 must read `context/changes/leaderboard-beat/leaderboard-contract.md` before adding a snapshot field or a phase |
 | S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | no                    | Needs S-03; run after F-04 measures headroom                  |
 | S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | no                    | Needs S-02                                                    |
 | S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | no                    | Needs S-07; nice-to-have, first candidate to cut               |

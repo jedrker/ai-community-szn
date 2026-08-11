@@ -8,7 +8,7 @@ you have to be watching.
 Read this before the session, not during it.
 
 > Status note (updated 2026-08-06): the **session spine** exists as of roadmap F-02 — server-held state,
-> sub-second fan-out, and the host verbs `start` / `advance` / `reveal` — plus, as of F-03, `end` and
+> sub-second fan-out, and the host verbs `start` / `advance` / `reveal` / `standings` — plus, as of F-03, `end` and
 > `purge`, so a session can now be closed and its data removed on demand. The **live loop does not**:
 > nobody can join yet, nothing is answered, nothing is scored (S-02 onward). So "the session" still means
 > the existing site for now — event archive, speaker directory, newsletter endpoint — plus a spine you can
@@ -266,9 +266,25 @@ raise it before the event rather than after.
   broadcasting to 150 devices is the O(N²) fan-out the spine is built to avoid, so nothing is
   published when someone joins. While the lobby fills, tap **odśwież** to watch it climb.
 
-- **`end` and `purge` are not on the host view.** Only `start`, `dalej`, `pokaż odpowiedź` and
-  `odśwież` are — the irreversible verbs were deliberately kept off a screen you drive from a stage.
-  To close a session, use `bun run quiz:reset` from the terminal.
+- **`end` and `purge` are not on the host view.** Only `start`, `dalej`, `pokaż odpowiedź`,
+  `pokaż ranking` and `odśwież` are — the irreversible verbs were deliberately kept off a screen you
+  drive from a stage. To close a session, use `bun run quiz:reset` from the terminal.
+
+- **`pokaż ranking` is the leaderboard beat, and it only works right after a reveal** (S-07, FR-014).
+  The button is disabled in every other phase, so the sequence is `dalej` → `pokaż odpowiedź` →
+  optionally `pokaż ranking` → `dalej`. Four things worth knowing on stage:
+
+  - **It replaces the question on screen**, top five by name and points. The phones show the same five
+    rows in the same order, each attendee's own line highlighted, and their own position underneath —
+    including attendees outside the top five.
+  - **You do not have to use it after every question.** It is a host-controlled beat precisely so a
+    fourteen-question segment does not grow fourteen leaderboards. Two or three is a rhythm; every
+    question is a different, longer show.
+  - **`pokaż odpowiedź` is refused while the board is up** with "Ranking jest już pokazany" — the
+    question is already closed, so the way onward is `dalej`. That is not a fault.
+  - If it answers **"Nie udało się odczytać rankingu"**, the store did not respond and the room stayed
+    on the reveal rather than getting a blank board. Tap it again; if it fails twice, carry on with
+    `dalej` — the segment does not depend on the beat.
 
 - **Watch the log stream**, not the dashboard. The stream is the only place a runtime error appears in
   time to act on.
@@ -288,6 +304,8 @@ raise it before the event rather than after.
   | `session.action.applied` | the room moved | nothing — this is the happy path |
   | `session.publish.ok` | the snapshot reached Ably | nothing |
   | `session.action.stale` | two actions raced; the second was a no-op | nothing, unless you did not double-tap — then something else is driving the session |
+  | `session.standings.shown` | the leaderboard reached the room; `rowCount` is how many rows it carried | nothing. A `rowCount` below 5 means the room is smaller than the board |
+  | `session.standings.failed` | the board could not be read, so the beat did not happen | tap **pokaż ranking** again; if it fails twice, move on with **dalej** |
   | `session.auth.rejected` | someone tried a host action with a wrong or missing secret | **if it was not you mis-clicking, someone else has the control URL.** One line is noise; a stream of them during a session means stop and rotate `LIVEQUIZ_HOST_SECRET` |
   | `session.publish.failed` | state is committed but did **not** reach devices | repeat the action; it re-broadcasts and is safe to retry |
   | `session.unconfigured` | an environment variable is missing | the session cannot run; check `vercel env ls` |
