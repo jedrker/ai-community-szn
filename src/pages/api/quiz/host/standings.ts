@@ -8,6 +8,7 @@ import {
   unauthorized,
 } from "../../../../lib/session/host";
 import { logSessionEvent } from "../../../../lib/session/log";
+import { publishSnapshot } from "../../../../lib/session/realtime";
 import { readStandings } from "../../../../lib/session/store";
 
 /**
@@ -102,13 +103,52 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   if (outcome.status === 200 && "applied" in outcome.body && outcome.body.applied === true) {
-    // The size of the room, and deliberately nothing about who is on the board. See the
-    // event's note in `log.ts` — there is no field a name or a total would fit in.
-    logSessionEvent("session.standings.shown", { playerCount: outcome.body.state.playerCount });
+    // Two counts, and deliberately nothing about who is on the board — see the event's note
+    // in `log.ts`. `rowCount` is the one worth having: a board shorter than `STANDINGS_SIZE`
+    // means the room was smaller than the board or records were dropped, and without it a
+    // two-row beat and a five-row beat are the same line.
+    logSessionEvent("session.standings.shown", {
+      playerCount: outcome.body.state.playerCount,
+      rowCount: outcome.body.state.standings?.rows.length ?? 0,
+    });
   }
 
   if (outcome.status === 200 && "applied" in outcome.body && outcome.body.applied === false) {
     const phase = outcome.body.state.phase;
+
+    /**
+     * **A re-tap while already in this phase RE-BROADCASTS rather than doing nothing**
+     * (impl review F5).
+     *
+     * Without this, a failed publish left the beat unrecoverable while the host was being
+     * told to retry. `applyHostAction` answers a committed-but-unbroadcast write with a 502
+     * and "Powtórz akcję, aby rozgłosić go ponownie" — but the retry's transition sees the
+     * session already in `standings` and returns `null`, which arrives here as a benign
+     * no-op. The store held the board, the room was still looking at the previous reveal,
+     * `reveal` 409'd, and the only way out was `advance`, which abandons the beat entirely.
+     *
+     * `reveal` has the same shape and does not do this, deliberately left alone: there the
+     * answer key had already reached the room on the earlier publish, so a lost broadcast
+     * costs a bar chart. Here the phase's whole content is the board that never went out.
+     *
+     * Safe in the ordinary double-tap case: a device drops a snapshot whose version it
+     * already holds, which is the same property that makes the 502's retry advice sound.
+     */
+    if (phase === "standings" && outcome.body.state.standings !== null) {
+      const republished = await publishSnapshot(outcome.body.state);
+
+      if (republished.outcome !== "ok") {
+        return toResponse({
+          status: 502,
+          body: {
+            state: outcome.body.state,
+            applied: true,
+            error:
+              "Ranking jest zapisany, ale nie dotarł do urządzeń. Kliknij ponownie, aby rozgłosić go jeszcze raz.",
+          },
+        });
+      }
+    }
 
     // Already showing it. A no-op, and not worth an error — see the module note.
     if (phase !== "standings") {

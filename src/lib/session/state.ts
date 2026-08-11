@@ -91,8 +91,13 @@ export const sessionStateSchema = z
      * whole document to Ably, which retains it for ~120s irreducibly (measured — see
      * the retention contract), so a display name added here would be readable for two
      * minutes by anything holding a subscribe token, and `/api/quiz/token` is
-     * deliberately open. A count carries nothing about who played. Names live in the
-     * players hash; a device knows only its own.
+     * deliberately open. A count carries nothing about who played.
+     *
+     * **This note used to end "Names live in the players hash; a device knows only its
+     * own." S-07 made that false** and the sentence is corrected here rather than deleted,
+     * because a reader checking the retention guardrail should meet the reversal where the
+     * old claim was. The `standings` field below publishes up to `STANDINGS_SIZE` display
+     * names; everything else about who played still lives in the players hash.
      *
      * **Defaulted rather than required, and that is load-bearing.** A session running
      * when this ships holds a document written before the field existed. Required, it
@@ -211,9 +216,23 @@ export const sessionStateSchema = z
      * and that is a decision rather than an oversight.** S-02 kept every name off the wire
      * and left the choice to this slice; the retention guardrail's Deviation 2 and
      * `leaderboard-contract.md` record what was chosen and why. The bound is what makes it
-     * defensible: at most `STANDINGS_SIZE` names, published for the ~2 minutes Ably retains
-     * a snapshot for connection recovery, on a channel whose token endpoint is deliberately
-     * open. Everything else about who played stays where it was — in the players hash,
+     * defensible: at most `STANDINGS_SIZE` names.
+     *
+     * **Be precise about the exposure, because the obvious answer is wrong.** The planning
+     * for this slice reasoned only about Ably's ~2-minute connection-recovery window, and
+     * that is *not* the binding surface. `GET /api/quiz/state` is deliberately
+     * unauthenticated and returns this whole document — its own docstring justifies that
+     * with "it returns exactly what is already broadcast", which was written when the
+     * document held only a count. So these five names are readable by anyone holding the
+     * attendee URL for **as long as the host leaves the board up**, since the field
+     * survives on the document until the next host action. That is longer than two minutes
+     * and it is a decision rather than an accident: the board is on a projector in front of
+     * the room, the PRD already accepts both an open token endpoint and an unprotected host
+     * view, and the alternative — stripping this field from the state route — would leave a
+     * device on the connection-limit polling fallback looking at a standings phase with no
+     * board in it.
+     *
+     * Everything else about who played stays where it was — in the players hash,
      * which `end` re-arms and `purge` deletes. (Named there rather than spelled here: the
      * registry in `keys.ts` owns every namespaced name, and `keys.test.ts` scans this file
      * for one, comments included.)

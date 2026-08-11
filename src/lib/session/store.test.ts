@@ -1235,6 +1235,26 @@ describe("readStandings", () => {
     expect(standings?.playerCount).toBe(1);
   });
 
+  /**
+   * A player whose total cannot be parsed still appears, at zero — not dropped, and never as
+   * `NaN` on a projector. Same note as `readOwnRank`'s sibling test: this holds under both
+   * the explicit parse and the bare coercion it replaced, so it pins the contract rather
+   * than the fix (impl review F8).
+   */
+  it("lists a player whose total cannot be parsed, at zero", async () => {
+    hashes({ ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) }, {
+      "id-ala": 10,
+      "id-bartek": "nonsense",
+    });
+
+    const standings = await readStandings();
+
+    expect(standings?.rows).toEqual([
+      { rank: 1, displayName: "Ala", points: 10 },
+      { rank: 2, displayName: "Bartek", points: 0 },
+    ]);
+  });
+
   it("reads an empty room as an empty board, not as a failure", () => {
     // `HGETALL` on a hash that does not exist answers null for the whole reply. Nobody
     // has joined yet; that is a fact, not an outage.
@@ -1305,6 +1325,33 @@ describe("readOwnRank", () => {
     redisMock.hgetall.mockRejectedValue(new Error("upstash unreachable"));
 
     return expect(readOwnRank("id-ala")).resolves.toBeNull();
+  });
+
+  /**
+   * A corrupt entry belonging to somebody else does not move this caller's rank.
+   *
+   * Pins the observable contract rather than the implementation: `storedTotal` drops the
+   * value and the older bare `Number(x) || 0` read it as zero, and **neither is greater than
+   * anything**, so both produce this result. Written down because the impl-review fix here
+   * (F8) is a clarity change with no behavioural difference — worth knowing before someone
+   * "simplifies" it back and looks for the test that should have failed.
+   */
+  it("is unaffected by another player's unparseable total", () => {
+    redisMock.hgetall.mockResolvedValue({
+      "id-ala": 30,
+      "id-bartek": 50,
+      "id-broken": "nonsense",
+    });
+
+    return expect(readOwnRank("id-ala")).resolves.toEqual({ rank: 2, total: 30 });
+  });
+
+  it("still answers a caller whose own total is corrupt, reading it as zero", () => {
+    redisMock.hgetall.mockResolvedValue({ "id-ala": "nonsense", "id-bartek": 50 });
+
+    // Refusing to tell a device where it stands, over a value only store corruption can
+    // produce, costs the attendee their line for no gain.
+    return expect(readOwnRank("id-ala")).resolves.toEqual({ rank: 2, total: 0 });
   });
 
   it("issues one command", async () => {

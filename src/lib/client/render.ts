@@ -444,6 +444,7 @@ export function renderStandings(
 
 /** Polish, because it renders directly. */
 const POSITION_UNAVAILABLE_TEXT = "Nie udało się pobrać Twojej pozycji.";
+const POSITION_PENDING_TEXT = "Sprawdzamy Twoją pozycję…";
 
 /**
  * The attendee's own line under the board (roadmap S-07, FR-014).
@@ -460,8 +461,19 @@ const POSITION_UNAVAILABLE_TEXT = "Nie udało się pobrać Twojej pozycji.";
  */
 export function standingsPositionText(
   rank: number | null,
-  playerCount: number | null
+  playerCount: number | null,
+  /**
+   * Whether a request for this beat is still open (impl review F2).
+   *
+   * **Checked before the absent-rank branch, and that order is the fix.** An absent rank
+   * means two different things — "the fetch failed" and "the fetch has not come back yet" —
+   * and without this flag the second rendered as the first, so a device whose connection
+   * flapped mid-beat was told its position could not be fetched while the request was still
+   * running. Waiting is not failing.
+   */
+  pending = false
 ): string {
+  if (pending && rank === null) return POSITION_PENDING_TEXT;
   if (rank === null) return POSITION_UNAVAILABLE_TEXT;
   if (playerCount === null) return `Twoja pozycja: ${rank}`;
   return `Twoja pozycja: ${rank} z ${playerCount}`;

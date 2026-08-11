@@ -356,6 +356,17 @@ import { publicQuiz } from "../../quiz/public";
        */
       let rank: number | null = null;
       let rankVersion: number | null = null;
+      /**
+       * Whether a rank request for `rankVersion` is still open.
+       *
+       * **A third state, because two collapse into a lie** (impl review F2). `rank === null`
+       * is the *failure* state, and it is also what this device holds while the request is
+       * in flight — so any re-render at the same version painted "we couldn't get your
+       * position" over a request that was still running. Re-rendering at the same version is
+       * routine: a connection transition calls `render()`, and a venue Wi-Fi flap during the
+       * beat is exactly when it happens.
+       */
+      let rankPending = false;
 
       const OPTION_CLASS =
         "rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl";
@@ -478,6 +489,7 @@ import { publicQuiz } from "../../quiz/public";
            */
           rank = null;
           rankVersion = null;
+          rankPending = false;
           // The field itself is a live DOM element and holds its own value; without
           // this the reconciliation guard sees an unchanged question id and never
           // rewrites it.
@@ -579,20 +591,40 @@ import { publicQuiz } from "../../quiz/public";
         if (rankVersion !== state.version) {
           rankVersion = state.version;
           rank = null;
-          setText("standings-you", "Sprawdzamy Twoją pozycję…");
+          rankPending = true;
+          renderOwnPosition(state.playerCount);
+
+          const beat = state.version;
 
           void fetchResult(player.id, state.currentQuestionId ?? "").then((own) => {
-            // Discarded if the room has moved on: `render()` is driven by the snapshot,
-            // and a reply landing after the next question opened would paint a position
-            // under a prompt.
-            if (rankVersion !== state.version) return;
+            /**
+             * **Guarded against the LIVE state, not against `rankVersion`** (impl review F6).
+             *
+             * The first version compared `rankVersion` — a module value this function is the
+             * only writer of — against the version captured in this closure, and claimed to
+             * discard a reply that landed after the room moved on. It could not: those two
+             * are equal unless a *newer standings beat* arrived, so a reply landing during
+             * the next question passed the guard and painted a position. It was invisible
+             * only because `#standings-you` is hidden by then, two functions away — a
+             * safety property provided by something other than the line claiming it.
+             *
+             * Reading `client.current()` asks the question the comment always meant to ask.
+             * The phase check also closes the purge hole: versions restart at 1, so a reply
+             * captured at version 7 could otherwise land inside a new session's version-7
+             * beat.
+             */
+            const live = client.current();
+            if (live === null || live.phase !== "standings" || live.version !== beat) return;
+            rankPending = false;
             rank = own?.rank ?? null;
-            renderOwnPosition(board?.playerCount ?? null);
+            // From the live snapshot rather than the captured one — same field either way
+            // (F3), and this is the fresher of the two.
+            renderOwnPosition(live.playerCount);
           });
           return;
         }
 
-        renderOwnPosition(board?.playerCount ?? null);
+        renderOwnPosition(state.playerCount);
       }
 
       /**
@@ -602,11 +634,17 @@ import { publicQuiz } from "../../quiz/public";
        * absent-rank branch is one `lessons.md` has an entry about, and a page has no
        * harness to reach it from.
        *
-       * The denominator is the board's own `playerCount`, not the snapshot's: it was
-       * counted in the same read that produced these rows, so the two cannot disagree.
+       * **The denominator is the snapshot's `playerCount`, not the board's** (impl review
+       * F3). The board carries its own count, taken in the same read as the rows, and using
+       * it looks like the more consistent choice — that was the first implementation and it
+       * was wrong. The host screen renders the *snapshot's* count, which `applyHostAction`
+       * refreshes with a fresh `HLEN` after the board is built, so the two numbers genuinely
+       * differ when a join lands between the reads. Phones reading "z 149" beside a projector
+       * reading "150" is the divergence the PRD guardrail is about; a denominator one beat
+       * fresher than the rows it describes is invisible.
        */
       function renderOwnPosition(playerCount: number | null): void {
-        setText("standings-you", standingsPositionText(rank, playerCount));
+        setText("standings-you", standingsPositionText(rank, playerCount, rankPending));
       }
 
       /** Every answering control off, in one call, so no branch can leave one behind. */

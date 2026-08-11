@@ -567,6 +567,25 @@ describe("standingsPositionText", () => {
     expect(standingsPositionText(7, null)).toBe("Twoja pozycja: 7");
   });
 
+  /**
+   * THE COLLAPSE F2 WAS (impl review). An absent rank means two different things, and
+   * before the `pending` flag the in-flight one rendered as the failure — so a phone whose
+   * connection flapped mid-beat was told its position could not be fetched while the
+   * request was still open.
+   */
+  it("says it is still checking while a request for this beat is open", () => {
+    expect(standingsPositionText(null, 42, true)).toBe("Sprawdzamy Twoją pozycję…");
+  });
+
+  it("still reports a real failure once nothing is in flight", () => {
+    expect(standingsPositionText(null, 42, false)).toContain("Nie udało się");
+  });
+
+  /** A rank that arrived wins over a stale pending flag rather than hiding behind it. */
+  it("shows an arrived rank even if pending was left set", () => {
+    expect(standingsPositionText(7, 42, true)).toBe("Twoja pozycja: 7 z 42");
+  });
+
   /** Rank 1 is a real position and must not be confused with the absent case. */
   it("reports first place as a position, not as a failure", () => {
     expect(standingsPositionText(1, 42)).toBe("Twoja pozycja: 1 z 42");

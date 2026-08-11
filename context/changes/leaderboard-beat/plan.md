@@ -94,7 +94,8 @@ standings opens the *next* question rather than question 1.
 - **Animation, count-ups, and rank-change indicators.** Hand-written DOM with no diffing is the
   accepted cost of the no-framework decision (`join-contract.md`); an animated reordering list is
   where that cost bites hardest.
-- **A room-scale rehearsal re-run.** The beat adds one publish and at most one fetch per device, on a
+- **A room-scale rehearsal re-run.** The beat adds one publish and at most one fetch per device (five
+  billed store commands — see the correction in Performance Considerations), on a
   phase where nothing else is in flight — strictly lighter than a reveal, which F-04 already measured.
 - **A host-only preview before showing the board.** The PRD accepts unmoderated content on the
   projector by explicit decision (§Non-Goals); a preview reopens a settled non-goal.
@@ -464,6 +465,12 @@ The same five rows on 150 phones, plus the line that tells an attendee where the
 **Intent**: A `renderStandings` beside the existing `renderQuestion` and `renderDistribution`, so DOM
 construction stays in the module the render tests already cover.
 
+> **Corrected by impl review, F10 (2026-08-11).** `renderStandings` and its tests in fact shipped in
+> **Phase 3** (`1973edf`), not here — Phase 3's projector board calls the renderer, so the plan's
+> sequencing made that unavoidable and this assignment is what was wrong. Only `standingsPositionText`
+> landed in Phase 4. Consequence for anyone reading plan against history: Phase 3's criteria covered a
+> Phase 4 deliverable, and criterion 4.4 retro-validates code from the previous commit.
+
 **Contract**: Takes the published rows, a class-name bag in the shape the two existing renderers use,
 and the device's own `displayName` for highlighting. `StandingsRow` arrives as an `import type` from
 `src/lib/session/standings` — erased at compile time and therefore allowed by `boundary.test.ts`,
@@ -545,10 +552,19 @@ quotes the superseded sentence rather than rewriting it — is the format to fol
 of the entry is that the expectation and its reversal both stay visible.
 
 **Contract**: A dated `**Amended 2026-08-11 (S-07).**` paragraph stating that display names now enter a
-published snapshot, bounded to five, that the ~2-minute window applies to those five names, why the
-alternative was rejected (150 per-device fetches per beat against an unexplained command baseline), and
-that nothing else about who played reaches the wire. Do not edit S-02's correction — it remains true
-about S-02.
+published snapshot, bounded to five, why the alternative was rejected (150 per-device fetches per beat
+against an unexplained command baseline), and that nothing else about who played reaches the wire. Do
+not edit S-02's correction — it remains true about S-02.
+
+**Corrected by impl review, F1 (2026-08-11) — the exposure this must record is NOT the Ably window.**
+The planning above reasoned only about Ably's ~2-minute connection-recovery floor. The binding surface
+is `GET /api/quiz/state`, which is deliberately unauthenticated and returns the whole session document,
+so the five names are readable by anyone holding the attendee URL for **as long as the host leaves the
+board up** — the field survives on the document until the next host action. State that, not the
+two-minute figure. The exposure is accepted (the board is on a projector; the PRD already accepts an
+open token endpoint and an unprotected host view) and the alternative was rejected because stripping
+the field from that route leaves a device on the polling fallback looking at a standings phase with no
+board. `state.ts`'s field docstring now carries this reasoning and is the source to copy from.
 
 #### 2. The risk register
 
@@ -642,10 +658,23 @@ that section, not this plan.
 
 ## Performance Considerations
 
-Per standings beat: **two** store commands for the host action, plus **one** per device that fetches
-its rank (~150). A segment with four beats is roughly 600 commands — against a 500k monthly free tier
+Per standings beat: **two** store commands for the host action, plus **five** per device that fetches
+its rank (~750). A segment with four beats is roughly 3,000 commands — against a 500k monthly free tier
 and the runbook's 200k-per-run tripwire, negligible beside the connection-limit fallback loop's
 already-budgeted 7k–66k.
+
+> **Corrected by impl review, F4 (2026-08-11).** This section originally said **one** command per
+> device and ~600 a segment. That was wrong by 5×. `result.ts` calls `readOwnResult` unconditionally
+> before it branches on phase, and that is the `READ_ANSWER` EVAL, which `store.ts` documents as four
+> billed commands (the `EVAL` plus `GET`, `HGET`, `HGET`); the standings branch then adds
+> `readOwnRank`'s `HGETALL`. Two of the four are waste on this path — only `result.state` is used,
+> `result.answer` is discarded and `result.total` is superseded, so the scores hash is read twice in
+> two round trips. The conclusion ("negligible") survives the correction; the arithmetic did not.
+> Triaged as accept-and-record rather than optimise: the alternative was letting the client declare
+> the beat so the route could skip the first read, which adds a client-supplied branch selector to the
+> densest attendee path for a saving that does not matter at this scale. **Note the standing caveat:**
+> "negligible against the budget" rests on the store's unexplained command baseline
+> (`command-counter-diagnostic.md`), which is an assumption, not a measurement.
 
 One publish per beat, carrying five rows (~200 bytes) — smaller than a reveal snapshot carrying a
 distribution.
@@ -722,11 +751,11 @@ No store key is added, so `end`, `purge` and `scripts/check-purge-residue.ts` ne
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 `boundary.test.ts` passes for `render.ts` and `index.astro`
-- [x] 4.4 `render.test.ts` covers order, the case-sensitive own-row highlight, and a short board
-- [x] 4.5 A test asserts a failed rank fetch renders neither 0 nor 1
+- [x] 4.1 Unit tests pass: `bun run test` — 1764909
+- [x] 4.2 Type checking passes: `bun run type-check` — 1764909
+- [x] 4.3 `boundary.test.ts` passes for `render.ts` and `index.astro` — 1764909
+- [x] 4.4 `render.test.ts` covers order, the case-sensitive own-row highlight, and a short board — 1764909
+- [x] 4.5 A test asserts a failed rank fetch renders neither 0 nor 1 — 1764909
 
 #### Manual
 

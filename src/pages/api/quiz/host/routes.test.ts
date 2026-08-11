@@ -128,6 +128,10 @@ beforeEach(() => {
   purgeSessionMock.mockReset();
   readQuestionTalliesMock.mockReset();
   readQuestionTalliesMock.mockResolvedValue({ answered: 0, options: {} });
+  // A default, like the tallies mock above: the standings route republishes on a
+  // same-phase no-op (impl review F5), so any test whose fixture lands in that phase
+  // reaches `publishSnapshot`. Individual tests override it.
+  publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
   vi.stubEnv("LIVEQUIZ_HOST_SECRET", SECRET);
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -1115,6 +1119,7 @@ describe("standings", () => {
 
   it("leaves an already-showing board as a 200 no-op, not an error", async () => {
     readStandingsMock.mockResolvedValue(board);
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
     applyHostActionMock.mockResolvedValue({
       status: 200,
       body: { state: standings, applied: false, note: "no-op" },
@@ -1124,6 +1129,55 @@ describe("standings", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ applied: false });
+  });
+
+  /**
+   * THE RECOVERY PATH (impl review F5). A committed-but-unbroadcast beat leaves the store
+   * in `standings` while the room still sees the previous reveal, and `applyHostAction`
+   * tells the host to retry the action. The retry's transition returns `null` — the session
+   * is already in the phase — so without a republish here the retry does nothing and the
+   * board can never reach the room.
+   */
+  it("re-broadcasts when the board is already committed, so the 502 retry advice is true", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: false, note: "no-op" },
+    });
+
+    await call(showStandings);
+
+    expect(publishSnapshotMock).toHaveBeenCalledWith(standings);
+  });
+
+  it("reports a re-broadcast that also fails as 502, not as a silent success", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    publishSnapshotMock.mockResolvedValue({ outcome: "failed", reason: "ably down" });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: false, note: "no-op" },
+    });
+
+    const response = await call(showStandings);
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("nie dotarł do urządzeń"),
+    });
+  });
+
+  /** A no-op from the WRONG phase must not republish anything. */
+  it("does not re-broadcast a phase that is not showing a board", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: lobby, applied: false, note: "no-op" },
+    });
+
+    await call(showStandings);
+
+    expect(publishSnapshotMock).not.toHaveBeenCalled();
   });
 
   it("turns a no-op from the wrong phase into 409 with a Polish explanation", async () => {

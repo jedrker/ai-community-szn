@@ -1134,6 +1134,23 @@ export async function readOwnResult(playerId: string, questionId: string): Promi
  * claim that nobody in the room has scored, at the moment the room is looking at it. The
  * caller refuses the transition rather than publishing one.
  */
+/**
+ * A total read back from the scores hash — explicitly, not by bare coercion.
+ *
+ * `Number(raw) || 0` was the first version and it is the shape `lessons.md`'s second entry
+ * warns about (impl review F8). Reading an **absent** entry as zero is correct and
+ * deliberate: `HINCRBY` only writes when something was awarded, so everyone who scored
+ * nothing is absent. Reading a **corrupt** entry as zero is not — that is a wrong number on
+ * a leaderboard where the contract reserves "could not say" for `null`. Only store
+ * corruption can produce one, since `HINCRBY` writes integers, which is why this returns
+ * `null` for it rather than failing the whole read.
+ */
+function storedTotal(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return 0;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
 export async function readStandings(): Promise<Standings | null> {
   const redis = client();
   if (!redis) return null;
@@ -1161,7 +1178,11 @@ export async function readStandings(): Promise<Standings | null> {
 
   const scores: Record<string, number> = {};
   for (const [id, raw] of Object.entries(rawScores ?? {})) {
-    scores[id] = Number(raw) || 0;
+    const total = storedTotal(raw);
+    // A corrupt total is left out rather than written in as zero. `buildStandings` reads a
+    // missing entry as zero anyway, so the player still appears — they are simply not
+    // credited with a number this function cannot vouch for.
+    if (total !== null) scores[id] = total;
   }
 
   return buildStandings(players, scores);
@@ -1199,9 +1220,27 @@ export async function readOwnRank(
     return null;
   }
 
-  const entries = Object.entries(raw ?? {});
-  const totals = entries.map(([, value]) => Number(value) || 0);
-  const total = Number(raw?.[playerId]) || 0;
+  /**
+   * Totals parsed explicitly rather than coerced (impl review F8).
+   *
+   * **A known and accepted gap remains, and it is not this line** (impl review F7). This
+   * function ranks against the scores hash; `readStandings` ranks against players whose
+   * *record* parsed. So a player whose record is corrupt while their score is intact and
+   * high is counted here and not on the board — numbering everyone below them one way on a
+   * phone and another on the projector. Closing it would mean reading the players hash here
+   * too, doubling the per-device command count on the densest attendee path to defend
+   * against a state only store corruption can produce. Accepted, not overlooked.
+   */
+  const totals: number[] = [];
+  for (const [, value] of Object.entries(raw ?? {})) {
+    const other = storedTotal(value);
+    if (other !== null) totals.push(other);
+  }
+
+  // The caller's own total takes the absent-is-zero reading; a corrupt one is zero here too
+  // rather than `null`, because refusing to answer a device about itself over a value only
+  // corruption can produce costs the attendee their line for no gain.
+  const total = storedTotal(raw?.[playerId]) ?? 0;
 
   return { rank: rankOf(total, totals), total };
 }

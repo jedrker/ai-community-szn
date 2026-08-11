@@ -114,10 +114,11 @@ export const SESSION_EVENTS = [
   /**
    * The leaderboard reached the room (roadmap S-07).
    *
-   * Carries `playerCount` and nothing else. **Never a name and never a total** — the board
-   * this event reports on is the first thing in this project to put display names on the
-   * wire, and a log stream is the one surface no TTL, no `purge` and no rollback reaches.
-   * There is no field either would fit in, and that closure is the enforcement.
+   * Carries `playerCount` and `rowCount` — two aggregates, and nothing else. **Never a name
+   * and never a total** — the board this event reports on is the first thing in this project
+   * to put display names on the wire, and a log stream is the one surface no TTL, no `purge`
+   * and no rollback reaches. There is no field either would fit in, and that closure is the
+   * enforcement.
    *
    * Host-paced, so a segment writes a handful of these — unlike the answer and join
    * events, this one is cheap enough to read line by line.
@@ -176,6 +177,16 @@ type LogFields = {
    * not be written at all.
    */
   playerCount?: number;
+  /**
+   * How many rows a published leaderboard carried (roadmap S-07).
+   *
+   * The same shape as `playerCount` above and added for the same reason it is safe: a count
+   * of lines, never a line. **There is deliberately no field for a name or a total**, so the
+   * one thing this event must not say is not merely undocumented, it is unspellable — which
+   * is the whole premise of this type. A board shorter than `STANDINGS_SIZE` is the signal
+   * worth having: it means the room was smaller than the board, or records were dropped.
+   */
+  rowCount?: number;
   /**
    * Why a join was refused — **a closed set, not a string** (roadmap S-02).
    *
