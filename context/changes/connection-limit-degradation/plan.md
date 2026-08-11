@@ -458,7 +458,7 @@ Recorded here because the plan is the document the next author reads as ground t
 - [x] 2.1 Test suite passes: `bun run test` — 903a8e9
 - [x] 2.2 Type checking passes: `bun run type-check` — 903a8e9
 - [x] 2.3 `boundary.test.ts` passes — no forbidden import or env read in either `<script>` block — 903a8e9
-- [x] 2.4 `session.test.ts` asserts the loop's cancellation seam (`stop`/`dispose`), plus the `shouldFallbackPoll` and `advanceLifecycle` predicates that bind `fallbackPolling` and the end of the session to it — 903a8e9, corrected during impl review (F5)
+- [x] 2.4 `session.test.ts` asserts the loop's cancellation seam (`stop`/`dispose`), plus the `shouldFallbackPoll` and `advanceLifecycle` predicates that bind `fallbackPolling` and the end of the session to it (wording corrected during impl review, F5) — 657e307
 
 #### Manual
 
