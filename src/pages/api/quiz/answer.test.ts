@@ -22,6 +22,7 @@ const { POST: answer } = await import("./answer");
 const { quiz } = await import("../../../quiz/index");
 const { SPEED_WINDOW_MS, MAX_TEXT_ANSWER_LENGTH } = await import("../../../lib/session/scoring");
 const { MAX_GUESS_MAGNITUDE } = await import("../../../lib/session/guess");
+const { MAX_WORD_LENGTH } = await import("../../../lib/session/words");
 
 const NOW = 1_785_000_000_000;
 
@@ -29,8 +30,8 @@ const single = quiz.questions.find((question) => question.id === "llm-skrot")!;
 const multi = quiz.questions.find((question) => question.id === "summer-tour-zakonczenie")!;
 const text = quiz.questions.find((question) => question.id === "zmyslanie-faktow")!;
 const unscored = quiz.questions.find((question) => question.id === "czy-wszyscy-gotowi")!;
-/** The two kinds S-06 and S-08 still own — the seam this slice did not take. */
 const number = quiz.questions.find((question) => question.id === "ai-devs-absolwenci")!;
+/** The last kind to take the seam (roadmap S-08). */
 const wordCloud = quiz.questions.find((question) => question.id === "smieszne-slowo-ai")!;
 
 function openOn(questionId: string, openedAt = NOW - 4_000) {
@@ -511,19 +512,165 @@ describe("numeric guesses", () => {
   });
 });
 
-describe("refusals", () => {
-  it("refuses a word-cloud question, with a message rather than a crash", async () => {
-    const question = wordCloud;
-    readSessionMock.mockResolvedValue(openOn(question.id));
+/**
+ * The word-cloud branch (roadmap S-08, FR-012).
+ *
+ * The fold and the validation rule are `words.test.ts`'s. What is under test here is what
+ * the route accepts, what it refuses, which status each refusal carries, and what it hands
+ * the store.
+ */
+describe("word-cloud answers", () => {
+  it("covers a question that really is a word cloud, and an unscored one", () => {
+    // The fixture proved rather than assumed: every expectation below depends on both,
+    // and a retyped question would otherwise pass silently.
+    expect(wordCloud.kind).toBe("word-cloud");
+    expect(wordCloud.points).toBeNull();
+  });
 
-    const response = await submit(question.id, []);
+  /**
+   * Sends a word submission. **`word` is omitted entirely when `value` is undefined**,
+   * rather than set to the string `"undefined"` — the absent-field case is what
+   * `lessons.md` rule 2 is about, and a helper that quietly supplied a value would test
+   * the present case while reading as though it covered the absent one. Same discipline
+   * as `submitText` and `submitGuess` above.
+   */
+  function submitWord(value?: string, elapsedMs = 4_000): Promise<Response> {
+    const fields: Record<string, string> = {
+      playerId: "player-abc",
+      questionId: wordCloud.id,
+      elapsedMs: String(elapsedMs),
+    };
+    if (value !== undefined) fields.word = value;
 
-    // The last kind behind the seam. S-05 took the text half of it, S-06 the number half.
-    expect(response.status).toBe(409);
-    expect((await body(response)).error).toBe("Ten typ pytania nie przyjmuje jeszcze odpowiedzi.");
+    return answer({ request: request(fields) } as Parameters<typeof answer>[0]) as Promise<Response>;
+  }
+
+  beforeEach(() => {
+    readSessionMock.mockResolvedValue(openOn(wordCloud.id));
+  });
+
+  it("accepts a word and stores the typed form beside the folded one", async () => {
+    const response = await submitWord("  Halucynacja  ");
+
+    expect(response.status).toBe(200);
+    // Trimmed but not folded — what the reveal echoes back.
+    expect(submitted().text).toBe("Halucynacja");
+    // Folded — what the counter is keyed by, so case does not split one word in two.
+    expect(submitted().word).toBe("halucynacja");
+    expect(submitted().optionIds).toEqual([]);
+    expect(submitted().value).toBeNull();
+  });
+
+  it("records it as unscored rather than as wrong", async () => {
+    await submitWord("robot");
+
+    // No scorer runs: the build gate guarantees `points === null` for this kind. The view
+    // tells a warm-up apart from a wrong answer by `scored`, never by the award.
+    expect(submitted().correct).toBe(false);
+    expect(submitted().awarded).toBe(0);
+  });
+
+  it("awards nothing however fast the answer was", async () => {
+    await submitWord("robot", 0);
+
+    // The speed curve multiplies a base of zero. Asserted because "fast" and "scored"
+    // are wired together everywhere else in this route.
+    expect(submitted().awarded).toBe(0);
+  });
+
+  it("keeps a word carrying Polish diacritics spelled as it was typed", async () => {
+    await submitWord("Żółw");
+
+    expect(submitted().text).toBe("Żółw");
+    // The fold lowercases and stops. This is the string the projector renders, so a
+    // stripped diacritic here is a misspelt word on the big screen.
+    expect(submitted().word).toBe("żółw");
+  });
+
+  it("folds two spellings of one word onto a single counter key", async () => {
+    await submitWord("SkyNet");
+    const first = submitted().word;
+
+    submitAnswerMock.mockClear();
+    await submitWord("skynet");
+
+    expect(submitAnswerMock.mock.calls[0]![0].word).toBe(first);
+  });
+
+  it("carries no verdict in the response", async () => {
+    const response = await submitWord("robot");
+
+    expect(await body(response)).toEqual({ accepted: true });
+  });
+
+  it("never lets the word reach a log line", async () => {
+    const log = vi.spyOn(console, "log");
+
+    await submitWord("halucynacja");
+
+    // A word is attendee-authored text and logs are covered by no TTL and no purge.
+    // `LogFields` has no field it fits in; this pins that the call site respected it.
+    for (const call of log.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain("halucynacja");
+    }
+  });
+
+  /**
+   * **THE ABSENT-FIELD CASE** (`lessons.md` rule 2), asserted by outcome: nothing reached
+   * the store. A submission that omits `word` must not burn FR-004's
+   * one-answer-per-question lock on nothing.
+   */
+  it("refuses a submission with no word field at all, writing nothing", async () => {
+    const response = await submitWord();
+
+    expect(response.status).toBe(400);
+    expect((await body(response)).error).toBe("Brak odpowiedzi.");
     expect(submitAnswerMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["empty", "", "Napisz jedno słowo."],
+    ["whitespace only", "   ", "Napisz jedno słowo."],
+    ["two words", "sztuczna inteligencja", "Wpisz tylko jedno słowo — bez spacji."],
+    ["an emoji", "🤖", "Słowo może zawierać tylko litery, cyfry i znaki . _ - '"],
+  ])("refuses %s with its own message and writes nothing", async (_label, value, message) => {
+    const response = await submitWord(value);
+
+    expect(response.status).toBe(400);
+    expect((await body(response)).error).toBe(message);
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an over-length word — curl ignores maxlength", async () => {
+    const response = await submitWord("a".repeat(MAX_WORD_LENGTH + 1));
+
+    expect(response.status).toBe(400);
+    expect((await body(response)).error).toContain(String(MAX_WORD_LENGTH));
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts a word exactly at the bound", async () => {
+    const response = await submitWord("a".repeat(MAX_WORD_LENGTH));
+
+    expect(response.status).toBe(200);
+    expect(submitAnswerMock).toHaveBeenCalled();
+  });
+
+  /**
+   * **400, not 409, and the distinction is the whole reason this is asserted.** The
+   * client treats a 409 as final: it locks the question and takes the field away. A
+   * refusal an attendee can fix must leave both, or someone who typed two words is told
+   * their answer was saved and can never answer the question.
+   */
+  it("refuses with a status the client will not treat as final", async () => {
+    const response = await submitWord("dwa slowa");
+
+    expect(response.status).toBe(400);
+    expect(response.status).not.toBe(409);
+  });
+});
+
+describe("refusals", () => {
   it("refuses an answer to a question that is not the open one", async () => {
     readSessionMock.mockResolvedValue(openOn(multi.id));
 

@@ -10,11 +10,12 @@ import {
   scoreTextAnswer,
 } from "../../../lib/session/scoring";
 import { readSession, submitAnswer } from "../../../lib/session/store";
+import { validateWord } from "../../../lib/session/words";
 import { getQuestionById } from "../../../quiz/index";
 
 /**
  * Submits one attendee's answer to the open question
- * (roadmap S-03/S-05, PRD FR-004/FR-010/FR-011).
+ * (roadmap S-03/S-05/S-06/S-08, PRD FR-004/FR-010/FR-011/FR-012/FR-013).
  *
  * On demand — no `prerender` export, per the project's rendering convention.
  *
@@ -43,7 +44,6 @@ const MESSAGES = {
   alreadyAnswered: "Odpowiedź została już zapisana.",
   notStarted: "Sesja jeszcze się nie rozpoczęła.",
   unknownPlayer: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie.",
-  unsupportedKind: "Ten typ pytania nie przyjmuje jeszcze odpowiedzi.",
   tooLong: `Odpowiedź może mieć najwyżej ${MAX_TEXT_ANSWER_LENGTH} znaków.`,
   notANumber: "Wpisz liczbę.",
   outOfRange: "Ta liczba jest poza zakresem.",
@@ -140,15 +140,6 @@ export const POST: APIRoute = async ({ request }) => {
     return json(409, { error: MESSAGES.notOpen });
   }
 
-  // The seam S-08 (word cloud) still extends: a refusal with a message rather than a
-  // crash, so a host who advances to a question this slice does not handle sees a phone
-  // that says so. S-05 took the `text` half of it and S-06 the `number` half; the word
-  // cloud is the last kind behind it.
-  if (question.kind === "word-cloud") {
-    logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
-    return json(409, { error: MESSAGES.unsupportedKind });
-  }
-
   /**
    * **During `question-open`, `updatedAt` IS the moment the question opened** — the
    * advance that opened it was the last write, and only host actions write the session
@@ -168,6 +159,7 @@ export const POST: APIRoute = async ({ request }) => {
   let selectedOptionIds: string[] = [];
   let answerText: string | null = null;
   let guessValue: number | null = null;
+  let foldedWord: string | null = null;
   let correct: boolean;
   let awarded: number;
 
@@ -241,6 +233,57 @@ export const POST: APIRoute = async ({ request }) => {
     // reader should not have to re-parse an attendee's typing.
     guessValue = guess;
     ({ correct, awarded } = scoreNumberAnswer(question, guess, elapsedMs));
+  } else if (question.kind === "word-cloud") {
+    /**
+     * The word cloud (roadmap S-08, FR-012) — **the last kind behind this seam**, which
+     * until now answered every submission with a refusal.
+     *
+     * **Parsed explicitly, never coerced**, and validated before the store is touched:
+     * `lessons.md` rule 2 and the same discipline as the two branches above. An absent
+     * field, a non-string, whitespace, two words and an over-length word are all
+     * refusals, and `validateWord` owns every one of those decisions so there is exactly
+     * one place they are made. The bound in particular has to be server-side because
+     * `curl` ignores an input's `maxlength` — `join.ts`'s reasoning for validating a
+     * display name before claiming it.
+     */
+    const rawWord = form.get("word");
+
+    if (typeof rawWord !== "string") {
+      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      return json(400, { error: MESSAGES.missing });
+    }
+
+    const validated = validateWord(rawWord);
+
+    if (!validated.ok) {
+      /**
+       * **400, deliberately not 409.** Nothing was written, and the client treats a 409
+       * as final — it locks the question and takes the field away. An attendee told
+       * "one word only" has to be able to fix it and send again, which is exactly the
+       * distinction `client/answer.ts` draws between `invalid` and `rejected`.
+       */
+      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      return json(400, { error: validated.error });
+    }
+
+    // The typed form travels on `text`, the counted form on `word` — see the note on
+    // that field in `answers.ts` for why one word occupies two of them.
+    answerText = validated.word;
+    foldedWord = validated.key;
+
+    /**
+     * **No scorer is called, and that is not an omission.** The build gate refuses a
+     * scored word-cloud question (`src/quiz/schema.ts`), so `points` is `null` here by
+     * construction and there is nothing to weigh — `scoring.ts` says in as many words
+     * that this kind "takes none of" the seam S-05 and S-06 extended.
+     *
+     * `correct: false` rather than a flattering `true`: there is no correct answer to
+     * match, and a fabricated verdict is a lie the reveal copy would then have to work
+     * around. The view distinguishes a warm-up from a wrong answer by `question.scored`,
+     * never by the award — the rule `scoreChoiceAnswer` states for the unscored case.
+     */
+    correct = false;
+    awarded = 0;
   } else {
     /**
      * **Only ids this question actually has.**
@@ -265,6 +308,9 @@ export const POST: APIRoute = async ({ request }) => {
     text: answerText,
     // The numeric branch (roadmap S-06) fills this; every other kind leaves it null.
     value: guessValue,
+    // The word-cloud branch (roadmap S-08) fills this with the *folded* word, which is
+    // what its counter was keyed by; every other kind leaves it null.
+    word: foldedWord,
     elapsedMs,
     correct,
     awarded,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { answerField, answerRecordSchema, parseAnswerRecord } from "./answers";
 import { MAX_TEXT_ANSWER_LENGTH } from "./scoring";
+import { MAX_WORD_LENGTH } from "./words";
 
 /**
  * The shape the answers hash holds, and the field name both paths must agree on
@@ -162,6 +163,59 @@ describe("the numeric-guess field (roadmap S-06)", () => {
 
   it("refuses a non-number, non-null value", () => {
     expect(answerRecordSchema.safeParse({ ...valid, value: "67" }).success).toBe(false);
+  });
+});
+
+describe("the word field (roadmap S-08)", () => {
+  it("accepts a record carrying a word and no selection, text or guess", () => {
+    const parsed = answerRecordSchema.safeParse({
+      ...valid,
+      optionIds: [],
+      // Both are populated for this kind: the typed form on `text`, the counted form
+      // here. They differ by case alone.
+      text: "Halucynacja",
+      word: "halucynacja",
+      value: null,
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.word).toBe("halucynacja");
+  });
+
+  /** The same mid-session-deploy case `text` and `value` document; `valid` predates all three. */
+  it("defaults to null for a record written before the field existed", () => {
+    expect("word" in valid).toBe(false);
+
+    const parsed = answerRecordSchema.safeParse(valid);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.word).toBeNull();
+  });
+
+  it("refuses a word longer than the bound the route enforces", () => {
+    const tooLong = "a".repeat(MAX_WORD_LENGTH + 1);
+
+    expect(answerRecordSchema.safeParse({ ...valid, word: tooLong }).success).toBe(false);
+  });
+
+  it("accepts a word exactly at the bound", () => {
+    expect(
+      answerRecordSchema.safeParse({ ...valid, word: "a".repeat(MAX_WORD_LENGTH) }).success
+    ).toBe(true);
+  });
+
+  it("refuses a non-string, non-null word", () => {
+    expect(answerRecordSchema.safeParse({ ...valid, word: 42 }).success).toBe(false);
+  });
+
+  it("bounds a word more tightly than free text, because it goes on a projector", () => {
+    // The two bounds are different numbers for different reasons — 80 is a sentence, 24
+    // is a projected line. A word at 25 characters must be refused even though a text
+    // answer at 25 is fine.
+    expect(MAX_WORD_LENGTH).toBeLessThan(MAX_TEXT_ANSWER_LENGTH);
+    const between = "a".repeat(MAX_WORD_LENGTH + 1);
+    expect(answerRecordSchema.safeParse({ ...valid, text: between }).success).toBe(true);
+    expect(answerRecordSchema.safeParse({ ...valid, word: between }).success).toBe(false);
   });
 });
 

@@ -46,7 +46,7 @@ const {
 } = await import("./store");
 const { registeredKeys, ANSWERS_KEY, PLAYER_IDS_KEY, PLAYERS_KEY, SCORES_KEY, TALLIES_KEY } =
   await import("./keys");
-const { answeredField, optionField } = await import("./tallies");
+const { answeredField, optionField, wordField } = await import("./tallies");
 const { quiz } = await import("../../quiz/index");
 
 const NOW = 1_785_000_000_000;
@@ -679,14 +679,27 @@ describe("readPlayerById", () => {
 describe("submitAnswer", () => {
   beforeEach(configure);
 
+  /**
+   * **A real choice question, looked up by id rather than by position.**
+   *
+   * This used to be `quiz.questions[0]`, which is the *word-cloud* opener — so a fixture
+   * commented "a choice answer" was carrying a word-cloud question's id with invented
+   * option ids. Harmless here, because `submitAnswer` is kind-agnostic by design, and
+   * exactly the shape `lessons.md` warns about ("never build a fixture from a positional
+   * index into real data without checking what that datum actually is"). Corrected during
+   * S-08 so the word-cloud fixture below can be told apart from this one at a glance.
+   */
+  const choiceQuestionId = "llm-skrot";
+
   const answer = {
     playerId: "player-abc",
-    questionId: quiz.questions[0]!.id,
+    questionId: choiceQuestionId,
     optionIds: ["a"],
-    // A choice answer, so neither a typed text nor a guess. Those paths are covered
+    // A choice answer, so no typed text, no guess and no word. Those paths are covered
     // in `answer.test.ts`.
     text: null,
     value: null,
+    word: null,
     elapsedMs: 3_200,
     correct: true,
     awarded: 920,
@@ -798,6 +811,101 @@ describe("submitAnswer", () => {
       optionField(answer.questionId, "a"),
       optionField(answer.questionId, "b"),
     ]);
+  });
+
+  /**
+   * THE WORD COUNTER (roadmap S-08, FR-012/FR-015).
+   *
+   * Structural, like the option assertions above and with the same caveat: the increment
+   * happens inside the Lua, so nothing here executes it. What is under test is that the
+   * right field is sent, that it takes the place of the option counters rather than
+   * joining them, and that a record without a word sends none.
+   */
+  describe("the word counter", () => {
+    const wordCloudId = "smieszne-slowo-ai";
+
+    it("covers a question that really is a word cloud", () => {
+      // The fixture proved rather than assumed — the mistake corrected above.
+      const question = quiz.questions.find((candidate) => candidate.id === wordCloudId);
+      expect(question?.kind).toBe("word-cloud");
+    });
+
+    const wordAnswer = {
+      ...answer,
+      questionId: wordCloudId,
+      optionIds: [],
+      text: "Halucynacja",
+      word: "halucynacja",
+      correct: false,
+      awarded: 0,
+    };
+
+    it("sends the answered field and exactly one word field", async () => {
+      redisMock.eval.mockResolvedValue([1, 0]);
+
+      await submitAnswer(wordAnswer);
+
+      const [, , args] = redisMock.eval.mock.calls[0]!;
+      expect(args[6]).toBe(answeredField(wordCloudId));
+      expect(args.slice(7)).toEqual([wordField(wordCloudId, "halucynacja")]);
+    });
+
+    it("keys the counter by the folded word, not by what the attendee typed", async () => {
+      redisMock.eval.mockResolvedValue([1, 0]);
+
+      await submitAnswer(wordAnswer);
+
+      const [, , args] = redisMock.eval.mock.calls[0]!;
+      // `text` is the typed form and must not reach the field name — otherwise two
+      // people who typed the same word in different case get two chips.
+      expect(args.slice(7)).not.toContain(wordField(wordCloudId, "Halucynacja"));
+    });
+
+    it("bills exactly what a single-choice answer bills", async () => {
+      redisMock.eval.mockResolvedValue([1, 0]);
+
+      await submitAnswer(wordAnswer);
+      const wordArgs = redisMock.eval.mock.calls[0]![2] as string[];
+
+      redisMock.eval.mockClear();
+      await submitAnswer(answer);
+      const choiceArgs = redisMock.eval.mock.calls[0]![2] as string[];
+
+      // One counter in the tail either way, so S-08 moved the event's cost by nothing.
+      expect(wordArgs.length).toBe(choiceArgs.length);
+    });
+
+    /**
+     * **The regression this exists for, and it was a live defect.** `submitAnswer` used
+     * to build its `ARGV` from the raw argument rather than from the parsed record, so a
+     * caller that omitted `word` — every choice and text submission, and any record
+     * written before the field shipped — sent the literal field
+     * `word:<questionId>:undefined`. That is a real hash field the cloud read would have
+     * returned, and the projector would have rendered "undefined" as a word somebody
+     * wrote. The parse succeeded; nothing reported it.
+     */
+    it("sends no word field when the record omits one entirely", async () => {
+      redisMock.eval.mockResolvedValue([1, 920]);
+
+      const { word: _word, ...withoutWord } = answer;
+      await submitAnswer(withoutWord as typeof answer);
+
+      const [, , args] = redisMock.eval.mock.calls[0]!;
+      expect(args.slice(7)).toEqual([optionField(answer.questionId, "a")]);
+      expect(args.join("|")).not.toContain("undefined");
+    });
+
+    it("stores the canonical record, with every per-kind field present", async () => {
+      redisMock.eval.mockResolvedValue([1, 920]);
+
+      const { word: _word, ...withoutWord } = answer;
+      await submitAnswer(withoutWord as typeof answer);
+
+      const [, , args] = redisMock.eval.mock.calls[0]!;
+      // The schema's defaults are what gets written, so what is read back matches what
+      // `readOwnResult` expects rather than depending on what the caller remembered.
+      expect(JSON.parse(args[1]!)).toMatchObject({ text: null, value: null, word: null });
+    });
   });
 
   it("increments the tallies only after the HSETNX that makes the answer final", async () => {
@@ -1045,11 +1153,11 @@ describe("readOwnResult", () => {
   beforeEach(configure);
 
   /**
-   * Deliberately written **without** `text` or `value` — this is the shape a record
-   * written before S-05 and S-06 shipped has, and a session live across either deploy
-   * holds them. The assertion below is that it still parses, defaulting the new
-   * fields, rather than coming back `null` and reporting `answered: false` to a device
-   * that watched its answer land.
+   * Deliberately written **without** `text`, `value` or `word` — this is the shape a
+   * record written before S-05, S-06 and S-08 shipped has, and a session live across any
+   * of those deploys holds them. The assertion below is that it still parses, defaulting
+   * the new fields, rather than coming back `null` and reporting `answered: false` to a
+   * device that watched its answer land.
    */
   const stored = {
     playerId: "player-abc",
@@ -1071,8 +1179,8 @@ describe("readOwnResult", () => {
     await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
       outcome: "ok",
       state: firstQuestionOpen,
-      // The pre-S-05/S-06 record, plus the fields it did not carry.
-      answer: { ...stored, text: null, value: null },
+      // The pre-S-05/S-06/S-08 record, plus the fields it did not carry.
+      answer: { ...stored, text: null, value: null, word: null },
       total: 920,
     });
 

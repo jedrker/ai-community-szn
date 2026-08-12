@@ -784,34 +784,34 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 
 #### Automated
 
-- [x] 1.1 `bun run test` passes
-- [x] 1.2 `bun run type-check` reports 0 errors
-- [x] 1.3 `words.test.ts` covers the fold's rules and every refusal
-- [x] 1.4 `normalize.test.ts` asserts `foldWord` and `normalizeAnswer` disagree on a diacritic
-- [x] 1.5 `normalize.test.ts`'s existing name-claim tripwire still passes, unmodified
-- [x] 1.6 `tallies.test.ts` covers three families and a colon-bearing word round-trip
-- [x] 1.7 `keys.test.ts` still passes
+- [x] 1.1 `bun run test` passes — ab05c1d
+- [x] 1.2 `bun run type-check` reports 0 errors — ab05c1d
+- [x] 1.3 `words.test.ts` covers the fold's rules and every refusal — ab05c1d
+- [x] 1.4 `normalize.test.ts` asserts `foldWord` and `normalizeAnswer` disagree on a diacritic — ab05c1d
+- [x] 1.5 `normalize.test.ts`'s existing name-claim tripwire still passes, unmodified — ab05c1d
+- [x] 1.6 `tallies.test.ts` covers three families and a colon-bearing word round-trip — ab05c1d
+- [x] 1.7 `keys.test.ts` still passes — ab05c1d
 
 #### Manual
 
-- [x] 1.8 `normalize.ts`'s docstring leaves no doubt there are three folds and why one is elsewhere
-- [x] 1.9 Break-the-guard pass: single-token refusal, diacritic preservation, prefix strip
+- [x] 1.8 `normalize.ts`'s docstring leaves no doubt there are three folds and why one is elsewhere — ab05c1d
+- [x] 1.9 Break-the-guard pass: single-token refusal, diacritic preservation, prefix strip — ab05c1d
 
 ### Phase 2: The write path
 
 #### Automated
 
-- [ ] 2.1 `bun run test` passes
-- [ ] 2.2 `bun run type-check` reports 0 errors
-- [ ] 2.3 `answer.test.ts` acceptance coverage replaces the refusal test
-- [ ] 2.4 Six refusals asserted by outcome, none reaching `submitAnswer`
-- [ ] 2.5 `store.test.ts` covers the extra counter and its absence
-- [ ] 2.6 `answers.test.ts` covers the `word` default for a pre-deploy record
+- [x] 2.1 `bun run test` passes
+- [x] 2.2 `bun run type-check` reports 0 errors
+- [x] 2.3 `answer.test.ts` acceptance coverage replaces the refusal test
+- [x] 2.4 Six refusals asserted by outcome, none reaching `submitAnswer`
+- [x] 2.5 `store.test.ts` covers the extra counter and its absence
+- [x] 2.6 `answers.test.ts` covers the `word` default for a pre-deploy record
 
 #### Manual
 
 - [ ] 2.7 A submitted word appears once in the Upstash console and a double tap does not raise it
-- [ ] 2.8 Break-the-guard pass: the increment's position below the `HSETNX`
+- [x] 2.8 Break-the-guard pass: the increment's position below the `HSETNX`
 
 ### Phase 3: The read and the host route
 

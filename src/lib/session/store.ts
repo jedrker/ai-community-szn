@@ -19,7 +19,7 @@ import { logSessionEvent } from "./log";
 import { parsePlayerRecord, type PlayerRecord } from "./players";
 import { buildStandings, rankOf, type Standings } from "./standings";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
-import { answeredField, optionField } from "./tallies";
+import { answeredField, optionField, wordField } from "./tallies";
 
 /**
  * The authoritative session store (roadmap F-02).
@@ -318,23 +318,33 @@ return { redis.call('HGET', KEYS[2], key), session }
  * Placed above the lock they would count a submission the lock then rejects, and the
  * projector would show more answers than the answers hash holds — a drift nothing else
  * would report. Below it, the increments inherit the same atomicity that makes the
- * first answer final: a duplicate never reaches them.
+ * first answer final: a duplicate never reaches them. **S-08's word counter inherits
+ * that placement for free**, which is the whole reason the word cloud is counted here
+ * rather than by a lighter write of its own: a double tap cannot put a word on the
+ * projector twice.
  *
  * **Ten commands are billed per submission**, up from seven: this `EVAL` plus nine
  * `redis.call`s on the accepted path (`GET`, `HEXISTS`, `HSETNX`, `HINCRBY` for the
- * score, `HINCRBY` for the answered counter, one `HINCRBY` per selected option, 3×
- * `EXPIRE`). That is `k + 2` more than before, where `k` is the number of options the
- * attendee selected. Upstash bills the script *and* every call inside it
+ * score, `HINCRBY` for the answered counter, one `HINCRBY` per counter in the tail, 3×
+ * `EXPIRE`). That is `k + 2` more than before, where `k` is the length of that tail.
+ * Upstash bills the script *and* every call inside it
  * (`command-counter-diagnostic.md`), and this is the first path in the project that
  * runs once per attendee per question — 150 × 14 of them in a real event. That number
  * is stated here because Phase 5 prices it: an edit that adds a call is an edit to the
  * event's cost, and should know it is being watched.
  *
+ * **A word-cloud submission bills exactly what a single-choice one does** (`k = 1`, the
+ * word counter in place of the one option counter), so S-08 moved the event's cost by
+ * nothing.
+ *
  * KEYS[1] = session doc, KEYS[2] = answers hash, KEYS[3] = scores hash,
  * KEYS[4] = player-ids hash, KEYS[5] = tallies hash
  * ARGV[1] = answer field, ARGV[2] = record JSON, ARGV[3] = player id,
  * ARGV[4] = question id, ARGV[5] = awarded, ARGV[6] = ttl,
- * ARGV[7] = answered field, ARGV[8..] = one option field per selected option
+ * ARGV[7] = answered field, ARGV[8..] = one tallies field per counter to increment —
+ * one per selected option for a choice answer, or the single word field for a
+ * word-cloud one. **The loop is deliberately generic**: it counts fields, not options,
+ * which is why S-08 needed no change to this script at all.
  * Returns { 1, total }  accepted
  *         { 0, 0 }      already answered this question
  *         { -1, 0 }     no session
@@ -863,6 +873,28 @@ export type SubmitResult =
   | { outcome: "failed"; reason: string };
 
 /**
+ * The tallies fields one answer increments, beyond the `answered` counter.
+ *
+ * Derived from the record alone, which is what keeps `submitAnswer`'s contract "the
+ * record determines everything the script writes" — a counter passed as a second
+ * argument is one a caller can forget, and the symptom would be a word that never
+ * reaches the projector while the answer itself stores correctly.
+ *
+ * The two kinds are mutually exclusive by construction: `answer.ts` populates
+ * `optionIds` for a choice question and `word` for a word-cloud one, never both. Written
+ * as two independent contributions anyway rather than as an `if/else`, so a future kind
+ * that counts something alongside options does not have to restructure this.
+ */
+function counterFields(record: AnswerRecord): string[] {
+  const fields = record.optionIds.map((optionId) => optionField(record.questionId, optionId));
+
+  // Roadmap S-08. `null` for every other kind, so this contributes nothing to them.
+  if (record.word !== null) fields.push(wordField(record.questionId, record.word));
+
+  return fields;
+}
+
+/**
  * Records a scored answer and advances the player's running total (roadmap S-03).
  *
  * The record arrives already scored: the route computes correctness and the award from
@@ -900,26 +932,42 @@ export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> 
     };
   }
 
+  /**
+   * **Everything below is derived from the PARSED record, never from the argument** —
+   * corrected during S-08, and the bug it fixes was live rather than hypothetical.
+   *
+   * The per-kind fields carry `.default(null)`, so a caller that omits one passes
+   * `undefined` while the schema's output has `null`. This function used to validate and
+   * then build its `ARGV` from the raw argument, throwing the normalised form away — so
+   * an omitted `word` produced the counter field `word:<questionId>:undefined`, a real
+   * hash field that `readWordCloud` would read back and the projector would render as
+   * the word "undefined". The parse succeeded and nothing anywhere reported it.
+   *
+   * Storing the parsed form also makes the stored JSON canonical: every per-kind field is
+   * present and explicitly `null`, which is what `readOwnResult` parses back anyway.
+   */
+  const stored = validated.data;
+
   let result: [number, number] | null;
   try {
     result = await redis.eval<string[], [number, number]>(
       SUBMIT_ANSWER,
       [SESSION_KEY, ANSWERS_KEY, SCORES_KEY, PLAYER_IDS_KEY, TALLIES_KEY],
       [
-        answerField(record.questionId, record.playerId),
-        JSON.stringify(record),
-        record.playerId,
-        record.questionId,
-        String(record.awarded),
+        answerField(stored.questionId, stored.playerId),
+        JSON.stringify(stored),
+        stored.playerId,
+        stored.questionId,
+        String(stored.awarded),
         String(SESSION_TTL_SECONDS),
-        answeredField(record.questionId),
+        answeredField(stored.questionId),
         // A variadic tail rather than a delimited string: a multiple-choice answer
         // needs no encoding scheme, and the script loops from ARGV[8] to #ARGV. An
         // answer with no options selected simply contributes no option increments,
         // and still counts toward `answered` — the two questions the panel asks are
         // "how many people answered" and "what did they choose", and those are not
         // the same question.
-        ...record.optionIds.map((optionId) => optionField(record.questionId, optionId)),
+        ...counterFields(stored),
       ]
     );
   } catch (err) {

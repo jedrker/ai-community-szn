@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { MAX_TEXT_ANSWER_LENGTH } from "./scoring";
+import { MAX_WORD_LENGTH } from "./words";
 
 /**
  * What the store holds per answer, and how the answers hash is keyed (roadmap S-03).
@@ -66,6 +67,28 @@ export const answerRecordSchema = z.object({
    * `.default(null)` for the same mid-session-deploy reason `text` carries one.
    */
   value: z.number().finite().nullable().default(null),
+  /**
+   * The **folded** word for a word-cloud question (roadmap S-08, FR-012), which is the
+   * field name its counter was incremented under.
+   *
+   * `null` for every other kind, exactly as `text` and `value` are.
+   *
+   * **Two fields hold one word, and the division is the point.** `text` above carries
+   * what the attendee typed — what the reveal echoes and what a stage dispute reads —
+   * while this carries what the room's cloud grouped them by. They differ by case alone
+   * (`foldWord` in `words.ts` folds nothing else), which is exactly why storing only one
+   * would be a trap: derive the fold at read time and the cloud depends on a function
+   * that may have changed since the answer was written; derive the raw form and there is
+   * none to derive.
+   *
+   * It also keeps `submitAnswer`'s contract intact — the record alone determines every
+   * field the script writes, so the counter is not a second argument that a caller can
+   * forget to pass.
+   *
+   * `.max()` is the backstop behind the route's visible refusal, as `text`'s is.
+   * `.default(null)` for the same mid-session-deploy reason both siblings carry one.
+   */
+  word: z.string().max(MAX_WORD_LENGTH).nullable().default(null),
   /** The clamped elapsed time, in milliseconds, that produced `awarded`. */
   elapsedMs: z.number().int().nonnegative(),
   correct: z.boolean(),

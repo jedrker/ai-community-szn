@@ -86,10 +86,12 @@ const REGISTERED_KEYS = [
     name: `${SESSION_NAMESPACE}answers`,
     holds:
       "ATTENDEE DATA. Hash of `<questionId>:<playerId>` -> answer record JSON " +
-      "{ playerId, questionId, optionIds, elapsedMs, correct, awarded, answeredAt }. " +
-      "What a given person answered, which is the most sensitive thing this project " +
-      "stores. No display name: the players hash owns that mapping, and a second copy " +
-      "is a second thing the purge has to reach.",
+      "{ playerId, questionId, optionIds, text, value, word, elapsedMs, correct, " +
+      "awarded, answeredAt }. What a given person answered, which is the most sensitive " +
+      "thing this project stores — `text` is attendee-authored free text (a typed " +
+      "answer, or a word-cloud word) and `word` is its folded form. No display name: " +
+      "the players hash owns that mapping, and a second copy is a second thing the " +
+      "purge has to reach.",
   },
   {
     name: `${SESSION_NAMESPACE}scores`,
@@ -101,14 +103,23 @@ const REGISTERED_KEYS = [
   {
     name: `${SESSION_NAMESPACE}tallies`,
     holds:
-      "NOT attendee data — the first registered key that is not. Hash of aggregate " +
-      "counters: `answered:<questionId>` -> how many people answered, and " +
-      "`opt:<questionId>:<optionId>` -> how many chose that option. Counts over a " +
-      "150-person room identify nobody, and no field is keyed by a player id or a " +
-      "name. It is registered and purged anyway, because the registry has no " +
-      "exemption list: an invariant with one is an invariant that rots, and the " +
-      "cheapest way to keep 'every namespaced name is here' true is to keep it " +
-      "true without exceptions.",
+      "Hash of aggregate counters, in three field families: " +
+      "`answered:<questionId>` -> how many people answered, " +
+      "`opt:<questionId>:<optionId>` -> how many chose that option, and " +
+      "`word:<questionId>:<foldedWord>` -> how many wrote that word (S-08). " +
+      "This entry used to open 'NOT attendee data — the first registered key that is " +
+      "not', and S-08 made that too strong to leave standing: the word family's FIELD " +
+      "NAMES are attendee-authored text, folded only for case. The claim is corrected " +
+      "here rather than deleted, because a reader checking the retention guardrail " +
+      "should meet the reversal where the old sentence was. What still holds is the " +
+      "part that matters: no field is keyed by a player id or a display name, so " +
+      "nothing here says WHO wrote or chose anything, and counts over a 150-person " +
+      "room identify nobody. What has changed is that this key is no longer merely " +
+      "counters, so it is purged because it holds attendee content and not only " +
+      "because the registry has no exemption list. That second reason stands too: an " +
+      "invariant with an exemption list is an invariant that rots. Note also that the " +
+      "word family is the only one whose field count grows with the ROOM rather than " +
+      "with the quiz — up to one field per attendee.",
   },
 ] as const satisfies readonly RegisteredKey[];
 
@@ -161,12 +172,13 @@ export const ANSWERS_KEY = REGISTERED_KEYS[3].name;
 export const SCORES_KEY = REGISTERED_KEYS[4].name;
 
 /**
- * The tallies hash: aggregate counters, one per question and one per option.
+ * The tallies hash: aggregate counters, one per question, one per option, and one per
+ * word.
  *
- * The two field families are `answered:<questionId>` and
- * `opt:<questionId>:<optionId>`, and `tallies.ts` owns both formats — the role
- * `answerField` plays for the answers hash, and for the same reason: a read path and a
- * write path that spell a field differently present as "nobody answered".
+ * The three field families are `answered:<questionId>`, `opt:<questionId>:<optionId>`
+ * and `word:<questionId>:<foldedWord>`, and `tallies.ts` owns all three formats — the
+ * role `answerField` plays for the answers hash, and for the same reason: a read path
+ * and a write path that spell a field differently present as "nobody answered".
  *
  * One hash for the whole session rather than one per question, for the reason
  * `ANSWERS_KEY` documents: a per-question name would have to be assembled at runtime,
