@@ -3,7 +3,7 @@ project: "LiveQuiz"
 version: 3
 status: draft
 created: 2026-08-05
-updated: 2026-08-09
+updated: 2026-08-12
 prd_version: 1
 main_goal: quality
 top_blocker: decisions
@@ -854,3 +854,24 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   while the client gates made a 400 unreachable; the loose "contains a digit" gate made it reachable
   and locked attendees out of a question nothing had been written for. Caught in implementation
   review, fixed by splitting `invalid` from `rejected` so only a 409 is final.
+
+- **S-07: Host can choose to show the standings between questions, and every attendee can locate
+  themselves on a leaderboard that matches what the room sees on the large screen.** — Archived
+  2026-08-12 → `context/archive/2026-08-11-leaderboard-beat/`. **Took the decision S-02 parked here:
+  display names are now published**, bounded to five `{ rank, displayName, points }` rows and never a
+  player id — the board is computed once server-side and broadcast, so no device sorts and the
+  no-divergence guardrail holds by construction rather than by agreement. Row *order* (a total order)
+  and rank *number* (competition rank, ties share it) are computed by different rules on purpose: the
+  per-device path holds only the scores hash, so a positional rank would make a tied attendee's phone
+  contradict the projector. The `standings` phase deliberately keeps `currentQuestionId` — questionless,
+  `nextQuestionId(null)` returns question 1 and advancing from the board would reopen the quiz — which
+  is why `advance.ts` needed no change at all. Suite 831 → 974; no new `livequiz:` key (rank is derived);
+  `standings` carries `.default(null)` for the mid-session deploy. **S-08 and S-10 must read
+  `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md`** before adding a snapshot field
+  or a phase; S-10 also inherits the `ended`-phase board, which this slice did not build.
+  Lesson: **check every path that exposes a new snapshot field, not just the one you reasoned about** —
+  publishing names was justified entirely on Ably's ~120 s retention floor, but `GET /api/quiz/state` is
+  deliberately unauthenticated and returns the whole document, so the five names are readable for as long
+  as the host leaves the board up. The exposure was accepted; the reasoning recorded in the plan was
+  simply wrong, and implementation review caught it rather than a test. Archived with 11 manual
+  verification rows still open, by explicit decision.
