@@ -1,9 +1,10 @@
 /**
- * The two folds (PRD FR-011, FR-008).
+ * The two folds in this file (PRD FR-011, FR-008) — and a pointer to the third,
+ * which is deliberately not here.
  *
- * **There are two on purpose, and merging them back into one would be a bug with
- * no visible symptom until a live session.** They differ by exactly one rule —
- * trailing sentence punctuation — and they have different jobs:
+ * **The two below are two on purpose, and merging them back into one would be a
+ * bug with no visible symptom until a live session.** They differ by exactly one
+ * rule — trailing sentence punctuation — and they have different jobs:
  *
  * | | `normalizePolish` | `normalizeAnswer` |
  * | --- | --- | --- |
@@ -14,6 +15,24 @@
  * Neither fold tolerates misspellings. A fuzzy threshold is something the host
  * would have to defend out loud in front of the room, so it is out of scope by
  * decision, not by omission.
+ *
+ * ## S-08 added a third fold, elsewhere. Both halves of that sentence matter
+ *
+ * `foldWord` in **`src/lib/session/words.ts`** groups word-cloud submissions
+ * (FR-012/FR-015). It folds case and whitespace and **keeps diacritics**, because
+ * unlike the two above its output is *rendered*: the folded word is the chip on the
+ * projector, and folding `ó` away would put a misspelt Polish word on the big screen
+ * in front of the room. See that function for the accepted cost.
+ *
+ * It was added **beside** these two, not by widening either — `lessons.md` has an
+ * entry about exactly that mistake, made against `normalizePolish` during S-05. Both
+ * functions here are unchanged, and the tests below still pin them. The tripwire for
+ * the third fold lives in `src/lib/session/words.test.ts`, next to the function it
+ * guards.
+ *
+ * It lives outside `src/quiz/` because it is a session-aggregation rule rather than a
+ * rule about the quiz definition — the same reasoning that keeps `scoring.ts` out of
+ * this directory (CLAUDE.md). This file stays part of the data contract.
  */
 
 /**

@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeAnswer, normalizePolish } from "./normalize";
 
+/**
+ * The two folds this file owns. **There is a third** — `foldWord` in
+ * `src/lib/session/words.ts`, which groups word-cloud submissions and deliberately keeps
+ * diacritics because its output is rendered on the projector rather than compared.
+ *
+ * Its tripwire lives beside it in `words.test.ts`, not here, so the assertion sits next
+ * to the function it guards and this file keeps no dependency on `src/lib/`. Named here
+ * because "the two folds" is the phrase a reader arrives with, and the third one being
+ * invisible from this file is how someone ends up widening one of these two instead.
+ */
+
 describe("normalizePolish", () => {
   it("lowercases", () => {
     expect(normalizePolish("Halucynacje")).toBe("halucynacje");
