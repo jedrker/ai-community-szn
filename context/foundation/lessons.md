@@ -118,3 +118,25 @@
   it, never inherit it. Amend the documents that state the old guarantee in the same change, and
   state the binding exposure rather than the first one you thought of.
 - **Applies to**: plan, plan-review, implement, impl-review
+
+## Break the guard and watch the named test fail — routinely, not when it looks interesting
+
+- **Context**: Every test written for a guard, branch or invariant, and every fix applied during
+  review triage. Sharpest immediately after the two entries above have already been read — both
+  name this technique as an option, and it is precisely the step that gets skipped when the
+  fixture looks obviously fine.
+- **Problem**: S-07 shipped two tests that could not fail, neither of them the shape the entries
+  above describe — no destructuring default, no shared base object, no fake timers. (1) "paints
+  rows in the order given and never sorts them" used a fixture already in descending points
+  order, so injecting a sort into `renderStandings` changed nothing; it shipped in a commit whose
+  message claimed it covered the no-divergence guardrail. (2) A triage fix for an impl-review
+  finding was aimed at the wrong mechanism — corrupt *scores* rather than dropped *player
+  records* — and its test passed with the fix reverted; the finding had already been reported as
+  fixed before a regression run showed otherwise. Both were found only by deliberately breaking
+  the code, and one of them only after it had been committed and described as done.
+- **Rule**: After writing a test for a guard, revert or disable that guard, confirm that specific
+  test fails, then restore. Treat it as a routine step in the same edit, not a flourish reserved
+  for interesting branches. If no edit to the code under test can make the test fail, stop: either
+  the fixture cannot reach the branch, or the change is behaviour-neutral — in which case say so
+  plainly instead of reporting it as a fix.
+- **Applies to**: implement, impl-review
