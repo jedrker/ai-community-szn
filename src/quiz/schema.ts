@@ -60,7 +60,7 @@ const numberSchema = z.object({
   // number" — which names neither the question nor the problem. Checking only
   // the typeof here lets the question-level refinement own the message.
   correctValue: z.custom<number>((value) => typeof value === "number", {
-    message: "correctValue musi być liczbą.",
+    error: "correctValue musi być liczbą.",
   }),
 });
 const wordCloudSchema = z.object({ kind: z.literal("word-cloud"), ...baseFields });
