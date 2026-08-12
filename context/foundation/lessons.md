@@ -97,3 +97,24 @@
   produce the state such a test claims to exercise. Then verify by breaking the guard: revert
   it and watch that specific test fail. Naming a timing branch is not reaching it.
 - **Applies to**: plan, plan-review, implement, impl-review
+
+## Check every path that emits a shared document, not just the one you reasoned about
+
+- **Context**: Any change that adds a field to a document more than one surface emits — a
+  broadcast snapshot, a shared response body, a cached payload. Sharpest when one of those
+  surfaces is deliberately unauthenticated and its openness was justified by what the payload
+  used to contain.
+- **Problem**: S-07 added `standings` — the first attendee display names ever published — to
+  `SessionState`, and the whole retention argument covered only Ably's ~120s connection-recovery
+  window. `GET /api/quiz/state` is deliberately open and returns the same document; its own
+  justification, "it returns exactly what is already broadcast", was written when that document
+  held nothing but a count. The names were therefore readable by anyone with the attendee URL
+  for as long as the host left the board up — a different mechanism and a longer window than the
+  one the plan analysed — while the PRD still asserted "no display name is ever published".
+  Neither tests nor `astro check` can see this; implementation review caught it.
+- **Rule**: Before adding a field to a shared document, list every route and transport that emits
+  it and re-check each one's access justification against the new payload. A justification of the
+  form "this only returns what X already exposes" is invalidated by any change to X — re-derive
+  it, never inherit it. Amend the documents that state the old guarantee in the same change, and
+  state the binding exposure rather than the first one you thought of.
+- **Applies to**: plan, plan-review, implement, impl-review
