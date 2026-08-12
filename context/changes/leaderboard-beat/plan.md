@@ -769,8 +769,8 @@ No store key is added, so `end`, `purge` and `scripts/check-purge-residue.ts` ne
 
 #### Automated
 
-- [x] 5.1 Unit tests pass: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.1 Unit tests pass: `bun run test` — d72cf47
+- [x] 5.2 Type checking passes: `bun run type-check` — d72cf47
 
 #### Manual
 
