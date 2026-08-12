@@ -801,35 +801,35 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 
 #### Automated
 
-- [x] 2.1 `bun run test` passes
-- [x] 2.2 `bun run type-check` reports 0 errors
-- [x] 2.3 `answer.test.ts` acceptance coverage replaces the refusal test
-- [x] 2.4 Six refusals asserted by outcome, none reaching `submitAnswer`
-- [x] 2.5 `store.test.ts` covers the extra counter and its absence
-- [x] 2.6 `answers.test.ts` covers the `word` default for a pre-deploy record
+- [x] 2.1 `bun run test` passes — bbfbf53
+- [x] 2.2 `bun run type-check` reports 0 errors — bbfbf53
+- [x] 2.3 `answer.test.ts` acceptance coverage replaces the refusal test — bbfbf53
+- [x] 2.4 Six refusals asserted by outcome, none reaching `submitAnswer` — bbfbf53
+- [x] 2.5 `store.test.ts` covers the extra counter and its absence — bbfbf53
+- [x] 2.6 `answers.test.ts` covers the `word` default for a pre-deploy record — bbfbf53
 
 #### Manual
 
 - [ ] 2.7 A submitted word appears once in the Upstash console and a double tap does not raise it
-- [x] 2.8 Break-the-guard pass: the increment's position below the `HSETNX`
+- [x] 2.8 Break-the-guard pass: the increment's position below the `HSETNX` — bbfbf53
 
 ### Phase 3: The read and the host route
 
 #### Automated
 
-- [ ] 3.1 `bun run test` passes
-- [ ] 3.2 `bun run type-check` reports 0 errors
-- [ ] 3.3 `words.test.ts` (route) mirrors participation, including the writes-nothing source scan
-- [ ] 3.4 Auth and the four `questionId` refusals covered
-- [ ] 3.5 Ordering covered with a fixture not pre-sorted
-- [ ] 3.6 Truncation reports `distinct` above the bound
-- [ ] 3.7 The `null`-vs-empty split covered on both sides
+- [x] 3.1 `bun run test` passes
+- [x] 3.2 `bun run type-check` reports 0 errors
+- [x] 3.3 `words.test.ts` (route) mirrors participation, including the writes-nothing source scan
+- [x] 3.4 Auth and the four `questionId` refusals covered
+- [x] 3.5 Ordering covered with a fixture not pre-sorted
+- [x] 3.6 Truncation reports `distinct` above the bound
+- [x] 3.7 The `null`-vs-empty split covered on both sides
 
 #### Manual
 
 - [ ] 3.8 `curl` with and without the host header behaves as specified
 - [ ] 3.9 A minute of polling leaves `updatedAt` and `version` untouched
-- [ ] 3.10 Break-the-guard pass: the kind refusal and the `null`-vs-empty split
+- [x] 3.10 Break-the-guard pass: the kind refusal and the `null`-vs-empty split
 
 ### Phase 4: The projector
 

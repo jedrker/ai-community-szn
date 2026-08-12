@@ -19,7 +19,8 @@ import { logSessionEvent } from "./log";
 import { parsePlayerRecord, type PlayerRecord } from "./players";
 import { buildStandings, rankOf, type Standings } from "./standings";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
-import { answeredField, optionField, wordField } from "./tallies";
+import { answeredField, optionField, wordField, wordFromField } from "./tallies";
+import { WORD_CLOUD_SIZE } from "./words";
 
 /**
  * The authoritative session store (roadmap F-02).
@@ -1089,6 +1090,84 @@ export async function readQuestionTallies(
   });
 
   return { answered: counterFrom(values[answered]), options };
+}
+
+/** One word and how many people wrote it. */
+export type WordCount = {
+  readonly word: string;
+  readonly count: number;
+};
+
+/**
+ * The word cloud for one question, ordered and bounded (roadmap S-08, FR-015).
+ *
+ * `distinct` is the count **before** the slice, so the caller can say how many words were
+ * dropped rather than presenting the top `WORD_CLOUD_SIZE` as the whole room.
+ */
+export type WordCloud = {
+  readonly answered: number;
+  readonly distinct: number;
+  readonly words: readonly WordCount[];
+};
+
+/**
+ * Reads the word cloud (roadmap S-08, FR-012/FR-015).
+ *
+ * **One billed command — `HGETALL` — and the `answered` count comes out of the same
+ * reply.** The tallies hash holds `answered:<questionId>` alongside the word family, so the
+ * numerator is free. Stated because adding a `readAnsweredCount` call beside this is the
+ * obvious change that would make the cost note wrong, and it would buy nothing.
+ *
+ * The whole hash crosses from Redis rather than a field list, because the field names *are*
+ * the data here: what an attendee typed is not knowable in advance, so `HMGET` has nothing
+ * to ask for. At 150 attendees that is ~200 small fields in the same region — the same trade
+ * `readOwnRank` makes for the scores hash.
+ *
+ * **Ordered by count descending, then word ascending — a total order, and here it decides
+ * what is on screen at all.** `buildStandings` needs a total order so two devices cannot
+ * render the same board differently; this one needs it for a sharper reason: the slice below
+ * drops everything past `WORD_CLOUD_SIZE`, so a partial order would let two consecutive
+ * polls drop *different* words, and the cloud would flicker between them with nothing
+ * anywhere to explain it. Alphabetical is the tie-break because it is stable and because a
+ * room full of one-vote words should not reorder itself every 2.5 seconds.
+ *
+ * **`null` only on a throw.** A hash that does not exist yet is an empty cloud — the key is
+ * not written until the first submission — exactly as `readQuestionTallies` documents. A
+ * failed read must never surface as an empty cloud: on a projector that is the claim
+ * "nobody in this room wrote anything", at the moment the room is looking at it.
+ */
+export async function readWordCloud(questionId: string): Promise<WordCloud | null> {
+  const redis = client();
+  if (!redis) return null;
+
+  let raw: Record<string, unknown> | null;
+  try {
+    raw = await redis.hgetall<Record<string, unknown>>(TALLIES_KEY);
+  } catch {
+    return null;
+  }
+
+  // `HGETALL` answers `null` for the whole reply when the key is absent. That is "nobody has
+  // answered", not "the store could not say" — see the note above.
+  const values = raw ?? {};
+
+  const words: WordCount[] = [];
+  for (const [field, value] of Object.entries(values)) {
+    // Selected through the inverse in `tallies.ts`, never by a prefix test written here:
+    // that function owns the format, and it is what makes a word containing a colon survive.
+    const word = wordFromField(questionId, field);
+    if (word === null) continue;
+
+    words.push({ word, count: counterFrom(value) });
+  }
+
+  words.sort((a, b) => b.count - a.count || (a.word < b.word ? -1 : a.word > b.word ? 1 : 0));
+
+  return {
+    answered: counterFrom(values[answeredField(questionId)]),
+    distinct: words.length,
+    words: words.slice(0, WORD_CLOUD_SIZE),
+  };
 }
 
 /**

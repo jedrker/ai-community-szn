@@ -38,6 +38,7 @@ const {
   readQuestionTallies,
   readSession,
   readStandings,
+  readWordCloud,
   submitAnswer,
   writeSession,
   ENDED_TTL_SECONDS,
@@ -47,6 +48,7 @@ const {
 const { registeredKeys, ANSWERS_KEY, PLAYER_IDS_KEY, PLAYERS_KEY, SCORES_KEY, TALLIES_KEY } =
   await import("./keys");
 const { answeredField, optionField, wordField } = await import("./tallies");
+const { WORD_CLOUD_SIZE } = await import("./words");
 const { quiz } = await import("../../quiz/index");
 
 const NOW = 1_785_000_000_000;
@@ -1146,6 +1148,175 @@ describe("readQuestionTallies", () => {
     vi.unstubAllEnvs();
 
     await expect(readQuestionTallies(questionId, optionIds)).resolves.toBeNull();
+  });
+});
+
+describe("readWordCloud", () => {
+  beforeEach(configure);
+
+  const questionId = "smieszne-slowo-ai";
+
+  /** Builds a tallies-hash reply, with the word family spelled through `wordField`. */
+  function hash(
+    counts: Record<string, number>,
+    extra: Record<string, unknown> = {}
+  ): Record<string, unknown> {
+    const fields: Record<string, unknown> = { ...extra };
+    for (const [word, count] of Object.entries(counts)) {
+      fields[wordField(questionId, word)] = count;
+    }
+    return fields;
+  }
+
+  it("reads the whole hash in one command and takes the answered count from it", async () => {
+    redisMock.hgetall.mockResolvedValue(
+      hash({ robot: 3 }, { [answeredField(questionId)]: 11 })
+    );
+
+    const cloud = await readWordCloud(questionId);
+
+    expect(cloud).toEqual({ answered: 11, distinct: 1, words: [{ word: "robot", count: 3 }] });
+    // One billed command, and the numerator came out of the same reply — adding a
+    // `readAnsweredCount` beside this is the change that would make the cost note wrong.
+    expect(redisMock.hgetall).toHaveBeenCalledTimes(1);
+    expect(redisMock.hget).not.toHaveBeenCalled();
+  });
+
+  it("ignores the other two field families", async () => {
+    redisMock.hgetall.mockResolvedValue(
+      hash(
+        { robot: 2 },
+        {
+          [answeredField(questionId)]: 5,
+          [optionField("llm-skrot", "large-language-model")]: 40,
+          [answeredField("llm-skrot")]: 60,
+        }
+      )
+    );
+
+    const cloud = await readWordCloud(questionId);
+
+    expect(cloud?.words).toEqual([{ word: "robot", count: 2 }]);
+    expect(cloud?.distinct).toBe(1);
+  });
+
+  it("ignores another question's words", async () => {
+    redisMock.hgetall.mockResolvedValue({
+      [wordField(questionId, "robot")]: 2,
+      [wordField("inne-pytanie", "android")]: 9,
+    });
+
+    expect((await readWordCloud(questionId))?.words).toEqual([{ word: "robot", count: 2 }]);
+  });
+
+  it("keeps a word containing a colon intact", async () => {
+    // The field format's inverse is a prefix strip, not a split — see `tallies.test.ts`.
+    redisMock.hgetall.mockResolvedValue(hash({ "time:zone": 3 }));
+
+    expect((await readWordCloud(questionId))?.words).toEqual([
+      { word: "time:zone", count: 3 },
+    ]);
+  });
+
+  it("keeps a word's Polish diacritics, because this string reaches the projector", async () => {
+    redisMock.hgetall.mockResolvedValue(hash({ "żółw": 2 }));
+
+    expect((await readWordCloud(questionId))?.words[0]!.word).toBe("żółw");
+  });
+
+  /**
+   * **A total order, and here it decides what is on screen at all.** The slice below drops
+   * everything past `WORD_CLOUD_SIZE`, so a partial order would let two consecutive polls
+   * drop *different* words and the cloud would flicker between them with nothing to explain
+   * it.
+   *
+   * The fixture is deliberately **not** in the expected order — a pre-sorted one makes a
+   * function that returns the hash's own order pass (`lessons.md`, and the S-07 test that
+   * could not fail).
+   */
+  it("orders by count descending", async () => {
+    redisMock.hgetall.mockResolvedValue(hash({ rzadkie: 1, czeste: 9, srednie: 4 }));
+
+    expect((await readWordCloud(questionId))?.words).toEqual([
+      { word: "czeste", count: 9 },
+      { word: "srednie", count: 4 },
+      { word: "rzadkie", count: 1 },
+    ]);
+  });
+
+  it("breaks a tie alphabetically, so the cloud does not reorder itself between polls", async () => {
+    redisMock.hgetall.mockResolvedValue(hash({ zebra: 2, android: 2, robot: 2 }));
+
+    expect((await readWordCloud(questionId))?.words.map((entry) => entry.word)).toEqual([
+      "android",
+      "robot",
+      "zebra",
+    ]);
+  });
+
+  it("is stable across two reads of the same hash in a different key order", async () => {
+    redisMock.hgetall.mockResolvedValue(hash({ a: 2, b: 2, c: 2 }));
+    const first = (await readWordCloud(questionId))?.words;
+
+    // The same counts arriving in the opposite order must produce the same cloud — which is
+    // what "total order" buys and what a `points`-only sort would not.
+    redisMock.hgetall.mockResolvedValue(hash({ c: 2, b: 2, a: 2 }));
+    const second = (await readWordCloud(questionId))?.words;
+
+    expect(second).toEqual(first);
+  });
+
+  it("returns at most WORD_CLOUD_SIZE words and reports how many exist", async () => {
+    const counts: Record<string, number> = {};
+    for (let index = 0; index < WORD_CLOUD_SIZE + 17; index += 1) {
+      // Descending counts, so the truncation is by rank rather than by chance.
+      counts[`slowo-${index}`] = 100 - index;
+    }
+    redisMock.hgetall.mockResolvedValue(hash(counts));
+
+    const cloud = await readWordCloud(questionId);
+
+    expect(cloud?.words).toHaveLength(WORD_CLOUD_SIZE);
+    expect(cloud?.distinct).toBe(WORD_CLOUD_SIZE + 17);
+    // The bound keeps the most-written words, not an arbitrary slice.
+    expect(cloud?.words[0]!.word).toBe("slowo-0");
+  });
+
+  it("reports an untouched question as an empty cloud, not as a failure", async () => {
+    // HGETALL answers null for the whole reply until the first submission writes the key.
+    redisMock.hgetall.mockResolvedValue(null);
+
+    await expect(readWordCloud(questionId)).resolves.toEqual({
+      answered: 0,
+      distinct: 0,
+      words: [],
+    });
+  });
+
+  /**
+   * **`null` for the whole read, never an empty cloud.** On a projector an empty cloud is
+   * the claim "nobody in this room wrote a word" — the strongest possible wrong message, at
+   * the moment the room is looking. `readQuestionTallies` and `readPlayerCount` hold the
+   * same discipline.
+   */
+  it("returns null when the store cannot answer", async () => {
+    redisMock.hgetall.mockRejectedValue(new Error("unreachable"));
+
+    await expect(readWordCloud(questionId)).resolves.toBeNull();
+  });
+
+  it("returns null when the store is unconfigured", async () => {
+    vi.unstubAllEnvs();
+
+    await expect(readWordCloud(questionId)).resolves.toBeNull();
+  });
+
+  it("reads a counter written as a decimal string", async () => {
+    // `automaticDeserialization` may hand back either; depending on one silently would mean
+    // every count reading as zero if it changed.
+    redisMock.hgetall.mockResolvedValue(hash({ robot: "7" as unknown as number }));
+
+    expect((await readWordCloud(questionId))?.words).toEqual([{ word: "robot", count: 7 }]);
   });
 });
 
