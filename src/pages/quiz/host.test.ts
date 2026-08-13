@@ -1,0 +1,216 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+/**
+ * The host page's poll loop, guarded structurally (roadmap S-04, extended by S-08).
+ *
+ * ## Why this file scans source instead of running the loop
+ *
+ * `host.astro`'s `<script>` block is not importable — nothing in the project loads it, and
+ * there is no harness for an Astro page's inline script. So the loop's *behaviour* is verified
+ * manually, per the plan's Phase 4 manual rows, and what can be protected here is the
+ * **structure that behaviour depends on**.
+ *
+ * That distinction is the honest one and it is worth stating plainly rather than letting a
+ * green file imply more: nothing below proves the poll fires at the right moment, stops at
+ * the right moment, or paints the right numbers. What it proves is that there is still
+ * exactly one timer, one predicate and one fetch site — the properties whose loss produced
+ * the bugs `host.astro`'s own docstrings record.
+ *
+ * `participation.test.ts` and `boundary.test.ts` take the same approach for the same reason,
+ * including stripping comments first so the file can explain its own rules without tripping
+ * them.
+ */
+
+const SOURCE = readFileSync(fileURLToPath(new URL("./host.astro", import.meta.url)), "utf8");
+
+/**
+ * Comments stripped, for the reason `participation.test.ts` gives: a rule whose reason is not
+ * written next to it is a rule someone deletes, and a scan over raw source would force this
+ * page to choose between explaining itself and passing.
+ */
+const CODE = SOURCE.replace(/<!--[\s\S]*?-->/g, "")
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/\/\/.*$/gm, "");
+
+function occurrences(needle: string): number {
+  return CODE.split(needle).length - 1;
+}
+
+describe("the scan can see the code it is checking", () => {
+  /**
+   * Without this, a stripper that over-matched would empty the source and turn every
+   * assertion below green by vacuity — the failure mode `keys.test.ts` guards with its own
+   * non-empty-registry check.
+   */
+  it("still has the loop's code left after comments are stripped", () => {
+    expect(CODE).toContain("function runPoll");
+    expect(CODE).toContain("function schedulePoll");
+    expect(CODE).toContain("function pollTargetFor");
+  });
+});
+
+/**
+ * THE ONE-LOOP PROPERTY.
+ *
+ * `host.astro`'s `polling` flag exists because a tick armed from `render` while a fetch was
+ * open held several requests at once — worst exactly when the venue network was worst. S-08
+ * added a second panel with its own endpoint and deliberately did **not** add a second timer:
+ * two loops mean two backoffs, two in-flight flags, and two chances to leave a timer running
+ * for a panel that is no longer on screen.
+ */
+describe("there is exactly one poll loop", () => {
+  it("arms a timer from exactly one place", () => {
+    expect(occurrences("setTimeout")).toBe(1);
+  });
+
+  /**
+   * **Matched by shape, not by name**, and the first version of this test was the weak kind
+   * `lessons.md` warns about: it asserted `let pollTimer` appeared once, which stays true when
+   * someone declares `let cloudTimer` beside it. Verified by adding exactly that and watching
+   * the test pass. Counting *any* timer-ish declaration is what the assertion always meant.
+   */
+  it("holds exactly one timer handle, one in-flight flag and one interval", () => {
+    // A second of any of these is the shape a second loop takes.
+    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(1);
+    expect(CODE.match(/\blet\s+polling\b/g) ?? []).toHaveLength(1);
+    expect(CODE.match(/\blet\s+\w*[Dd]elay\b/g) ?? []).toHaveLength(1);
+  });
+
+  it("clears the timer from exactly one place", () => {
+    expect(occurrences("clearTimeout")).toBe(1);
+  });
+
+  /**
+   * The two panels are fed by two endpoints and **one** fetch call site: the URL comes off the
+   * target rather than being written at the call. A second `fetch` for the cloud would be a
+   * second request path with its own error handling, and the 401 branch — which is about the
+   * log noise an unprotected page can generate — would then exist in two versions that could
+   * disagree.
+   */
+  it("issues the polled request from exactly one fetch site", () => {
+    // `fire` and `refresh` have their own fetches for host *actions*; those are not polled.
+    // The polled one is the only one that reads a target's url.
+    expect(occurrences("fetch(target.url")).toBe(1);
+    expect(CODE).not.toContain("/api/quiz/host/words?");
+    expect(CODE).not.toContain("/api/quiz/host/participation?");
+  });
+});
+
+/**
+ * THE SINGLE PREDICATE.
+ *
+ * `host.astro` states it as a rule: one predicate governs both the panel and the poll, because
+ * two conditions would let the poll run for a question whose panel is not rendered — a data
+ * path with no affordance, which is the mirror of `lessons.md`'s first rule and fails just as
+ * quietly. The panels ask `pollTargetFor`; nothing re-derives the condition.
+ */
+describe("one predicate decides both the panels and the poll", () => {
+  it("routes both panels through pollTargetFor", () => {
+    expect(CODE).toContain('pollTargetFor(state)?.kind === "participation"');
+    expect(CODE).toContain('pollTargetFor(state)?.kind === "words"');
+  });
+
+  /**
+   * **Scoped to the predicate's own body, not counted across the file**, and the first version
+   * of this test got that wrong: it asserted the condition appeared once in total and failed at
+   * 2, because `pollTargetFor` legitimately names the phase twice — once for the word cloud's
+   * two phases and once for the participation count's one. Counting occurrences globally
+   * measured the wrong thing entirely.
+   *
+   * What matters is that no *other* function re-derives the phase-and-kind condition, since
+   * that is how a panel and its poll drift apart.
+   */
+  it("keeps the phase-and-kind condition inside the predicate and nowhere else", () => {
+    const predicate =
+      /function pollTargetFor[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    expect(predicate).toContain('state.phase !== "question-open"');
+
+    const elsewhere = CODE.replace(predicate, "");
+    expect(elsewhere).not.toContain('phase !== "question-open"');
+    expect(elsewhere).not.toContain('kind === "single-choice"');
+  });
+});
+
+/**
+ * THE FINAL-READ GATE (roadmap S-08).
+ *
+ * The word-cloud target covers `question-revealed` so the host keeps a complete cloud to talk
+ * over — but no submission can arrive in that phase, so every tick after the first returns the
+ * same bytes. Without the flag the loop re-arms forever on a revealed question, because the
+ * panel is still on screen and the target still exists.
+ *
+ * **`schedulePoll` must be gated on `pollWanted`, not on `pollTargetFor`**, in both places it
+ * is reached: `render` and `runPoll`'s `finally`. Missing it in the `finally` alone is enough
+ * to keep the loop alive.
+ */
+describe("the word cloud's final read closes the loop", () => {
+  it("tracks which question has had its final read", () => {
+    expect(CODE).toContain("cloudFinalReadFor");
+  });
+
+  it("gates every re-arm on pollWanted rather than on the target existing", () => {
+    // Two call sites: `render` and the `finally` in `runPoll`. Both must consult the gate, or
+    // a revealed word-cloud question polls until the host advances.
+    expect(occurrences("if (pollWanted(")).toBe(2);
+    expect(CODE).not.toContain("if (pollTargetFor(client.current())) schedulePoll()");
+  });
+
+  it("records the final read only in the revealed phase", () => {
+    // Recorded while the question is open, the loop would end on the first tick and the cloud
+    // would freeze while the room was still writing into it.
+    expect(CODE).toContain('client.current()?.phase === "question-revealed"');
+  });
+});
+
+/**
+ * THE NO-WRITE PROPERTY, from the page's side.
+ *
+ * `participation.test.ts` and `words.test.ts` assert their own routes never write. This is the
+ * other half: the page must not reach for a *write* route on a polled path. During
+ * `question-open` the session document's `updatedAt` is the moment the question opened and
+ * bounds the speed clamp, so a write from anything that runs on a timer inflates every award
+ * after it, silently.
+ */
+describe("nothing on the polled path writes", () => {
+  it("polls only the two read endpoints", () => {
+    expect(CODE).toContain("/api/quiz/host/words");
+    expect(CODE).toContain("/api/quiz/host/participation");
+  });
+
+  it("reaches a host action only through the button handler", () => {
+    // `fire` is the only place an action URL is built, and it is driven by a click.
+    expect(occurrences("/api/quiz/host/${action}")).toBe(1);
+  });
+});
+
+/**
+ * The panel reset (roadmap S-04's rule, inherited by S-08).
+ *
+ * A first paint under a new prompt carrying the previous question's numbers is plausible and
+ * wrong, and a stale *word* is worse than a stale count: a chip is something somebody wrote,
+ * so leaving it attributes it to the question now on screen.
+ */
+describe("both polled panels reset together when the question changes", () => {
+  it("resets through one function rather than per panel", () => {
+    expect(CODE).toContain("function resetPanels");
+    expect(CODE).toContain("if (state.currentQuestionId !== panelQuestionId) resetPanels(");
+  });
+
+  it("clears the cloud's state in that reset", () => {
+    const reset = /function resetPanels[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(reset).toContain("cloudWords = null");
+    expect(reset).toContain("cloudDistinct = 0");
+    expect(reset).toContain("cloudStale = false");
+    expect(reset).toContain("answered = null");
+    /**
+     * **And deliberately NOT `cloudFinalReadFor`.** It is keyed by question id, so it needs no
+     * clearing — and clearing it here would re-open the loop for a question the host had
+     * already revealed and then come back to.
+     */
+    expect(reset).not.toContain("cloudFinalReadFor");
+  });
+});

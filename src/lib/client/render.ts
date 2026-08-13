@@ -478,3 +478,134 @@ export function standingsPositionText(
   if (playerCount === null) return `Twoja pozycja: ${rank}`;
   return `Twoja pozycja: ${rank} z ${playerCount}`;
 }
+
+/**
+ * One word and how many people wrote it (roadmap S-08, FR-015).
+ *
+ * Structurally identical to the store's `WordCount`, and deliberately declared here rather
+ * than imported: `readWordCloud`'s type lives in `src/lib/session/store.ts`, and even a
+ * type-only import from that module would pull this file's dependency graph toward the
+ * server SDKs the moment someone dropped the `type` keyword. `StandingsRow` is imported
+ * because `standings.ts` is a pure leaf; `store.ts` is not.
+ */
+export type WordCount = {
+  readonly word: string;
+  readonly count: number;
+};
+
+export type WordCloudClassNames = {
+  readonly list?: string;
+  /** Applied to every chip. The type size is set inline, not by class — see the function. */
+  readonly chip?: string;
+  readonly empty?: string;
+};
+
+export type RenderWordCloudOptions = WordCloudClassNames & {
+  /**
+   * The type size range, in `rem`, the smallest and largest counts map onto.
+   *
+   * Defaulted rather than required so the two numbers live in one place, and overridable
+   * because only the page knows what its projector was measured for.
+   */
+  readonly minRem?: number;
+  readonly maxRem?: number;
+};
+
+/** Polish, because it renders directly. */
+const NO_WORDS_TEXT = "Jeszcze nikt nie napisał słowa.";
+
+const DEFAULT_MIN_REM = 1.5;
+const DEFAULT_MAX_REM = 5;
+
+/**
+ * The word cloud on the large screen (roadmap S-08, PRD FR-012/FR-015).
+ *
+ * **Paints the order given and never sorts** — `renderStandings`' rule, and it matters more
+ * here: the server has already dropped everything past `WORD_CLOUD_SIZE`, so a renderer that
+ * re-ordered would be re-ranking a list whose tail is missing. Its test fixture is
+ * deliberately *not* in count order, because a sorted fixture makes a sorting renderer pass.
+ *
+ * **`createElement` and `textContent`, never `innerHTML`.** This is the call site the two
+ * notes in this module were written for: a word cloud is attendee-typed text going straight
+ * onto a projector, unmoderated by explicit decision (PRD §Non-Goals). The PRD accepts
+ * unmoderated *content*; it accepts nothing about unmoderated markup, and this is the line
+ * that keeps those two apart.
+ *
+ * **Size scales by count relative to the largest count present, not to an absolute.** A
+ * cloud of ten words where the top word has three votes should look like a cloud, not like
+ * ten identical small chips waiting for a hundred more. The consequence, stated because it
+ * looks like a bug: the biggest word is always at `maxRem`, so the cloud's *shape* is
+ * meaningful and its absolute sizes are not.
+ *
+ * **When every count is equal the whole cloud takes the ceiling**, not the floor. That is
+ * the opening beat — one word, written once, on an otherwise empty screen — and the floor
+ * would make the first thing the room sees look like a rendering failure. It also covers the
+ * degenerate `max === min` division, so nothing here divides by zero.
+ */
+export function renderWordCloud(
+  container: HTMLElement,
+  words: readonly WordCount[] | undefined,
+  options: RenderWordCloudOptions = {}
+): void {
+  container.replaceChildren();
+
+  const classNames = options;
+  const minRem = options.minRem ?? DEFAULT_MIN_REM;
+  const maxRem = options.maxRem ?? DEFAULT_MAX_REM;
+
+  // An empty cloud is a real state — the seconds after a question opens — and it says so in
+  // a sentence rather than drawing an empty frame, the choice `renderDistribution` and
+  // `renderStandings` both make. `undefined` reaches here before the first poll answers.
+  if (!words || words.length === 0) {
+    const empty = document.createElement("p");
+    if (classNames.empty) empty.className = classNames.empty;
+    empty.textContent = NO_WORDS_TEXT;
+    container.append(empty);
+    return;
+  }
+
+  // From the whole list rather than from `words[0]`, so the scale does not depend on the
+  // caller having sorted — this function's contract is that it does not care about order.
+  const counts = words.map((entry) => entry.count);
+  const max = Math.max(...counts);
+  const min = Math.min(...counts);
+
+  const list = document.createElement("ul");
+  if (classNames.list) list.className = classNames.list;
+
+  for (const entry of words) {
+    const chip = document.createElement("li");
+    if (classNames.chip) chip.className = classNames.chip;
+
+    // Marked in the DOM as well as rendered, so what was drawn survives a stylesheet that
+    // failed to load on a venue network — `renderDistribution`'s `data-correct` rule.
+    chip.dataset.word = entry.word;
+    chip.dataset.count = String(entry.count);
+
+    // `max === min` covers both the all-equal cloud and the single-word one. Everything
+    // takes the ceiling; see the function note for why that direction.
+    const share = max === min ? 1 : (entry.count - min) / (max - min);
+    chip.style.fontSize = `${(minRem + share * (maxRem - minRem)).toFixed(2)}rem`;
+
+    chip.textContent = entry.word;
+    list.append(chip);
+  }
+
+  container.append(list);
+}
+
+/**
+ * The line under the cloud saying how much of the room is on screen (roadmap S-08).
+ *
+ * A function rather than a template inline in the page, for the reason `standingsPositionText`
+ * is one: it has a branch worth a test and the page has no harness to reach it from.
+ *
+ * **The branch is the honest one.** `readWordCloud` drops everything past `WORD_CLOUD_SIZE`,
+ * and a panel that always said "N słów" would present the top of the list as the whole room —
+ * a silent cap, which is the one thing a truncation must not be. When nothing was dropped the
+ * second number is noise, so it is left out.
+ */
+export function wordCloudCountText(shown: number, distinct: number): string {
+  if (distinct > shown) return `${shown} z ${distinct} słów`;
+  return `${shown} słów`;
+}

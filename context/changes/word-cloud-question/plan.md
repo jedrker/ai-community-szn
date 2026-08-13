@@ -817,36 +817,36 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 
 #### Automated
 
-- [x] 3.1 `bun run test` passes
-- [x] 3.2 `bun run type-check` reports 0 errors
-- [x] 3.3 `words.test.ts` (route) mirrors participation, including the writes-nothing source scan
-- [x] 3.4 Auth and the four `questionId` refusals covered
-- [x] 3.5 Ordering covered with a fixture not pre-sorted
-- [x] 3.6 Truncation reports `distinct` above the bound
-- [x] 3.7 The `null`-vs-empty split covered on both sides
+- [x] 3.1 `bun run test` passes — 2b362c7
+- [x] 3.2 `bun run type-check` reports 0 errors — 2b362c7
+- [x] 3.3 `words.test.ts` (route) mirrors participation, including the writes-nothing source scan — 2b362c7
+- [x] 3.4 Auth and the four `questionId` refusals covered — 2b362c7
+- [x] 3.5 Ordering covered with a fixture not pre-sorted — 2b362c7
+- [x] 3.6 Truncation reports `distinct` above the bound — 2b362c7
+- [x] 3.7 The `null`-vs-empty split covered on both sides — 2b362c7
 
 #### Manual
 
 - [ ] 3.8 `curl` with and without the host header behaves as specified
 - [ ] 3.9 A minute of polling leaves `updatedAt` and `version` untouched
-- [x] 3.10 Break-the-guard pass: the kind refusal and the `null`-vs-empty split
+- [x] 3.10 Break-the-guard pass: the kind refusal and the `null`-vs-empty split — 2b362c7
 
 ### Phase 4: The projector
 
 #### Automated
 
-- [ ] 4.1 `bun run test` passes
-- [ ] 4.2 `bun run type-check` reports 0 errors
-- [ ] 4.3 `render.test.ts` covers order, escaping, size scale, empty state, `data-word`, copy helper
-- [ ] 4.4 `boundary.test.ts` passes for the new script code
+- [x] 4.1 `bun run test` passes
+- [x] 4.2 `bun run type-check` reports 0 errors
+- [x] 4.3 `render.test.ts` covers order, escaping, size scale, empty state, `data-word`, copy helper
+- [x] 4.4 `boundary.test.ts` passes for the new script code
 
 #### Manual
 
 - [ ] 4.5 The cloud fills within ~2.5 s of a submission and the count line moves
-- [ ] 4.6 Revealing freezes the cloud and stops the poll
-- [ ] 4.7 Advancing clears the cloud and restores the participation panel
-- [ ] 4.8 Tab backgrounding stops and resumes the poll
-- [ ] 4.9 A missing host secret shows the secret message, not a staleness marker
+- [x] 4.6 Revealing freezes the cloud and stops the poll
+- [x] 4.7 Advancing clears the cloud and restores the participation panel
+- [x] 4.8 Tab backgrounding stops and resumes the poll
+- [x] 4.9 A missing host secret shows the secret message, not a staleness marker
 
 ### Phase 5: The phone
 

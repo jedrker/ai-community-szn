@@ -6,7 +6,9 @@ import {
   renderDistribution,
   renderQuestion,
   renderStandings,
+  renderWordCloud,
   standingsPositionText,
+  wordCloudCountText,
 } from "./render";
 import type { PublicQuestion } from "../../quiz/public";
 
@@ -589,5 +591,210 @@ describe("standingsPositionText", () => {
   /** Rank 1 is a real position and must not be confused with the absent case. */
   it("reports first place as a position, not as a failure", () => {
     expect(standingsPositionText(1, 42)).toBe("Twoja pozycja: 1 z 42");
+  });
+});
+
+/**
+ * The word cloud (roadmap S-08, FR-012/FR-015).
+ *
+ * The one renderer in this module whose input is entirely attendee-authored, and the call
+ * site the `textContent` notes elsewhere in the file were written for. What is under test is
+ * what the projector shows: which words, in what order, at what relative size — and that
+ * markup stays inert.
+ */
+describe("renderWordCloud", () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+  });
+
+  function chips(): HTMLElement[] {
+    return [...container.querySelectorAll("li")];
+  }
+
+  function sizes(): number[] {
+    return chips().map((chip) => Number.parseFloat(chip.style.fontSize));
+  }
+
+  /**
+   * THE ORDER GUARD. The server has already ordered the cloud and dropped its tail, so a
+   * renderer that sorted would be re-ranking an incomplete list.
+   *
+   * **The fixture is deliberately NOT in count order.** Written descending — as a published
+   * cloud always is — a count sort is a no-op and this passes against a renderer that sorts,
+   * which is precisely the failure `lessons.md` describes and the one S-07 shipped. Verified
+   * by adding a sort and watching this fail.
+   */
+  it("paints words in the order given and never sorts them", () => {
+    renderWordCloud(container, [
+      { word: "rzadkie", count: 1 },
+      { word: "czeste", count: 9 },
+      { word: "srednie", count: 4 },
+    ]);
+
+    expect(chips().map((chip) => chip.textContent)).toEqual(["rzadkie", "czeste", "srednie"]);
+  });
+
+  it("marks each chip in the DOM as well as rendering it", () => {
+    renderWordCloud(container, [{ word: "robot", count: 3 }]);
+
+    // Survives a stylesheet that failed to load on a venue network — the rule
+    // `renderDistribution` follows for `data-correct`.
+    expect(chips()[0]!.dataset.word).toBe("robot");
+    expect(chips()[0]!.dataset.count).toBe("3");
+  });
+
+  /**
+   * **The rule this module's docstrings were written for.** A word cloud is attendee-typed
+   * text going straight onto a projector, unmoderated by explicit decision — so content is
+   * accepted and markup must be inert.
+   */
+  it("writes a word as text, never as markup", () => {
+    renderWordCloud(container, [
+      { word: "<img src=x onerror=alert(1)>", count: 2 },
+      { word: "<b>pogrubione</b>", count: 1 },
+    ]);
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("b")).toBeNull();
+    expect(chips()[0]!.textContent).toBe("<img src=x onerror=alert(1)>");
+  });
+
+  describe("the size scale", () => {
+    it("gives the largest count the ceiling and the smallest the floor", () => {
+      renderWordCloud(
+        container,
+        [
+          { word: "duze", count: 10 },
+          { word: "srednie", count: 5 },
+          { word: "male", count: 1 },
+        ],
+        { minRem: 2, maxRem: 6 }
+      );
+
+      const [large, middle, small] = sizes();
+      expect(large).toBe(6);
+      expect(small).toBe(2);
+      // Between the two, and strictly — a scale that collapsed would still satisfy the ends.
+      expect(middle).toBeGreaterThan(small!);
+      expect(middle).toBeLessThan(large!);
+    });
+
+    it("scales relative to the largest count present, not to an absolute", () => {
+      // Three votes is the top of this room, so it gets the ceiling — a cloud of ten words
+      // must not look like ten identical chips waiting for a hundred more votes.
+      renderWordCloud(container, [{ word: "szczyt", count: 3 }, { word: "dol", count: 1 }], {
+        minRem: 2,
+        maxRem: 6,
+      });
+
+      expect(sizes()[0]).toBe(6);
+    });
+
+    /**
+     * **The all-equal cloud takes the CEILING, not the floor**, and the direction is the
+     * decision. This is the opening beat — the first word, written once, on an otherwise
+     * empty screen — and at the floor the first thing the room sees looks like a failed
+     * render. It also covers the `max === min` division, so nothing divides by zero.
+     */
+    it("gives every word the ceiling when all counts are equal", () => {
+      renderWordCloud(
+        container,
+        [
+          { word: "a", count: 1 },
+          { word: "b", count: 1 },
+          { word: "c", count: 1 },
+        ],
+        { minRem: 2, maxRem: 6 }
+      );
+
+      expect(sizes()).toEqual([6, 6, 6]);
+    });
+
+    it("gives a single word the ceiling", () => {
+      renderWordCloud(container, [{ word: "pierwsze", count: 1 }], { minRem: 2, maxRem: 6 });
+
+      expect(sizes()).toEqual([6]);
+    });
+
+    it("produces no NaN size for any of the degenerate cases", () => {
+      // Dividing by `max - min` is the one arithmetic hazard here, and `NaN` would reach the
+      // projector as an unstyled chip rather than as an error.
+      for (const fixture of [
+        [{ word: "a", count: 0 }],
+        [
+          { word: "a", count: 0 },
+          { word: "b", count: 0 },
+        ],
+        [{ word: "a", count: 7 }],
+      ]) {
+        renderWordCloud(container, fixture);
+        expect(sizes().every((size) => Number.isFinite(size))).toBe(true);
+      }
+    });
+  });
+
+  it("says so in a sentence when nobody has written a word", () => {
+    renderWordCloud(container, []);
+
+    // The state every word-cloud question is in for its first seconds. An empty frame on a
+    // projector reads as broken; a sentence reads as waiting.
+    expect(chips()).toHaveLength(0);
+    expect(container.textContent).toContain("Jeszcze nikt nie napisał");
+  });
+
+  it("says the same for a cloud that has not been fetched yet", () => {
+    renderWordCloud(container, undefined);
+
+    expect(container.textContent).toContain("Jeszcze nikt nie napisał");
+  });
+
+  it("replaces the previous cloud rather than appending to it", () => {
+    renderWordCloud(container, [{ word: "pierwsze", count: 1 }]);
+    renderWordCloud(container, [{ word: "drugie", count: 1 }]);
+
+    // Polled every ~2.5s, so an appending renderer would grow without bound on screen.
+    expect(chips()).toHaveLength(1);
+    expect(container.textContent).toContain("drugie");
+  });
+
+  it("clears the empty sentence once words arrive", () => {
+    renderWordCloud(container, []);
+    renderWordCloud(container, [{ word: "robot", count: 1 }]);
+
+    expect(container.querySelectorAll("p")).toHaveLength(0);
+    expect(chips()).toHaveLength(1);
+  });
+});
+
+/**
+ * The count line under the cloud (roadmap S-08).
+ *
+ * Extracted for the reason `standingsPositionText` is: it has a branch, and the page has no
+ * harness to reach it from.
+ */
+describe("wordCloudCountText", () => {
+  /**
+   * THE HONEST BRANCH. `readWordCloud` drops everything past `WORD_CLOUD_SIZE`, and a line
+   * that always said "N słów" would present the top of the list as the whole room — a silent
+   * cap, which is the one thing a truncation must not be.
+   */
+  it("names both numbers when words were dropped", () => {
+    expect(wordCloudCountText(30, 47)).toBe("30 z 47 słów");
+  });
+
+  it("names one number when nothing was dropped", () => {
+    expect(wordCloudCountText(12, 12)).toBe("12 słów");
+  });
+
+  it("does not claim a truncation that did not happen", () => {
+    // Defensive against a caller that passed the two the wrong way round: the line must not
+    // read "12 z 5", which would be a claim about the room that is simply false.
+    expect(wordCloudCountText(12, 5)).toBe("12 słów");
+  });
+
+  it("reports an empty cloud without inventing a second number", () => {
+    expect(wordCloudCountText(0, 0)).toBe("0 słów");
   });
 });

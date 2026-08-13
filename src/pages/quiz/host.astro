@@ -176,6 +176,35 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       </section>
 
       <!--
+        The word cloud (roadmap S-08, FR-012/FR-015).
+
+        The one panel on this page that fills continuously rather than on a host action,
+        and the reason it exists at all: watching your own word land on the big screen is
+        what proves the session is live. It is fed by a **poll**, not by the snapshot —
+        publishing per submission is the O(N^2) fan-out the spine contract forbids, and a
+        cloud that fills as the room types has no host action to ride. See
+        `/api/quiz/host/words`.
+
+        **Below the prompt for the reason the participation panel is**: the prompt is what
+        the room is reading, and a panel above it pushes the question down the projector.
+
+        The count line sits above the words rather than below, so the host can see the
+        room's progress without reading the cloud — and it carries the same staleness
+        marker the participation count does, because a cloud that has quietly stopped
+        filling is indistinguishable from a room that has stopped writing.
+      -->
+      <section id="word-cloud" hidden class="flex flex-col gap-4">
+        <div class="flex items-baseline gap-4">
+          <p class="text-text-secondary text-lg uppercase tracking-wide">Chmura słów</p>
+          <p id="word-cloud-count" class="text-4xl font-bold leading-none">—</p>
+          <span id="word-cloud-stale" hidden class="text-amber-400 text-lg">
+            (nieaktualne)
+          </span>
+        </div>
+        <div id="word-cloud-words"></div>
+      </section>
+
+      <!--
         The leaderboard (roadmap S-07, FR-014).
 
         The published top five, straight off the snapshot — the host's screen sorts
@@ -264,8 +293,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         renderDistribution,
         renderQuestion,
         renderStandings,
+        renderWordCloud,
         setHidden,
         setText,
+        wordCloudCountText,
+        type WordCount,
       } from "../../lib/client/render";
       import type { PublicQuestion } from "../../quiz/public";
 
@@ -303,6 +335,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const acceptedAnswerBox = el("accepted-answer");
       const standingsBox = el("standings");
       const standingsBoard = el("standings-board");
+      const wordCloudBox = el("word-cloud");
+      const wordCloudWords = el("word-cloud-words");
+      const wordCloudStale = el("word-cloud-stale");
       const standingsButton = document.querySelector<HTMLButtonElement>(
         '[data-action="standings"]'
       );
@@ -376,6 +411,28 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       let pollTimer: number | null = null;
       let pollDelay = POLL_BASE_MS;
       let unauthorizedPolls = 0;
+      /**
+       * The word cloud's per-question state (roadmap S-08).
+       *
+       * Held beside `answered` below and reset by the same `panelQuestionId` change, because
+       * the two panels are two views of the same beat and a cloud left over from the previous
+       * question under a new prompt is exactly as wrong as a stale count.
+       *
+       * `null` means the poll has not answered yet, which `renderWordCloud` draws as its
+       * waiting sentence rather than as an empty room.
+       */
+      let cloudWords: WordCount[] | null = null;
+      let cloudDistinct = 0;
+      let cloudStale = false;
+      /**
+       * Which question's cloud has already had its final, post-reveal read.
+       *
+       * **Without this the loop never stops.** The word-cloud target below deliberately
+       * covers `question-revealed` so the host keeps a complete cloud to talk over — but no
+       * submission can arrive in that phase, so every tick after the first is guaranteed to
+       * return the same bytes. This is what makes the final read a read rather than a loop.
+       */
+      let cloudFinalReadFor: string | null = null;
       /**
        * Whether a request is in flight.
        *
@@ -474,34 +531,91 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
-       * **ONE predicate governs both the panel and the poll**, and it is written once.
+       * **ONE predicate governs both the panels and the poll**, and it is written once
+       * (extended by roadmap S-08 from a boolean to a target).
        *
-       * Two conditions here would mean the poll runs for the four drafted questions
-       * `/api/quiz/answer` refuses — feeding a panel that is not rendered, from an
-       * endpoint that can only ever return zero. A data path with no affordance is the
-       * mirror of `lessons.md`'s first rule, and it fails just as quietly: nothing is
-       * wrong on screen, and the command counter climbs.
+       * Two conditions would mean the poll runs for a question whose panel is not rendered —
+       * feeding nothing, from an endpoint that can only ever return zero. A data path with no
+       * affordance is the mirror of `lessons.md`'s first rule, and it fails just as quietly:
+       * nothing is wrong on screen, and the command counter climbs.
+       *
+       * **One loop serves both endpoints**, chosen here by question kind. A second timer was
+       * the alternative and it is the failure this file guards hardest against — see the
+       * `polling` flag's note above: two loops mean two backoffs, two in-flight flags, and two
+       * chances to leave a timer running for a panel that is no longer on screen.
+       *
+       * Returns `null` when nothing should be polled, which is also what hides both panels.
        */
-      function participationApplies(state: State | null): state is State {
-        if (state === null || state.phase !== "question-open") return false;
+      type PollTarget = { kind: "participation" | "words"; questionId: string; url: string };
+
+      function pollTargetFor(state: State | null): PollTarget | null {
+        if (state === null) return null;
+
+        const questionId = state.currentQuestionId;
+        if (questionId === null) return null;
+
         const kind = questionFor(state)?.kind;
-        return kind === "single-choice" || kind === "multiple-choice";
+        const query = `?questionId=${encodeURIComponent(questionId)}`;
+
+        /**
+         * The word cloud runs in **both** `question-open` and `question-revealed`, unlike the
+         * participation count. FR-005 keeps the distribution off the screen until the reveal
+         * because it is a cheat sheet while answering is open; the cloud has no correct answer
+         * to leak (FR-005's own scope note says so), so the only reason to stop is that there
+         * is nothing left to read — which is what `cloudFinalReadFor` decides, not this.
+         */
+        if (kind === "word-cloud") {
+          if (state.phase !== "question-open" && state.phase !== "question-revealed") return null;
+          return { kind: "words", questionId, url: `/api/quiz/host/words${query}` };
+        }
+
+        // Unchanged from S-04: the count is shown only while the question is open, and only
+        // for the two kinds whose answers it can count.
+        if (state.phase !== "question-open") return null;
+        if (kind !== "single-choice" && kind !== "multiple-choice") return null;
+
+        return { kind: "participation", questionId, url: `/api/quiz/host/participation${query}` };
+      }
+
+      /** Whether a tick is still worth firing for the current target. */
+      function pollWanted(state: State | null): boolean {
+        const target = pollTargetFor(state);
+        if (target === null) return false;
+
+        // The final-read gate. Only the word cloud has one; the participation loop stops
+        // because its target disappears at the reveal.
+        if (target.kind === "words" && state?.phase === "question-revealed") {
+          return cloudFinalReadFor !== target.questionId;
+        }
+
+        return true;
+      }
+
+      /**
+       * Forgets every polled panel's numbers when the question changes.
+       *
+       * **One reset for both panels, called before anything renders.** A first paint under a
+       * new prompt carrying the previous question's count — or its cloud — is plausible and
+       * wrong, and the word cloud makes it worse than the count did: a chip is a word somebody
+       * wrote, so a stale one attributes it to the question now on screen.
+       */
+      function resetPanels(questionId: string | null): void {
+        panelQuestionId = questionId;
+        answered = null;
+        answeredStale = false;
+        cloudWords = null;
+        cloudDistinct = 0;
+        cloudStale = false;
+        // Deliberately NOT `cloudFinalReadFor`: it is keyed by question id, so it needs no
+        // clearing here, and clearing it would re-open the loop for a question the host had
+        // already revealed and come back to.
+        pollDelay = POLL_BASE_MS;
       }
 
       function renderParticipation(state: State): void {
-        // A new question means the previous one's numbers are meaningless. Reset before
-        // anything renders, or the first paint under a new prompt carries the last
-        // question's count — plausible, and wrong.
-        if (state.currentQuestionId !== panelQuestionId) {
-          panelQuestionId = state.currentQuestionId;
-          answered = null;
-          answeredStale = false;
-          pollDelay = POLL_BASE_MS;
-        }
-
         const distribution =
           state.phase === "question-revealed" ? state.revealedDistribution : null;
-        const showCount = participationApplies(state);
+        const showCount = pollTargetFor(state)?.kind === "participation";
 
         setHidden(participationBox, !showCount && distribution === null);
         setHidden(countBox, !showCount);
@@ -533,6 +647,41 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
+       * The word cloud panel (roadmap S-08, FR-012/FR-015).
+       *
+       * Shown for exactly the phases the poll runs in, so the panel and the data path cannot
+       * disagree — `pollTargetFor` is the single predicate, and asking it here is what keeps
+       * that true rather than re-deriving the condition.
+       *
+       * A failed read leaves the last cloud on screen with the staleness marker beside the
+       * count, never an empty one: on a projector an empty cloud is the claim that nobody in
+       * the room wrote a word. `pollFailed` documents the same rule for the count.
+       */
+      function renderWordCloudPanel(state: State): void {
+        const isCloud = pollTargetFor(state)?.kind === "words";
+        // The panel survives the final read: `pollTargetFor` still returns a words target in
+        // `question-revealed`, and only `pollWanted` stops the ticks. That split is what lets
+        // the host talk over a frozen cloud.
+        setHidden(wordCloudBox, !isCloud);
+        setHidden(wordCloudStale, !cloudStale);
+
+        if (!isCloud) return;
+
+        const shown = cloudWords?.length ?? 0;
+        setText("word-cloud-count", wordCloudCountText(shown, cloudDistinct));
+
+        renderWordCloud(wordCloudWords, cloudWords ?? undefined, {
+          list: "flex flex-wrap items-baseline gap-x-8 gap-y-3",
+          chip: "font-bold leading-none text-brand-purple-light",
+          empty: "text-text-secondary text-3xl",
+          // Measured for this projector: small enough that thirty fit, large enough that a
+          // one-vote word is still readable from the back.
+          minRem: 1.75,
+          maxRem: 5,
+        });
+      }
+
+      /**
        * The leaderboard beat is reachable only from a reveal (roadmap S-07).
        *
        * Disabled elsewhere so the host is not offered an action that will come back 409.
@@ -558,7 +707,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           setHidden(participationBox, true);
           setHidden(acceptedAnswerBox, true);
           setHidden(standingsBox, true);
+          setHidden(wordCloudBox, true);
           stopPolling();
+          /**
+           * A purge or an expiry, so the next session starts from nothing. Without this the
+           * cloud from the previous room would be re-shown the moment a new session reached
+           * the same question — question ids are stable across sessions, which is what makes
+           * that line up rather than being far-fetched (`clearSeen`'s reasoning on the
+           * attendee side).
+           */
+          resetPanels(null);
+          cloudFinalReadFor = null;
           renderQuestion(questionBox, undefined, { prompt: "text-4xl font-bold leading-tight" });
           return;
         }
@@ -566,6 +725,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         setText("phase", PHASE_LABELS[state.phase] ?? state.phase);
         setText("player-count", liveCount ?? state.playerCount);
         setText("version", state.version);
+
+        // Before any panel renders, so neither can paint the previous question's numbers
+        // under a new prompt. Both polled panels read the state this clears.
+        if (state.currentQuestionId !== panelQuestionId) resetPanels(state.currentQuestionId);
 
         const question = questionFor(state);
         const distribution =
@@ -640,9 +803,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         if (accepted) setText("accepted-answer-value", accepted);
 
         renderParticipation(state);
+        renderWordCloudPanel(state);
         syncStandingsButton();
 
-        if (participationApplies(state)) schedulePoll();
+        if (pollWanted(state)) schedulePoll();
         else stopPolling();
       }
 
@@ -679,18 +843,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * read the count is in a different situation from one whose room has gone quiet.
        * The staleness marker is what says which.
        */
-      function pollFailed(): void {
-        answeredStale = true;
+      function pollFailed(kind: PollTarget["kind"]): void {
+        // Only the panel that asked is marked stale. Marking both would put "(nieaktualne)"
+        // beside a count nobody is polling.
+        if (kind === "words") cloudStale = true;
+        else answeredStale = true;
+
         pollDelay = Math.min(pollDelay * 2, POLL_MAX_MS);
         render();
       }
 
       async function runPoll(): Promise<void> {
-        const state = client.current();
-        if (!participationApplies(state)) return;
-
-        const questionId = state.currentQuestionId;
-        if (questionId === null) return;
+        const target = pollTargetFor(client.current());
+        if (target === null) return;
+        if (!pollWanted(client.current())) return;
 
         // Nothing may open a second request while one is open — including the secret
         // field's immediate retry, which is otherwise one keystroke away from a burst.
@@ -698,10 +864,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         polling = true;
 
         try {
-          const response = await fetch(
-            `/api/quiz/host/participation?questionId=${encodeURIComponent(questionId)}`,
-            { headers: { [config.secretHeader]: secretField.value } }
-          );
+          const response = await fetch(target.url, {
+            headers: { [config.secretHeader]: secretField.value },
+          });
 
           /**
            * **A 401 is not a network failure and must not take that path.** The ordinary
@@ -713,7 +878,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            * alone, and let the `input` handler on the secret field retry immediately.
            */
           if (response.status === 401) {
-            say("Wpisz sekret hosta, żeby zobaczyć liczbę odpowiedzi.", true);
+            say(
+              target.kind === "words"
+                ? "Wpisz sekret hosta, żeby zobaczyć chmurę słów."
+                : "Wpisz sekret hosta, żeby zobaczyć liczbę odpowiedzi.",
+              true
+            );
 
             /**
              * **The fast retries are bounded, and that bound is about a different threat
@@ -740,7 +910,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           unauthorizedPolls = 0;
 
           if (!response.ok) {
-            pollFailed();
+            pollFailed(target.kind);
             return;
           }
 
@@ -748,26 +918,53 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             questionId?: string;
             answered?: number;
             playerCount?: number | null;
+            words?: WordCount[];
+            distinct?: number;
           };
 
           /**
            * The host is free to advance at any moment, so a reply can arrive after the
-           * question changed. Discarded rather than painted: the count would look
-           * entirely plausible under the new prompt, which is what makes it worth a
-           * guard.
+           * question changed. Discarded rather than painted: the count — or worse, a cloud of
+           * words somebody wrote about another question — would look entirely plausible under
+           * the new prompt, which is what makes it worth a guard.
            */
           if (payload.questionId !== client.current()?.currentQuestionId) {
             return;
           }
 
-          answered = typeof payload.answered === "number" ? payload.answered : answered;
           if (typeof payload.playerCount === "number") liveCount = payload.playerCount;
-          answeredStale = false;
+
+          if (target.kind === "words") {
+            // Absent rather than empty is the "could not say" case, and it must not blank the
+            // cloud — `readWordCloud` returns `null` for it and the route turns that into a
+            // 503, which took the `!response.ok` path above. Reaching here with no array at
+            // all would be a route that changed shape; keep what is on screen.
+            if (Array.isArray(payload.words)) {
+              cloudWords = payload.words;
+              cloudDistinct = typeof payload.distinct === "number" ? payload.distinct : 0;
+            }
+            if (typeof payload.answered === "number") answered = payload.answered;
+            cloudStale = false;
+
+            /**
+             * The final read has landed, so `pollWanted` stops re-arming for this question.
+             * Recorded only in the revealed phase: doing it while the question is open would
+             * end the loop on the first tick, and the cloud would freeze while the room was
+             * still writing into it.
+             */
+            if (client.current()?.phase === "question-revealed") {
+              cloudFinalReadFor = target.questionId;
+            }
+          } else {
+            answered = typeof payload.answered === "number" ? payload.answered : answered;
+            answeredStale = false;
+          }
+
           pollDelay = POLL_BASE_MS;
           render();
         } catch {
           // The venue network. Not an error worth a message — the marker says it.
-          pollFailed();
+          pollFailed(target.kind);
         } finally {
           polling = false;
           /**
@@ -776,8 +973,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            * request was open — the host revealing mid-fetch is the ordinary way that
            * happens — and re-arming there would leave a timer running for a panel that
            * is no longer on screen.
+           *
+           * `pollWanted` rather than `pollTargetFor`, so the word cloud's final read closes
+           * the loop here too. Without that this block would re-arm forever on a revealed
+           * word-cloud question — the panel is still on screen, so the target still exists.
            */
-          if (participationApplies(client.current())) schedulePoll();
+          if (pollWanted(client.current())) schedulePoll();
         }
       }
 
