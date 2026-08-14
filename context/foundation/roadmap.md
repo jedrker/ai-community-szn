@@ -60,6 +60,7 @@ an attendee is scoring on their own device.
 | S-08  | `word-cloud-question`                 | Attendee can submit one word and watch the cloud fill on the large screen               | S-03          | US-01, US-02, FR-012, FR-015                                              | done     |
 | S-09  | `resilient-join`                      | Attendee can reload or unlock their phone and resume as the same player                 | S-02          | US-01, FR-009, FR-018                                                     | done     |
 | S-10  | `final-winner-reveal`                 | Host can close the session with a winner-reveal sequence                                | S-07          | US-02, FR-006                                                             | done     |
+| S-11  | `per-question-timer`                  | Attendee sees how long is left and cannot answer after the time runs out                | S-03          | US-01, US-02, FR-020                                                      | done     |
 
 ## Streams
 
@@ -656,6 +657,10 @@ and do NOT re-scaffold them.
   consistent with the retention guardrail F-03 enforces.
 - **Parallel sessions and multiple quizzes** — Why parked: PRD §Non-Goals. One session, one quiz, one
   room; this removes session management from the change entirely.
+- **Host override of a question's time budget** — Why parked: PRD §Non-Goals, added with S-11. An
+  extend or pause button is a write to the session document while a question is open, which moves
+  the timestamp the speed clamp measures every award against. Reopening it means first finding a
+  second timestamp for the question's open moment; until then the answer is an edit and a deploy.
 - **Multimedia in questions** — Why parked: PRD §Non-Goals. Questions are text only.
 - **Moderation of word-cloud submissions** — Why parked: PRD §Non-Goals; the reputational risk of an
   unreviewed word on a projector was surfaced and accepted.

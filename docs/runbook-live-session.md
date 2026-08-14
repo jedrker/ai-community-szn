@@ -316,6 +316,27 @@ raise it before the event rather than after.
   gated. The routes still refuse an illegal action — that refusal is now the backstop, not something
   you should meet.
 
+- **Every scored question now has a clock, and it does not move the session** (S-11, FR-020). The
+  projector shows the time left under the prompt and every phone shows the same number, counted
+  from the moment you tapped `dalej`. Five things worth knowing on stage:
+
+  - **Nothing happens when it reaches zero.** The question stays on screen, the phones lock their
+    inputs, and the room waits for you exactly as before. Advancing, revealing, the leaderboard beat
+    and the close are all still yours — there is no automatic anything.
+  - **What it does is stop counting answers.** A submission arriving after the budget is refused
+    with "Czas na odpowiedź minął." on that phone, and the answer is not recorded. There is a
+    couple of seconds of grace past the visible zero so a slow phone that tapped in time still
+    lands; the room is not told about it, and you do not need to.
+  - **You cannot extend it from the stage, and this is deliberate.** There is no override button.
+    Changing a budget is an edit to `src/quiz/definition.ts` and a deploy, like changing a question
+    — so if the room clearly needs longer on a question, the lever you have is the same one you
+    always had: talk over it, then `dalej`.
+  - **The budgets are 25 seconds for a tap and 30 for anything typed.** If a question feels
+    consistently too tight or too generous in a real room, that is worth writing down after the
+    session — it is a one-line change per question.
+  - **Q1 and Q2 have no clock at all.** The word cloud and the gather question are unscored, and
+    unscored questions carry no budget: the cloud still fills until you reveal it.
+
 - **`pokaż ranking` is the leaderboard beat, and it is reachable from a reveal** (S-07, FR-014).
   The button is dark in the lobby, while a question is open, and after the session ends, so the
   sequence is `dalej` → `pokaż odpowiedź` → optionally `pokaż ranking` → `dalej`. It **stays live once
@@ -482,6 +503,14 @@ are counted. Check expected attendance against the ceiling when you plan the ses
 **If someone asks why they scored lower.** Answer honestly: a device on the fallback starts its clock
 when the question reaches it, so it earns fewer speed points. It is not a scoring bug and the banner
 says so on their phone.
+
+**If someone on the fallback says the question closed too early.** Their countdown is counted from
+the moment you advanced, not from when the question reached them — so a device running ~6 seconds
+behind really does get ~6 seconds less to answer (S-11, FR-020). That is the same trade the banner
+already describes for speed points, and it is why the two clocks are separate: the *cutoff* has to
+be shared or the projector and the phones would disagree about how long is left, while the *reward*
+is per-device so nobody is punished twice for a bad connection. Nothing to do mid-segment; if it
+affects several people, the answer is a longer budget next time, not a change on stage.
 
 ## Standing constraints
 

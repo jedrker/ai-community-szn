@@ -297,6 +297,13 @@ counter-argument raised during shaping and its resolution.
   > Socrates: Counter-argument considered: "a per-question timer would be fairer to fast answerers
   > and would free the host from judging when the room is done." Resolution: kept manual advance.
   > The host reading the room beats a fixed clock, and a timer is a whole extra mechanic.
+  >
+  > **Half-reversed 2026-08-15 by FR-020 (S-11).** The resolution above is kept rather than
+  > deleted, so a reader meets the position that was overturned and can see exactly how much of
+  > it was. What survives: advancing is still manual, and so are revealing, the leaderboard beat
+  > and the close — no clock moves the session. What was reversed: a scored question now stops
+  > *accepting answers* on a budget authored per question. The clock bounds answering; it does
+  > not pace the segment, and the host reading the room is still what decides when to move on.
 - `[new]` FR-004: Host can reveal the results of the current question. Priority: must-have.
   > Socrates: Counter-argument considered: "the reveal carries no judgement, so it's an extra click
   > on stage that could happen automatically." Resolution: kept manual. Controlling the reveal is
@@ -355,6 +362,36 @@ counter-argument raised during shaping and its resolution.
   > final scores become effectively impossible, removing the need for a tie-breaking rule. This
   > deliberately reverses the original non-goal "zaawansowana punktacja (bonus za czas, mnożniki,
   > streaki)" — the time-bonus half of it only. Multipliers and streaks remain non-goals.
+- `[new]` FR-020: Each scored question carries a time budget, authored per question, after which it stops accepting answers; attendees and the room can see how long is left. Priority: must-have.
+  > Origin: added 2026-08-15 (S-11) at the user's request — "for every question we should have
+  > specific time slot".
+  >
+  > **This reverses half of FR-003's rejection, and the half matters.** That resolution refused a
+  > timer on the ground that "the host reading the room beats a fixed clock, and a timer is a
+  > whole extra mechanic". The clock added here moves nothing: it does not advance, reveal, show
+  > the leaderboard or end the session, and there is no automatic transition anywhere. It closes
+  > the *submission window* on a question the host opened and will close themselves. FR-002,
+  > FR-003, FR-004 and FR-014 are all unchanged in substance.
+  >
+  > **Two clocks now exist and they are deliberately different.** FR-019's speed component is
+  > measured per device from its own first paint, so a slow connection costs no points. This
+  > budget is measured from the host's advance and is shared, so one clock is true for the whole
+  > room and the projector cannot disagree with a phone. Merging them would break one guarantee
+  > or the other.
+  >
+  > A budget shorter than the 20-second speed window is legal but compresses the reward curve;
+  > every authored value sits at or above it. Unscored questions carry no budget at all — the
+  > word cloud fills until the host reveals it, which FR-015 depends on.
+  >
+  > **Nothing new is published.** The deadline is derived from the session document's existing
+  > `updatedAt` plus the authored limit, so no field is added to the broadcast snapshot and no
+  > new key exists. The retention deviation chain above therefore needs no entry for this change:
+  > its subject is what rides the wire about who played, and nothing here does.
+  >
+  > Known cost, accepted: an attendee who is reading slowly, or who is on the connection
+  > fallback and thus a few seconds behind, has less usable time than the budget suggests. The
+  > enforced cutoff sits a short grace past the visible zero so an answer already in flight is
+  > not lost, and that grace is deliberately not disclosed to devices.
 
 ### Standings & feedback
 - `[new]` FR-014: Host can choose when to show the leaderboard between questions. Priority: must-have.
@@ -362,6 +399,12 @@ counter-argument raised during shaping and its resolution.
   > a segment meant to run short." Resolution: **FR revised.** The leaderboard becomes a
   > host-controlled beat rather than an automatic one after every question, handing pacing to the
   > host — consistent with FR-003 and FR-004 keeping manual control.
+  >
+  > **The consistency clause survives FR-020 (S-11), narrowed.** Manual pacing is still a
+  > property the design holds across FR-002, FR-003, FR-004 and this FR: every *transition* is a
+  > deliberate host act, and nothing in the session moves on a clock. What FR-020 added bounds
+  > answering inside a question the host opened and will close themselves. Read the clause as
+  > being about who moves the session, which is what it was always doing work for.
 - `[new]` FR-015: Host can display the word cloud updating as attendees submit words. Priority: must-have.
   > Socrates: Counter-argument considered: "it's the most expensive view in the set, built for a
   > single question." Resolution: kept unchanged and the cost accepted. Watching your own word
@@ -477,6 +520,14 @@ are introduced for the existing site's users.
 - **No score multipliers and no streak bonuses.** The time-bonus half of the original
   advanced-scoring non-goal was deliberately reversed (see FR-019); multipliers and streaks remain
   out of scope.
+- **No host override of a question's time budget.** No extend, no pause, no "+15 seconds" on the
+  host view (FR-020). Not an ergonomic call: extending a deadline means writing the session
+  document while a question is open, which moves the timestamp the speed clamp measures every
+  award against — inflating every award after it *and* granting time nobody authored, with
+  nothing on any screen to say either happened. Changing a budget is an edit to the definition
+  and a deploy, exactly as changing a question is.
+- **No automatic transitions.** Nothing in the session advances, reveals, shows the leaderboard or
+  ends on a clock or a schedule. FR-020's budget closes a submission window and moves nothing.
 - **No native mobile applications.** The attendee experience is the web on the device they arrived
   with.
 - **No change to how existing content is authored or published.** The Markdown-in-repository workflow

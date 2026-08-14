@@ -646,32 +646,32 @@ shape to undo.
 
 #### Automated
 
-- [x] 4.1 `bun run test` passes
-- [x] 4.2 `bun run type-check` reports 0 errors
-- [x] 4.3 The rewritten `host.test.ts` guard passes on the finished file
-- [x] 4.4 The guard fails when a second fetch-arming timer is added
-- [x] 4.5 The guard fails when a countdown clear is removed
-- [x] 4.6 `boundary.test.ts` passes for the new `<script>` code
+- [x] 4.1 `bun run test` passes — 206e4c3
+- [x] 4.2 `bun run type-check` reports 0 errors — 206e4c3
+- [x] 4.3 The rewritten `host.test.ts` guard passes on the finished file — 206e4c3
+- [x] 4.4 The guard fails when a second fetch-arming timer is added — 206e4c3
+- [x] 4.5 The guard fails when a countdown clear is removed — 206e4c3
+- [x] 4.6 `boundary.test.ts` passes for the new `<script>` code — 206e4c3
 
 #### Manual
 
-- [x] 4.7 The countdown is legible from the back of the room
-- [x] 4.8 Projector and phone agree throughout a question
-- [x] 4.9 Advancing restarts the clock; revealing stops it
-- [x] 4.10 Participation and word-cloud panels unchanged, staleness markers included
-- [x] 4.11 Backgrounding the host tab leaves no second clock running
+- [x] 4.7 The countdown is legible from the back of the room — 206e4c3
+- [x] 4.8 Projector and phone agree throughout a question — 206e4c3
+- [x] 4.9 Advancing restarts the clock; revealing stops it — 206e4c3
+- [x] 4.10 Participation and word-cloud panels unchanged, staleness markers included — 206e4c3
+- [x] 4.11 Backgrounding the host tab leaves no second clock running — 206e4c3
 
 ### Phase 5: Contract and documents
 
 #### Automated
 
-- [ ] 5.1 `bun run test` passes
-- [ ] 5.2 `bun run type-check` reports 0 errors
-- [ ] 5.3 `bun run build` succeeds
-- [ ] 5.4 No document still asserts the three falsified claims
+- [x] 5.1 `bun run test` passes
+- [x] 5.2 `bun run type-check` reports 0 errors
+- [x] 5.3 `bun run build` succeeds
+- [x] 5.4 No document still asserts the three falsified claims
 
 #### Manual
 
-- [ ] 5.5 The contract is a one-page pointer
-- [ ] 5.6 FR-003's note shows what was reversed and what was not
-- [ ] 5.7 The runbook alone suffices for a host to run the new behaviour
+- [x] 5.5 The contract is a one-page pointer
+- [x] 5.6 FR-003's note shows what was reversed and what was not
+- [x] 5.7 The runbook alone suffices for a host to run the new behaviour

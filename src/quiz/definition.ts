@@ -28,7 +28,7 @@ const POINTS = 1000;
 const TAP_SECONDS = 25;
 
 /** Long enough to type an answer, including a correction. */
-const TYPE_SECONDS = 40;
+const TYPE_SECONDS = 30;
 
 export const quizDefinition = {
   questions: [

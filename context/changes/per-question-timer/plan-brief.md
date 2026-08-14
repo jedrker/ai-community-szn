@@ -85,7 +85,7 @@ post-roadmap change.
 
 ## Open Risks & Assumptions
 
-- The proposed budgets (25 s tapping, 40 s typing) are a first guess and will want one live rehearsal to
+- The proposed budgets (25 s tapping, 30 s typing) are a first guess and will want one live rehearsal to
   calibrate; they are a one-line edit per question.
 - The grace window means the enforced cutoff is later than the visible one. Accepted deliberately, and
   the reason it must stay invisible to clients is recorded in the contract.

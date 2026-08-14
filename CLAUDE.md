@@ -202,8 +202,18 @@ two rules above. FR-015 lets its aggregate display live precisely because it has
 leak, and scoring one would break that reasoning. It also takes no scoring function at all: the route
 writes `correct: false, awarded: 0` directly, because there is nothing to weigh.
 
+A scored question must carry **`timeLimitSeconds`**, and an unscored one may not (S-11, FR-020).
+Required where `points !== null`, refused where `points === null`, bounded to
+`[MIN_TIME_LIMIT_SECONDS, MAX_TIME_LIMIT_SECONDS]` (5–180) — all three at the build gate, all three
+keyed on `points` rather than on `kind`, so marking a question unscored is enough to take its clock
+away. A value below the 20-second speed window is legal and compresses the reward curve; every
+authored value sits at or above it.
+
 Scoring rules deliberately do **not** live here. `points` (a number, or `null` for an unscored
-question per FR-017) is the only scoring field; the speed weighting, the answer-length bound
+question per FR-017) is the only *scoring* field — **`timeLimitSeconds` is pacing, not scoring**, and
+that distinction is the whole of why it is allowed in this file: it decides how long a question
+accepts answers, never what an answer is worth. The deadline arithmetic it feeds lives in
+`src/lib/session/deadline.ts`. The speed weighting, the answer-length bound
 (`MAX_TEXT_ANSWER_LENGTH`) and the numeric-closeness curve live in `src/lib/session/scoring.ts`.
 The word bound (`MAX_WORD_LENGTH`, 24) lives in `src/lib/session/words.ts` for the same reason, and it
 is **24 rather than the text field's 80 because a word goes on a projector** — the same number and the
@@ -447,12 +457,21 @@ decision that it stays out of reach in `lobby` even though the route accepts it 
 ## Polling: two loops, three endpoints, and why every one has to be nameable
 
 The runbook's command tripwire is a polling detector, so **an unaccounted-for loop reads as an
-incident.** There are exactly two, and they are bounded differently:
+incident.** There are exactly two loops that *fetch*, and they are bounded differently:
 
 | Loop | Where | Bounded by |
 | --- | --- | --- |
 | The host panel poll | `src/pages/quiz/host.astro` | one device; a question kind; ~2.5 s with exponential backoff; tab visibility |
 | The connection fallback | `src/lib/client/session.ts` | the channel outage; tab visibility; the session ending |
+
+**Since S-11 there are also two timers that fetch nothing** — the countdowns in `host.astro` and
+`index.astro` — and the distinction is the point rather than a footnote. They issue no request, so
+they spend no commands and cannot appear in the tripwire; what bounds them is their question, not a
+backoff. Their rule is narrower and different: cleared on every render, armed only while a question
+with a limit is open, stopped at both lifecycle exits. **Do not count timers and do not merge the two
+rules** — `host.test.ts`'s guard used to assert `occurrences("setTimeout") === 1`, a *shape*, and the
+only way to fit a countdown under it was to weaken it to `=== 2`, which protects nothing. It now
+asserts the property it always meant: exactly one timer whose callback can reach a `fetch`.
 
 The host loop serves **two** endpoints — `/api/quiz/host/participation` for a choice question's
 answered count, `/api/quiz/host/words` for the word cloud — chosen by question kind in
@@ -471,6 +490,15 @@ arrive in that phase.
 the question opened, and it is the upper bound `clampElapsed` measures every award against — so a
 host-side write on a polled path inflates every award after it, with nothing on any screen to say
 scoring changed. Both route tests assert the ban against their own source.
+
+**S-11 made that timestamp load-bearing twice, and it is now the reason two features have no knobs.**
+The submission window is derived from the same `updatedAt` — `deadline = updatedAt + timeLimitSeconds`,
+stored nowhere, so no `SessionState` field, no key and no new snapshot traffic. A write during
+`question-open` therefore both inflates every later award *and* silently grants the room extra time
+nobody authored. That is why there is no host override on the clock, and why "just stamp a
+`deadlineAt` when the question opens" is a worse trade than it looks: it buys nothing the subtraction
+does not, and costs a fourth kind of state field with its own guard clause and back-compat default.
+See `context/changes/per-question-timer/timer-contract.md`.
 
 ## API route conventions
 
