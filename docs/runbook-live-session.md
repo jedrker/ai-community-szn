@@ -307,9 +307,21 @@ raise it before the event rather than after.
   `purge` stayed off this screen deliberately — it deletes with no undo and no ten-minute window.
   It lives on `/quiz/spine-check`, or use `bun run quiz:reset` from the terminal.
 
-- **`pokaż ranking` is the leaderboard beat, and it only works right after a reveal** (S-07, FR-014).
-  The button is disabled in every other phase, so the sequence is `dalej` → `pokaż odpowiedź` →
-  optionally `pokaż ranking` → `dalej`. Four things worth knowing on stage:
+- **The panel leads the sequence — every flow button goes dark in a phase that would refuse it, and
+  one is ringed as the next step.** So `start` is live only before a session exists, `pokaż odpowiedź`
+  only while a question is open, and in the lobby the only ringed button is `dalej`. **Hold on a dark
+  button to read why it is dark** — the reason is on the button itself, in Polish. The one deliberate
+  exception is `dalej`, which stays live while a question is open even though it is not the ringed
+  step: it is your only lever if something is on the projector that should not be. `odśwież` is never
+  gated. The routes still refuse an illegal action — that refusal is now the backstop, not something
+  you should meet.
+
+- **`pokaż ranking` is the leaderboard beat, and it is reachable from a reveal** (S-07, FR-014).
+  The button is dark in the lobby, while a question is open, and after the session ends, so the
+  sequence is `dalej` → `pokaż odpowiedź` → optionally `pokaż ranking` → `dalej`. It **stays live once
+  the board is up**, where tapping it again simply re-publishes the same board — that is the retry its
+  own "Ranking jest zapisany, ale nie dotarł do urządzeń. Kliknij ponownie…" asks for. Four things
+  worth knowing on stage:
 
   - **It replaces the question on screen**, top five by name and points. The phones show the same five
     rows in the same order, each attendee's own line highlighted, and their own position underneath —
@@ -317,8 +329,9 @@ raise it before the event rather than after.
   - **You do not have to use it after every question.** It is a host-controlled beat precisely so a
     fourteen-question segment does not grow fourteen leaderboards. Two or three is a rhythm; every
     question is a different, longer show.
-  - **`pokaż odpowiedź` is refused while the board is up** with "Ranking jest już pokazany" — the
-    question is already closed, so the way onward is `dalej`. That is not a fault.
+  - **`pokaż odpowiedź` is dark while the board is up** — the question is already closed, so the way
+    onward is `dalej`. The route would refuse it with "Ranking jest już pokazany"; you should no
+    longer meet that message, because the button is not offered there.
   - If it answers **"Nie udało się odczytać rankingu"**, the store did not respond and the room stayed
     on the reveal rather than getting a blank board. Tap it again; if it fails twice, carry on with
     `dalej` — the segment does not depend on the beat.
