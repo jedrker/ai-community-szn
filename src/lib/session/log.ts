@@ -210,6 +210,20 @@ type LogFields = {
     /** S-03: this player already answered this question. FR-004 makes the first final. */
     | "already-answered"
     /**
+     * S-11: the question's time limit ran out before the answer landed (FR-020).
+     *
+     * Its own class rather than folded into `not-open`, because the two say different
+     * things about the session: `not-open` means the host moved on, this one means the
+     * host has not and the clock did. A host reading a burst of these while the
+     * projector still shows the question is reading a room that ran out of time, which
+     * is a pacing signal rather than a fault.
+     *
+     * The class only — never the elapsed time or the deadline. A per-submission
+     * timestamp in a stream retained ~1 hour, covered by no TTL and no purge, is a
+     * handle on when one phone acted.
+     */
+    | "expired"
+    /**
      * S-09: the claiming device has already registered its allowance (FR-018).
      *
      * The class, never the device id — which would be a stable handle on one phone in a

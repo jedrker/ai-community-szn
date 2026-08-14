@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { isSubmissionExpired } from "../../../lib/session/deadline";
 import { MAX_GUESS_MAGNITUDE, parseGuess } from "../../../lib/session/guess";
 import { logSessionEvent } from "../../../lib/session/log";
 import {
@@ -42,6 +43,13 @@ const MESSAGES = {
   missing: "Brak odpowiedzi.",
   notOpen: "To pytanie nie jest już otwarte.",
   alreadyAnswered: "Odpowiedź została już zapisana.",
+  /**
+   * Distinct from `notOpen` on purpose: the question *is* still open — the host has not
+   * advanced — and only the clock ran out. Telling an attendee the question closed when
+   * the projector still shows it is the kind of small lie that produces a hand in the
+   * air mid-segment.
+   */
+  expired: "Czas na odpowiedź minął.",
   notStarted: "Sesja jeszcze się nie rozpoczęła.",
   unknownPlayer: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie.",
   tooLong: `Odpowiedź może mieć najwyżej ${MAX_TEXT_ANSWER_LENGTH} znaków.`,
@@ -150,10 +158,43 @@ export const POST: APIRoute = async ({ request }) => {
    * (a live participation count, say), this bound silently shortens and every clamp
    * after it hands out more speed weight than it should.
    *
+   * **S-11 made that reasoning load-bearing twice.** The same timestamp is now also the
+   * start of the submission window below, so a mid-question write would not only inflate
+   * awards — it would push the deadline out and give the room extra time nobody granted.
+   * That is why the limit has no host override.
+   */
+  const now = Date.now();
+
+  /**
+   * **The submission window (roadmap S-11, FR-020).**
+   *
+   * Refused here, above the kind branches, because the rule is global and because a
+   * refusal must cost nothing: no scoring, and no `EVAL` — an expired submission spends
+   * only the read this route had already made.
+   *
+   * **Both inputs are the server's.** `now` is this route's clock and `updatedAt` came
+   * out of the store; the attendee's `elapsedMs` is deliberately *not* consulted. That
+   * field is attacker-controlled — `clampElapsed` documents the accepted risk — so a
+   * cutoff that read it would be a cutoff any phone could opt out of by claiming to have
+   * answered sooner.
+   *
+   * **Below the phase gate, never above it.** A submission to a question that is not
+   * open must keep saying `notOpen`: that is the truthful message, and the two refusals
+   * are not interchangeable on a phone that has to tell the attendee which happened.
+   *
+   * The enforced cutoff sits `SUBMISSION_GRACE_MS` past the zero the countdown showed,
+   * so an answer already in flight is not lost. `deadline.ts` owns that reasoning and
+   * the reason the grace never travels to a client.
+   */
+  if (isSubmissionExpired(now, session.state.updatedAt, question)) {
+    logSessionEvent("session.answer.rejected", { rejection: "expired", questionId });
+    return json(409, { error: MESSAGES.expired, refusal: "expired" });
+  }
+
+  /**
    * Computed above the kind branch because the timing rule is global — every scored
    * answer is weighted the same way regardless of what it is made of.
    */
-  const now = Date.now();
   const elapsedMs = clampElapsed(rawElapsed, now - session.state.updatedAt);
 
   let selectedOptionIds: string[] = [];

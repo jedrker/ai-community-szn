@@ -23,6 +23,7 @@ const { quiz } = await import("../../../quiz/index");
 const { SPEED_WINDOW_MS, MAX_TEXT_ANSWER_LENGTH } = await import("../../../lib/session/scoring");
 const { MAX_GUESS_MAGNITUDE } = await import("../../../lib/session/guess");
 const { MAX_WORD_LENGTH } = await import("../../../lib/session/words");
+const { SUBMISSION_GRACE_MS } = await import("../../../lib/session/deadline");
 
 const NOW = 1_785_000_000_000;
 
@@ -193,7 +194,18 @@ describe("the elapsed time is the device's, but it is bounded", () => {
   });
 
   it("treats a missing claim as the slowest answer rather than the fastest", async () => {
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - SPEED_WINDOW_MS * 2));
+    /**
+     * Past the speed window, but still inside the question's own time limit (S-11).
+     *
+     * This used to be `SPEED_WINDOW_MS * 2` — comfortably past the window and, once the
+     * question carried a 25-second budget, comfortably *expired*, so the route refused
+     * before it ever scored and the assertion below read a call that never happened.
+     * The two clocks now bound this fixture from both sides: it must exceed
+     * `SPEED_WINDOW_MS` to floor the weight and stay under `timeLimitSeconds` to be
+     * accepted at all. That squeeze is real for any question whose limit is close to the
+     * window, and it is the reason the definition keeps every limit at or above 20s.
+     */
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - (SPEED_WINDOW_MS + 1_000)));
 
     await answer({
       request: request({ playerId: "player-abc", questionId: single.id }, [
@@ -667,6 +679,154 @@ describe("word-cloud answers", () => {
 
     expect(response.status).toBe(400);
     expect(response.status).not.toBe(409);
+  });
+});
+
+/**
+ * The submission window (roadmap S-11, FR-020).
+ *
+ * Every boundary below is built from the question's own `timeLimitSeconds` and
+ * `SUBMISSION_GRACE_MS`, never from a typed millisecond figure — a literal would leave
+ * this suite asserting a grace the module no longer applies.
+ *
+ * The clock is pinned: `Date.now()` is stubbed to `NOW` in `beforeEach`, and each test
+ * moves the question's *open time* instead. One `openOn` offset is exactly one position
+ * on the window, which is what `lessons.md` asks of a timing test.
+ */
+describe("the time limit closes the submission window", () => {
+  /** ms of budget for the default fixture, from the definition rather than a guess. */
+  const LIMIT_MS = single.timeLimitSeconds! * 1_000;
+
+  it("accepts a submission well inside the window", async () => {
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - 1_000));
+
+    expect((await submit(single.id, ["large-language-model"])).status).toBe(200);
+  });
+
+  it("accepts one arriving exactly at the visible zero", async () => {
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS));
+
+    expect((await submit(single.id, ["large-language-model"])).status).toBe(200);
+  });
+
+  it("accepts one inside the grace, which is what the grace is for", async () => {
+    // The attendee tapped as the bar emptied and the request crossed a venue network.
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - SUBMISSION_GRACE_MS));
+
+    expect((await submit(single.id, ["large-language-model"])).status).toBe(200);
+    expect(submitAnswerMock).toHaveBeenCalled();
+  });
+
+  it("refuses one a millisecond past the grace, with its own discriminator", async () => {
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - SUBMISSION_GRACE_MS - 1));
+
+    const response = await submit(single.id, ["large-language-model"]);
+
+    expect(response.status).toBe(409);
+    expect(await body(response)).toEqual({
+      error: "Czas na odpowiedź minął.",
+      refusal: "expired",
+    });
+  });
+
+  it("spends no write on a refusal", async () => {
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+
+    await submit(single.id, ["large-language-model"]);
+
+    // The read had already happened; the 10-command EVAL must not.
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it("says the time ran out, not that the question closed", async () => {
+    // The question IS still open — the host has not advanced. Reusing `notOpen` here
+    // would tell the room the projector is lying to them.
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+
+    const expired = await body(await submit(single.id, ["large-language-model"]));
+
+    readSessionMock.mockResolvedValue(openOn(multi.id));
+    const notOpen = await body(await submit(single.id, ["large-language-model"]));
+
+    expect(expired.error).not.toBe(notOpen.error);
+    expect(notOpen.refusal).toBeUndefined();
+  });
+
+  it("reads each question's own limit rather than one shared number", async () => {
+    // 30s after opening: past the 25s tap budget, inside the 40s typing one.
+    const at = NOW - 30_000;
+
+    readSessionMock.mockResolvedValue(openOn(single.id, at));
+    expect((await submit(single.id, ["large-language-model"])).status).toBe(409);
+
+    readSessionMock.mockResolvedValue(openOn(text.id, at));
+    const typed = await answer({
+      request: request({ playerId: "player-abc", questionId: text.id, text: "halucynacje" }),
+    } as Parameters<typeof answer>[0]);
+    expect(typed.status).toBe(200);
+  });
+
+  it.each([
+    ["the word cloud", () => wordCloud.id],
+    ["the gather question", () => unscored.id],
+  ])("never expires %s, whose pacing is the host's", async (_label, id) => {
+    // An hour in, an unscored question is still open — the schema refuses to give it a
+    // limit at all, so there is nothing for the window to close.
+    readSessionMock.mockResolvedValue(openOn(id(), NOW - 3_600_000));
+
+    const response = await answer({
+      request: request(
+        id() === wordCloud.id
+          ? { playerId: "player-abc", questionId: id(), word: "robot" }
+          : { playerId: "player-abc", questionId: id() },
+        id() === wordCloud.id ? [] : ["gotowy"]
+      ),
+    } as Parameters<typeof answer>[0]);
+
+    expect(response.status).toBe(200);
+  });
+
+  /**
+   * **The cutoff must not read the attendee's clock.**
+   *
+   * `elapsedMs` is attacker-controlled by design, so a cutoff that consulted it would be
+   * one any phone could opt out of. These two come at it from both sides: saying nothing,
+   * and claiming to have answered instantly. Neither may rescue an expired submission.
+   */
+  it("refuses an expired submission that omits elapsedMs entirely", async () => {
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+
+    const response = await answer({
+      request: request({ playerId: "player-abc", questionId: single.id }, [
+        "large-language-model",
+      ]),
+    } as Parameters<typeof answer>[0]);
+
+    expect(response.status).toBe(409);
+    expect((await body(response)).refusal).toBe("expired");
+  });
+
+  it("refuses an expired submission claiming elapsedMs of zero", async () => {
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+
+    const response = await submit(single.id, ["large-language-model"], 0);
+
+    expect(response.status).toBe(409);
+    expect((await body(response)).refusal).toBe("expired");
+  });
+
+  it("logs the class, and nothing about the timing", async () => {
+    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+
+    await submit(single.id, ["large-language-model"]);
+
+    const line = (console.log as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map((call) => String(call[0]))
+      .find((text) => text.includes("session.answer.rejected"));
+
+    expect(line).toContain("expired");
+    // No elapsed figure and no deadline: the log outlives the session document.
+    expect(line).not.toContain(String(LIMIT_MS));
   });
 });
 

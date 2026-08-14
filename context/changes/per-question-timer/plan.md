@@ -592,36 +592,36 @@ shape to undo.
 
 #### Automated
 
-- [x] 1.1 `bun run test` passes
-- [x] 1.2 `bun run type-check` reports 0 errors
-- [x] 1.3 `bun run build` succeeds
-- [x] 1.4 `schema.test.ts` covers the three authoring clauses and names the question
-- [x] 1.5 `public.test.ts` covers exposure for scored and absence for unscored
-- [x] 1.6 `deadline.test.ts` covers no-limit, boundaries from the constant, degenerate `openedAt`
+- [x] 1.1 `bun run test` passes — ea1ef22
+- [x] 1.2 `bun run type-check` reports 0 errors — ea1ef22
+- [x] 1.3 `bun run build` succeeds — ea1ef22
+- [x] 1.4 `schema.test.ts` covers the three authoring clauses and names the question — ea1ef22
+- [x] 1.5 `public.test.ts` covers exposure for scored and absence for unscored — ea1ef22
+- [x] 1.6 `deadline.test.ts` covers no-limit, boundaries from the constant, degenerate `openedAt` — ea1ef22
 
 #### Manual
 
-- [x] 1.7 Deleting a `timeLimitSeconds` fails the build with a message naming that question
-- [x] 1.8 Break-the-guard pass on all three schema clauses
+- [x] 1.7 Deleting a `timeLimitSeconds` fails the build with a message naming that question — ea1ef22
+- [x] 1.8 Break-the-guard pass on all three schema clauses — ea1ef22
 
 ### Phase 2: The write path
 
 #### Automated
 
-- [ ] 2.1 `bun run test` passes
-- [ ] 2.2 `bun run type-check` reports 0 errors
-- [ ] 2.3 Accepted inside the window; 409 with `refusal: "expired"` past deadline plus grace
-- [ ] 2.4 Accepted past the deadline but inside the grace
-- [ ] 2.5 Boundary expectations computed from `SUBMISSION_GRACE_MS`, not literals
-- [ ] 2.6 An unscored question never expires
-- [ ] 2.7 Refused with `elapsedMs` absent, and refused with a forged `elapsedMs: 0`
-- [ ] 2.8 `submitAnswer` not reached on the refusal path
+- [x] 2.1 `bun run test` passes
+- [x] 2.2 `bun run type-check` reports 0 errors
+- [x] 2.3 Accepted inside the window; 409 with `refusal: "expired"` past deadline plus grace
+- [x] 2.4 Accepted past the deadline but inside the grace
+- [x] 2.5 Boundary expectations computed from `SUBMISSION_GRACE_MS`, not literals
+- [x] 2.6 An unscored question never expires
+- [x] 2.7 Refused with `elapsedMs` absent, and refused with a forged `elapsedMs: 0`
+- [x] 2.8 `submitAnswer` not reached on the refusal path
 
 #### Manual
 
-- [ ] 2.9 A late submission from a phone shows the Polish expiry message
-- [ ] 2.10 A refused submission leaves `version` and `updatedAt` unchanged
-- [ ] 2.11 Break-the-guard pass on the expiry check and on the server-clock source
+- [x] 2.9 A late submission from a phone shows the Polish expiry message
+- [x] 2.10 A refused submission leaves `version` and `updatedAt` unchanged
+- [x] 2.11 Break-the-guard pass on the expiry check and on the server-clock source
 
 ### Phase 3: The phone
 
