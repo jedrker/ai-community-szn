@@ -91,7 +91,17 @@ export type OwnResult = {
 export type AnswerPayload =
   | { readonly kind: "choice"; readonly optionIds: readonly string[] }
   | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "number"; readonly value: string };
+  | { readonly kind: "number"; readonly value: string }
+  /**
+   * One word for a word-cloud question (roadmap S-08, FR-012).
+   *
+   * Its own arm rather than reusing `text`, even though both carry a raw string the server
+   * trims: the two are bound, validated and refused by different rules — 24 characters and
+   * no whitespace here, 80 and anything there — and they arrive at the route under
+   * different field names. A shared arm would make the route's branch depend on the
+   * question kind it looked up rather than on what the device actually sent.
+   */
+  | { readonly kind: "word"; readonly word: string };
 
 /**
  * What this device knows about one question, across reloads.
@@ -320,6 +330,12 @@ export async function submitAnswer(
     // Raw, exactly as typed — commas, spaces and all. `parseGuess` on the server owns
     // every decision about what that string means.
     body.set("value", payload.value);
+  } else if (payload.kind === "word") {
+    // Raw, like the two above: `validateWord` on the server trims it, bounds it, checks the
+    // character set and folds it. One implementation of each of those rules, and the fold
+    // could not live here anyway — it is under `src/lib/session/`, which
+    // `boundary.test.ts` refuses to let a client module value-import.
+    body.set("word", payload.word);
   } else {
     // Repeated field, so a multiple-choice answer needs no encoding scheme.
     for (const id of payload.optionIds) body.append("optionIds", id);

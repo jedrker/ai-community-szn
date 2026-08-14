@@ -9,6 +9,7 @@ import {
   renderWordCloud,
   standingsPositionText,
   wordCloudCountText,
+  wordEchoText,
 } from "./render";
 import type { PublicQuestion } from "../../quiz/public";
 
@@ -796,5 +797,39 @@ describe("wordCloudCountText", () => {
 
   it("reports an empty cloud without inventing a second number", () => {
     expect(wordCloudCountText(0, 0)).toBe("0 słów");
+  });
+});
+
+/**
+ * The attendee's own word at the reveal (roadmap S-08).
+ *
+ * Extracted from the page for the reason `standingsPositionText` was: the absent branch is
+ * what the function exists for, and the page has no harness.
+ */
+describe("wordEchoText", () => {
+  it("echoes the word this device sent", () => {
+    expect(wordEchoText("Halucynacja")).toBe("Twoje słowo: Halucynacja");
+  });
+
+  it("echoes it exactly as typed, not folded", () => {
+    // The projector shows the folded form; the phone shows what its owner actually wrote, so
+    // the two are allowed to differ in case and the attendee can see why.
+    expect(wordEchoText("SkyNet")).toBe("Twoje słowo: SkyNet");
+  });
+
+  /**
+   * THE ABSENT BRANCH. Reachable from a phone that cleared storage. It must produce nothing
+   * at all — not "Twoje słowo: " with a hole in it, and not a placeholder claiming the
+   * attendee wrote nothing, which is the one wrong thing this line could say at the moment
+   * they are looking for their word on the screen.
+   */
+  it("says nothing at all when the word is not in storage", () => {
+    expect(wordEchoText(null)).toBe("");
+  });
+
+  it("says nothing for an empty stored word either", () => {
+    // `validateWord` refuses an empty word, so this is unreachable through the route — and
+    // handled anyway, because a truncated storage read would otherwise render a bare label.
+    expect(wordEchoText("")).toBe("");
   });
 });

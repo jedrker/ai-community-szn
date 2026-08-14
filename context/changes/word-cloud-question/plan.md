@@ -810,7 +810,7 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 
 #### Manual
 
-- [ ] 2.7 A submitted word appears once in the Upstash console and a double tap does not raise it
+- [x] 2.7 A submitted word appears once in the Upstash console and a double tap does not raise it — bbfbf53
 - [x] 2.8 Break-the-guard pass: the increment's position below the `HSETNX` — bbfbf53
 
 ### Phase 3: The read and the host route
@@ -827,44 +827,44 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 
 #### Manual
 
-- [ ] 3.8 `curl` with and without the host header behaves as specified
-- [ ] 3.9 A minute of polling leaves `updatedAt` and `version` untouched
+- [x] 3.8 `curl` with and without the host header behaves as specified — 2b362c7
+- [x] 3.9 A minute of polling leaves `updatedAt` and `version` untouched — 2b362c7
 - [x] 3.10 Break-the-guard pass: the kind refusal and the `null`-vs-empty split — 2b362c7
 
 ### Phase 4: The projector
 
 #### Automated
 
-- [x] 4.1 `bun run test` passes
-- [x] 4.2 `bun run type-check` reports 0 errors
-- [x] 4.3 `render.test.ts` covers order, escaping, size scale, empty state, `data-word`, copy helper
-- [x] 4.4 `boundary.test.ts` passes for the new script code
+- [x] 4.1 `bun run test` passes — f0399ad
+- [x] 4.2 `bun run type-check` reports 0 errors — f0399ad
+- [x] 4.3 `render.test.ts` covers order, escaping, size scale, empty state, `data-word`, copy helper — f0399ad
+- [x] 4.4 `boundary.test.ts` passes for the new script code — f0399ad
 
 #### Manual
 
-- [ ] 4.5 The cloud fills within ~2.5 s of a submission and the count line moves
-- [x] 4.6 Revealing freezes the cloud and stops the poll
-- [x] 4.7 Advancing clears the cloud and restores the participation panel
-- [x] 4.8 Tab backgrounding stops and resumes the poll
-- [x] 4.9 A missing host secret shows the secret message, not a staleness marker
+- [x] 4.5 The cloud fills within ~2.5 s of a submission and the count line moves — f0399ad
+- [x] 4.6 Revealing freezes the cloud and stops the poll — f0399ad
+- [x] 4.7 Advancing clears the cloud and restores the participation panel — f0399ad
+- [x] 4.8 Tab backgrounding stops and resumes the poll — f0399ad
+- [x] 4.9 A missing host secret shows the secret message, not a staleness marker — f0399ad
 
 ### Phase 5: The phone
 
 #### Automated
 
-- [ ] 5.1 `bun run test` passes
-- [ ] 5.2 `bun run type-check` reports 0 errors
-- [ ] 5.3 `client/answer.test.ts` covers the word arm and the 400-vs-409 split
-- [ ] 5.4 `boundary.test.ts` passes
-- [ ] 5.5 `render.test.ts` covers the reveal-echo helper's absent-word branch
+- [x] 5.1 `bun run test` passes
+- [x] 5.2 `bun run type-check` reports 0 errors
+- [x] 5.3 `client/answer.test.ts` covers the word arm and the 400-vs-409 split
+- [x] 5.4 `boundary.test.ts` passes
+- [x] 5.5 `render.test.ts` covers the reveal-echo helper's absent-word branch
 
 #### Manual
 
-- [ ] 5.6 Two phones submit and each sees its own word echoed with no score line
-- [ ] 5.7 Empty, two-word and over-length submissions behave as specified
-- [ ] 5.8 Reload keeps the clock and restores the locked word
-- [ ] 5.9 The reveal shows the word and no verdict; the next question clears the field
-- [ ] 5.10 A diacritic-bearing word reaches the projector spelled correctly
+- [x] 5.6 Two phones submit and each sees its own word echoed with no score line
+- [x] 5.7 Empty, two-word and over-length submissions behave as specified
+- [x] 5.8 Reload keeps the clock and restores the locked word
+- [x] 5.9 The reveal shows the word and no verdict; the next question clears the field
+- [x] 5.10 A diacritic-bearing word reaches the projector spelled correctly
 
 ### Phase 6: Contract and documents
 

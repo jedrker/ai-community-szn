@@ -5,6 +5,7 @@ import { PLAYER_STORAGE_KEY, QUESTION_SEEN_STORAGE_KEY } from "../../lib/session
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
 import { MAX_GUESS_INPUT_LENGTH } from "../../lib/session/guess";
 import { MAX_TEXT_ANSWER_LENGTH } from "../../lib/session/scoring";
+import { MAX_WORD_LENGTH } from "../../lib/session/words";
 import { publicQuiz } from "../../quiz/public";
 
 /**
@@ -178,6 +179,37 @@ import { publicQuiz } from "../../quiz/public";
           placeholder="Wpisz liczbę"
         />
 
+        <!-- The word field (S-08). A third static sibling of the two above, for the same
+             reason and with the same consequence: `render()` runs on every snapshot and
+             `replaceChildren()` inside the question container would destroy the input
+             mid-keystroke, losing the value, the focus and the caret.
+
+             `maxlength` is `MAX_WORD_LENGTH`, not the text field's 80 — a word goes on a
+             projector, so it is bounded by what fits a projected line, the same number
+             `MAX_DISPLAY_NAME_LENGTH` uses for the same reason. Read in frontmatter and
+             written straight into the markup, because the `<script>` block below may not
+             value-import from `src/lib/session/`.
+
+             `autocapitalize="off"` deliberately: the fold lowercases anyway, so a phone
+             capitalising the first letter would show the attendee something other than
+             what the projector renders. -->
+        <input
+          id="answer-word"
+          type="text"
+          hidden
+          inputmode="text"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          maxlength={MAX_WORD_LENGTH}
+          class="w-full rounded-xl border border-surface-border bg-surface-secondary
+                 px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
+                 focus:border-brand-purple-light focus:outline-none
+                 disabled:opacity-60"
+          placeholder="Wpisz jedno słowo"
+        />
+
         <button
           id="answer-submit"
           type="button"
@@ -274,6 +306,7 @@ import { publicQuiz } from "../../quiz/public";
         setHidden,
         setText,
         standingsPositionText,
+        wordEchoText,
       } from "../../lib/client/render";
       import type { PublicQuestion } from "../../quiz/public";
 
@@ -303,6 +336,7 @@ import { publicQuiz } from "../../quiz/public";
       const answerSubmit = el("answer-submit") as HTMLButtonElement;
       const answerText = el("answer-text") as HTMLInputElement;
       const answerNumber = el("answer-number") as HTMLInputElement;
+      const answerWord = el("answer-word") as HTMLInputElement;
       const answerNote = el("answer-note");
       const answerError = el("answer-error");
       const standingsBox = el("standings");
@@ -497,6 +531,8 @@ import { publicQuiz } from "../../quiz/public";
           delete answerText.dataset.questionId;
           answerNumber.value = "";
           delete answerNumber.dataset.questionId;
+          answerWord.value = "";
+          delete answerWord.dataset.questionId;
           return;
         }
 
@@ -652,6 +688,7 @@ import { publicQuiz } from "../../quiz/public";
         setHidden(answerSubmit, true);
         setHidden(answerText, true);
         setHidden(answerNumber, true);
+        setHidden(answerWord, true);
         setHidden(answerNote, true);
         setHidden(answerAccepted, true);
         setHidden(resultPanel, true);
@@ -669,16 +706,24 @@ import { publicQuiz } from "../../quiz/public";
         setHidden(resultPanel, true);
         setHidden(answerAccepted, true);
 
+        /**
+         * **Every kind is answerable now (roadmap S-08 took the last one).** The branch is
+         * kept rather than collapsed to `question !== undefined`, because the thing it
+         * actually guards is a question id absent from the projection — a definition changed
+         * under a live session — and a sixth kind added later must land in the static
+         * placeholder rather than in whichever branch happens to fall through.
+         */
         const answerable =
           question !== undefined &&
           (question.kind === "single-choice" ||
             question.kind === "multiple-choice" ||
             question.kind === "text" ||
-            question.kind === "number");
+            question.kind === "number" ||
+            question.kind === "word-cloud");
 
         if (!question || !answerable) {
-          // The word cloud is S-08. Static text, and no control — something tappable
-          // that does nothing reads as a broken quiz.
+          // Static text, and no control — something tappable that does nothing reads as a
+          // broken quiz.
           renderQuestion(questionBox, question, {
             prompt: "text-3xl font-bold leading-tight",
             list: "flex flex-col gap-3",
@@ -698,10 +743,16 @@ import { publicQuiz } from "../../quiz/public";
           return;
         }
 
+        if (question.kind === "word-cloud") {
+          renderOpenWord(question);
+          return;
+        }
+
         // A choice question has no field. Hidden explicitly because this branch does not
         // call `hideAnswerControls`.
         setHidden(answerText, true);
         setHidden(answerNumber, true);
+        setHidden(answerWord, true);
 
         markSeen(config.seenStorageKey, question.id);
 
@@ -860,9 +911,86 @@ import { publicQuiz } from "../../quiz/public";
         answerSubmit.disabled = !hasTypedGuess();
       }
 
+      /**
+       * `question-open` for a word-cloud question (roadmap S-08, FR-012).
+       *
+       * The same five beats as the text and number paths — paint clock, reconciliation,
+       * lock, note, disabled-until-valid submit — and its own function for the same reason
+       * `renderOpenNumber` is: the copy, the enable rule and the element are what differ,
+       * which is most of the body.
+       *
+       * **The copy is the one real difference and it is deliberate.** Every other unscored
+       * beat says "bez punktów", which frames the question as something the attendee missed
+       * out on. This is the question the PRD kept knowing it was the most expensive view in
+       * the set, because watching your own word land on the big screen is what proves the
+       * session is live — so the note points at the screen instead of apologising for the
+       * absence of points.
+       */
+      function renderOpenWord(question: PublicQuestion): void {
+        // Prompt only; the field is a static sibling outside the container `render()`
+        // rebuilds.
+        renderQuestion(questionBox, question, {
+          prompt: "text-3xl font-bold leading-tight",
+        });
+
+        markSeen(config.seenStorageKey, question.id);
+
+        const locked = hasSubmitted(config.seenStorageKey, question.id);
+
+        // The same reconciliation rule as the other two fields, and for the same reason —
+        // see `renderOpenText`. Written only when the element holds a different question, so
+        // a snapshot arriving mid-keystroke cannot clobber what is being typed.
+        if (answerWord.dataset.questionId !== question.id) {
+          answerWord.dataset.questionId = question.id;
+          answerWord.value =
+            submittedText(config.seenStorageKey, question.id) ?? typed.get(question.id) ?? "";
+        }
+
+        setHidden(answerWord, false);
+        setHidden(answerText, true);
+        setHidden(answerNumber, true);
+        // Disabled rather than hidden once locked, so the attendee still sees the word they
+        // sent — and can compare it with the chip on the projector.
+        answerWord.disabled = locked;
+
+        setHidden(answerNote, false);
+        if (locked) {
+          answerNote.textContent = "Słowo wysłane! Zobacz duży ekran.";
+          setHidden(answerSubmit, true);
+          return;
+        }
+
+        // No `scored` branch, unlike every other kind: the build gate refuses a scored
+        // word-cloud question, so there is no second case to write copy for.
+        answerNote.textContent = "Napisz jedno słowo — pojawi się na dużym ekranie.";
+
+        setHidden(answerSubmit, false);
+        answerSubmit.disabled = !hasTypedWord();
+      }
+
       /** Whether the field holds anything but whitespace. The server is the real judge. */
       function hasTypedAnswer(): boolean {
         return answerText.value.trim().length > 0;
+      }
+
+      /**
+       * Whether the word field holds something that could be one word.
+       *
+       * **A loose test, deliberately not a copy of `validateWord`.** That function is
+       * server-side and lives under `src/lib/session/`, which `boundary.test.ts` refuses to
+       * let this script value-import — and two validators that disagree would refuse an
+       * answer the server would have accepted, or enable a button for one it will not. All
+       * this decides is whether the button is tappable: an over-permissive gate costs a
+       * refusal the attendee can read, an over-strict one silently blocks a legitimate word.
+       *
+       * It checks the two rules an attendee can *see* they broke — nothing typed, or a space
+       * in the middle. The length bound is enforced by the input's `maxlength` and by the
+       * server; the character allowlist is the server's alone, because a disallowed
+       * character is not something a greyed-out button explains.
+       */
+      function hasTypedWord(): boolean {
+        const value = answerWord.value.trim();
+        return value.length > 0 && !/\s/.test(value);
       }
 
       /**
@@ -898,6 +1026,14 @@ import { publicQuiz } from "../../quiz/public";
         answerSubmit.disabled = answerNumber.disabled || !hasTypedGuess();
       });
 
+      /** And for the word field. Same reason again: `render()` would fight the input. */
+      answerWord.addEventListener("input", () => {
+        const questionId = answerWord.dataset.questionId;
+        if (questionId) typed.set(questionId, answerWord.value);
+
+        answerSubmit.disabled = answerWord.disabled || !hasTypedWord();
+      });
+
       /**
        * `question-revealed` — the payoff beat.
        *
@@ -914,6 +1050,7 @@ import { publicQuiz } from "../../quiz/public";
         setHidden(answerSubmit, true);
         setHidden(answerText, true);
         setHidden(answerNumber, true);
+        setHidden(answerWord, true);
         setHidden(answerNote, true);
         setText("answer-error", "");
 
@@ -951,6 +1088,36 @@ import { publicQuiz } from "../../quiz/public";
         // attendee who answered into one who apparently did not.
         if (!hasSubmitted(config.seenStorageKey, question.id)) {
           setHidden(resultPanel, true);
+          return;
+        }
+
+        /**
+         * The word cloud's own reveal (roadmap S-08, FR-012).
+         *
+         * **Branched on KIND before `scored`, and the order is the point** — the ordering
+         * S-06 established for the number kind, here for a different conflation. Both
+         * unscored kinds fall through the same `scored` gate below, but the copy there says
+         * "To była rozgrzewka — bez punktów", which frames the question as something the
+         * attendee missed out on. This is the question the PRD kept *because* it is the
+         * moment that proves the session is live, so it gets its own line pointing at the
+         * cloud the room is looking at.
+         *
+         * **No result fetch**, exactly as the unscored branch below: there is no award to
+         * ask for, and this keeps the fan-in gate intact — 2 of the 14 questions removed
+         * from 150 devices per reveal.
+         *
+         * The word comes from storage rather than from the server, unlike the free-text
+         * echo: `/api/quiz/result` would serve it, but spending a request to be told
+         * something this device already wrote down is the fetch the gate exists to avoid.
+         * A device that cleared storage sees the line without the word, which is honest.
+         */
+        if (question.kind === "word-cloud") {
+          setHidden(resultPanel, false);
+          setText("result-verdict", "Dzięki za słowo!");
+          setText("result-award", "Twoje słowo jest na dużym ekranie.");
+          // Through `wordEchoText`, which owns the absent-word branch — see that function.
+          setText("result-answer", wordEchoText(submittedText(config.seenStorageKey, question.id)));
+          setText("result-total", "");
           return;
         }
 
@@ -1115,6 +1282,13 @@ import { publicQuiz } from "../../quiz/public";
           if (!/\d/.test(value)) return;
           // Raw, commas and spaces included — `parseGuess` decides what it means.
           payload = { kind: "number", value };
+        } else if (question.kind === "word-cloud") {
+          const value = answerWord.value;
+          // The same loose gate the button uses, and the same reason a stricter one is not
+          // here: `validateWord` is server-side and is the only judge.
+          if (!hasTypedWord()) return;
+          // Raw — the server trims, bounds, checks the character set and folds.
+          payload = { kind: "word", word: value };
         } else {
           const selected = selections.get(questionId) ?? [];
           if (selected.length === 0) return;
@@ -1133,15 +1307,17 @@ import { publicQuiz } from "../../quiz/public";
 
         answerSubmit.textContent = "Wyślij odpowiedź";
 
-        // A typed answer — free text or a raw guess — is kept so a reload can put it
-        // back in the locked field. A choice answer passes nothing and the stored entry
+        // A typed answer — free text, a raw guess, or a word — is kept so a reload can put
+        // it back in the locked field. A choice answer passes nothing and the stored entry
         // stays exactly as it was before.
         const sentText =
           payload.kind === "text"
             ? payload.text
             : payload.kind === "number"
               ? payload.value
-              : undefined;
+              : payload.kind === "word"
+                ? payload.word
+                : undefined;
 
         if (outcome.outcome === "accepted") {
           markSubmitted(config.seenStorageKey, questionId, { text: sentText });

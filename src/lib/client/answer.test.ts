@@ -364,6 +364,77 @@ describe("submitAnswer", () => {
     expect(body.getAll("optionIds")).toEqual([]);
   });
 
+  /**
+   * The word arm (roadmap S-08, FR-012).
+   *
+   * Its own arm rather than a reuse of `text`, so what is asserted here is that it lands in
+   * its own field and takes no other kind's branch at the route.
+   */
+  it("sends a word raw, leaving the trim, the bound and the fold to the server", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitAnswer("p1", "q1", { kind: "word", word: "  Halucynacja  " }, 3_200);
+
+    const body = fetchMock.mock.calls[0]![1].body as FormData;
+    // Untouched. `validateWord` is the only judge, and the fold could not live here anyway —
+    // `boundary.test.ts` refuses a value import from `src/lib/session/`.
+    expect(body.get("word")).toBe("  Halucynacja  ");
+  });
+
+  it("sends nothing that would take another kind's branch at the route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitAnswer("p1", "q1", { kind: "word", word: "robot" }, 3_200);
+
+    const body = fetchMock.mock.calls[0]![1].body as FormData;
+    // The route branches on the question's kind, but a stray field here would be read by
+    // whichever branch that lookup selected — so the payload must say one thing only.
+    expect(body.get("text")).toBeNull();
+    expect(body.get("value")).toBeNull();
+    expect(body.getAll("optionIds")).toEqual([]);
+  });
+
+  it("sends no word field on any other kind", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitAnswer("p1", "q1", choice(["a"]), 3_200);
+    await submitAnswer("p1", "q2", { kind: "text", text: "halucynacje" }, 3_200);
+    await submitAnswer("p1", "q3", { kind: "number", value: "67" }, 3_200);
+
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1].body as FormData).get("word")).toBeNull();
+    }
+  });
+
+  /**
+   * **The 400-vs-409 split, for the kind that makes it most reachable.** The word submit
+   * gate checks only "something, and no space in the middle" — the character allowlist and
+   * the length bound are the server's — so an attendee typing an emoji gets a 400. Folded
+   * into `rejected` that would tell them their word was saved, disable the field, and leave
+   * them unable to answer a question they never answered.
+   */
+  it("reports a 400 on a word as invalid, so the field is kept", async () => {
+    respond(false, { error: "Słowo może zawierać tylko litery, cyfry i znaki . _ - '" }, 400);
+
+    await expect(
+      submitAnswer("p1", "q1", { kind: "word", word: "🤖" }, 1_000)
+    ).resolves.toEqual({
+      outcome: "invalid",
+      error: "Słowo może zawierać tylko litery, cyfry i znaki . _ - '",
+    });
+  });
+
+  it("reports a 409 on a word as the final refusal it is", async () => {
+    respond(false, { error: "Odpowiedź została już zapisana." }, 409);
+
+    await expect(
+      submitAnswer("p1", "q1", { kind: "word", word: "robot" }, 1_000)
+    ).resolves.toEqual({ outcome: "rejected", error: "Odpowiedź została już zapisana." });
+  });
+
   it("sends no value field on a choice or text answer", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);

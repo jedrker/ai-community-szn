@@ -609,3 +609,23 @@ export function wordCloudCountText(shown: number, distinct: number): string {
   if (distinct > shown) return `${shown} z ${distinct} słów`;
   return `${shown} słów`;
 }
+
+/**
+ * The attendee's own word, echoed back at the reveal (roadmap S-08, FR-012).
+ *
+ * A function rather than a template inline in the page, for the reason `standingsPositionText`
+ * is one: the absent branch is the whole point and the page has no harness to reach it from.
+ *
+ * **The word comes from this device's own storage, so `null` is reachable** — a phone that
+ * cleared storage, or one whose answer predates the value being persisted. Returning an empty
+ * string rather than a sentence with a hole in it is what keeps that honest: the panel's other
+ * two lines already say the word is on the screen, so the echo simply has nothing to add.
+ *
+ * Never a placeholder like "(brak)" or the empty quotes a template would produce — the
+ * attendee did write a word, and telling them otherwise at the moment they are looking for it
+ * on the projector is the one wrong thing this line could say.
+ */
+export function wordEchoText(word: string | null): string {
+  if (word === null || word.length === 0) return "";
+  return `Twoje słowo: ${word}`;
+}
