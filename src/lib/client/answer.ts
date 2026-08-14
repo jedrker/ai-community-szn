@@ -37,6 +37,24 @@ export type SubmitOutcome =
    * is not.
    */
   | { outcome: "invalid"; error: string }
+  /**
+   * The question's time limit ran out before the answer landed (roadmap S-11, FR-020).
+   *
+   * **A 409, and final like `rejected` — but it must not be folded into it.** The
+   * caller's `rejected` path calls `markSubmitted`, which is what makes `hasSubmitted`
+   * true for this question. That flag decides two things at the reveal: whether a result
+   * panel appears at all, and whether the locked note reads "Odpowiedź zapisana". An
+   * expired submission was never recorded, so folding it in would put a result panel and
+   * a saved-answer confirmation on screen for an answer the store has never seen — and
+   * the attendee would have no way to tell that from a real one.
+   *
+   * So the control is still taken away (the window is closed; there is nothing to retry
+   * into), but nothing is marked as submitted.
+   *
+   * Discriminated by the route's `refusal` field rather than by matching the Polish
+   * message, which is presentation and may be reworded.
+   */
+  | { outcome: "expired"; error: string }
   | { outcome: "failed" };
 
 export type OwnResult = {
@@ -364,15 +382,23 @@ export async function submitAnswer(
      */
     if (response.status >= 500) return { outcome: "failed" };
 
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      refusal?: string;
+    };
     if (!payload.error) return { outcome: "failed" };
 
-    // **Only a 409 is final.** It means the answer is already recorded or the question
-    // has closed — the two cases where taking the control away is correct. Every other
-    // 4xx wrote nothing, so the attendee must keep the field and be able to try again.
-    return response.status === 409
-      ? { outcome: "rejected", error: payload.error }
-      : { outcome: "invalid", error: payload.error };
+    // **Only a 409 is final.** It means the answer is already recorded, the question has
+    // closed, or its time ran out — the three cases where taking the control away is
+    // correct. Every other 4xx wrote nothing, so the attendee must keep the field and be
+    // able to try again.
+    if (response.status !== 409) return { outcome: "invalid", error: payload.error };
+
+    // Two final refusals, told apart by the class the route sends rather than by its
+    // wording: one recorded an answer, the other recorded nothing. See `expired`.
+    return payload.refusal === "expired"
+      ? { outcome: "expired", error: payload.error }
+      : { outcome: "rejected", error: payload.error };
   } catch {
     // Includes the timeout above: an abandoned request is a failure, not a refusal, so
     // the attendee keeps the control and can try again.

@@ -138,6 +138,34 @@ import { publicQuiz } from "../../quiz/public";
 
         <div id="question" class="flex flex-col gap-4"></div>
 
+        <!-- The countdown (S-11, FR-020). A STATIC element shown and hidden, for the same
+             reason the input below is one: `renderQuestion` calls `replaceChildren()` on
+             the question container, so anything emitted there is destroyed and rebuilt on
+             every snapshot — and this one is animating.
+
+             Present only while a scored question is open. The two unscored questions
+             carry no limit, so no clock appears on them at all. -->
+        <div id="countdown" hidden class="flex flex-col gap-1" aria-hidden="true">
+          <div class="flex items-baseline justify-between">
+            <span class="text-sm text-content-secondary">Pozostały czas</span>
+            <span
+              data-countdown-text
+              class="font-mono text-lg tabular-nums text-content-primary">0 s</span
+            >
+          </div>
+          <!-- The bar is decoration for the number above it, hence aria-hidden on the
+               container: a screen reader announcing a width every second is noise, and
+               the note that appears at zero is what actually has to be announced. -->
+          <div class="h-1.5 overflow-hidden rounded-full bg-surface-secondary">
+            <div
+              data-countdown-bar
+              class="h-full rounded-full bg-accent transition-[width] duration-1000 ease-linear"
+              style="width: 100%"
+            >
+            </div>
+          </div>
+        </div>
+
         <!-- The answering controls. Hidden for every phase and kind that cannot be
              answered, so nothing tappable is ever on screen without a purpose. -->
 
@@ -323,6 +351,7 @@ import { publicQuiz } from "../../quiz/public";
       } from "../../lib/client/answer";
       import {
         el,
+        renderCountdown,
         renderQuestion,
         renderStandings,
         setHidden,
@@ -374,6 +403,7 @@ import { publicQuiz } from "../../quiz/public";
       const answerAccepted = el("answer-accepted");
       const degradedNote = el("degraded-note");
       const resultPanel = el("result");
+      const countdownBox = el("countdown");
 
       let connection: ConnectionStatus = "connecting";
       /**
@@ -463,6 +493,15 @@ import { publicQuiz } from "../../quiz/public";
        */
       function render(): void {
         if (!joined) return;
+
+        /**
+         * **The countdown's single clearing point.** Every branch below either returns
+         * without a clock or, on `question-open`, arms a fresh one — so no phase change,
+         * connection loss or reveal can leave a timer running for a question that has left
+         * the screen. Put anywhere else, this would be a rule each new branch has to
+         * remember.
+         */
+        stopCountdown();
 
         const state = client.current();
 
@@ -635,7 +674,7 @@ import { publicQuiz } from "../../quiz/public";
           return;
         }
 
-        renderOpen(question);
+        renderOpen(question, state.updatedAt);
       }
 
       /**
@@ -806,6 +845,90 @@ import { publicQuiz } from "../../quiz/public";
         setText("standings-you", standingsPositionText(rank, playerCount, rankPending));
       }
 
+      /**
+       * The countdown (roadmap S-11, FR-020).
+       *
+       * **One timer, cleared from exactly one place.** `stopCountdown` runs at the top of
+       * every `render()`, so no branch — reveal, standings, lobby, `ended`, a lost
+       * connection — can leave a clock ticking for a question that is no longer on screen.
+       * Only the `question-open` path arms it again. A timer that outlives its beat is the
+       * failure both of this project's other loops are built to avoid.
+       *
+       * **Every tick recomputes from `Date.now()` rather than decrementing.** That is what
+       * makes a backgrounded tab correct on return: browsers throttle timers in a hidden
+       * tab, so a counter that subtracted a second per tick would come back minutes fast.
+       * It also means no visibility listener is needed here.
+       *
+       * **The tick repaints the countdown only.** It deliberately does not call `render()`
+       * every second: `renderQuestion` calls `replaceChildren()`, so a full re-render
+       * would rebuild the option buttons under an attendee's thumb once a second. The one
+       * full `render()` happens when the clock reaches zero, which is when the controls
+       * actually have to change.
+       */
+      let countdownTimer: number | null = null;
+      /**
+       * Whether the open question's window has closed, derived on every render and never
+       * stored. A stale `true` would lock a phone out of the *next* question.
+       */
+      let timeUp = false;
+      /** What the running timer is counting, so the tick needs no lookup. */
+      let countdownFor: { id: string; deadline: number; limitMs: number } | null = null;
+
+      function stopCountdown(): void {
+        if (countdownTimer !== null) {
+          window.clearTimeout(countdownTimer);
+          countdownTimer = null;
+        }
+        countdownFor = null;
+        timeUp = false;
+        setHidden(countdownBox, true);
+      }
+
+      /**
+       * Paints the clock for the open question and arms the next tick.
+       *
+       * `openedAt` is the snapshot's `updatedAt` — the moment the host opened this
+       * question, which is the same value the server measures the window from. That is
+       * what keeps this phone, every other phone and the projector on one clock: nothing
+       * here is derived from when *this* device happened to paint.
+       *
+       * A question with no limit (the two unscored ones) gets no clock at all.
+       */
+      function startCountdown(question: PublicQuestion, openedAt: number): void {
+        if (question.timeLimitSeconds === undefined) return;
+
+        const limitMs = question.timeLimitSeconds * 1_000;
+        const deadline = openedAt + limitMs;
+        countdownFor = { id: question.id, deadline, limitMs };
+
+        setHidden(countdownBox, false);
+        paintCountdown();
+      }
+
+      function paintCountdown(): void {
+        if (countdownFor === null) return;
+
+        const remaining = countdownFor.deadline - Date.now();
+        renderCountdown(countdownBox, remaining, countdownFor.limitMs);
+
+        if (remaining <= 0) {
+          // Reached zero: take the controls away, once, through the normal state machine.
+          if (!timeUp) {
+            timeUp = true;
+            render();
+          }
+          return;
+        }
+
+        // Land on the next whole second rather than a fixed 1000ms, so the digits change
+        // when the number changes instead of drifting a few hundred ms per tick.
+        const untilNextSecond = remaining % 1_000 || 1_000;
+        countdownTimer = window.setTimeout(() => {
+          countdownTimer = null;
+          paintCountdown();
+        }, untilNextSecond);
+      }
+
       /** Every answering control off, in one call, so no branch can leave one behind. */
       function hideAnswerControls(): void {
         setHidden(answerSubmit, true);
@@ -825,7 +948,7 @@ import { publicQuiz } from "../../quiz/public";
        * question before, which is what makes a reload keep its original clock rather
        * than restarting it at full speed weight.
        */
-      function renderOpen(question: PublicQuestion | undefined): void {
+      function renderOpen(question: PublicQuestion | undefined, openedAt: number): void {
         setHidden(resultPanel, true);
         setHidden(answerAccepted, true);
 
@@ -853,6 +976,28 @@ import { publicQuiz } from "../../quiz/public";
             option: OPTION_CLASS,
           });
           hideAnswerControls();
+          return;
+        }
+
+        /**
+         * The clock starts before the kind dispatch, because the rule is the same for all
+         * of them and because `timeUp` below has to be decided once.
+         */
+        startCountdown(question, openedAt);
+
+        /**
+         * **Out of time, and this device never answered.**
+         *
+         * Checked before the kind branches so there is one timed-out screen rather than
+         * four, and `hasSubmitted` is read first because an attendee who *did* answer must
+         * keep seeing their confirmation — for them the clock running out changes nothing.
+         *
+         * Nothing here marks the question as submitted. The server recorded no answer, and
+         * saying otherwise would put a result panel on screen at the reveal for an answer
+         * that does not exist.
+         */
+        if (timeUp && !hasSubmitted(config.seenStorageKey, question.id)) {
+          renderTimedOut(question);
           return;
         }
 
@@ -915,6 +1060,32 @@ import { publicQuiz } from "../../quiz/public";
 
         setHidden(answerSubmit, false);
         answerSubmit.disabled = selected.length === 0;
+      }
+
+      /**
+       * `question-open`, but the window has closed on a device that did not answer
+       * (roadmap S-11, FR-020).
+       *
+       * The prompt stays on screen — the question has not gone anywhere, and the host has
+       * not advanced — with every control gone and one sentence saying why. Deliberately
+       * **not** the `notOpen` wording: the question *is* open, and telling an attendee it
+       * closed while the projector still shows it is the kind of small contradiction that
+       * produces a hand in the air.
+       *
+       * The controls come off client-side as a courtesy, not as the rule. The server is
+       * still the only thing that decides, which is why a phone whose clock is a little
+       * fast costs its owner nothing they would not have lost anyway.
+       */
+      function renderTimedOut(question: PublicQuestion): void {
+        renderQuestion(questionBox, question, {
+          prompt: "text-3xl font-bold leading-tight",
+          list: "flex flex-col gap-3",
+          option: OPTION_CLASS,
+        });
+
+        hideAnswerControls();
+        setHidden(answerNote, false);
+        answerNote.textContent = "Czas minął. Czekamy na prowadzącego…";
       }
 
       /**
@@ -1489,6 +1660,24 @@ import { publicQuiz } from "../../quiz/public";
           // The server's own Polish message — "already answered", "no longer open".
           // Treated as final: the answer is not going to be accepted by retrying.
           markSubmitted(config.seenStorageKey, questionId, { text: sentText });
+          setText("answer-error", outcome.error);
+          render();
+          return;
+        }
+
+        /**
+         * **Final, like `rejected`, but nothing is marked as submitted** (roadmap S-11).
+         *
+         * The window closed while this request was in flight — a phone whose clock ran a
+         * little slow, or a slow network. There is nothing to retry into, so the control
+         * goes; but the store recorded no answer, and `markSubmitted` here would paint a
+         * result panel at the reveal for an answer that never existed and label it
+         * "Odpowiedź zapisana".
+         *
+         * `render()` re-runs the state machine, which now finds the clock at zero and
+         * lands on the timed-out screen — so this branch does not have to reproduce it.
+         */
+        if (outcome.outcome === "expired") {
           setText("answer-error", outcome.error);
           render();
           return;

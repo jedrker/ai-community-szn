@@ -494,6 +494,52 @@ describe("submitAnswer", () => {
     ).resolves.toEqual({ outcome: "rejected", error: "Odpowiedź została już zapisana." });
   });
 
+  /**
+   * **The two final 409s, told apart (roadmap S-11, FR-020).**
+   *
+   * Both close the control; only one recorded an answer. The caller marks the question as
+   * submitted on `rejected`, which is what makes a result panel appear at the reveal — so
+   * an expired submission folded into `rejected` would show a panel, and the words
+   * "Odpowiedź zapisana", for an answer the store has never seen.
+   */
+  it("reports an expired submission as its own outcome, not as rejected", async () => {
+    respond(false, { error: "Czas na odpowiedź minął.", refusal: "expired" }, 409);
+
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 26_000)).resolves.toEqual({
+      outcome: "expired",
+      error: "Czas na odpowiedź minął.",
+    });
+  });
+
+  it("keeps every other 409 as rejected", async () => {
+    // The discriminator is opt-in: a 409 without it is the pre-S-11 shape and must keep
+    // behaving exactly as it did.
+    respond(false, { error: "Odpowiedź została już zapisana." }, 409);
+
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toMatchObject({
+      outcome: "rejected",
+    });
+  });
+
+  it("discriminates on the class, not on the message", async () => {
+    // The Polish copy is presentation and may be reworded; matching on it would make a
+    // copy edit a behaviour change.
+    respond(false, { error: "Cokolwiek innego.", refusal: "expired" }, 409);
+
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toMatchObject({
+      outcome: "expired",
+    });
+  });
+
+  it("ignores the discriminator on a status that is not 409", async () => {
+    // Nothing was written on a 400, so the control must stay live whatever the body says.
+    respond(false, { error: "Brak odpowiedzi.", refusal: "expired" }, 400);
+
+    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toMatchObject({
+      outcome: "invalid",
+    });
+  });
+
   it("reports an unrecognised device as invalid too, since nothing was written", async () => {
     // A 404 is not final in the sense that matters here: it cannot be fixed by
     // retrying, but claiming the answer was saved is still a lie, and the attendee

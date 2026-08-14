@@ -608,39 +608,39 @@ shape to undo.
 
 #### Automated
 
-- [x] 2.1 `bun run test` passes
-- [x] 2.2 `bun run type-check` reports 0 errors
-- [x] 2.3 Accepted inside the window; 409 with `refusal: "expired"` past deadline plus grace
-- [x] 2.4 Accepted past the deadline but inside the grace
-- [x] 2.5 Boundary expectations computed from `SUBMISSION_GRACE_MS`, not literals
-- [x] 2.6 An unscored question never expires
-- [x] 2.7 Refused with `elapsedMs` absent, and refused with a forged `elapsedMs: 0`
-- [x] 2.8 `submitAnswer` not reached on the refusal path
+- [x] 2.1 `bun run test` passes — d62c914
+- [x] 2.2 `bun run type-check` reports 0 errors — d62c914
+- [x] 2.3 Accepted inside the window; 409 with `refusal: "expired"` past deadline plus grace — d62c914
+- [x] 2.4 Accepted past the deadline but inside the grace — d62c914
+- [x] 2.5 Boundary expectations computed from `SUBMISSION_GRACE_MS`, not literals — d62c914
+- [x] 2.6 An unscored question never expires — d62c914
+- [x] 2.7 Refused with `elapsedMs` absent, and refused with a forged `elapsedMs: 0` — d62c914
+- [x] 2.8 `submitAnswer` not reached on the refusal path — d62c914
 
 #### Manual
 
-- [x] 2.9 A late submission from a phone shows the Polish expiry message
-- [x] 2.10 A refused submission leaves `version` and `updatedAt` unchanged
-- [x] 2.11 Break-the-guard pass on the expiry check and on the server-clock source
+- [x] 2.9 A late submission from a phone shows the Polish expiry message — d62c914
+- [x] 2.10 A refused submission leaves `version` and `updatedAt` unchanged — d62c914
+- [x] 2.11 Break-the-guard pass on the expiry check and on the server-clock source — d62c914
 
 ### Phase 3: The phone
 
 #### Automated
 
-- [ ] 3.1 `bun run test` passes
-- [ ] 3.2 `bun run type-check` reports 0 errors
-- [ ] 3.3 `render.test.ts` covers countdown text, geometry, the clamp, no `NaN`, no markup
-- [ ] 3.4 `answer.test.ts` (client) covers `expired` versus `rejected`
-- [ ] 3.5 `boundary.test.ts` passes with no rule change
+- [x] 3.1 `bun run test` passes
+- [x] 3.2 `bun run type-check` reports 0 errors
+- [x] 3.3 `render.test.ts` covers countdown text, geometry, the clamp, no `NaN`, no markup
+- [x] 3.4 `answer.test.ts` (client) covers `expired` versus `rejected`
+- [x] 3.5 `boundary.test.ts` passes with no rule change
 
 #### Manual
 
-- [ ] 3.6 Two phones agree on the remaining time
-- [ ] 3.7 At zero the input locks with the note, and reveal still behaves normally
-- [ ] 3.8 A reload mid-question restores the true remainder
-- [ ] 3.9 Joining past the deadline shows the locked state and no input
-- [ ] 3.10 Tab backgrounding and return shows a corrected countdown
-- [ ] 3.11 Break-the-guard pass on a timer-clearing path
+- [x] 3.6 Two phones agree on the remaining time
+- [x] 3.7 At zero the input locks with the note, and reveal still behaves normally
+- [x] 3.8 A reload mid-question restores the true remainder
+- [x] 3.9 Joining past the deadline shows the locked state and no input
+- [x] 3.10 Tab backgrounding and return shows a corrected countdown
+- [x] 3.11 Break-the-guard pass on a timer-clearing path
 
 ### Phase 4: The projector
 

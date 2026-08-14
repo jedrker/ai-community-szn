@@ -3,6 +3,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  countdownText,
+  renderCountdown,
   renderDistribution,
   renderQuestion,
   renderStandings,
@@ -831,5 +833,126 @@ describe("wordEchoText", () => {
     // `validateWord` refuses an empty word, so this is unreachable through the route — and
     // handled anyway, because a truncated storage read would otherwise render a bare label.
     expect(wordEchoText("")).toBe("");
+  });
+});
+
+/**
+ * The countdown (roadmap S-11, FR-020).
+ *
+ * Pure functions over a remaining-milliseconds figure — the page owns the clock, this owns
+ * what the room reads. Extracted for the reason `standingsPositionText` was: every branch
+ * here is worth a test and the page has no harness to reach it from.
+ */
+describe("countdownText", () => {
+  it("renders whole seconds", () => {
+    expect(countdownText(12_000)).toBe("12 s");
+  });
+
+  /**
+   * ROUNDS UP, AND THIS IS THE ONE THAT MATTERS.
+   *
+   * With `Math.floor`, the display reads "0 s" for the whole final second while the field
+   * is still accepting answers — so an attendee typing then believes they are already too
+   * late and gives up an answer they could have sent. Rounding up means zero appears
+   * exactly when the window closes.
+   */
+  it("rounds a part-second up, so zero appears only when the window is actually closed", () => {
+    expect(countdownText(1)).toBe("1 s");
+    expect(countdownText(999)).toBe("1 s");
+    expect(countdownText(1_001)).toBe("2 s");
+  });
+
+  it("floors at zero rather than counting into negatives", () => {
+    // Reachable on a phone that was asleep past the deadline.
+    expect(countdownText(0)).toBe("0 s");
+    expect(countdownText(-5_000)).toBe("0 s");
+  });
+
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+  ])("renders 0 s rather than %s", (_label, value) => {
+    // The remaining time is computed from a snapshot timestamp and a definition value, so a
+    // missing question reaches here as NaN. "NaN s" on 150 phones is worse than an empty
+    // clock.
+    expect(countdownText(value)).not.toContain("NaN");
+    expect(countdownText(value)).not.toContain("Infinity");
+  });
+});
+
+describe("renderCountdown", () => {
+  let node: HTMLElement;
+
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <div id="countdown">
+        <span data-countdown-text></span>
+        <div><div data-countdown-bar style="width: 100%"></div></div>
+      </div>`;
+    node = document.getElementById("countdown")!;
+  });
+
+  const label = (): string => node.querySelector("[data-countdown-text]")!.textContent ?? "";
+  const width = (): string =>
+    (node.querySelector("[data-countdown-bar]") as HTMLElement).style.width;
+
+  it("paints the seconds and the fraction of the budget left together", () => {
+    renderCountdown(node, 12_500, 25_000);
+
+    expect(label()).toBe("13 s");
+    expect(width()).toBe("50%");
+  });
+
+  /**
+   * The two must never disagree. A bar a third full beside "0 s" reads as a broken page at
+   * the exact moment an attendee is deciding whether to hurry.
+   */
+  it("empties the bar when the text reaches zero", () => {
+    renderCountdown(node, 0, 25_000);
+
+    expect(label()).toBe("0 s");
+    expect(width()).toBe("0%");
+  });
+
+  it("clamps a negative remainder rather than producing a negative width", () => {
+    renderCountdown(node, -9_000, 25_000);
+
+    expect(label()).toBe("0 s");
+    expect(width()).toBe("0%");
+  });
+
+  it("clamps a remainder larger than the budget", () => {
+    // Reachable from a device whose clock is behind the server's.
+    renderCountdown(node, 40_000, 25_000);
+
+    expect(width()).toBe("100%");
+  });
+
+  it.each([
+    ["zero", 0],
+    ["negative", -1],
+    ["NaN", Number.NaN],
+  ])("produces no NaN width for a %s budget", (_label, limitMs) => {
+    renderCountdown(node, 5_000, limitMs);
+
+    expect(width()).not.toContain("NaN");
+    expect(width()).toBe("0%");
+  });
+
+  it("writes text, never markup", () => {
+    // The module's escaping rule. Nothing attendee-typed reaches here, but an exception
+    // would be the precedent that matters.
+    renderCountdown(node, 5_000, 25_000);
+
+    expect(node.querySelector("[data-countdown-text]")!.innerHTML).not.toContain("<");
+  });
+
+  it("leaves the bar alone when there is none to paint", () => {
+    // A caller could hand this a bare element; it must not throw on the way past.
+    document.body.innerHTML = `<div id="bare"><span data-countdown-text></span></div>`;
+    const bare = document.getElementById("bare")!;
+
+    expect(() => renderCountdown(bare, 5_000, 25_000)).not.toThrow();
+    expect(bare.querySelector("[data-countdown-text]")!.textContent).toBe("5 s");
   });
 });

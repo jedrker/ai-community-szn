@@ -629,3 +629,57 @@ export function wordEchoText(word: string | null): string {
   if (word === null || word.length === 0) return "";
   return `Twoje słowo: ${word}`;
 }
+
+/**
+ * How much time is left, as the room reads it (roadmap S-11, FR-020).
+ *
+ * **Whole seconds, rounded UP, and floored at zero.** Up because a bar reading "0 s"
+ * while the field still accepts an answer is the one thing a countdown must not do:
+ * `Math.floor` shows zero for the whole final second, so an attendee typing then believes
+ * they are already too late. Rounding up means the display reaches zero exactly when the
+ * window does.
+ *
+ * A function rather than a template inline in the page, for the reason
+ * `standingsPositionText` is one: every branch here is worth a test and the page has no
+ * harness to reach it from.
+ *
+ * Degenerate input renders `0 s` rather than `NaN s`. The remaining time is computed from
+ * a snapshot timestamp and a definition value, so a missing question or a document
+ * written before the field shipped both reach here as `NaN` — and `NaN s` on 150 phones
+ * is worse than a clock that reads empty.
+ */
+export function countdownText(remainingMs: number): string {
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return "0 s";
+  return `${Math.ceil(remainingMs / 1_000)} s`;
+}
+
+/**
+ * Paints the countdown: the seconds text, plus the fraction of the budget still unspent
+ * as a percentage width for a bar.
+ *
+ * **Text and geometry together in one helper**, because the two must never disagree — a
+ * bar that is a third full beside "0 s" reads as a broken page at the exact moment an
+ * attendee is deciding whether to hurry.
+ *
+ * `textContent`, never `innerHTML`: the module's escaping rule. Nothing attendee-typed
+ * reaches this one, but the rule is the file's and an exception here would be the
+ * precedent that matters.
+ *
+ * A degenerate `limitMs` yields a width of `0%` rather than a division by zero, matching
+ * `countdownText`'s posture on the same inputs.
+ */
+export function renderCountdown(node: HTMLElement, remainingMs: number, limitMs: number): void {
+  // The label is a child rather than the node itself, because the node also holds the
+  // bar — writing `textContent` on the container would delete it.
+  const label = node.querySelector<HTMLElement>("[data-countdown-text]");
+  if (label) label.textContent = countdownText(remainingMs);
+
+  const bar = node.querySelector<HTMLElement>("[data-countdown-bar]");
+  if (!bar) return;
+
+  const usable = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 0;
+  const left = Number.isFinite(remainingMs) ? Math.max(0, Math.min(remainingMs, usable)) : 0;
+  const fraction = usable === 0 ? 0 : left / usable;
+
+  bar.style.width = `${Math.round(fraction * 100)}%`;
+}
