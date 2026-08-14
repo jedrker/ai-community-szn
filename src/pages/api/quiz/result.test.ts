@@ -273,23 +273,59 @@ describe("the ended-phase exception", () => {
    * `ended` would keep those totals for ten minutes with no way to read them — and
    * there is nothing left to leak once the segment is over. S-07 inherits this.
    */
-  it("serves the running total alone, with no verdict attached", async () => {
+  beforeEach(() => {
     readOwnResultMock.mockResolvedValue({
       outcome: "ok",
       state: state("ended"),
       answer: answered,
       total: 8_420,
     });
+    readOwnRankMock.mockResolvedValue({ rank: 11, total: 8_420 });
+  });
 
+  it("serves no verdict, award, text or value", async () => {
+    expect(await body(await ask())).toMatchObject({
+      answered: false,
+      correct: null,
+      awarded: null,
+      text: null,
+      value: null,
+    });
+  });
+
+  /**
+   * THE HALF S-10 ADDED (FR-006). Until then this branch served the total alone, so an
+   * attendee who placed 11th left the room with a number and nothing to measure it against.
+   * The rank comes from the same `rankOf` the published board's rows were numbered by.
+   */
+  it("serves the final position alongside the total", async () => {
     expect(await body(await ask())).toEqual({
       answered: false,
       correct: null,
       awarded: null,
       text: null,
       value: null,
-      rank: null,
+      rank: 11,
       total: 8_420,
     });
+    expect(readOwnRankMock).toHaveBeenCalledWith("player-abc");
+  });
+
+  /**
+   * **THE DIVERGENCE FROM THE STANDINGS BRANCH, which reports the same failure as a 503.**
+   * There the beat is live and the host can show the board again; here the segment is over,
+   * so refusing the whole response would take the attendee's total away over a missing line.
+   *
+   * Asserted on the total being intact as well as on the status, because a handler that
+   * 503'd would satisfy a test checking only that no rank came back.
+   */
+  it("still serves the total when the rank read fails, with the rank null rather than 503", async () => {
+    readOwnRankMock.mockResolvedValue(null);
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(await body(response)).toMatchObject({ rank: null, total: 8_420 });
   });
 });
 
@@ -429,7 +465,12 @@ describe("the standings branch", () => {
     await expect(body(response)).resolves.not.toHaveProperty("rank");
   });
 
-  it("is the only branch that returns a rank", async () => {
+  /**
+   * Renamed by S-10: the closing branch returns a rank too now, so "the only branch" was
+   * about to become false while the fixture below stayed correct. What it actually pins is
+   * that the *reveal* branch spends no rank read and reports the field as null.
+   */
+  it("leaves the reveal branch's rank null, and spends no read on it", async () => {
     readOwnResultMock.mockResolvedValue({
       outcome: "ok",
       state: state("question-revealed"),

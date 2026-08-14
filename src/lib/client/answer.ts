@@ -64,8 +64,8 @@ export type OwnResult = {
   readonly value: number | null;
   readonly total: number;
   /**
-   * Where this device stands in the room — **only during the standings phase**, and
-   * `null` on every other branch (roadmap S-07, FR-014).
+   * Where this device stands in the room — in the **standings** phase and, since S-10, in
+   * **`ended`**; `null` on every other branch (roadmap S-07/S-10, FR-014/FR-006).
    *
    * A competition rank, so a tie shares a number and this agrees with the position the
    * published board shows for the same player. The denominator is not here: the device
@@ -74,7 +74,10 @@ export type OwnResult = {
    *
    * `null` also covers "the store could not say" reaching the client as a failed fetch —
    * the view must render neither a `0` nor a `1` from an absent rank, both of which are
-   * claims about where the attendee stands.
+   * claims about where the attendee stands. **The two phases reach that null differently**:
+   * during the beat a failed rank read is a 503 and this whole object never arrives, while
+   * at the close the route serves the total with the rank nulled, because the segment is over
+   * and there is no beat to retry into.
    */
   readonly rank: number | null;
 };

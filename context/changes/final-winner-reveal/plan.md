@@ -542,23 +542,23 @@ for free.
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 A board in a non-closing phase still fails to parse
-- [x] 1.4 The end route ends the session when `readStandings` returns `null`
+- [x] 1.1 Unit tests pass: `bun run test` — 7955bd2
+- [x] 1.2 Type checking passes: `bun run type-check` — 7955bd2
+- [x] 1.3 A board in a non-closing phase still fails to parse — 7955bd2
+- [x] 1.4 The end route ends the session when `readStandings` returns `null` — 7955bd2
 
 #### Manual
 
-- [x] 1.5 `end` from `/quiz/spine-check` puts a board on the host projector
-- [x] 1.6 The projector's board disappears on `purge`
+- [x] 1.5 `end` from `/quiz/spine-check` puts a board on the host projector — 7955bd2
+- [x] 1.6 The projector's board disappears on `purge` — 7955bd2
 
 ### Phase 2: The attendee's final position
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 A failed rank read in `ended` yields 200 with a total and a null rank
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 A failed rank read in `ended` yields 200 with a total and a null rank
 
 #### Manual
 

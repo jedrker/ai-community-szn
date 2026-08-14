@@ -22,13 +22,14 @@ import { readOwnRank, readOwnResult } from "../../../lib/session/store";
  * anything but `question-revealed` **for the question being asked about**, and that
  * check reads the session document rather than trusting a parameter.
  *
- * **One deliberate exception: the `ended` phase serves the running total alone** — no
- * verdict, no award, no question id. `ENDED_TTL_SECONDS` exists precisely so a device
- * that reloads just after the host closes the segment still finds the final standings,
- * and a gate that refused everything in `ended` would keep those totals for ten
+ * **One deliberate exception: the `ended` phase serves the running total and the final
+ * position** — no verdict, no award, no question id. `ENDED_TTL_SECONDS` exists precisely
+ * so a device that reloads just after the host closes the segment still finds the final
+ * standings, and a gate that refused everything in `ended` would keep those totals for ten
  * minutes with no way to read them. There is nothing left to leak once the segment is
  * over. **S-07's leaderboard inherits this gate and this exception** rather than
- * rediscovering them.
+ * rediscovering them; **S-10 added the position** to what the exception serves, since the
+ * total alone left everyone outside the top five with nothing to measure it against.
  *
  * `answered: false` is a normal outcome — a latecomer, or someone who did not tap in
  * time — and not a 404. A store failure is a 503, and the client must treat the two
@@ -98,16 +99,44 @@ export const POST: APIRoute = async ({ request }) => {
 
   const state = result.state;
 
-  // The closing exception: the total alone, with no verdict attached to it.
+  /**
+   * The closing exception: the total and the final position, with no verdict attached.
+   *
+   * **S-10 added the rank here** (FR-006). Until then this branch served the total alone —
+   * the gap `leaderboard-contract.md` recorded as inherited — so everyone outside the
+   * published top five left the room with a number and nothing to measure it against. The
+   * rank comes from `readOwnRank`, i.e. from the same `rankOf` that numbered the rows on the
+   * projector, which is what stops a tied attendee's phone contradicting the big screen.
+   *
+   * **A failed rank read degrades to `null` rather than 503, and that is a deliberate
+   * divergence from the standings branch below.** There, a 503 is right: the beat is live,
+   * the client shows a neutral line, and the host can show the board again. Here the segment
+   * is over, there is no beat to retry into, and the total is still worth serving — refusing
+   * the whole response over a missing position would take the attendee's score away with it.
+   * `standingsPositionText` already renders an absent rank as a neutral line.
+   *
+   * Every verdict field stays null for the reason the standings branch's are: the questions
+   * are closed and their results were served at their reveals.
+   */
   if (state?.phase === "ended") {
+    const own = await readOwnRank(playerId);
+
+    if (own === null) {
+      // Logged rather than surfaced — the attendee gets their total and one missing line.
+      console.error("Rank read failed for player at the close");
+    }
+
     return json(200, {
       answered: false,
       correct: null,
       awarded: null,
       text: null,
       value: null,
-      total: result.total,
-      rank: null,
+      // From the closing read when it answered, and from the document read otherwise. The
+      // two agree; preferring `own.total` keeps the pair on this response consistent, so a
+      // rank and a total that arrived together cannot describe different moments.
+      total: own?.total ?? result.total,
+      rank: own?.rank ?? null,
     });
   }
 
