@@ -57,7 +57,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
     (join past deadline, crossing mid-question, ordinary question, expired-but-answered,
     unscored), all terminating at depth 1 with the correct screen.
   - Blind spot: Still no executable test — see F4.
-- **Decision**: FIXED
+- **Decision**: FIXED — 8825875
 
 ### F2 — Projector countdown survives a session that no longer exists
 
@@ -73,7 +73,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
   live.
 - **Fix**: Hoist `stopCountdown()` to the first statement of `render()` and make
   `renderCountdownPanel` arm-only, matching the attendee page.
-- **Decision**: FIXED
+- **Decision**: FIXED — 8825875
 
 ### F3 — Both countdown guards certified the defects they were written to prevent
 
@@ -98,7 +98,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
   - Tradeoff: Still source scanning — see F4 for the limit of that.
   - Confidence: HIGH — five break-the-guard runs, each failing the intended assertion.
   - Blind spot: A scan cannot see behaviour; a third defect of a different shape would pass.
-- **Decision**: FIXED
+- **Decision**: FIXED — 8825875
 
 ### F4 — Neither countdown has any executable test
 
