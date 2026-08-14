@@ -776,6 +776,37 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
   `src/pages/api/quiz/host/participation.test.ts`, and `host.astro:347`'s poll loop
 - Recurring rules: `context/foundation/lessons.md` (rules 1, 2, 3, and the two test-integrity entries)
 
+## Delivered differently
+
+Recorded during implementation review (F5, F9) because each of these was decided in conversation and
+never written back — leaving the Progress rows as the only account, and wrong in four places. The plan is
+the document the next reader treats as ground truth, so the divergences belong in it.
+
+1. **The fold-divergence tripwire lives in `src/lib/session/words.test.ts`, not `normalize.test.ts`**
+   (Phase 1). The assertion needs both `foldWord` and `normalizeAnswer`, and importing
+   `src/lib/session/` from a `src/quiz/` test inverts the dependency direction that directory exists to
+   protect. `normalize.test.ts` got a pointer docstring instead. Row 1.4 reworded.
+2. **`normalize.ts`'s two-column table was not extended to three rows** (Phase 1). The third fold is
+   described there in prose; the three-row table lives in `words.ts` and CLAUDE.md. Same intent,
+   different shape.
+3. **Phase 4's prescribed timer tests were not written; `src/pages/quiz/host.test.ts` substitutes for
+   them.** The plan called for fake timers and a manually resolved deferred — `host.astro`'s inline
+   script has no test harness, so instead there is a structural source scan in the style of
+   `participation.test.ts`, explicit in its own docstring that it proves structure and not behaviour.
+   **This turned out to matter:** impl review found three behavioural defects in that loop (F1, F2, F6)
+   by reading, and the scan could see none of them until assertions were added for the fixes.
+4. **Row 2.3's word-cloud-specific `already-answered` test does not exist.** That outcome is covered by
+   the file's pre-existing generic outcome-mapping table, driven with a choice question; the real
+   guarantee is the `HSETNX` position, covered in `store.test.ts`. A naming gap, not a behaviour gap.
+   Row 2.3 reworded.
+
+Two corrections outside this plan's scope were also made in its diff, both fixing false statements left
+by earlier slices, both in passages this change was editing anyway: **CLAUDE.md's "three transition
+fields"** (S-07's `standings` made it four, and its "S-07 still owns the open half" paragraph was stale
+too), and **the runbook's projection** that "every slice from here (S-05 through S-08) adds another
+per-attendee path" — three landed and none did. Noted so `git blame` is not the only record of when
+those claims broke.
+
 ## Progress
 
 > Convention: `- [ ]` pending, `- [x]` done. Append ` — <commit sha>` when a step lands. Do not rename step titles. See `references/progress-format.md`.
@@ -787,7 +818,7 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 - [x] 1.1 `bun run test` passes — ab05c1d
 - [x] 1.2 `bun run type-check` reports 0 errors — ab05c1d
 - [x] 1.3 `words.test.ts` covers the fold's rules and every refusal — ab05c1d
-- [x] 1.4 `normalize.test.ts` asserts `foldWord` and `normalizeAnswer` disagree on a diacritic — ab05c1d
+- [x] 1.4 `words.test.ts` asserts `foldWord` and `normalizeAnswer` disagree on a diacritic; `normalize.test.ts` carries a pointer to it — ab05c1d
 - [x] 1.5 `normalize.test.ts`'s existing name-claim tripwire still passes, unmodified — ab05c1d
 - [x] 1.6 `tallies.test.ts` covers three families and a colon-bearing word round-trip — ab05c1d
 - [x] 1.7 `keys.test.ts` still passes — ab05c1d
@@ -803,7 +834,7 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 
 - [x] 2.1 `bun run test` passes — bbfbf53
 - [x] 2.2 `bun run type-check` reports 0 errors — bbfbf53
-- [x] 2.3 `answer.test.ts` acceptance coverage replaces the refusal test — bbfbf53
+- [x] 2.3 `answer.test.ts` acceptance coverage replaces the refusal test; the `already-answered` outcome is covered by the file's generic outcome-mapping table, not by a word-cloud-specific test — bbfbf53
 - [x] 2.4 Six refusals asserted by outcome, none reaching `submitAnswer` — bbfbf53
 - [x] 2.5 `store.test.ts` covers the extra counter and its absence — bbfbf53
 - [x] 2.6 `answers.test.ts` covers the `word` default for a pre-deploy record — bbfbf53

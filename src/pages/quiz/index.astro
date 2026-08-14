@@ -1114,7 +1114,16 @@ import { publicQuiz } from "../../quiz/public";
         if (question.kind === "word-cloud") {
           setHidden(resultPanel, false);
           setText("result-verdict", "Dzięki za słowo!");
-          setText("result-award", "Twoje słowo jest na dużym ekranie.");
+          /**
+           * **Says the screen shows it in lower case, rather than pretending it matches** (impl
+           * review F10). The echo below is the word as *typed*; the projector renders the fold,
+           * so someone who typed `KAWA` sees `kawa` up there. The two genuinely differ and the
+           * honest fix is to say so — this device cannot compute the fold, because `foldWord`
+           * lives under `src/lib/session/` and `boundary.test.ts` refuses a value import from
+           * there. A second, client-side fold would be the "two implementations that can
+           * disagree" shape this project rejects for the guess parser, for a cosmetic line.
+           */
+          setText("result-award", "Na dużym ekranie zobaczysz je małymi literami.");
           // Through `wordEchoText`, which owns the absent-word branch — see that function.
           setText("result-answer", wordEchoText(submittedText(config.seenStorageKey, question.id)));
           setText("result-total", "");

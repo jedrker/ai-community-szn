@@ -1,7 +1,7 @@
 ---
 change_id: word-cloud-question
 title: Word cloud question
-status: implemented
+status: impl_reviewed
 created: 2026-08-12
 updated: 2026-08-14
 archived_at: null

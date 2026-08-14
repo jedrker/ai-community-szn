@@ -97,7 +97,7 @@ const MESSAGES = {
  * caller has already checked.
  */
 export function foldWord(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
+  return value.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 export type ValidatedWord =
@@ -123,7 +123,19 @@ export type ValidatedWord =
  * and a one-letter answer is refused by nothing.
  */
 export function validateWord(raw: string): ValidatedWord {
-  const word = raw.trim();
+  /**
+   * **Normalised to NFC before anything else looks at it** (impl review F10).
+   *
+   * `ALLOWED_CHARACTERS` matches `\p{L}` and `\p{N}` and deliberately not `\p{M}`, so a
+   * *decomposed* `ą` — `a` followed by U+0328 — fails the allowlist and the attendee is told
+   * their word may contain "only letters, digits and . _ - '" about a word that visibly is
+   * letters. Decomposed Polish is reachable by paste and from some keyboards, and a word is far
+   * likelier to be pasted than a display name is.
+   *
+   * Composing first also keeps the stored `text` and the stored `word` in the same form, which is
+   * what lets `answerRecordSchema`'s fold invariant compare them exactly.
+   */
+  const word = raw.normalize("NFC").trim();
 
   if (word.length === 0) return { ok: false, error: MESSAGES.empty };
   if (/\s/.test(word)) return { ok: false, error: MESSAGES.whitespace };

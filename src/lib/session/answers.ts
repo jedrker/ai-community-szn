@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { MAX_TEXT_ANSWER_LENGTH } from "./scoring";
-import { MAX_WORD_LENGTH } from "./words";
+import { foldWord, MAX_WORD_LENGTH } from "./words";
 
 /**
  * What the store holds per answer, and how the answers hash is keyed (roadmap S-03).
@@ -25,7 +25,7 @@ import { MAX_WORD_LENGTH } from "./words";
  * speed weight depends on an elapsed time only the submission knew. Recomputing at
  * reveal would silently re-score every answer from whatever the clock said then.
  */
-export const answerRecordSchema = z.object({
+const answerRecordShape = z.object({
   playerId: z.string().min(1),
   questionId: z.string().min(1),
   optionIds: z.array(z.string()),
@@ -95,6 +95,38 @@ export const answerRecordSchema = z.object({
   awarded: z.number().int().nonnegative(),
   /** Epoch milliseconds. */
   answeredAt: z.number().int().positive(),
+});
+
+/**
+ * The one cross-field rule this record has (roadmap S-08; impl review F7).
+ *
+ * **`word` must be the fold of `text`.** The two are stored separately on purpose — see the
+ * note on `word` above — and nothing but this clause stops them drifting apart. The single
+ * current writer computes both from one `validateWord` call and cannot desynchronise them; a
+ * second writer could, silently, and the consequence lands on a projector: the chip is keyed by
+ * `word` while the attendee's phone echoes `text`, so a mismatch shows the room one word and its
+ * author another.
+ *
+ * Checked here rather than at the route because this is the last point before a value becomes a
+ * stored one — the reason `submitAnswer` validates on the way in at all.
+ *
+ * Deliberately **not** a check that `text` is non-null when `word` is: a record is allowed to
+ * carry neither, and every other kind carries neither.
+ */
+export const answerRecordSchema = answerRecordShape.superRefine((record, ctx) => {
+  if (record.word === null) return;
+
+  if (record.text === null || foldWord(record.text) !== record.word) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["word"],
+      message:
+        `word ("${record.word}") must be foldWord(text) — ` +
+        `text is ${record.text === null ? "null" : `"${record.text}"`}. ` +
+        "The projector renders the fold and the attendee's phone echoes the raw text; " +
+        "a mismatch shows the room one word and its author another.",
+    });
+  }
 });
 
 export type AnswerRecord = z.infer<typeof answerRecordSchema>;

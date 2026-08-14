@@ -54,7 +54,18 @@ by a player id or a display name, so nothing says *who* wrote anything, and `end
 it. It is the only family whose field count grows with the **room** rather than with the quiz.
 
 `wordFromField` is a **prefix strip, never `split(":")`**: the fold removes nothing but case, so a word
-may contain a colon, and splitting would silently merge two distinct words into one chip.
+may in principle contain a colon, and splitting would silently merge two distinct words into one chip.
+(The current allowlist refuses a colon, so this is defence-in-depth rather than a live case.)
+
+**The ten-minute post-`end` window now covers attendee-authored words, and that is accepted** (impl
+review F8). `end` re-arms every registered key to `ENDED_TTL_SECONDS`, and that window was reasoned
+about in F-03 when this key held nothing but integers — the reclassification above changes what sits in
+it for those ten minutes. It is accepted on the same terms as the PRD's Deviation 1, which already
+accepts the window for the standings a device might reload into: the words are aggregate, keyed by no
+player id and no name, so nothing in them says who wrote what, and the window is bounded,
+self-expiring, and escapable by the explicit purge a host can run on the spot. The rejected alternative
+was deleting the word family in `COMPARE_AND_END` rather than re-arming it — it adds a branch to the one
+Lua path whose failure mode is "the session never ends", to shorten a window that carries no name.
 
 ## The counter rides the submission script, below the lock
 
@@ -83,6 +94,31 @@ cost note wrong.
 
 **`null` only on a throw.** An absent hash is an empty cloud; a failed read must never surface as one,
 because on a projector that is the claim "nobody in this room wrote a word".
+
+## The payload is attacker-controlled, and that is a second risk, not the same one
+
+The paragraph above accepts an unmeasured `HGETALL` payload **at ~150 distinct words** — the
+honest-room figure. Deliberate inflation is a different risk and is recorded separately here, because
+conflating them is how the smaller number ends up standing in for both (impl review F3).
+
+`/api/quiz/join` is deliberately open and unthrottled (an accepted risk in `infrastructure.md`), and
+word fields **never shrink within a session** — the TTL is the only thing that removes them. So the
+field count is bounded by how many player ids exist rather than by how many people are in the room, and
+a scripted join-and-submit run inflates what the projector downloads **every 2.5 seconds for the rest
+of the segment**. Before S-08 this read was bounded by the quiz definition; the word family is the first
+whose cardinality an attendee controls.
+
+**Accepted rather than defended**, on the same reasoning the open token endpoint and the unprotected
+host view already rest on: the room is trusted for one session. The rejected alternative was an
+`HLEN`-style ceiling inside `SUBMIT_ANSWER` — it would add a billed command to the densest path in the
+project (150 × 14 submissions) and, worse, a ceiling low enough to matter would silently stop counting
+real attendees' words in a full room, turning a performance risk into a correctness one.
+
+**What makes this an assumption rather than a measurement:** nobody has measured the payload or its
+parse time at, say, 2,000 distinct fields. **Tripwire:** the projector's cloud visibly slowing or the
+command counter climbing while no question is open. Secondary and cost-only: the reply also carries
+every *other* question's `answered:`, `opt:` and `word:` fields, so it grows monotonically across the
+segment.
 
 ## Cost, honestly
 

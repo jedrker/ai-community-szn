@@ -25,6 +25,24 @@ describe("foldWord", () => {
   });
 
   /**
+   * Composes decomposed input (impl review F10), so `text` and `word` end up in the same form and
+   * `answerRecordSchema`'s fold invariant can compare them exactly.
+   */
+  it("composes a decomposed diacritic to NFC", () => {
+    /**
+     * **Both forms are built from escapes, deliberately.** Typed literally, the decomposed and
+     * composed strings are visually identical, so a failure would print a diff in which both
+     * sides look the same — the trap CLAUDE.md records for `Intl`'s U+00A0 group separator,
+     * arriving here through a different door.
+     */
+    const decomposed = "sa\u0328czek";
+    const composed = "s\u0105czek";
+
+    expect(decomposed).not.toBe(composed);
+    expect(foldWord(decomposed)).toBe(composed);
+  });
+
+  /**
    * **The property that distinguishes this fold from the other two, and the reason it
    * exists at all.** The folded word is what the projector renders, so a stripped
    * diacritic is a misspelt Polish word on the big screen rather than an invisible
@@ -126,6 +144,22 @@ describe("validateWord accepts one word", () => {
   it("has no minimum length — a word carries no identity to be found by", () => {
     // Unlike a display name, which `players.ts` requires two characters of.
     expect(validateWord("a").ok).toBe(true);
+  });
+
+  /**
+   * **Decomposed Polish is accepted, not refused** (impl review F10). `ALLOWED_CHARACTERS` matches
+   * `\p{L}` and `\p{N}` and deliberately not `\p{M}`, so before the NFC pass a pasted `sączek`
+   * whose `ą` is `a` + U+0328 was told it may contain "only letters, digits and . _ - '" — about a
+   * word that visibly is letters. Escapes rather than literals, for the reason the fold's own NFC
+   * test gives.
+   */
+  it("accepts a decomposed diacritic and stores it composed", () => {
+    const result = validateWord("sa\u0328czek");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.word).toBe("s\u0105czek");
+    expect(result.key).toBe("s\u0105czek");
   });
 });
 

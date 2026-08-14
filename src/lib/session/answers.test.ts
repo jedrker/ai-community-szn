@@ -199,8 +199,12 @@ describe("the word field (roadmap S-08)", () => {
   });
 
   it("accepts a word exactly at the bound", () => {
+    const atBound = "a".repeat(MAX_WORD_LENGTH);
+
+    // `text` must match, or the fold invariant below refuses it for a different reason — which
+    // would leave this test passing for the wrong one.
     expect(
-      answerRecordSchema.safeParse({ ...valid, word: "a".repeat(MAX_WORD_LENGTH) }).success
+      answerRecordSchema.safeParse({ ...valid, text: atBound, word: atBound }).success
     ).toBe(true);
   });
 
@@ -215,7 +219,63 @@ describe("the word field (roadmap S-08)", () => {
     expect(MAX_WORD_LENGTH).toBeLessThan(MAX_TEXT_ANSWER_LENGTH);
     const between = "a".repeat(MAX_WORD_LENGTH + 1);
     expect(answerRecordSchema.safeParse({ ...valid, text: between }).success).toBe(true);
-    expect(answerRecordSchema.safeParse({ ...valid, word: between }).success).toBe(false);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, text: between, word: between }).success
+    ).toBe(false);
+  });
+
+  /**
+   * THE FOLD INVARIANT (impl review F7).
+   *
+   * `word` and `text` are stored separately and only this clause stops them drifting. The
+   * consequence of a drift lands on a projector: the chip is keyed by `word` while the
+   * attendee's phone echoes `text`, so a mismatch shows the room one word and its author
+   * another.
+   */
+  describe("word must be the fold of text", () => {
+    it("accepts a record whose word is the fold of its text", () => {
+      expect(
+        answerRecordSchema.safeParse({ ...valid, text: "Żółw", word: "żółw" }).success
+      ).toBe(true);
+    });
+
+    it("refuses a word that is not the fold of the stored text", () => {
+      expect(
+        answerRecordSchema.safeParse({ ...valid, text: "kawa", word: "herbata" }).success
+      ).toBe(false);
+    });
+
+    it("refuses an unfolded word — the case the single current writer cannot produce", () => {
+      // `validateWord` folds before storing, so this is what a *second* writer would get wrong.
+      expect(
+        answerRecordSchema.safeParse({ ...valid, text: "KAWA", word: "KAWA" }).success
+      ).toBe(false);
+    });
+
+    it("refuses a word with no text beside it", () => {
+      expect(answerRecordSchema.safeParse({ ...valid, text: null, word: "kawa" }).success).toBe(
+        false
+      );
+    });
+
+    it("still allows a record carrying neither, which every other kind is", () => {
+      expect(answerRecordSchema.safeParse({ ...valid, text: null, word: null }).success).toBe(
+        true
+      );
+    });
+
+    it("still allows text with no word — the free-text kind", () => {
+      expect(
+        answerRecordSchema.safeParse({ ...valid, text: "halucynacje", word: null }).success
+      ).toBe(true);
+    });
+
+    it("names the field in its message, so a failure points at the right one", () => {
+      const parsed = answerRecordSchema.safeParse({ ...valid, text: "kawa", word: "herbata" });
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.success === false && parsed.error.issues[0]?.path).toEqual(["word"]);
+    });
   });
 });
 

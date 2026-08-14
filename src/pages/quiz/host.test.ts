@@ -84,6 +84,17 @@ describe("there is exactly one poll loop", () => {
   });
 
   /**
+   * **The polled request is bounded** (impl review F1). Without a timeout a stall leaves
+   * `polling` true, so no tick re-arms, and `pollFailed` never runs, so no staleness marker
+   * appears — a frozen panel that looks live, which is the one thing the marker exists to
+   * prevent. `src/lib/client/answer.ts` bounds both of its calls for the reason its docstring
+   * states; this loop had none.
+   */
+  it("bounds the polled request with a timeout", () => {
+    expect(CODE).toContain("AbortSignal.timeout(POLL_TIMEOUT_MS)");
+  });
+
+  /**
    * The two panels are fed by two endpoints and **one** fetch call site: the URL comes off the
    * target rather than being written at the call. A second `fetch` for the cloud would be a
    * second request path with its own error handling, and the 401 branch — which is about the
@@ -158,10 +169,49 @@ describe("the word cloud's final read closes the loop", () => {
     expect(CODE).not.toContain("if (pollTargetFor(client.current())) schedulePoll()");
   });
 
-  it("records the final read only in the revealed phase", () => {
+  /**
+   * **Gated on the phase the request was ISSUED in, not the phase it arrived in** (impl review
+   * F2). This test previously asserted `client.current()?.phase === "question-revealed"` — the
+   * arrival phase — and so pinned the defect in place: a reply computed while the question was
+   * open counted as final whenever the host revealed mid-flight, dropping every word submitted
+   * in the interval from the cloud the host then talks over.
+   *
+   * Two halves, because either alone permits the bug: the flag must be derived from a value
+   * captured before the fetch, and the arrival-phase form must be gone.
+   */
+  /**
+   * **Staleness is cleared only when a cloud actually arrived** (impl review F6).
+   *
+   * Added because moving `cloudStale = false` back out of the `Array.isArray` branch broke
+   * nothing in this file — the fix was real and unguarded. A 200 whose body had lost its `words`
+   * array keeps the previous cloud, correctly, and would then present it as fresh: the same
+   * "looks live but isn't" failure the timeout above exists to prevent, reached through the body
+   * instead of through the network.
+   */
+  it("clears staleness only inside the branch where a cloud arrived", () => {
+    const branch =
+      /if \(Array\.isArray\(payload\.words\)\) \{[\s\S]*?\n {12}\}/.exec(CODE)?.[0] ?? "";
+
+    expect(branch).toContain("cloudWords = payload.words");
+    expect(branch).toContain("cloudStale = false");
+
+    /**
+     * **Scoped to the words handler, not counted across the file**, and the first version of
+     * this assertion got that wrong: it required exactly one `cloudStale = false` in the whole
+     * page and failed on correct code, because `resetPanels` legitimately clears it too. What
+     * matters is that the words handler clears it *only* inside the branch above — so this looks
+     * at what follows that branch, which is where moving the line puts it.
+     */
+    const afterBranch = CODE.slice(CODE.indexOf(branch) + branch.length, CODE.indexOf("} else {"));
+    expect(afterBranch).not.toContain("cloudStale = false");
+  });
+
+  it("records the final read from the phase the request was issued in", () => {
+    expect(CODE).toContain("const issuedInPhase");
+    expect(CODE).toContain('issuedInPhase === "question-revealed"');
     // Recorded while the question is open, the loop would end on the first tick and the cloud
     // would freeze while the room was still writing into it.
-    expect(CODE).toContain('client.current()?.phase === "question-revealed"');
+    expect(CODE).not.toContain('client.current()?.phase === "question-revealed"');
   });
 });
 

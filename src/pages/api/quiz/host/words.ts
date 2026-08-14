@@ -116,10 +116,15 @@ export const GET: APIRoute = async ({ request, url }) => {
   const [cloud, playerCount] = await Promise.all([
     readWordCloud(questionId),
     /**
-     * The denominator for the panel's `answered / joined`, so the cloud beat needs no second
+     * The denominator for the cloud panel's `Odpowiedzi N / M` line, so the beat needs no second
      * request and the join count stops needing a manual refresh while the question is open —
      * `participation.ts`'s reasoning. `null` when the store could not answer, which is
      * distinct from `0`, so the page keeps the number it has.
+     *
+     * That line was missing from the first implementation of the panel while this call and the
+     * `answered` field below were both already in place — a data path with no affordance, caught
+     * in implementation review (F4). If a later change removes the line again, remove this call
+     * with it rather than leaving a billed command feeding nothing.
      */
     readPlayerCount(),
   ]);

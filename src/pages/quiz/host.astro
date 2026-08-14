@@ -194,9 +194,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         filling is indistinguishable from a room that has stopped writing.
       -->
       <section id="word-cloud" hidden class="flex flex-col gap-4">
-        <div class="flex items-baseline gap-4">
-          <p class="text-text-secondary text-lg uppercase tracking-wide">Chmura słów</p>
-          <p id="word-cloud-count" class="text-4xl font-bold leading-none">—</p>
+        <div class="flex flex-wrap items-baseline gap-x-8 gap-y-2">
+          <!-- How much of the room has written, which is the figure the host reads to judge
+               when to reveal (impl review F4). Distinct from the word count beside it: thirty
+               attendees can write five words, so the two answer different questions and the
+               cloud alone cannot say how many people have taken part. Both numbers come from
+               the same poll reply, so this costs no extra command. -->
+          <div class="flex items-baseline gap-4">
+            <p class="text-text-secondary text-lg uppercase tracking-wide">Odpowiedzi</p>
+            <p id="word-cloud-answered" class="text-4xl font-bold leading-none">—</p>
+          </div>
+          <div class="flex items-baseline gap-4">
+            <p class="text-text-secondary text-lg uppercase tracking-wide">Chmura słów</p>
+            <p id="word-cloud-count" class="text-4xl font-bold leading-none">—</p>
+          </div>
           <span id="word-cloud-stale" hidden class="text-amber-400 text-lg">
             (nieaktualne)
           </span>
@@ -400,6 +411,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        */
       const POLL_BASE_MS = 2_500;
       const POLL_MAX_MS = 20_000;
+      /**
+       * How long a tick is given before it is abandoned (impl review F1).
+       *
+       * **Without this a stall is indistinguishable from a healthy poll, and worse than a
+       * failure.** `polling` stays `true`, so `schedulePoll` returns early and no further tick
+       * re-arms; and `pollFailed` never runs, so the staleness marker never appears. The
+       * projector then shows a frozen count or a frozen cloud that *looks live* — precisely
+       * what `(nieaktualne)` exists to prevent, and the same class as the back-forward-cache
+       * gap `pageshow` closes below.
+       *
+       * Ten seconds, matching `REQUEST_TIMEOUT_MS` in `src/lib/client/answer.ts`, whose
+       * docstring states the rule this borrows: a request that never returns is worse than one
+       * that fails, because nothing downstream can tell the difference. Generous against a
+       * venue network and still well short of a host advance.
+       */
+      const POLL_TIMEOUT_MS = 10_000;
       /**
        * How many consecutive `401`s keep the fast interval before the loop starts backing
        * off. Five ticks is ~12.5 s — comfortably longer than a host takes to type the
@@ -670,6 +697,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const shown = cloudWords?.length ?? 0;
         setText("word-cloud-count", wordCloudCountText(shown, cloudDistinct));
 
+        /**
+         * How much of the room has written (impl review F4).
+         *
+         * **The plan promised this line and the first implementation dropped it**, leaving the
+         * route computing `answered` and this page storing it with nothing rendering it — a data
+         * path with no affordance, which is `lessons.md`'s first rule inverted. The word count
+         * beside it is not a substitute: it counts distinct *words*, so five words can mean five
+         * people or fifty, and the host reads this figure to decide when to reveal.
+         *
+         * Same shape and same fallbacks as the participation count: `—` until the first reply,
+         * and the denominator prefers the freshest join count the page holds.
+         */
+        setText("word-cloud-answered", `${answered ?? "—"} / ${liveCount ?? state.playerCount}`);
+
         renderWordCloud(wordCloudWords, cloudWords ?? undefined, {
           list: "flex flex-wrap items-baseline gap-x-8 gap-y-3",
           chip: "font-bold leading-none text-brand-purple-light",
@@ -858,6 +899,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         if (target === null) return;
         if (!pollWanted(client.current())) return;
 
+        /**
+         * **The phase this request was ISSUED in, captured before it leaves** (impl review F2).
+         *
+         * The word cloud's final-read flag is set from this, not from the phase the reply
+         * happens to arrive in. Read at arrival, a body computed while the question was still
+         * open counts as the final cloud whenever the host reveals mid-flight — which this
+         * function's own `finally` calls "the ordinary way that happens" — and every word
+         * submitted after the request left is permanently missing from the cloud the host then
+         * talks over, with nothing on screen to say so.
+         *
+         * The same capture-at-issue shape `index.astro` uses for its rank fetch
+         * (`const beat = state.version`), and for the same class of reason.
+         */
+        const issuedInPhase = client.current()?.phase ?? null;
+
         // Nothing may open a second request while one is open — including the secret
         // field's immediate retry, which is otherwise one keystroke away from a burst.
         if (polling) return;
@@ -866,6 +922,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         try {
           const response = await fetch(target.url, {
             headers: { [config.secretHeader]: secretField.value },
+            // See `POLL_TIMEOUT_MS`: an abandoned request takes the `catch` below, which sets
+            // the staleness marker. A request that never returns sets nothing at all.
+            signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
           });
 
           /**
@@ -942,17 +1001,31 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             if (Array.isArray(payload.words)) {
               cloudWords = payload.words;
               cloudDistinct = typeof payload.distinct === "number" ? payload.distinct : 0;
+              /**
+               * **Cleared only when a cloud actually arrived** (impl review F6). Run
+               * unconditionally — as it was — a 200 whose body had lost its `words` array would
+               * keep the previous cloud, correctly, and then present it as *fresh*: the same
+               * "looks live but isn't" failure `POLL_TIMEOUT_MS` exists to prevent, reached
+               * through the body instead of through the network.
+               */
+              cloudStale = false;
             }
             if (typeof payload.answered === "number") answered = payload.answered;
-            cloudStale = false;
 
             /**
              * The final read has landed, so `pollWanted` stops re-arming for this question.
-             * Recorded only in the revealed phase: doing it while the question is open would
-             * end the loop on the first tick, and the cloud would freeze while the room was
-             * still writing into it.
+             *
+             * **Gated on the phase the request was ISSUED in, not the phase it arrived in**
+             * (impl review F2). Recorded only for a request that left *after* the reveal: one
+             * issued while the question was still open cannot be final, because words submitted
+             * in the interval are not in it. A reveal mid-flight therefore costs one extra tick
+             * rather than a silently incomplete cloud.
+             *
+             * Still only in the revealed phase at all — doing it while the question is open
+             * would end the loop on the first tick and freeze the cloud while the room was
+             * writing into it.
              */
-            if (client.current()?.phase === "question-revealed") {
+            if (issuedInPhase === "question-revealed") {
               cloudFinalReadFor = target.questionId;
             }
           } else {

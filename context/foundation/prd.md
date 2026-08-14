@@ -197,7 +197,16 @@ during an event.
   > it and `purge` deletes it; and it reaches no log line. The guardrail above is therefore still
   > satisfied on the same terms — but the claim that one registered key was free of attendee content is
   > no longer true, and the entry in `src/lib/session/keys.ts` was corrected in place rather than
-  > quietly reworded. See `context/changes/word-cloud-question/word-cloud-contract.md`.
+  > quietly reworded.
+  >
+  > *And the consequence for Deviation 1, asked rather than assumed (impl review F8).* `end` re-arms
+  > every registered key to ten minutes, so that window — reasoned about in F-03 when this key held
+  > nothing but integers — now covers attendee-authored words too. **Accepted, on Deviation 1's own
+  > terms**: the words are aggregate, keyed by no player id and no display name, so nothing in them
+  > says who wrote what; the window is bounded, self-expiring, and escapable by the explicit purge.
+  > The alternative was deleting the word family at `end` instead of re-arming it, which adds a branch
+  > to the one Lua path whose failure mode is "the session never ends" in order to shorten a window
+  > that carries no name. See `context/changes/word-cloud-question/word-cloud-contract.md`.
 - Every capability the existing site provides today continues to work unchanged: event browsing,
   speaker profiles, both signup forms, and the practice of publishing content by committing Markdown.
 
