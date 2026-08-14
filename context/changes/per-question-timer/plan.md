@@ -665,13 +665,13 @@ shape to undo.
 
 #### Automated
 
-- [x] 5.1 `bun run test` passes
-- [x] 5.2 `bun run type-check` reports 0 errors
-- [x] 5.3 `bun run build` succeeds
-- [x] 5.4 No document still asserts the three falsified claims
+- [x] 5.1 `bun run test` passes — 1311a96
+- [x] 5.2 `bun run type-check` reports 0 errors — 1311a96
+- [x] 5.3 `bun run build` succeeds — 1311a96
+- [x] 5.4 No document still asserts the three falsified claims — 1311a96
 
 #### Manual
 
-- [x] 5.5 The contract is a one-page pointer
-- [x] 5.6 FR-003's note shows what was reversed and what was not
-- [x] 5.7 The runbook alone suffices for a host to run the new behaviour
+- [x] 5.5 The contract is a one-page pointer — 1311a96
+- [x] 5.6 FR-003's note shows what was reversed and what was not — 1311a96
+- [x] 5.7 The runbook alone suffices for a host to run the new behaviour — 1311a96
