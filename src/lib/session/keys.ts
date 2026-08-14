@@ -121,6 +121,19 @@ const REGISTERED_KEYS = [
       "word family is the only one whose field count grows with the ROOM rather than " +
       "with the quiz — up to one field per attendee.",
   },
+  {
+    name: `${SESSION_NAMESPACE}devices`,
+    holds:
+      "Hash of opaque device id -> how many players that device has claimed (an " +
+      "integer). NOT attendee data: the id is minted by the browser about itself and " +
+      "is stored beside no name, no player id and no answer, so nothing here says WHO " +
+      "played or what they played as — it is the weakest thing that can enforce the " +
+      "per-device cap (FR-018). It is registered anyway, and for two reasons worth " +
+      "keeping apart: the registry has no exemption list, and a device id left behind " +
+      "after a session would still be a stable handle on a returning phone. The count " +
+      "only ever goes up — there is no 'abandon a player' action to release a slot " +
+      "against — so a claim refused as taken must not reach it.",
+  },
 ] as const satisfies readonly RegisteredKey[];
 
 /**
@@ -192,6 +205,22 @@ export const SCORES_KEY = REGISTERED_KEYS[4].name;
 export const TALLIES_KEY = REGISTERED_KEYS[5].name;
 
 /**
+ * The devices hash: opaque device id -> how many players it has claimed (roadmap S-09).
+ *
+ * Read and written inside `CLAIM_PLAYER` and nowhere else. The check has to be in the
+ * script for the same reason the collision check is: a count read outside it is a count
+ * that can change before the write lands, and two fast taps are the ordinary thing to do
+ * on a phone.
+ *
+ * **The counter is cumulative and never decremented.** FR-018 is about *registering* an
+ * unreasonable number of players, and a slot that could be released would let one device
+ * cycle a single slot indefinitely — which is the whole guard, defeated by a mechanism
+ * built to be forgiving. The accepted cost is that an attendee who claims a name they
+ * immediately regret has spent one of three.
+ */
+export const DEVICES_KEY = REGISTERED_KEYS[6].name;
+
+/**
  * The Ably channel every snapshot is published to.
  *
  * Not a store key — see the module docstring for why it is declared here anyway.
@@ -228,6 +257,27 @@ export const PLAYER_STORAGE_KEY = `${SESSION_NAMESPACE}player`;
  * certain, so the timestamp is persisted and read back rather than overwritten.
  */
 export const QUESTION_SEEN_STORAGE_KEY = `${SESSION_NAMESPACE}seen`;
+
+/**
+ * The `localStorage` entry holding this device's own opaque id: a bare string
+ * (roadmap S-09, FR-018).
+ *
+ * Third of the browser-storage keys and the same posture as the two above — no purge
+ * reaches it, and that is compliant rather than a gap, because the retention guardrail
+ * is about operator-accessible storage.
+ *
+ * **It is the one that carries no session data at all.** The other two hold a display
+ * name and a set of paint times; this holds a number the device made up about itself,
+ * whose only meaning is as a field name in `DEVICES_KEY`. That is deliberate: the cap
+ * needs to recognise a device across joins without the project learning anything else
+ * about it.
+ *
+ * **It is deliberately not cleared when a stale player is dropped.** `clearPlayer` and
+ * `clearSeen` run when a stored id no longer resolves, because that data belonged to a
+ * session that is gone. This one belongs to the *device*, and clearing it on that path
+ * would hand a fresh cap allowance to anyone who reloads after a purge.
+ */
+export const DEVICE_STORAGE_KEY = `${SESSION_NAMESPACE}device`;
 
 /**
  * Every registered key name, in declaration order.

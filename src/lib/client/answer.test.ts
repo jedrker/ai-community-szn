@@ -35,24 +35,35 @@ beforeEach(() => {
 /**
  * Runs `body` with `localStorage.setItem` throwing, then puts it back.
  *
- * Restored by hand rather than by `vi.restoreAllMocks()`: happy-dom's `localStorage` is
- * a Proxy, and a spy installed on it is NOT restored by the global teardown — the
- * throwing implementation leaks into every later test in the file, where it silently
- * swallows writes and makes unrelated assertions fail for a reason that looks like a
- * bug in the code under test. (It did exactly that once.)
+ * **This helper used to install nothing at all** (found in S-09, roadmap Phase 1). It
+ * assigned to `window.localStorage.setItem` directly, and happy-dom's `localStorage` is
+ * a *Proxy* whose set trap swallows the assignment: the write went on succeeding, the
+ * body never met a failure, and all three tests below passed against a `writeSeen` with
+ * its `try`/`catch` deleted. Verified by deleting it.
+ *
+ * The two halves of the trap point in opposite directions and both have to be respected:
+ *
+ * - Install with `vi.spyOn`. Plain assignment is swallowed, as above.
+ * - Restore with `spy.mockRestore()`, never `vi.restoreAllMocks()` — the global teardown
+ *   does not reach a spy on the Proxy, so the throwing implementation leaks into every
+ *   later test in the file, silently swallowing writes and failing unrelated assertions
+ *   in a way that reads as a bug in the code under test. (It did exactly that once,
+ *   which is how the original hand-restore was arrived at — the right conclusion about
+ *   the restore, from a stub that was never installed.)
  */
-function withBrokenWrite(body: () => void): void {
-  const original = window.localStorage.setItem;
-  window.localStorage.setItem = () => {
-    throw new Error("quota");
-  };
+function withBroken(method: "setItem" | "removeItem", body: () => void): void {
+  const spy = vi.spyOn(window.localStorage, method).mockImplementation(() => {
+    throw new Error("storage unavailable");
+  });
 
   try {
     body();
   } finally {
-    window.localStorage.setItem = original;
+    spy.mockRestore();
   }
 }
+
+const withBrokenWrite = (body: () => void): void => withBroken("setItem", body);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -277,16 +288,11 @@ describe("clearSeen", () => {
   });
 
   it("does not throw when storage is unavailable", () => {
-    const original = window.localStorage.removeItem;
-    window.localStorage.removeItem = () => {
-      throw new Error("disabled");
-    };
-
-    try {
+    // `removeItem`, not `setItem` — `clearSeen` never writes, so the write-breaking
+    // helper above would leave this test exercising a perfectly healthy storage.
+    withBroken("removeItem", () => {
       expect(() => clearSeen(SEEN_KEY)).not.toThrow();
-    } finally {
-      window.localStorage.removeItem = original;
-    }
+    });
   });
 });
 

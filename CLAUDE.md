@@ -59,11 +59,22 @@ two files — the suite's default environment is still `node`, so nothing else p
 test only gets a DOM by asking for one. Do not add a `vitest.config.ts` to set it globally; there is
 no vitest config file in this project and the per-file docblock is what keeps it that way.
 
-One trap it carries: **its `localStorage` is a Proxy, and `vi.restoreAllMocks()` does not restore a
-spy installed on it.** A test that stubs `localStorage.setItem` to throw will leak that
-implementation into every later test in the file, where it silently swallows writes and fails
-unrelated assertions in a way that reads as a bug in the code under test. Save and restore the
-method by hand — `answer.test.ts`'s `withBrokenWrite` helper is the pattern.
+One trap it carries, and **it has two halves that point in opposite directions** — a fix for either
+one alone is what shipped here for four months and certified nothing. Its `localStorage` is a Proxy:
+
+- **Install with `vi.spyOn`.** A plain assignment — `window.localStorage.setItem = () => { throw }` —
+  is *swallowed by the Proxy's set trap*. The write goes on succeeding, the test never meets a
+  failure, and it passes against code whose `try`/`catch` has been deleted. Three tests in
+  `answer.test.ts` were in exactly this state until S-09 deleted the guards and watched them stay
+  green.
+- **Restore with `spy.mockRestore()`, never `vi.restoreAllMocks()`** — the global teardown does not
+  reach a spy on the Proxy, so the throwing implementation leaks into every later test in the file,
+  where it silently swallows writes and fails unrelated assertions in a way that reads as a bug in
+  the code under test.
+
+`answer.test.ts`'s and `device.test.ts`'s `withBroken(method, body)` helper is the pattern. Note
+which method a test needs: `clearSeen` calls `removeItem` and never `setItem`, so breaking the write
+would have left it exercising perfectly healthy storage.
 
 `qrcode` (with `@types/qrcode`) carries no version constraint — recorded here because in this file
 an unmentioned dependency is indistinguishable from an unconsidered one. It is **server-side only**:

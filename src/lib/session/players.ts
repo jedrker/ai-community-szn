@@ -28,6 +28,29 @@ export const MIN_DISPLAY_NAME_LENGTH = 2;
 export const MAX_DISPLAY_NAME_LENGTH = 24;
 
 /**
+ * How many players one device may register in a session (roadmap S-09, PRD FR-018).
+ *
+ * **Three, and the number is a judgement rather than a measurement.** It covers the
+ * honest shared-handset cases — a couple, a parent and a child, one phone lent to
+ * somebody whose battery died — while making leaderboard-farming tedious enough to be
+ * visible. Two would refuse a lent handset on the first try, which lands the refusal on
+ * an attendee who did nothing wrong; five is already enough fake players to distort a
+ * board in a room of 150, so it would protect against almost nothing.
+ *
+ * **What this buys is friction, not prevention**, and that is the requirement rather
+ * than a shortfall against it: FR-018 asks for a lightweight, defeatable guard and
+ * explicitly not an identity system. Clearing site data or opening a private tab resets
+ * the count, because the device is identified by an id it stores about itself
+ * (`DEVICE_STORAGE_KEY`). The PRD accepts that, and it also accepts the cost pointing
+ * the other way — a genuinely shared phone in a group of four is refused.
+ *
+ * It lives here, beside the name bounds, for the reason those do: this module is the
+ * pure half of joining, so both the route and the store can read the number without a
+ * cycle and there is one place it is spelled.
+ */
+export const MAX_PLAYERS_PER_DEVICE = 3;
+
+/**
  * Polish letters, digits, spaces, and a small set of marks people actually put in a
  * nickname. Deliberately permissive about *what* a name says and strict about what it
  * is made of: PRD §Non-Goals accepts unmoderated content on the projector, so this is
