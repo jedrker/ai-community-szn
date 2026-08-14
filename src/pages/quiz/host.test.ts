@@ -80,8 +80,50 @@ describe("the scan can see the code it is checking", () => {
  * for a panel that is no longer on screen.
  */
 describe("there is exactly one poll loop", () => {
-  it("arms a timer from exactly one place", () => {
-    expect(occurrences("setTimeout")).toBe(1);
+  /**
+   * **This assertion used to read `occurrences("setTimeout") === 1`, and S-11 had to change
+   * it — which is the case `lessons.md` describes.**
+   *
+   * That form asserted a *shape*: "this file contains one timer". The property it was written
+   * to protect is narrower and is about cost — one loop that *fetches*, so there is one
+   * backoff, one in-flight flag, and one thing able to spend commands for a panel nobody is
+   * looking at. S-11 added a countdown: a timer that touches no endpoint, has no backoff, and
+   * cannot appear in the runbook's command tripwire because it issues no request. Under the
+   * old form the only way to add it was to weaken the guard to `=== 2`, which protects nothing.
+   *
+   * So the count is scoped to the loop's own machinery instead. `schedulePoll` and `runPoll`
+   * *are* the poll; a second timer inside either is a second loop, and that is what fails here.
+   */
+  it("arms the polled tick from exactly one place", () => {
+    const scheduler = /function schedulePoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const runner = /function runPoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    // Non-vacuity: both bodies must actually have been found, or the count below is zero
+    // against zero and the guard applauds an empty string.
+    expect(scheduler).toContain("pollDelay");
+    expect(runner).toContain("fetch(target.url");
+
+    expect((scheduler + runner).split("setTimeout").length - 1).toBe(1);
+  });
+
+  /**
+   * **The property, stated directly: exactly one timer arms a fetch.**
+   *
+   * Every `setTimeout` callback in the file is classified by what it can reach. A second
+   * *fetching* timer fails; a second painting timer does not. That is the distinction a raw
+   * count cannot make, and it is the one that matters — two fetching loops mean two backoffs
+   * and two chances to leave requests firing for a panel that is off screen.
+   */
+  it("has exactly one timer whose callback can fetch", () => {
+    const callbacks = [...CODE.matchAll(/setTimeout\(\(\) => \{([\s\S]*?)\}, /g)].map((m) => m[1]!);
+
+    // Non-vacuity: if the pattern stops matching, fail rather than pass on an empty list.
+    expect(callbacks.length).toBeGreaterThan(0);
+
+    const fetching = callbacks.filter(
+      (body) => body.includes("runPoll") || body.includes("fetch(")
+    );
+    expect(fetching).toHaveLength(1);
   });
 
   /**
@@ -89,16 +131,31 @@ describe("there is exactly one poll loop", () => {
    * `lessons.md` warns about: it asserted `let pollTimer` appeared once, which stays true when
    * someone declares `let cloudTimer` beside it. Verified by adding exactly that and watching
    * the test pass. Counting *any* timer-ish declaration is what the assertion always meant.
+   *
+   * S-11 raised the handle count from one to two — the poll's and the countdown's — and the
+   * number is pinned rather than dropped: a *third* is a change nobody has reasoned about.
+   * Both are named, so "two" cannot be satisfied by any two timers. `polling` and the delay
+   * stay at one each, because they belong to the fetching loop alone.
    */
-  it("holds exactly one timer handle, one in-flight flag and one interval", () => {
-    // A second of any of these is the shape a second loop takes.
-    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(1);
+  it("holds exactly two timer handles, one in-flight flag and one delay", () => {
+    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(2);
+    expect(CODE).toContain("let pollTimer");
+    expect(CODE).toContain("let countdownTimer");
+
     expect(CODE.match(/\blet\s+polling\b/g) ?? []).toHaveLength(1);
     expect(CODE.match(/\blet\s+\w*[Dd]elay\b/g) ?? []).toHaveLength(1);
   });
 
-  it("clears the timer from exactly one place", () => {
-    expect(occurrences("clearTimeout")).toBe(1);
+  it("clears each timer inside its own stop function, once", () => {
+    // One `clearTimeout` per timer, each in the function that owns it — so neither can be
+    // cancelled from a branch with no business doing it.
+    expect(occurrences("clearTimeout")).toBe(2);
+
+    const stopPolling = /function stopPolling\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const stopCountdown = /function stopCountdown\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(stopPolling.split("clearTimeout").length - 1).toBe(1);
+    expect(stopCountdown.split("clearTimeout").length - 1).toBe(1);
   });
 
   /**
@@ -125,6 +182,68 @@ describe("there is exactly one poll loop", () => {
     expect(occurrences("fetch(target.url")).toBe(1);
     expect(CODE).not.toContain("/api/quiz/host/words?");
     expect(CODE).not.toContain("/api/quiz/host/participation?");
+  });
+});
+
+/**
+ * THE COUNTDOWN'S OWN RULE (roadmap S-11, FR-020).
+ *
+ * It spends no commands, so the poll's bounding — the timeout, the backoff, the in-flight
+ * flag — does not apply to it and asserting those here would be cargo. What does apply is
+ * that it must not outlive its question: a clock left running under the next prompt shows
+ * the room a number belonging to a question that has gone, and because it repaints on its
+ * own it would keep looking live while doing it.
+ */
+describe("the countdown cannot outlive its question", () => {
+  it("clears before its renderer can return early", () => {
+    const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    // Non-vacuity: the body must have been found.
+    expect(panel).toContain("state.phase");
+
+    const clearAt = panel.indexOf("stopCountdown();");
+    const firstReturn = panel.indexOf("return;");
+
+    expect(clearAt).toBeGreaterThan(-1);
+    expect(firstReturn).toBeGreaterThan(-1);
+    // Ahead of every early return, so no branch can leave the previous question's clock up.
+    expect(clearAt).toBeLessThan(firstReturn);
+  });
+
+  it("stops wherever the poll stops", () => {
+    // The two lifecycle exits. A countdown left armed at `pagehide` is the "timer that
+    // outlives the page" case that handler exists for.
+    const visibility = CODE.slice(
+      CODE.indexOf('addEventListener("visibilitychange"'),
+      CODE.indexOf('addEventListener("pagehide"')
+    );
+    expect(visibility).toContain("stopCountdown()");
+
+    const pagehide = CODE.slice(CODE.indexOf('addEventListener("pagehide"'));
+    expect(pagehide.slice(0, 300)).toContain("stopCountdown()");
+  });
+
+  /**
+   * **Keyed on the limit's presence, never on a phase or kind list.** The schema decides
+   * which questions carry a clock — required when scored, refused when not — and a list here
+   * would be a second copy of that rule, able to fall behind it. Both views apply the same
+   * reasoning to the standings board's visibility.
+   */
+  it("keys on the limit rather than re-deciding which kinds have a clock", () => {
+    const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(panel).toContain("timeLimitSeconds === undefined");
+    expect(panel).not.toContain('kind === "word-cloud"');
+    expect(panel).not.toContain("scored");
+  });
+
+  it("reads the remainder from the snapshot, not from a local clock", () => {
+    // `updatedAt + limit` is the same arithmetic every phone does from the same two values,
+    // which is what stops the projector drifting from the room. A countdown seeded from when
+    // this page happened to paint would disagree with all 150 of them.
+    const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(panel).toContain("state.updatedAt + limitMs");
   });
 });
 
@@ -158,7 +277,28 @@ describe("one predicate decides both the panels and the poll", () => {
     expect(predicate).toContain('state.phase !== "question-open"');
 
     const elsewhere = CODE.replace(predicate, "");
-    expect(elsewhere).not.toContain('phase !== "question-open"');
+    /**
+     * **Scoped to what the poll re-derives, which now needs saying out loud (S-11).**
+     *
+     * The countdown reads the phase too — it shows a clock only while a question is open —
+     * and that is not the drift this guards against. The rule is that nothing re-derives the
+     * *poll's* condition, so a panel and its poll cannot disagree about whether to run. The
+     * countdown fetches nothing and has no panel-versus-poll pair to fall out of step.
+     *
+     * So the countdown's renderer is excluded by name rather than the assertion being
+     * loosened, and the kind test below still covers the whole file: the countdown must key
+     * on the limit's presence, never on a kind.
+     */
+    const withoutCountdown = elsewhere.replace(
+      /function renderCountdownPanel\([\s\S]*?\n {6}}/,
+      ""
+    );
+
+    // Non-vacuity: the exclusion must have removed something, or it is hiding nothing and
+    // the assertion below is weaker than it reads.
+    expect(withoutCountdown.length).toBeLessThan(elsewhere.length);
+
+    expect(withoutCountdown).not.toContain('phase !== "question-open"');
     expect(elsewhere).not.toContain('kind === "single-choice"');
   });
 });

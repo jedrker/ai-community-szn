@@ -144,6 +144,40 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       <section id="question" class="flex flex-col gap-5"></section>
 
       <!--
+        The countdown (roadmap S-11, FR-020).
+
+        **Below the prompt for the reason the participation panel is**: the prompt is what
+        the room is reading, and a clock above it makes the screen about the clock.
+
+        Sized to be read from the back of the room, which is the whole point of putting it
+        here rather than leaving it on 150 phones. It counts the same window the server
+        enforces, from the same timestamp every phone uses, so the projector and the room
+        cannot disagree about how long is left.
+
+        Present only while a scored question is open — the two unscored questions carry no
+        limit, and the word cloud in particular fills until the host reveals it.
+      -->
+      <section id="host-countdown" hidden class="flex flex-col gap-2">
+        <div class="flex items-baseline gap-4">
+          <p class="text-text-secondary text-lg uppercase tracking-wide">Pozostały czas</p>
+          <p
+            data-countdown-text
+            class="text-7xl font-bold leading-none tabular-nums"
+          >
+            —
+          </p>
+        </div>
+        <div class="h-3 overflow-hidden rounded-full bg-white/10">
+          <div
+            data-countdown-bar
+            class="h-full rounded-full bg-emerald-400 transition-[width] duration-1000 ease-linear"
+            style="width: 100%"
+          >
+          </div>
+        </div>
+      </section>
+
+      <!--
         The accepted answer for a free-text question, at reveal (roadmap S-05, FR-016).
 
         A choice question marks its correct option in the list above; a text question has
@@ -354,6 +388,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       } from "../../lib/client/session";
       import {
         el,
+        renderCountdown,
         renderDistribution,
         renderQuestion,
         renderStandings,
@@ -402,6 +437,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const wordCloudBox = el("word-cloud");
       const wordCloudWords = el("word-cloud-words");
       const wordCloudStale = el("word-cloud-stale");
+      const hostCountdownBox = el("host-countdown");
       const endButton = el("end") as HTMLButtonElement;
 
       const actionButtons = (): HTMLButtonElement[] =>
@@ -1098,6 +1134,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         setHidden(acceptedAnswerBox, accepted === null || accepted.length === 0);
         if (accepted) setText("accepted-answer-value", accepted);
 
+        renderCountdownPanel(state);
         renderParticipation(state);
         renderWordCloudPanel(state);
         syncControls();
@@ -1116,6 +1153,81 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         if (pollTimer === null) return;
         window.clearTimeout(pollTimer);
         pollTimer = null;
+      }
+
+      /**
+       * THE COUNTDOWN, AND WHY IT IS NOT A SECOND POLL LOOP (roadmap S-11, FR-020).
+       *
+       * `host.test.ts` guards this page against a second *polling* loop, and the reason it
+       * gives is specific: two loops mean two backoffs, two in-flight flags, and two chances
+       * to leave a timer fetching for a panel that is off screen. **This timer fetches
+       * nothing.** It touches no endpoint, has no backoff, no in-flight flag and no failure
+       * mode beyond painting a stale number — so it costs no commands and cannot appear in
+       * the runbook's tripwire, which is a polling detector.
+       *
+       * That distinction is exactly what the rewritten guard in `host.test.ts` now asserts:
+       * one timer arms a `fetch`, and this one is held to a different, narrower rule —
+       * cleared on every render, armed only while a scored question is open.
+       *
+       * Its remainder is computed from the snapshot's `updatedAt` plus the question's own
+       * limit, which is the same arithmetic every phone does from the same two values. The
+       * projector cannot drift from the room because neither side is measuring anything
+       * local.
+       */
+      let countdownTimer: number | null = null;
+      /** What the running clock is counting, so the tick needs no lookup. */
+      let countdownFor: { deadline: number; limitMs: number } | null = null;
+
+      function stopCountdown(): void {
+        if (countdownTimer !== null) {
+          window.clearTimeout(countdownTimer);
+          countdownTimer = null;
+        }
+        countdownFor = null;
+        setHidden(hostCountdownBox, true);
+      }
+
+      /**
+       * Shows the clock for a scored open question, and nothing otherwise.
+       *
+       * **Keyed on the limit's presence, never on a phase list.** The schema decides which
+       * questions have a clock — required when scored, refused when not — and a list here
+       * would be a copy of that rule able to fall behind it. The same reasoning both views
+       * apply to the standings board's visibility.
+       */
+      function renderCountdownPanel(state: State | null): void {
+        stopCountdown();
+
+        if (state === null || state.phase !== "question-open") return;
+        if (state.currentQuestionId === null) return;
+
+        const question = config.questions.find((q) => q.id === state.currentQuestionId);
+        if (question?.timeLimitSeconds === undefined) return;
+
+        const limitMs = question.timeLimitSeconds * 1_000;
+        countdownFor = { deadline: state.updatedAt + limitMs, limitMs };
+
+        setHidden(hostCountdownBox, false);
+        paintCountdown();
+      }
+
+      function paintCountdown(): void {
+        if (countdownFor === null) return;
+
+        // Recomputed from the wall clock every tick rather than decremented, so a projector
+        // whose tab was throttled comes back correct instead of minutes fast.
+        const remaining = countdownFor.deadline - Date.now();
+        renderCountdown(hostCountdownBox, remaining, countdownFor.limitMs);
+
+        // At zero the clock simply stops. Nothing advances, nothing reveals: the host owns
+        // every transition, and the room keeps looking at the question until they act.
+        if (remaining <= 0) return;
+
+        const untilNextSecond = remaining % 1_000 || 1_000;
+        countdownTimer = window.setTimeout(() => {
+          countdownTimer = null;
+          paintCountdown();
+        }, untilNextSecond);
       }
 
       function schedulePoll(): void {
@@ -1459,10 +1571,18 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * outlives the page is a request fired at a document that is gone.
        */
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "hidden") stopPolling();
-        else render();
+        // The countdown stops with the poll. It spends no commands, so this is hygiene
+        // rather than budget — but a hidden tab that keeps a timer is the shape this page
+        // is careful about, and `render` re-arms it from the wall clock on the way back.
+        if (document.visibilityState === "hidden") {
+          stopPolling();
+          stopCountdown();
+        } else render();
       });
-      window.addEventListener("pagehide", stopPolling);
+      window.addEventListener("pagehide", () => {
+        stopPolling();
+        stopCountdown();
+      });
       /**
        * The other half of `pagehide`. A back-forward-cache restore does not re-run this
        * script, so without this the page comes back showing whatever count it froze on,

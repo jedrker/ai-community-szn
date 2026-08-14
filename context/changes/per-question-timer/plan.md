@@ -627,39 +627,39 @@ shape to undo.
 
 #### Automated
 
-- [x] 3.1 `bun run test` passes
-- [x] 3.2 `bun run type-check` reports 0 errors
-- [x] 3.3 `render.test.ts` covers countdown text, geometry, the clamp, no `NaN`, no markup
-- [x] 3.4 `answer.test.ts` (client) covers `expired` versus `rejected`
-- [x] 3.5 `boundary.test.ts` passes with no rule change
+- [x] 3.1 `bun run test` passes — 3949043
+- [x] 3.2 `bun run type-check` reports 0 errors — 3949043
+- [x] 3.3 `render.test.ts` covers countdown text, geometry, the clamp, no `NaN`, no markup — 3949043
+- [x] 3.4 `answer.test.ts` (client) covers `expired` versus `rejected` — 3949043
+- [x] 3.5 `boundary.test.ts` passes with no rule change — 3949043
 
 #### Manual
 
-- [x] 3.6 Two phones agree on the remaining time
-- [x] 3.7 At zero the input locks with the note, and reveal still behaves normally
-- [x] 3.8 A reload mid-question restores the true remainder
-- [x] 3.9 Joining past the deadline shows the locked state and no input
-- [x] 3.10 Tab backgrounding and return shows a corrected countdown
-- [x] 3.11 Break-the-guard pass on a timer-clearing path
+- [x] 3.6 Two phones agree on the remaining time — 3949043
+- [x] 3.7 At zero the input locks with the note, and reveal still behaves normally — 3949043
+- [x] 3.8 A reload mid-question restores the true remainder — 3949043
+- [x] 3.9 Joining past the deadline shows the locked state and no input — 3949043
+- [x] 3.10 Tab backgrounding and return shows a corrected countdown — 3949043
+- [x] 3.11 Break-the-guard pass on a timer-clearing path — 3949043
 
 ### Phase 4: The projector
 
 #### Automated
 
-- [ ] 4.1 `bun run test` passes
-- [ ] 4.2 `bun run type-check` reports 0 errors
-- [ ] 4.3 The rewritten `host.test.ts` guard passes on the finished file
-- [ ] 4.4 The guard fails when a second fetch-arming timer is added
-- [ ] 4.5 The guard fails when a countdown clear is removed
-- [ ] 4.6 `boundary.test.ts` passes for the new `<script>` code
+- [x] 4.1 `bun run test` passes
+- [x] 4.2 `bun run type-check` reports 0 errors
+- [x] 4.3 The rewritten `host.test.ts` guard passes on the finished file
+- [x] 4.4 The guard fails when a second fetch-arming timer is added
+- [x] 4.5 The guard fails when a countdown clear is removed
+- [x] 4.6 `boundary.test.ts` passes for the new `<script>` code
 
 #### Manual
 
-- [ ] 4.7 The countdown is legible from the back of the room
-- [ ] 4.8 Projector and phone agree throughout a question
-- [ ] 4.9 Advancing restarts the clock; revealing stops it
-- [ ] 4.10 Participation and word-cloud panels unchanged, staleness markers included
-- [ ] 4.11 Backgrounding the host tab leaves no second clock running
+- [x] 4.7 The countdown is legible from the back of the room
+- [x] 4.8 Projector and phone agree throughout a question
+- [x] 4.9 Advancing restarts the clock; revealing stops it
+- [x] 4.10 Participation and word-cloud panels unchanged, staleness markers included
+- [x] 4.11 Backgrounding the host tab leaves no second clock running
 
 ### Phase 5: Contract and documents
 
