@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { getQuestionById, quiz } from "../../quiz/index";
-import { standingsSchema } from "./standings";
+import { standingsSchema, type Standings } from "./standings";
 
 /**
  * What one live session *is* (roadmap F-02).
@@ -68,6 +68,21 @@ export type SessionPhase = (typeof SESSION_PHASES)[number];
 
 /** The phases that have no open question. Everything else must have one. */
 const QUESTIONLESS_PHASES: readonly SessionPhase[] = ["lobby", "ended"];
+
+/**
+ * The phases a leaderboard may appear in (roadmap S-07, widened by S-10).
+ *
+ * Two, and they are not symmetric — read `standings`' own note below before adding a
+ * third. `standings` *requires* a board, because there the board is the whole phase;
+ * `ended` merely *permits* one, because the closing screen must still be reachable when
+ * the store could not answer. Both halves are separate `superRefine` clauses further
+ * down.
+ *
+ * Stated as a set for the reason `QUESTIONLESS_PHASES` is: the inverted form
+ * (`phase !== "standings"`) was correct while one phase carried a board, and a second
+ * one must not have to be remembered in a condition written for the first.
+ */
+const BOARD_PHASES: readonly SessionPhase[] = ["standings", "ended"];
 
 export const sessionStateSchema = z
   .object({
@@ -205,12 +220,17 @@ export const sessionStateSchema = z
      * The leaderboard the room is looking at (roadmap S-07, FR-014).
      *
      * **Fifth field in the comparison above, and on `revealedOptionIds`' side of it** —
-     * part of a transition, not decoration on one. Set by
-     * `src/pages/api/quiz/host/standings.ts` alone and nulled by every other constructor.
-     * Injected in `applyHostAction` beside `playerCount`, where a reader who
-     * pattern-matched on "aggregate fact about the room" would put it, it would carry one
-     * beat's board into the next question and leave it on 150 phones while that question
-     * is being answered. The `superRefine` clauses below are the enforcement.
+     * part of a transition, not decoration on one. Injected in `applyHostAction` beside
+     * `playerCount`, where a reader who pattern-matched on "aggregate fact about the room"
+     * would put it, it would carry one beat's board into the next question and leave it on
+     * 150 phones while that question is being answered. The `superRefine` clauses below are
+     * the enforcement.
+     *
+     * **Two constructors set it now, not one** (roadmap S-10). It used to be
+     * `src/pages/api/quiz/host/standings.ts` alone; `endedSessionState` below is the second,
+     * because the closing beat lands the segment on the same board rather than on a bare
+     * sentence. Everything else still nulls it, and the two that set it are the two phases
+     * in `BOARD_PHASES` — one field, two owners, and no third without a clause to match.
      *
      * **This is the first snapshot field in the project to carry attendee display names,
      * and that is a decision rather than an oversight.** S-02 kept every name off the wire
@@ -245,6 +265,21 @@ export const sessionStateSchema = z
      * beside a visible answer key. Here the board *is* the phase, so a null one is a blank
      * projector with nothing for the host to say about it; the standings route refuses the
      * transition on a failed read rather than publishing one.
+     *
+     * **That requirement does NOT extend to `ended`, and the asymmetry is the decision**
+     * (roadmap S-10). `end` is what moves every key onto the short lifetime, so it may never
+     * be refused over a board it could not read — a host who cannot close because an
+     * `HGETALL` blipped is stuck in front of a room with the retention guardrail unserved.
+     * A closing screen with no board falls back to the plain closing copy; a standings phase
+     * with no board is a blank projector nobody asked for.
+     *
+     * **The exposure changes shape here, and it is accepted rather than mitigated.** In the
+     * `standings` phase these names are readable for as long as the host leaves the board up;
+     * on the terminal document they are readable for `ENDED_TTL_SECONDS` — bounded by a TTL
+     * rather than by the host's attention, and again through the deliberately open
+     * `GET /api/quiz/state`. The bound is unchanged at `STANDINGS_SIZE` names, and the same
+     * names reached the same devices during the beat minutes earlier. See the PRD's retention
+     * guardrail (Deviation 2) and this slice's contract.
      *
      * `.default(null)` for the same load-bearing reason as its four siblings: a session
      * document written before this ships must still parse, or the host's next action 409s
@@ -326,10 +361,10 @@ export const sessionStateSchema = z
     }
 
     // The same shape of invariant as the three above, and its own clause for the same
-    // reason: each field's failure should name itself. A board outside its own phase is
+    // reason: each field's failure should name itself. A board outside its own phases is
     // last beat's leaderboard sitting on 150 phones under the next question — visible,
-    // plausible, and wrong.
-    if (state.phase !== "standings" && state.standings !== null) {
+    // plausible, and wrong. Two phases may carry one as of S-10; see `BOARD_PHASES`.
+    if (!BOARD_PHASES.includes(state.phase) && state.standings !== null) {
       ctx.addIssue({
         code: "custom",
         path: ["standings"],
@@ -342,6 +377,11 @@ export const sessionStateSchema = z
     // to exist without a board. This is what makes the standings route's "refuse the
     // transition when the store cannot answer" structural rather than a habit of that one
     // handler.
+    //
+    // **`standings` only, never `ended`** — deliberately narrower than the clause above,
+    // which now spans both. Widening this one to match would make a failed board read at
+    // the close un-closeable, which is the one thing `end` may never be. See the field's
+    // note.
     if (state.phase === "standings" && state.standings === null) {
       ctx.addIssue({
         code: "custom",
@@ -394,13 +434,27 @@ export function nextQuestionId(currentQuestionId: string | null): string | null 
 }
 
 /**
- * The terminal document (roadmap F-03).
+ * The terminal document (roadmap F-03, extended by S-10).
  *
  * Clears `currentQuestionId`, which is a consequence worth stating: the closing
  * snapshot does not name the last question. That is deliberate — the ended screen is
  * about the session, not about whatever happened to be on screen when it stopped.
+ *
+ * **`standings` is the one thing it now carries rather than clears** (roadmap S-10,
+ * FR-006). The closing beat lands the segment on the winner instead of on a bare
+ * sentence, so `end.ts` reads the board inside its transition and passes it here.
+ *
+ * **Optional, defaulting to `null`, and that default is the failure path rather than a
+ * convenience.** A board read that could not answer must still end the session — the
+ * close is what moves every key onto the short lifetime — so the caller passes nothing
+ * and the room gets the plain closing screen. The schema permits a boardless `ended`
+ * for exactly this; see the `standings` field's note.
  */
-export function endedSessionState(current: SessionState, now: number): SessionState {
+export function endedSessionState(
+  current: SessionState,
+  now: number,
+  standings: Standings | null = null
+): SessionState {
   return {
     version: current.version + 1,
     phase: "ended",
@@ -421,10 +475,15 @@ export function endedSessionState(current: SessionState, now: number): SessionSt
     // mid-question.
     revealedDistribution: null,
     revealedAnswerText: null,
-    // Cleared like the three above. S-10's closing sequence is the slice that decides
-    // what the ended screen shows; until it lands, ending from a standings beat clears
-    // the board rather than freezing the room on a leaderboard the host has finished with.
-    standings: null,
+    /**
+     * **NOT cleared like the three above — this is what S-10 decided** (FR-006).
+     *
+     * It is the board this transition was handed, not the one `current` happened to be
+     * showing: ending from a `standings` beat must not freeze the room on a leaderboard
+     * computed before the last answers landed. `end.ts` reads a fresh one, and `null`
+     * from a failed read is a plain closing screen rather than a refused close.
+     */
+    standings,
   };
 }
 

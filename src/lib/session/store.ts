@@ -727,7 +727,22 @@ export async function endSession(
     return { outcome: "stale", version: current };
   }
 
-  logSessionEvent("session.ended", { version: next.version, phase: next.phase });
+  /**
+   * `rowCount` added by S-10, and it is the one field worth having on this line: the
+   * closing snapshot carries the leaderboard now, and a close whose board read failed
+   * publishes none — `0` is how that outcome is told apart from an ordinary close in a
+   * stream a host is grepping. A count of rows, never a row; `LogFields` has no field a
+   * name or a total would fit in, and that closure is the enforcement.
+   *
+   * Emitted here rather than in `end.ts` so there is still exactly one `session.ended`
+   * line per close. `purge` writes its terminal state through this function too, and its
+   * board is null by construction — it is abandoning the session, not landing it.
+   */
+  logSessionEvent("session.ended", {
+    version: next.version,
+    phase: next.phase,
+    rowCount: next.standings?.rows.length ?? 0,
+  });
   return { outcome: "applied", state: next };
 }
 

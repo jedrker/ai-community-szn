@@ -7,8 +7,9 @@ import {
   toResponse,
   unauthorized,
 } from "../../../../lib/session/host";
+import { logSessionEvent } from "../../../../lib/session/log";
 import { endedSessionState } from "../../../../lib/session/state";
-import { endSession, readSession } from "../../../../lib/session/store";
+import { endSession, readSession, readStandings } from "../../../../lib/session/store";
 
 /**
  * Ends the session (roadmap F-03).
@@ -30,6 +31,24 @@ import { endSession, readSession } from "../../../../lib/session/store";
  * 2. **A phase guard.** Refused while a question is open, so it cannot fire
  *    mid-question. A host who genuinely needs to abandon a session at that moment
  *    has `purge`, which deliberately has no phase guard.
+ *
+ * ## The closing beat carries the leaderboard (roadmap S-10, FR-006)
+ *
+ * The terminal snapshot now lands the segment on the winner rather than on a bare
+ * sentence, so the board is read here and passed to `endedSessionState`.
+ *
+ * **Read inside the transition, for the reason `reveal.ts` and the standings route read
+ * theirs there**: a read placed beside `playerCount` in `applyHostAction` would attach a
+ * board to *every* host action, including the `advance` that opens the next question.
+ *
+ * **A failed read ends the session anyway, and that is the departure from
+ * `standings.ts`.** That route refuses its transition when the store cannot answer,
+ * because there the board *is* the beat and completing would put a blank screen in front
+ * of the room — and refusing costs nothing, since the beat is optional. Refusing here
+ * would cost the close itself, which is what moves every key onto the short lifetime and
+ * is the mechanism the whole retention guardrail rests on. So the room gets the plain
+ * closing screen, the failure is logged, and the session ends. The schema permits a
+ * boardless `ended` for exactly this.
  */
 export const POST: APIRoute = async ({ request }) => {
   const { secret, confirmVersion } = await extractHostFields(request);
@@ -115,11 +134,28 @@ export const POST: APIRoute = async ({ request }) => {
   // read rather than by the version the host actually confirmed — and anything that
   // moved the session in between would be ended unconfirmed.
   const outcome = await applyHostAction(
-    (state, now) => endedSessionState(state, now),
+    async (state, now) => {
+      const standings = await readStandings();
+
+      if (standings === null) {
+        // Logged, not surfaced: the host is closing the session and there is nothing for
+        // them to do about it. The reason names the close so this line cannot be mistaken
+        // for a failed `pokaż ranking` in a stream a host is grepping mid-event.
+        logSessionEvent("session.standings.failed", {
+          reason: "standings read failed while ending — closing without a board",
+        });
+      }
+
+      return endedSessionState(state, now, standings);
+    },
     Date.now(),
     endSession,
     confirmVersion
   );
 
+  // No `session.ended` line here, deliberately: `endSession` already emits one, and it
+  // now carries the board's `rowCount`. One line per mutation is a property the runbook
+  // tells a host to read the stream by, and two would break it at the one moment they are
+  // checking the session really closed.
   return toResponse(outcome);
 };

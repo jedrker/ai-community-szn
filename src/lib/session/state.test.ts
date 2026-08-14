@@ -603,17 +603,54 @@ describe("standings", () => {
   });
 
   /**
-   * THE INVARIANT. A board outside its own phase is the previous beat's leaderboard on
-   * 150 phones underneath the question they are being asked to answer.
+   * The second phase that may carry one (roadmap S-10, FR-006). The closing beat lands the
+   * segment on the winner, so the terminal document holds the same board the standings beat
+   * would have.
    */
-  it.each(["lobby", "question-open", "question-revealed", "ended"] as const)(
+  it("accepts a board in the ended phase — the closing screen carries one", () => {
+    const candidate = {
+      ...open,
+      phase: "ended" as const,
+      currentQuestionId: null,
+      standings: board,
+    };
+
+    expect(sessionStateSchema.safeParse(candidate).success).toBe(true);
+  });
+
+  /**
+   * THE ASYMMETRY BETWEEN THE TWO PHASES THAT MAY CARRY ONE, and it is the half most
+   * likely to be "fixed" into consistency. `standings` requires a board because there the
+   * board is the whole phase. `ended` must stay valid without one, because `end` is what
+   * moves every key onto the short lifetime and may never be refused over a board the
+   * store could not read.
+   */
+  it("accepts the ended phase with NO board — a failed read must still close the session", () => {
+    const candidate = {
+      ...open,
+      phase: "ended" as const,
+      currentQuestionId: null,
+      standings: null,
+    };
+
+    expect(sessionStateSchema.safeParse(candidate).success).toBe(true);
+  });
+
+  /**
+   * THE INVARIANT. A board outside the two phases that may carry one is the previous
+   * beat's leaderboard on 150 phones underneath the question they are being asked to
+   * answer.
+   *
+   * `ended` left this list in S-10 and the three that remain are the ones that matter:
+   * every phase here is one in which a board on screen is a board over a live question.
+   */
+  it.each(["lobby", "question-open", "question-revealed"] as const)(
     "refuses a board in %s",
     (phase) => {
-      const questionless = phase === "lobby" || phase === "ended";
       const candidate = {
         ...open,
         phase,
-        currentQuestionId: questionless ? null : open.currentQuestionId,
+        currentQuestionId: phase === "lobby" ? null : open.currentQuestionId,
         standings: board,
       };
 
@@ -668,12 +705,48 @@ describe("standings", () => {
     expect(result.error?.issues.some((issue) => issue.path[0] === field)).toBe(true);
   });
 
-  it("is null on every constructor that is not the standings route", () => {
+  it("is null in the lobby, which has nothing to rank", () => {
     expect(initialSessionState(NOW).standings).toBeNull();
+  });
 
+  /**
+   * The closing constructor (roadmap S-10). Three properties, and the third is the one a
+   * later reader is most likely to break.
+   */
+  describe("endedSessionState carries a board", () => {
     const showing = { ...open, phase: "standings" as const, standings: board };
-    // Cleared, not carried. S-10 owns what the closing screen shows; until then, ending
-    // from a leaderboard beat should not freeze the room on it.
-    expect(endedSessionState(showing, NOW + 9_000).standings).toBeNull();
+
+    it("carries the board it is handed", () => {
+      expect(endedSessionState(showing, NOW + 9_000, board).standings).toEqual(board);
+    });
+
+    /**
+     * **The board it is HANDED, never the one `current` was showing.** Ending from a
+     * standings beat must publish a freshly-read board, or the closing screen freezes the
+     * room on a leaderboard computed before the last answers landed. The fixture is a
+     * *different* board from `showing`'s so a constructor that carried `current.standings`
+     * fails here rather than passing on an identical value.
+     */
+    it("ignores the board the session was already showing", () => {
+      const fresher = {
+        rows: [{ rank: 1, displayName: "Czarek", points: 99 }],
+        playerCount: 5,
+      };
+
+      expect(endedSessionState(showing, NOW + 9_000, fresher).standings).toEqual(fresher);
+    });
+
+    /**
+     * The failure path, and it is the default rather than a branch: a board read that
+     * could not answer passes nothing, and the session still ends. Refusing here would
+     * make a transient store blip block the one action that moves attendee data onto the
+     * short lifetime.
+     */
+    it("defaults to no board, and the document still parses", () => {
+      const closed = endedSessionState(showing, NOW + 9_000);
+
+      expect(closed.standings).toBeNull();
+      expect(sessionStateSchema.safeParse(closed).success).toBe(true);
+    });
   });
 });

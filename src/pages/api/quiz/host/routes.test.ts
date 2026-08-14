@@ -549,16 +549,112 @@ describe("end", () => {
 
   it("produces a terminal state at a strictly higher version", async () => {
     sessionIs(revealed);
+    readStandingsMock.mockResolvedValue(null);
     applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
 
     await call(end, { version: revealed.version });
 
     const [transition] = applyHostActionMock.mock.calls[0]!;
-    const next = transition(revealed, NOW + 9_000);
+    // Awaited: the transition became async in S-10 so it can read the board here rather
+    // than in `applyHostAction`, where the read would apply to every action.
+    const next = await transition(revealed, NOW + 9_000);
 
     expect(next.phase).toBe("ended");
     expect(next.currentQuestionId).toBeNull();
     expect(next.version).toBeGreaterThan(revealed.version);
+  });
+
+  /**
+   * THE CLOSING BEAT (roadmap S-10, FR-006).
+   *
+   * The terminal snapshot carries the leaderboard, so the segment lands on the winner
+   * rather than on a bare sentence. Run against the transition closure directly, as the
+   * reveal and standings blocks do: what is under test is what the closure builds.
+   */
+  describe("the closing board", () => {
+    const board = {
+      rows: [
+        { rank: 1, displayName: "Ala", points: 30 },
+        { rank: 2, displayName: "Bartek", points: 20 },
+      ],
+      playerCount: 4,
+    };
+
+    it("puts a freshly-read board on the terminal state", async () => {
+      sessionIs(revealed);
+      readStandingsMock.mockResolvedValue(board);
+      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+
+      await call(end, { version: revealed.version });
+
+      const [transition] = applyHostActionMock.mock.calls[0]!;
+      const next = await transition(revealed, NOW + 9_000);
+
+      expect(next.standings).toEqual(board);
+      expect(readStandingsMock).toHaveBeenCalled();
+    });
+
+    /**
+     * **The board is read in the transition, not before it.** A read hoisted above
+     * `applyHostAction` — or into it, beside `playerCount` — would attach a board to every
+     * host action, including the `advance` that opens the next question. Asserted by
+     * running the route without ever invoking the closure: nothing may have been read.
+     */
+    it("spends no read until the transition actually runs", async () => {
+      sessionIs(revealed);
+      readStandingsMock.mockResolvedValue(board);
+      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+
+      await call(end, { version: revealed.version });
+
+      expect(readStandingsMock).not.toHaveBeenCalled();
+    });
+
+    /**
+     * THE DEPARTURE FROM `standings.ts`, and the reason it is one. That route refuses its
+     * transition when the store cannot answer, because the board is the beat and refusing
+     * costs nothing. Refusing here would cost the close — the action that moves every key
+     * onto the short lifetime — so the session ends and the room gets the plain closing
+     * screen.
+     *
+     * Asserted on the *state* rather than on the response, because a handler that returned
+     * 200 while refusing the transition would satisfy a weaker test.
+     */
+    it("still ends the session when the board cannot be read, with no board rather than a refusal", async () => {
+      sessionIs(revealed);
+      readStandingsMock.mockResolvedValue(null);
+      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+
+      const response = await call(end, { version: revealed.version });
+      expect(response.status).toBe(200);
+
+      const [transition] = applyHostActionMock.mock.calls[0]!;
+      const next = await transition(revealed, NOW + 9_000);
+
+      expect(next).not.toBeNull();
+      expect(next.phase).toBe("ended");
+      expect(next.standings).toBeNull();
+    });
+
+    /**
+     * Ending from a leaderboard beat takes the fresh board, never the one already on the
+     * document. The two differ whenever an answer landed after the beat was shown, and a
+     * constructor that carried `current.standings` would freeze the room on the older one
+     * — invisible on screen, since both look like a leaderboard.
+     */
+    it("does not carry the board the session was already showing", async () => {
+      sessionIs(standings);
+      readStandingsMock.mockResolvedValue(board);
+      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+
+      await call(end, { version: standings.version });
+
+      const [transition] = applyHostActionMock.mock.calls[0]!;
+      const next = await transition(standings, NOW + 9_000);
+
+      expect(next.standings).toEqual(board);
+      expect(next.standings).not.toEqual(standings.standings);
+    });
   });
 
   describe("the confirmation guard", () => {
