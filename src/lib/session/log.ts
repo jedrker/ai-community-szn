@@ -208,7 +208,25 @@ type LogFields = {
     /** S-03: the question closed, or a different one is open, before the answer landed. */
     | "not-open"
     /** S-03: this player already answered this question. FR-004 makes the first final. */
-    | "already-answered";
+    | "already-answered"
+    /**
+     * S-09: the claiming device has already registered its allowance (FR-018).
+     *
+     * The class, never the device id — which would be a stable handle on one phone in a
+     * stream retained ~1 hour and covered by no TTL, no purge and no rollback. A count
+     * of these lines is what a host actually needs: a burst says someone is farming, and
+     * a steady trickle says the cap is landing on honest shared handsets.
+     */
+    | "capped"
+    /**
+     * S-09: the claim carried no device id at all.
+     *
+     * Worth its own class rather than folding into `invalid`, because the two mean
+     * different things about who is calling. This one is either a page cached from
+     * before the guard shipped — recoverable by reloading, which is what the message
+     * says — or a caller that is not our client, since `device.ts` always sends a value.
+     */
+    | "no-device";
 };
 
 /**

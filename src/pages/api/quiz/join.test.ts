@@ -164,6 +164,62 @@ describe("claiming a name", () => {
     expect(String(ended.error)).toContain("zakończona");
   });
 
+  /**
+   * THE CAP, AS THE ATTENDEE MEETS IT (roadmap S-09, FR-018).
+   *
+   * `capped` and `taken` are both 409s and both ordinary, but they are not the same
+   * answer: `taken` invites another name, `capped` is final for this device. Copy that
+   * blurred them would send someone through three more refusals before they learned the
+   * reason, so the messages are asserted to differ rather than merely to exist.
+   */
+  it("refuses a device at its allowance with copy that does not invite another name", async () => {
+    claimPlayerMock.mockResolvedValue({ outcome: "taken", state: lobby });
+    const taken = await body(await join({ request: claiming({ displayName: "Anna" }) } as never));
+
+    claimPlayerMock.mockResolvedValue({ outcome: "capped", state: lobby });
+    const response = await join({ request: claiming({ displayName: "Anna" }) } as never);
+    const capped = await body(response);
+
+    expect(response.status).toBe(409);
+    expect(capped.error).not.toBe(taken.error);
+    expect(String(capped.error)).toContain("urządzenia");
+    // The retry prompt belongs to `taken` alone — this one has nothing to retry with.
+    expect(String(capped.error)).not.toContain("Wybierz inną");
+  });
+
+  /**
+   * THE ABSENT FIELD (roadmap S-09; `lessons.md`, "absent untrusted input must fail
+   * toward the safe end").
+   *
+   * A claim carrying no device id is refused rather than counted against nothing. The
+   * assertion that matters is `claimPlayer` never being reached: a route that let the
+   * request through and simply passed an empty string would still answer 400-ish under
+   * some later edit while quietly claiming a player, and the cap would be bypassed by
+   * omitting one field.
+   *
+   * Note the fixture uses `request`, not `claiming` — the helper that supplies a device
+   * id would put this test on the *present* path, which is the failure `lessons.md`
+   * records under "prove the fixture reaches the branch".
+   */
+  it("refuses a claim that carries no device id, without reaching the store", async () => {
+    const response = await join({ request: request({ displayName: "Anna" }) } as never);
+
+    expect(response.status).toBe(400);
+    expect(claimPlayerMock).not.toHaveBeenCalled();
+    // Recoverable in one tap — the honest way to hit this is a page cached from before
+    // the guard shipped.
+    expect(String((await body(response)).error)).toContain("Odśwież");
+  });
+
+  it("refuses a claim whose device id is present but empty", async () => {
+    const response = await join({
+      request: request({ displayName: "Anna", deviceId: "" }),
+    } as never);
+
+    expect(response.status).toBe(400);
+    expect(claimPlayerMock).not.toHaveBeenCalled();
+  });
+
   it("surfaces an unconfigured store as 503", async () => {
     claimPlayerMock.mockResolvedValue({ outcome: "unconfigured", reason: "no url" });
 
@@ -205,6 +261,44 @@ describe("a device coming back", () => {
 
     await join({ request: request({ playerId: "player-abc" }) } as never);
 
+    expect(claimPlayerMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * THE EXEMPTION (roadmap S-09, FR-018 against FR-009).
+   *
+   * The cap governs the claim path and never this one. A phone that legitimately
+   * registered three players and then locked its screen must come back as itself; a
+   * guard that refused it would turn a lightweight anti-farming counter into something
+   * that eliminates a player, losing a score already earned.
+   *
+   * The request deliberately carries **no** device id, which is what a resume actually
+   * sends — so this fails if a future edit hoists the device-id guard to the top of the
+   * handler, which is the natural place to put it and the one place it must not go.
+   */
+  it("resumes a device that sends no device id at all, so the cap can never refuse it", async () => {
+    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+
+    const response = await join({ request: request({ playerId: "player-abc" }) } as never);
+
+    expect(response.status).toBe(200);
+    expect((await body(response)).resumed).toBe(true);
+  });
+
+  /**
+   * The same property from the other side: even a device that presents an id AND is at
+   * its allowance resumes, because nothing on this path asks the store to claim — and
+   * `capped` can only ever come back from a claim.
+   */
+  it("resumes without consulting the cap even when a device id is present", async () => {
+    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+    claimPlayerMock.mockResolvedValue({ outcome: "capped", state: lobby });
+
+    const response = await join({
+      request: request({ playerId: "player-abc", deviceId: "device-xyz" }),
+    } as never);
+
+    expect(response.status).toBe(200);
     expect(claimPlayerMock).not.toHaveBeenCalled();
   });
 
@@ -334,5 +428,35 @@ describe("what joining must never do", () => {
     // `reason`, which is where it used to sit and where a display name would also fit.
     expect(lines).toContain('"rejection":"taken"');
     expect(lines).not.toContain('"reason"');
+  });
+
+  /**
+   * The same rule, for the identifier S-09 introduced.
+   *
+   * A device id in a log line is a stable handle on one phone, in a stream retained
+   * ~1 hour and covered by no TTL, no purge and no rollback — so it would outlive the
+   * session document the whole retention guardrail is built around. The class is what a
+   * host needs anyway: a burst of these says someone is farming.
+   */
+  it("logs the capped class without the device id", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    claimPlayerMock.mockResolvedValue({ outcome: "capped", state: lobby });
+
+    await join({ request: claiming({ displayName: "Anna" }) } as never);
+
+    const lines = log.mock.calls.map(([first]) => String(first)).join("\n");
+    expect(lines).toContain('"rejection":"capped"');
+    expect(lines).not.toContain(DEVICE);
+  });
+
+  it("logs the no-device class, distinctly from an invalid name", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await join({ request: request({ displayName: "Anna" }) } as never);
+
+    const lines = log.mock.calls.map(([first]) => String(first)).join("\n");
+    // Its own class: this one says "reload the page", `invalid` says "fix your name".
+    expect(lines).toContain('"rejection":"no-device"');
+    expect(lines).not.toContain('"rejection":"invalid"');
   });
 });

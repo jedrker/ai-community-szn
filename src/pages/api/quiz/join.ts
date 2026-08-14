@@ -22,6 +22,24 @@ import { claimPlayer, readPlayerById } from "../../../lib/session/store";
  * same thing — to be in, with the current state — and the client asks the question
  * once either way.
  *
+ * ## THE EXEMPTION: the cap governs the claim path and never the resume path
+ *
+ * S-09 added a per-device player cap (FR-018). **The `playerId` branch does not consult
+ * it, must not consult it, and does not even read the device id**, which is why that read
+ * sits below rather than at the top of the handler.
+ *
+ * The two requirements pull in opposite directions on one fact — resume needs the device
+ * remembered, the cap needs it counted — and applying the cap to a resume converts a
+ * lightweight anti-farming counter into something that eliminates a player. Concretely:
+ * a phone that legitimately registered three players and then locked its screen would be
+ * refused on the way back and lose a score it had already earned, which is the exact
+ * failure FR-009 exists to prevent, reached through the guard rather than through the
+ * front door.
+ *
+ * The ordering above already delivers this — the resume branch returns before the guard
+ * — but "correct because of where the code happens to sit" is not a property anyone can
+ * see when editing. `join.test.ts` names it.
+ *
  * **Deliberately open, with no host secret**, on the same reasoning as
  * `/api/quiz/token`: the room is trusted for the length of one session, there are no
  * accounts, and an IP-keyed throttle was rejected during planning because a venue
@@ -137,6 +155,7 @@ export const POST: APIRoute = async ({ request }) => {
    */
   const deviceId = form.get("deviceId");
   if (typeof deviceId !== "string" || deviceId.length === 0) {
+    logSessionEvent("session.join.rejected", { rejection: "no-device" });
     return json(400, { error: MESSAGES.noDevice });
   }
 
@@ -148,7 +167,10 @@ export const POST: APIRoute = async ({ request }) => {
 
   const claim = await claimPlayer(validated.key, record, deviceId);
 
+  // 409 rather than 403: like `taken`, this is an outcome about the request against the
+  // room's current state, not a permission the attendee could ever have been granted.
   if (claim.outcome === "capped") {
+    logSessionEvent("session.join.rejected", { rejection: "capped" });
     return json(409, { error: MESSAGES.capped });
   }
 

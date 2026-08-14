@@ -613,31 +613,31 @@ requires, avoids it entirely.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 The single-`eval` assertion in `store.test.ts` still passes
-- [x] 2.4 The cap boundary test fails with the `-3` branch removed, passes when restored
-- [x] 2.5 The "taken consumes no slot" test fails with the `HINCRBY` moved above the collision check
+- [x] 2.1 Unit tests pass: `bun run test` — 893575f
+- [x] 2.2 Type checking passes: `bun run type-check` — 893575f
+- [x] 2.3 The single-`eval` assertion in `store.test.ts` still passes — 893575f
+- [x] 2.4 The cap boundary test fails with the `-3` branch removed, passes when restored — 893575f
+- [x] 2.5 The "taken consumes no slot" test fails with the `HINCRBY` moved above the collision check — 893575f
 
 #### Manual
 
-- [x] 2.6 Nothing user-visible changed — no claim is capped yet
+- [x] 2.6 Nothing user-visible changed — no claim is capped yet — 893575f
 
 ### Phase 3: The route, and the resume exemption
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 `boundary.test.ts` passes for the new `<script>` usage
-- [ ] 3.4 The exemption test fails when the cap is applied to the `playerId` branch
-- [ ] 3.5 The absent-`deviceId` test fails when the guard is removed
+- [x] 3.1 Unit tests pass: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 `boundary.test.ts` passes for the new `<script>` usage
+- [x] 3.4 The exemption test fails when the cap is applied to the `playerId` branch
+- [x] 3.5 The absent-`deviceId` test fails when the guard is removed
 
 #### Manual
 
-- [ ] 3.6 Joining from a fresh device works and lands inside the 30-second target
-- [ ] 3.7 A fourth claim is refused with copy that does not read as "try another name"
-- [ ] 3.8 A capped device still resumes its existing player on reload
+- [x] 3.6 Joining from a fresh device works and lands inside the 30-second target
+- [x] 3.7 A fourth claim is refused with copy that does not read as "try another name"
+- [x] 3.8 A capped device still resumes its existing player on reload
 
 ### Phase 4: The phone — score-intact resume and a recoverable refusal
 
