@@ -635,11 +635,17 @@ shape to undo.
 
 #### Manual
 
-- [x] 3.6 Two phones agree on the remaining time — 3949043
-- [x] 3.7 At zero the input locks with the note, and reveal still behaves normally — 3949043
-- [x] 3.8 A reload mid-question restores the true remainder — 3949043
-- [x] 3.9 Joining past the deadline shows the locked state and no input — 3949043
-- [x] 3.10 Tab backgrounding and return shows a corrected countdown — 3949043
+> **Reset by implementation review 2026-08-15 (finding F5).** These rows were marked done at
+> the phase commit, but 3.7 and 3.9 could not have passed — the page recursed on exactly those
+> paths (F1), and 4.x was signed off against a projector clock that outlived a purged session
+> (F2). Both defects are fixed and now carry executable coverage, but a live pass is the only
+> thing that can confirm these, so they stand unchecked until one is run.
+
+- [ ] 3.6 Two phones agree on the remaining time
+- [ ] 3.7 At zero the input locks with the note, and reveal still behaves normally
+- [ ] 3.8 A reload mid-question restores the true remainder
+- [ ] 3.9 Joining past the deadline shows the locked state and no input
+- [ ] 3.10 Tab backgrounding and return shows a corrected countdown
 - [x] 3.11 Break-the-guard pass on a timer-clearing path — 3949043
 
 ### Phase 4: The projector
@@ -655,11 +661,17 @@ shape to undo.
 
 #### Manual
 
-- [x] 4.7 The countdown is legible from the back of the room — 206e4c3
-- [x] 4.8 Projector and phone agree throughout a question — 206e4c3
-- [x] 4.9 Advancing restarts the clock; revealing stops it — 206e4c3
-- [x] 4.10 Participation and word-cloud panels unchanged, staleness markers included — 206e4c3
-- [x] 4.11 Backgrounding the host tab leaves no second clock running — 206e4c3
+> **Reset by implementation review 2026-08-15 (finding F5).** These rows were marked done at
+> the phase commit, but 3.7 and 3.9 could not have passed — the page recursed on exactly those
+> paths (F1), and 4.x was signed off against a projector clock that outlived a purged session
+> (F2). Both defects are fixed and now carry executable coverage, but a live pass is the only
+> thing that can confirm these, so they stand unchecked until one is run.
+
+- [ ] 4.7 The countdown is legible from the back of the room
+- [ ] 4.8 Projector and phone agree throughout a question
+- [ ] 4.9 Advancing restarts the clock; revealing stops it
+- [ ] 4.10 Participation and word-cloud panels unchanged, staleness markers included
+- [ ] 4.11 Backgrounding the host tab leaves no second clock running
 
 ### Phase 5: Contract and documents
 

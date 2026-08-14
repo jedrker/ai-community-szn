@@ -132,30 +132,30 @@ describe("there is exactly one poll loop", () => {
    * someone declares `let cloudTimer` beside it. Verified by adding exactly that and watching
    * the test pass. Counting *any* timer-ish declaration is what the assertion always meant.
    *
-   * S-11 raised the handle count from one to two — the poll's and the countdown's — and the
-   * number is pinned rather than dropped: a *third* is a change nobody has reasoned about.
-   * Both are named, so "two" cannot be satisfied by any two timers. `polling` and the delay
-   * stay at one each, because they belong to the fetching loop alone.
+   * S-11 raised the handle count to two while the countdown was inline, then an
+   * implementation review sent that state machine to `countdown.ts` — so the number is back
+   * to one, and the name is pinned so "one" cannot be satisfied by some other timer.
+   * `polling` and the delay stay at one each, because they belong to the fetching loop alone.
    */
-  it("holds exactly two timer handles, one in-flight flag and one delay", () => {
-    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(2);
+  it("holds exactly one timer handle, one in-flight flag and one delay", () => {
+    // S-11 briefly made this two, when the countdown was inline. Extracting that state
+    // machine into `countdown.ts` — after a review found it outliving a purged session —
+    // returned this page to one timer, which is the number the property always wanted.
+    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(1);
     expect(CODE).toContain("let pollTimer");
-    expect(CODE).toContain("let countdownTimer");
 
     expect(CODE.match(/\blet\s+polling\b/g) ?? []).toHaveLength(1);
     expect(CODE.match(/\blet\s+\w*[Dd]elay\b/g) ?? []).toHaveLength(1);
   });
 
-  it("clears each timer inside its own stop function, once", () => {
-    // One `clearTimeout` per timer, each in the function that owns it — so neither can be
-    // cancelled from a branch with no business doing it.
-    expect(occurrences("clearTimeout")).toBe(2);
+  it("clears the polled timer from exactly one place", () => {
+    // One `clearTimeout` in the file, inside the function that owns the poll — so the loop
+    // cannot be cancelled from a branch with no business doing it. The countdown's own
+    // cancellation lives in `countdown.ts` and is tested there.
+    expect(occurrences("clearTimeout")).toBe(1);
 
     const stopPolling = /function stopPolling\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
-    const stopCountdown = /function stopCountdown\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
-
     expect(stopPolling.split("clearTimeout").length - 1).toBe(1);
-    expect(stopCountdown.split("clearTimeout").length - 1).toBe(1);
   });
 
   /**
@@ -227,7 +227,7 @@ describe("the countdown cannot outlive its question", () => {
     expect(panel).toContain("state.phase");
     // Arm-only. A clear here would re-create the split that hid the bug above.
     expect(panel).not.toContain("stopCountdown()");
-    expect(panel).toContain("paintCountdown()");
+    expect(panel).toContain("countdown.start(");
   });
 
   it("stops wherever the poll stops", () => {
@@ -263,7 +263,7 @@ describe("the countdown cannot outlive its question", () => {
     // this page happened to paint would disagree with all 150 of them.
     const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
-    expect(panel).toContain("state.updatedAt + limitMs");
+    expect(panel).toContain("countdown.start(state.updatedAt");
   });
 });
 

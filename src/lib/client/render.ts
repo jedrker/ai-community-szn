@@ -669,16 +669,32 @@ export function countdownText(remainingMs: number): string {
  * `countdownText`'s posture on the same inputs.
  */
 export function renderCountdown(node: HTMLElement, remainingMs: number, limitMs: number): void {
+  /**
+   * **Clamped into `[0, limitMs]` once, and the text uses the same clamped value as the
+   * bar** (impl review F6). The remainder mixes a server timestamp with the device's own
+   * clock, so a phone several minutes behind computes a remainder *larger than the whole
+   * budget* — which is impossible on a correct clock, and used to render as "325 s" beside
+   * a bar the same code had already clamped to full. Two readings of one number disagreeing
+   * on screen is the failure this helper exists to prevent.
+   *
+   * The opposite skew — a phone running fast — is deliberately **not** treated as
+   * unreliable, because it cannot be distinguished from a question that has genuinely been
+   * open a long time: both are a large negative remainder. Refusing to trust it would
+   * un-lock every legitimate latecomer, which is worse than the case it would fix. A fast
+   * clock costing its owner one question stays the accepted risk, bounded by the server
+   * being the only thing that actually decides.
+   */
+  const usable = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 0;
+  const left = Number.isFinite(remainingMs) ? Math.max(0, Math.min(remainingMs, usable)) : 0;
+
   // The label is a child rather than the node itself, because the node also holds the
   // bar — writing `textContent` on the container would delete it.
   const label = node.querySelector<HTMLElement>("[data-countdown-text]");
-  if (label) label.textContent = countdownText(remainingMs);
+  if (label) label.textContent = countdownText(left);
 
   const bar = node.querySelector<HTMLElement>("[data-countdown-bar]");
   if (!bar) return;
 
-  const usable = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 0;
-  const left = Number.isFinite(remainingMs) ? Math.max(0, Math.min(remainingMs, usable)) : 0;
   const fraction = usable === 0 ? 0 : left / usable;
 
   bar.style.width = `${Math.round(fraction * 100)}%`;

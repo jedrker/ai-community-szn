@@ -59,6 +59,21 @@ One consequence, accepted: on a question whose limit is close to 20 s the speed 
 reachable in the last few seconds. That is why every authored limit sits at or above the
 window, and why a shorter limit is legal but documented as a tradeoff rather than an error.
 
+## The authored budgets, and the one that changed
+
+25 seconds for a question answered by tapping, 30 for one answered by typing
+(`TAP_SECONDS` / `TYPE_SECONDS` in `definition.ts`). Every value sits at or above the
+20-second speed window, which is what keeps the whole reward curve reachable.
+
+**The typed budget was 40 in the plan and shipped as 30.** Recorded here because the plan
+still reads 40 and a later reader would otherwise treat the code as drift: the change was
+made deliberately after Phase 1 landed and applied consistently to the runbook and the
+plan-brief, but no reason was written down at the time. Both values satisfy the constraint
+that matters — at or above the speed window — so the difference is a judgement about how
+long typing a Polish word takes on a phone, and it is the kind of number one live rehearsal
+settles better than any amount of reasoning. Treat it as provisional and re-check it after
+the first real session.
+
 ## Unscored questions have no clock
 
 The schema **requires** `timeLimitSeconds` where `points !== null` and **refuses** it where

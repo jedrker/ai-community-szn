@@ -386,6 +386,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         type ConnectionInfo,
         type ConnectionStatus,
       } from "../../lib/client/session";
+      import { createCountdown } from "../../lib/client/countdown";
       import {
         el,
         renderCountdown,
@@ -1171,88 +1172,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         pollTimer = null;
       }
 
-      /**
-       * THE COUNTDOWN, AND WHY IT IS NOT A SECOND POLL LOOP (roadmap S-11, FR-020).
-       *
-       * `host.test.ts` guards this page against a second *polling* loop, and the reason it
-       * gives is specific: two loops mean two backoffs, two in-flight flags, and two chances
-       * to leave a timer fetching for a panel that is off screen. **This timer fetches
-       * nothing.** It touches no endpoint, has no backoff, no in-flight flag and no failure
-       * mode beyond painting a stale number — so it costs no commands and cannot appear in
-       * the runbook's tripwire, which is a polling detector.
-       *
-       * That distinction is exactly what the rewritten guard in `host.test.ts` now asserts:
-       * one timer arms a `fetch`, and this one is held to a different, narrower rule —
-       * cleared on every render, armed only while a scored question is open.
-       *
-       * Its remainder is computed from the snapshot's `updatedAt` plus the question's own
-       * limit, which is the same arithmetic every phone does from the same two values. The
-       * projector cannot drift from the room because neither side is measuring anything
-       * local.
-       */
-      let countdownTimer: number | null = null;
-      /** What the running clock is counting, so the tick needs no lookup. */
-      let countdownFor: { deadline: number; limitMs: number } | null = null;
-
-      function stopCountdown(): void {
-        if (countdownTimer !== null) {
-          window.clearTimeout(countdownTimer);
-          countdownTimer = null;
-        }
-        countdownFor = null;
-        setHidden(hostCountdownBox, true);
-      }
-
-      /**
-       * Shows the clock for a scored open question, and nothing otherwise.
-       *
-       * **Keyed on the limit's presence, never on a phase list.** The schema decides which
-       * questions have a clock — required when scored, refused when not — and a list here
-       * would be a copy of that rule able to fall behind it. The same reasoning both views
-       * apply to the standings board's visibility.
-       */
-      /**
-       * Arms the clock for a scored open question, and nothing otherwise.
-       *
-       * **Arm-only: the clearing lives at the top of `render`.** This function used to
-       * clear as well, which read as safe and was not — it is called near the end of
-       * `render`, so every early return above it skipped the clear entirely. Splitting the
-       * two means the clear cannot be missed by a branch and this one cannot be reached
-       * without it having already happened.
-       */
-      function renderCountdownPanel(state: State | null): void {
-        if (state === null || state.phase !== "question-open") return;
-        if (state.currentQuestionId === null) return;
-
-        const question = config.questions.find((q) => q.id === state.currentQuestionId);
-        if (question?.timeLimitSeconds === undefined) return;
-
-        const limitMs = question.timeLimitSeconds * 1_000;
-        countdownFor = { deadline: state.updatedAt + limitMs, limitMs };
-
-        setHidden(hostCountdownBox, false);
-        paintCountdown();
-      }
-
-      function paintCountdown(): void {
-        if (countdownFor === null) return;
-
-        // Recomputed from the wall clock every tick rather than decremented, so a projector
-        // whose tab was throttled comes back correct instead of minutes fast.
-        const remaining = countdownFor.deadline - Date.now();
-        renderCountdown(hostCountdownBox, remaining, countdownFor.limitMs);
-
-        // At zero the clock simply stops. Nothing advances, nothing reveals: the host owns
-        // every transition, and the room keeps looking at the question until they act.
-        if (remaining <= 0) return;
-
-        const untilNextSecond = remaining % 1_000 || 1_000;
-        countdownTimer = window.setTimeout(() => {
-          countdownTimer = null;
-          paintCountdown();
-        }, untilNextSecond);
-      }
-
       function schedulePoll(): void {
         // Never two timers, and never a timer stacked behind a request that has not come
         // back. `render` runs on every snapshot, and a snapshot arriving mid-question
@@ -1264,6 +1183,62 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           pollTimer = null;
           void runPoll();
         }, pollDelay);
+      }
+
+      /**
+       * THE COUNTDOWN, AND WHY IT IS NOT A SECOND POLL LOOP (roadmap S-11, FR-020).
+       *
+       * `host.test.ts` guards this page against a second *polling* loop, for a specific
+       * reason: two loops mean two backoffs, two in-flight flags, and two chances to leave
+       * a timer fetching for a panel that is off screen. **This clock fetches nothing.** No
+       * endpoint, no backoff, no failure mode beyond a stale number — so it costs no
+       * commands and cannot appear in the runbook's tripwire, which is a polling detector.
+       *
+       * **Its state machine lives in `countdown.ts`, unit-tested with fake timers.** It was
+       * inline until an implementation review found this page leaving a clock running over
+       * a purged session — a bug the structural scan could not see, because a scan cannot
+       * execute a timer.
+       *
+       * The remainder comes from the snapshot's `updatedAt` plus the question's own limit,
+       * which is the same arithmetic every phone does from the same two values. The
+       * projector cannot drift from the room because neither side measures anything local.
+       *
+       * **Nothing happens at zero.** No `onExpire`: the clock stops and the question stays
+       * on screen, because the host owns every transition and nothing here may move the
+       * session.
+       */
+      const countdown = createCountdown({
+        onPaint: (remainingMs, limitMs) =>
+          renderCountdown(hostCountdownBox, remainingMs, limitMs),
+      });
+
+      function stopCountdown(): void {
+        countdown.stop();
+        setHidden(hostCountdownBox, true);
+      }
+
+      /**
+       * Arms the clock for a scored open question, and nothing otherwise.
+       *
+       * **Arm-only: the clearing lives at the top of `render`.** This function used to
+       * clear as well, which read as safe and was not — it is called near the end of
+       * `render`, so every early return above it skipped the clear entirely. Splitting the
+       * two means the clear cannot be missed by a branch, and this one cannot be reached
+       * without it having already happened.
+       *
+       * **Keyed on the limit's presence, never on a phase or kind list.** The schema
+       * decides which questions carry a clock, and a list here would be a copy of that rule
+       * able to fall behind it — the same reasoning both views apply to the board.
+       */
+      function renderCountdownPanel(state: State | null): void {
+        if (state === null || state.phase !== "question-open") return;
+        if (state.currentQuestionId === null) return;
+
+        const question = config.questions.find((q) => q.id === state.currentQuestionId);
+        if (question?.timeLimitSeconds === undefined) return;
+
+        setHidden(hostCountdownBox, false);
+        countdown.start(state.updatedAt, question.timeLimitSeconds);
       }
 
       /**
