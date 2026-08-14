@@ -53,6 +53,25 @@ import { publicQuiz } from "../../quiz/public";
 const attendeeUrl = new URL("/quiz", Astro.url);
 
 /**
+ * The join address as the room reads it (plan §7, open question 1).
+ *
+ * `www.` is stripped **for display only** — four characters that carry no meaning to
+ * someone typing the address, on the one line of this page that is set for the back of
+ * the room. The QR below still encodes `attendeeUrl.href`, so the canonical URL is what
+ * a scan resolves; a phone that types the shortened form is redirected by the host.
+ */
+const joinDisplayUrl = `${attendeeUrl.host.replace(/^www\./, "")}${attendeeUrl.pathname}`;
+
+/**
+ * How many questions the segment has, for the top strip's counter.
+ *
+ * Read in frontmatter rather than from the `questions` array the `<script>` already
+ * receives, because the total never changes and the strip should carry it on first paint —
+ * before any snapshot has arrived to say which question is current.
+ */
+const questionTotal = publicQuiz.questions.length;
+
+/**
  * The join QR (added 2026-08-08, from the first two-device run).
  *
  * The URL as text was the only way in, and typing it is the slowest step in a flow
@@ -72,244 +91,357 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
   type: "svg",
   errorCorrectionLevel: "M",
   margin: 1,
-  color: { dark: "#0a0a0f", light: "#ffffff" },
+  color: { dark: "#0b0b0c", light: "#ffffff" },
 });
 ---
 
-<html lang="pl" class="bg-surface-primary">
+<html lang="pl" class="bg-quiz-ink">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>LiveQuiz — prowadzący</title>
   </head>
-  <body
-    class="min-h-dvh bg-surface-primary text-text-primary font-archivo antialiased
-           flex flex-col gap-8 px-8 py-6"
-  >
-    <header class="flex flex-wrap items-center justify-between gap-6">
-      <h1 class="text-brand-purple-light text-sm font-bold uppercase tracking-[0.2em]">
-        LiveQuiz — prowadzący
-      </h1>
+  <!--
+    THE PROJECTOR SHELL (signage redesign, step 2).
 
-      <!-- The join affordance, sized for the back of the room: scan, or read the URL
-           off the same block. Both routes to the same place, side by side. -->
-      <div class="flex items-center gap-5">
-        <div class="h-40 w-40 rounded-xl bg-white p-2 [&>svg]:h-full [&>svg]:w-full">
-          <Fragment set:html={joinQrSvg} />
-        </div>
-        <div class="flex flex-col gap-1">
-          <p class="text-text-secondary text-lg">Zeskanuj albo wpisz:</p>
-          <p class="text-3xl font-bold leading-tight break-all">
-            {attendeeUrl.host}{attendeeUrl.pathname}
+    Three fixed regions — a top strip, a body split into stage and rail, and a control bar
+    at the foot — rather than the single scrolling column this page was. The shell is what
+    makes the later steps mechanical: every phase now paints into a slot whose size the
+    room has already learnt, so nothing on the projector moves between questions except the
+    content that is supposed to.
+
+    `h-dvh` with `overflow-hidden`, deliberately. A projector has no scrollbar and nobody
+    is going to reach for one mid-session, so content that overflows must be *visibly*
+    wrong here rather than quietly parked below the fold.
+  -->
+  <body
+    class="flex h-dvh flex-col overflow-hidden bg-quiz-ink font-archivo text-quiz-signwhite
+           antialiased"
+  >
+    <!--
+      THE TOP STRIP: where the room is, and how to get in.
+
+      Both halves stay up for the whole segment, which is the point. The counter answers
+      "how much is left" without the host being asked, and the join address stays reachable
+      for the person who arrives at question four — the previous layout put the QR in a
+      header that scrolled with everything else.
+    -->
+    <header
+      class="flex shrink-0 items-center justify-between border-b-2 border-quiz-divider
+             pt-[56px] pr-[72px] pb-[40px] pl-[72px]"
+    >
+      <p class="flex items-baseline gap-4 leading-none">
+        <span
+          id="question-index"
+          class="text-[96px] font-extrabold tracking-[-0.035em] tabular-nums text-quiz-chrome"
+        >
+          —
+        </span>
+        <span class="text-[48px] font-semibold tabular-nums text-quiz-zinc">
+          / {questionTotal}
+        </span>
+      </p>
+
+      <!-- Scan, or read the address off the same block. Both routes to the same place,
+           side by side, at a size that survives the back of the room. -->
+      <div class="flex items-center gap-8">
+        <div class="flex flex-col items-end gap-2">
+          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+            Wejdź
           </p>
+          <p class="text-[56px] font-extrabold leading-none tracking-[-0.02em]">
+            {joinDisplayUrl}
+          </p>
+        </div>
+        <div class="h-[132px] w-[132px] rounded-[20px] bg-white p-2 [&>svg]:h-full [&>svg]:w-full">
+          <Fragment set:html={joinQrSvg} />
         </div>
       </div>
     </header>
 
-    <!-- Compact, and above the controls: it is the first thing to fix when an action
-         comes back 401, and nothing else on the page works until it is right. -->
-    <section class="flex flex-wrap items-center gap-3">
-      <label for="secret" class="text-text-secondary text-base">Sekret hosta</label>
-      <input
-        id="secret"
-        type="password"
-        autocomplete="off"
-        class="flex-1 min-w-56 rounded-lg border border-surface-border bg-surface-secondary
-               px-3 py-2 text-lg text-text-primary focus:border-brand-purple-light
-               focus:outline-none"
-      />
-      <span id="secret-note" class="text-text-secondary text-base"></span>
-    </section>
+    <div class="flex min-h-0 flex-1">
+      <!--
+        THE STAGE: what the room is reading. One question's worth of content, nothing else.
 
-    <main class="flex flex-1 flex-col gap-8">
-      <!-- The three figures the room and the host read from a distance. -->
-      <section class="grid gap-6 sm:grid-cols-3">
-        <div>
-          <p class="text-text-secondary text-lg uppercase tracking-wide">Faza</p>
-          <p id="phase" class="text-5xl font-bold leading-tight">—</p>
+        `justify-between` so the prompt sits under the strip and the accepted answer lands
+        at the foot of the stage rather than floating wherever the option list happens to
+        end.
+      -->
+      <main
+        class="flex min-w-0 flex-1 flex-col justify-between overflow-hidden pt-[48px]
+               pr-[72px] pb-[40px] pl-[72px]"
+      >
+        <div class="flex min-h-0 flex-col gap-[40px]">
+          <section id="question" class="flex flex-col gap-5"></section>
+
+          <!--
+            The distribution bars, at a reveal (roadmap S-04, FR-005).
+
+            **On the stage, not in the rail**: `renderQuestion` drops the option list when a
+            distribution exists, so these bars *are* the option list at that moment and they
+            carry the same text the room was reading a second earlier. Its own panel, because
+            the count line beside it moved to the rail and the two now hide independently.
+          -->
+          <section id="distribution-panel" hidden>
+            <div id="distribution"></div>
+          </section>
+
+          <!--
+            The word cloud's chips (roadmap S-08, FR-012/FR-015).
+
+            The one panel that fills continuously rather than on a host action, and the
+            reason it exists at all: watching your own word land on the big screen is what
+            proves the session is live. Fed by a **poll**, not by the snapshot — publishing
+            per submission is the O(N^2) fan-out the spine contract forbids. See
+            `/api/quiz/host/words`.
+
+            The chips are stage content; the two counters that say how full the cloud is are
+            rail content, because they are figures about the room rather than about the
+            question.
+          -->
+          <section id="word-cloud-panel" hidden>
+            <div id="word-cloud-words"></div>
+          </section>
+
+          <!--
+            The leaderboard (roadmap S-07, FR-014), and the closing board (S-10, FR-006).
+
+            The published top five, straight off the snapshot — the host's screen sorts
+            nothing, and neither does any phone. That is what makes "no divergence in
+            standings between devices" a property of the design rather than an agreement
+            between four renderers.
+
+            The heading carries an id because the closing beat renames it: the same board is
+            a leaderboard between questions and a result at the end, and a projector that
+            still says "Ranking" after the session closed leaves the room unsure whether
+            anything has finished.
+          -->
+          <section id="standings" hidden class="flex flex-col gap-3">
+            <p
+              id="standings-title"
+              class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc"
+            >
+              Ranking
+            </p>
+            <div id="standings-board"></div>
+          </section>
         </div>
-        <div>
-          <p class="text-text-secondary text-lg uppercase tracking-wide">Uczestnicy</p>
-          <p id="player-count" class="text-7xl font-bold leading-none text-brand-purple-light">
-            —
+
+        <!--
+          The accepted answer for a free-text question, at reveal (roadmap S-05, FR-016).
+
+          A choice question marks its correct option in the list above; a text question has
+          no list to mark, so without this the room sees the answer on 150 phones and
+          nothing on the projector — the failure the host notices from the stage.
+
+          Hidden whenever the field is null, which the schema guarantees for every phase but
+          `question-revealed`.
+        -->
+        <section
+          id="accepted-answer"
+          hidden
+          class="rounded-[20px] border-2 border-quiz-mint bg-quiz-mint-tint px-8 py-6"
+        >
+          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+            Poprawna odpowiedź
           </p>
-        </div>
-        <div>
-          <p class="text-text-secondary text-lg uppercase tracking-wide">Wersja</p>
-          <p id="version" class="text-5xl font-bold leading-tight">—</p>
-        </div>
-      </section>
-
-      <section id="question" class="flex flex-col gap-5"></section>
+          <p
+            id="accepted-answer-value"
+            class="text-[72px] font-extrabold leading-tight tracking-[-0.035em] text-quiz-mint"
+          >
+          </p>
+        </section>
+      </main>
 
       <!--
-        The countdown (roadmap S-11, FR-020).
+        THE RAIL: at most two blocks, and never three.
 
-        **Below the prompt for the reason the participation panel is**: the prompt is what
-        the room is reading, and a clock above it makes the screen about the clock.
-
-        Sized to be read from the back of the room, which is the whole point of putting it
-        here rather than leaving it on 150 phones. It counts the same window the server
-        enforces, from the same timestamp every phone uses, so the projector and the room
-        cannot disagree about how long is left.
-
-        Present only while a scored question is open — the two unscored questions carry no
-        limit, and the word cloud in particular fills until the host reveals it.
+        The room's participation on top — the count for a choice question, the cloud's two
+        figures for a word one, only ever one of them visible — and the clock at the bottom.
+        Everything here is a figure *about the room*; anything about the question belongs on
+        the stage. That division is what keeps the rail readable at a glance from the stage,
+        which is the only reason it is a separate column at all.
       -->
-      <section id="host-countdown" hidden class="flex flex-col gap-2">
-        <div class="flex items-baseline gap-4">
-          <p class="text-text-secondary text-lg uppercase tracking-wide">Pozostały czas</p>
+      <aside
+        class="flex w-[440px] shrink-0 flex-col justify-between border-l-2 border-quiz-divider
+               pt-[48px] pr-[72px] pb-[40px] pl-[56px]"
+      >
+        <div class="flex flex-col gap-[40px]">
+          <!--
+            `answered / joined` while a question is open, and nothing at all for a question
+            kind whose answers cannot be counted.
+
+            Hidden with the `hidden` attribute, which needs no CSS to work — the same reason
+            `setHidden` exists.
+          -->
+          <section id="participation" hidden class="flex flex-col gap-3">
+            <div id="participation-count-box" class="flex flex-col gap-2">
+              <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+                Odpowiedzi
+              </p>
+              <p
+                id="participation-count"
+                class="text-[116px] font-extrabold leading-none tracking-[-0.05em] tabular-nums"
+              >
+                —
+              </p>
+              <!-- Beside the number, not in place of it: the count keeps its last value on a
+                   failed poll, and this is what says the value is not fresh. -->
+              <span id="participation-stale" hidden class="text-[26px] text-quiz-chrome">
+                (nieaktualne)
+              </span>
+            </div>
+          </section>
+
+          <!--
+            The word cloud's two counters.
+
+            How much of the room has written is the figure the host reads to judge when to
+            reveal (impl review F4). Distinct from the word count beside it: thirty attendees
+            can write five words, so the two answer different questions and the cloud alone
+            cannot say how many people have taken part. Both numbers come from the same poll
+            reply, so this costs no extra command.
+
+            It carries the same staleness marker the participation count does, because a
+            cloud that has quietly stopped filling is indistinguishable from a room that has
+            stopped writing.
+          -->
+          <section id="word-cloud" hidden class="flex flex-col gap-[32px]">
+            <div class="flex flex-col gap-2">
+              <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+                Odpowiedzi
+              </p>
+              <p
+                id="word-cloud-answered"
+                class="text-[116px] font-extrabold leading-none tracking-[-0.05em] tabular-nums"
+              >
+                —
+              </p>
+            </div>
+            <div class="flex flex-col gap-2">
+              <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+                Chmura słów
+              </p>
+              <p id="word-cloud-count" class="text-[40px] font-bold leading-none">—</p>
+            </div>
+            <span id="word-cloud-stale" hidden class="text-[26px] text-quiz-chrome">
+              (nieaktualne)
+            </span>
+          </section>
+        </div>
+
+        <!--
+          The countdown (roadmap S-11, FR-020).
+
+          At the foot of the rail, away from the prompt: the room is reading the question,
+          and a clock beside it makes the screen about the clock. Sized to be read from the
+          back of the room, which is the whole point of putting it here rather than leaving
+          it on 150 phones. It counts the same window the server enforces, from the same
+          timestamp every phone uses, so the projector and the room cannot disagree about how
+          long is left.
+
+          Present only while a scored question is open — the two unscored questions carry no
+          limit, and the word cloud in particular fills until the host reveals it.
+        -->
+        <section id="host-countdown" hidden class="flex flex-col gap-4">
+          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+            Pozostały czas
+          </p>
           <p
             data-countdown-text
-            class="text-7xl font-bold leading-none tabular-nums"
+            class="text-[116px] font-extrabold leading-none tracking-[-0.05em] tabular-nums
+                   text-quiz-chrome"
           >
             —
           </p>
-        </div>
-        <div class="h-3 overflow-hidden rounded-full bg-white/10">
-          <div
-            data-countdown-bar
-            class="h-full rounded-full bg-emerald-400 transition-[width] duration-1000 ease-linear"
-            style="width: 100%"
-          >
+          <div class="h-[14px] w-[312px] overflow-hidden rounded-full bg-quiz-divider">
+            <div
+              data-countdown-bar
+              class="h-full rounded-full bg-quiz-chrome transition-[width] duration-1000 ease-linear"
+              style="width: 100%"
+            >
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </aside>
+    </div>
 
+    <!--
+      THE CONTROL BAR: the host's half of the screen, on its own plane.
+
+      Everything the host touches lives here, below a hairline, on `asphalt` — so the room
+      reads the stage and the host reads the bar, and neither has to filter the other out.
+      The flow verbs keep a **fixed order** and never move between phases: which one is
+      reachable changes, where it sits does not, because a button that migrates is one the
+      host has to find again mid-session.
+    -->
+    <footer
+      class="flex shrink-0 flex-col gap-5 border-t-2 border-quiz-divider bg-quiz-asphalt
+             px-[72px] py-[32px]"
+    >
       <!--
-        The accepted answer for a free-text question, at reveal (roadmap S-05, FR-016).
+        The host's own line: the secret, and what the connection is doing.
 
-        A choice question marks its correct option in the list above; a text question has
-        no list to mark, so without this the room sees the answer on 150 phones and
-        nothing on the projector — the failure the host notices from the stage.
-
-        Sized to be read from the back, and hidden whenever the field is null, which the
-        schema guarantees for every phase but `question-revealed`.
+        Above the verbs, because the secret is the first thing to fix when an action comes
+        back 401 and nothing else on this page works until it is right.
       -->
-      <section
-        id="accepted-answer"
-        hidden
-        class="rounded-xl border-2 border-emerald-400 bg-emerald-500/15 px-6 py-5"
-      >
-        <p class="text-text-secondary text-lg uppercase tracking-wide">Poprawna odpowiedź</p>
-        <p id="accepted-answer-value" class="text-6xl font-bold leading-tight"></p>
-      </section>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <label for="secret" class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+          Sekret hosta
+        </label>
+        <input
+          id="secret"
+          type="password"
+          autocomplete="off"
+          class="min-w-72 rounded-[18px] border-2 border-quiz-field-border bg-quiz-ink px-4 py-2
+                 text-[26px] text-quiz-signwhite focus:border-quiz-chrome focus:outline-none"
+        />
+        <span id="secret-note" class="text-[26px] text-quiz-zinc"></span>
+        <p id="connection" class="ml-auto text-[26px] text-quiz-zinc">połączenie: —</p>
+      </div>
 
-      <!--
-        The participation panel (roadmap S-04, FR-005).
+      <div class="flex flex-wrap items-center gap-4">
+        <!--
+          The flow verbs. Which one is offered — and which one is ringed as the next step —
+          is decided by `CONTROL_RULES` and applied by `syncControls`, which is the table's
+          only reader. Nothing here states a phase condition of its own.
 
-        `answered / joined` while a question is open, the room's answers once it is
-        revealed, and nothing at all for a question kind that cannot be answered.
-
-        **Below the prompt, deliberately.** The prompt is what the room is reading; a
-        panel above it pushes the question down the projector and makes the screen about
-        the count rather than about the question.
-
-        Hidden with the `hidden` attribute, which needs no CSS to work — the same reason
-        `setHidden` exists.
-      -->
-      <section id="participation" hidden class="flex flex-col gap-3">
-        <div id="participation-count-box" class="flex items-baseline gap-4">
-          <p class="text-text-secondary text-lg uppercase tracking-wide">Odpowiedzi</p>
-          <p id="participation-count" class="text-7xl font-bold leading-none">—</p>
-          <!-- Beside the number, not in place of it: the count keeps its last value on a
-               failed poll, and this is what says the value is not fresh. -->
-          <span id="participation-stale" hidden class="text-amber-400 text-lg">
-            (nieaktualne)
-          </span>
-        </div>
-        <div id="distribution"></div>
-      </section>
-
-      <!--
-        The word cloud (roadmap S-08, FR-012/FR-015).
-
-        The one panel on this page that fills continuously rather than on a host action,
-        and the reason it exists at all: watching your own word land on the big screen is
-        what proves the session is live. It is fed by a **poll**, not by the snapshot —
-        publishing per submission is the O(N^2) fan-out the spine contract forbids, and a
-        cloud that fills as the room types has no host action to ride. See
-        `/api/quiz/host/words`.
-
-        **Below the prompt for the reason the participation panel is**: the prompt is what
-        the room is reading, and a panel above it pushes the question down the projector.
-
-        The count line sits above the words rather than below, so the host can see the
-        room's progress without reading the cloud — and it carries the same staleness
-        marker the participation count does, because a cloud that has quietly stopped
-        filling is indistinguishable from a room that has stopped writing.
-      -->
-      <section id="word-cloud" hidden class="flex flex-col gap-4">
-        <div class="flex flex-wrap items-baseline gap-x-8 gap-y-2">
-          <!-- How much of the room has written, which is the figure the host reads to judge
-               when to reveal (impl review F4). Distinct from the word count beside it: thirty
-               attendees can write five words, so the two answer different questions and the
-               cloud alone cannot say how many people have taken part. Both numbers come from
-               the same poll reply, so this costs no extra command. -->
-          <div class="flex items-baseline gap-4">
-            <p class="text-text-secondary text-lg uppercase tracking-wide">Odpowiedzi</p>
-            <p id="word-cloud-answered" class="text-4xl font-bold leading-none">—</p>
-          </div>
-          <div class="flex items-baseline gap-4">
-            <p class="text-text-secondary text-lg uppercase tracking-wide">Chmura słów</p>
-            <p id="word-cloud-count" class="text-4xl font-bold leading-none">—</p>
-          </div>
-          <span id="word-cloud-stale" hidden class="text-amber-400 text-lg">
-            (nieaktualne)
-          </span>
-        </div>
-        <div id="word-cloud-words"></div>
-      </section>
-
-      <!--
-        The leaderboard (roadmap S-07, FR-014).
-
-        The published top five, straight off the snapshot — the host's screen sorts
-        nothing, and neither does any phone. That is what makes "no divergence in
-        standings between devices" a property of the design rather than an agreement
-        between four renderers.
-
-        Sized for the back of the room: `MAX_DISPLAY_NAME_LENGTH` is 24 because that is
-        what fits a projected line at this type size, and a name that would still overflow
-        truncates with an ellipsis rather than wrapping — five rows that became seven
-        would push the board off the screen it was measured for.
-      -->
-      <!-- The heading carries an id because the closing beat renames it (roadmap S-10):
-           the same board is a leaderboard between questions and a result at the end, and a
-           projector that still says "Ranking" after the session closed leaves the room
-           unsure whether anything has finished. -->
-      <section id="standings" hidden class="flex flex-col gap-3">
-        <p
-          id="standings-title"
-          class="text-text-secondary text-lg uppercase tracking-wide"
-        >
-          Ranking
-        </p>
-        <div id="standings-board"></div>
-      </section>
-    </main>
-
-    <footer class="flex flex-col gap-4">
-      <div class="flex flex-wrap gap-3">
+          `data-next` rather than a class toggle: the filled and outlined treatments set the
+          same three properties, and two competing utility classes on one element are
+          resolved by stylesheet order rather than by the order they were added. A variant
+          always wins over the base utility, so the state is unambiguous.
+        -->
         <button
           data-action="start"
-          class="rounded-xl bg-brand-purple px-6 py-4 text-2xl font-semibold text-white
-                 disabled:opacity-50"
+          data-next="false"
+          class="rounded-full border-2 border-quiz-pill-border px-8 py-3 text-[40px]
+                 font-semibold tracking-[-0.01em] text-quiz-signwhite
+                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
         >
           start
         </button>
         <button
           data-action="advance"
-          class="rounded-xl bg-brand-purple px-6 py-4 text-2xl font-semibold text-white
-                 disabled:opacity-50"
+          data-next="false"
+          class="rounded-full border-2 border-quiz-pill-border px-8 py-3 text-[40px]
+                 font-semibold tracking-[-0.01em] text-quiz-signwhite
+                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
         >
           dalej
         </button>
         <button
           data-action="reveal"
-          class="rounded-xl bg-brand-purple px-6 py-4 text-2xl font-semibold text-white
-                 disabled:opacity-50"
+          data-next="false"
+          class="rounded-full border-2 border-quiz-pill-border px-8 py-3 text-[40px]
+                 font-semibold tracking-[-0.01em] text-quiz-signwhite
+                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
         >
           pokaż odpowiedź
         </button>
@@ -318,8 +450,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
              backstop, not the interaction. -->
         <button
           data-action="standings"
-          class="rounded-xl bg-brand-purple px-6 py-4 text-2xl font-semibold text-white
-                 disabled:opacity-50"
+          data-next="false"
+          class="rounded-full border-2 border-quiz-pill-border px-8 py-3 text-[40px]
+                 font-semibold tracking-[-0.01em] text-quiz-signwhite
+                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
         >
           pokaż ranking
         </button>
@@ -327,11 +463,26 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
              contract forbids), so this is how the host watches the lobby fill. -->
         <button
           id="refresh"
-          class="rounded-xl border border-surface-border bg-surface-secondary px-6 py-4
-                 text-2xl font-semibold text-text-primary disabled:opacity-50"
+          class="rounded-full border-2 border-quiz-divider px-8 py-3 text-[40px] font-semibold
+                 tracking-[-0.01em] text-quiz-zinc disabled:text-quiz-pill-disabled"
         >
           odśwież
         </button>
+
+        <!-- The phase, which used to be a metric of its own above the prompt. It is the
+             host's own reading of where the session is, so it belongs on the host's plane —
+             and the version beside it, kept in the DOM and out of the hierarchy: nothing on
+             stage needs it, and the closing beat's confirmation quotes it back.
+
+             The join count sits here too for the phases where nothing else shows it. It is
+             the *denominator* of the rail's `answered / joined` while a question is open,
+             and the lobby will put it on the stage at full size — between the two, this is
+             the host's own copy of a figure they should never have to ask for. -->
+        <p class="ml-auto flex items-baseline gap-4">
+          <span id="phase" class="text-[26px] font-semibold uppercase tracking-[0.16em]">—</span>
+          <span id="player-count" class="text-[26px] tabular-nums text-quiz-zinc">—</span>
+          <span id="version" class="text-[26px] tabular-nums text-quiz-pill-disabled">—</span>
+        </p>
 
         <!--
           The closing beat (roadmap S-10, FR-006), and **the reversal of a deliberate F-03
@@ -339,9 +490,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
           Three things keep that reversal defensible, and all three are load-bearing:
 
-          - **It is set apart.** Pushed to the far end of the row, outlined in red rather
-            than filled in brand purple, and it carries no `data-action` — so a mis-reach
-            lands on a flow verb and the blanket handler that drives them cannot fire it.
+          - **It is set apart.** Pushed past the phase label to the far end of the bar,
+            outlined in `signal` rather than filled like a flow verb, and it carries no
+            `data-action` — so a mis-reach lands on a flow verb and the blanket handler that
+            drives them cannot fire it.
           - **It takes two taps.** The first arms it and rewrites the label; the second
             fires. Any action that moves the session disarms it again, so it can never fire
             into a state the host has not looked at.
@@ -358,15 +510,15 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         <button
           id="end"
           disabled
-          class="ml-auto rounded-xl border-2 border-red-400 px-6 py-4 text-2xl
-                 font-semibold text-red-400 disabled:opacity-50"
+          class="rounded-full border-2 border-quiz-signal px-8 py-3 text-[40px] font-semibold
+                 tracking-[-0.01em] text-quiz-signal disabled:border-quiz-divider
+                 disabled:text-quiz-pill-disabled"
         >
           zakończ sesję
         </button>
       </div>
 
-      <p id="connection" class="text-text-secondary text-base">połączenie: —</p>
-      <p id="message" role="status" aria-live="polite" class="text-xl"></p>
+      <p id="message" role="status" aria-live="polite" class="text-[40px] leading-[52px]"></p>
     </footer>
 
     <script
@@ -431,10 +583,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const countBox = el("participation-count-box");
       const staleMark = el("participation-stale");
       const distributionBox = el("distribution");
+      /**
+       * The stage-side panels the redesign split off from their rail-side counters.
+       *
+       * `participation` and `word-cloud` are figures about the room and live in the rail;
+       * the bars and the chips are about the question and live on the stage. Two boxes mean
+       * two visibility decisions where there used to be one — both are made from the same
+       * predicate below, so the halves cannot come apart.
+       */
+      const distributionPanel = el("distribution-panel");
       const acceptedAnswerBox = el("accepted-answer");
       const standingsBox = el("standings");
       const standingsBoard = el("standings-board");
       const wordCloudBox = el("word-cloud");
+      const wordCloudPanel = el("word-cloud-panel");
       const wordCloudWords = el("word-cloud-words");
       const wordCloudStale = el("word-cloud-stale");
       const hostCountdownBox = el("host-countdown");
@@ -630,10 +792,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            */
           el("connection").className =
             status === "connected"
-              ? "text-text-secondary text-base"
+              ? "ml-auto text-[26px] text-quiz-zinc"
               : status === "degraded"
-                ? "text-amber-300 text-base"
-                : "text-red-400 text-base";
+                ? "ml-auto text-[26px] text-quiz-chrome"
+                : "ml-auto text-[26px] text-quiz-signal";
         },
       });
 
@@ -738,7 +900,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           state.phase === "question-revealed" ? state.revealedDistribution : null;
         const showCount = pollTargetFor(state)?.kind === "participation";
 
-        setHidden(participationBox, !showCount && distribution === null);
+        // The rail's count and the stage's bars now hide independently, because they sit in
+        // different regions — but both answers come from the one predicate, so a bar list
+        // can still never appear for a question whose poll is not running.
+        setHidden(participationBox, !showCount);
+        setHidden(distributionPanel, distribution === null);
         setHidden(countBox, !showCount);
         setHidden(staleMark, !answeredStale);
 
@@ -784,6 +950,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         // `question-revealed`, and only `pollWanted` stops the ticks. That split is what lets
         // the host talk over a frozen cloud.
         setHidden(wordCloudBox, !isCloud);
+        setHidden(wordCloudPanel, !isCloud);
         setHidden(wordCloudStale, !cloudStale);
 
         if (!isCloud) return;
@@ -918,13 +1085,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       };
 
       /**
-       * The highlight on the next step. A ring rather than a size or padding change: the
-       * button row is measured for a projector and sits in a `flex-wrap` container, so a
-       * button that grew when it became the next step would reflow the whole row mid-session.
-       */
-      const NEXT_STEP_CLASSES = ["ring-4", "ring-white/70"];
-
-      /**
        * The phase rules above, applied to the buttons.
        *
        * Called from `render` AND from `fire`'s `finally`, because that block re-enables
@@ -948,10 +1108,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           if (!allowed && reason !== undefined) button.title = reason;
           else button.removeAttribute("title");
 
-          const isNext = allowed && action === rule.next;
-          for (const className of NEXT_STEP_CLASSES) {
-            button.classList.toggle(className, isNext);
-          }
+          /**
+           * The highlight on the next step: exactly one filled chrome pill on the bar, and
+           * the rationing is what makes it read as an instruction rather than as decoration.
+           *
+           * **A `data-` flag rather than a class toggle.** The filled and the outlined
+           * treatments set the same three properties, and two competing utilities on one
+           * element are resolved by stylesheet order — not by the order they were added — so
+           * a toggled `text-quiz-ink` could silently lose to the base `text-quiz-signwhite`.
+           * A variant always wins over the base utility it overrides.
+           *
+           * Geometry is identical in both states on purpose: the bar is measured for a
+           * projector, and a pill that grew when it became the next step would reflow the
+           * whole row mid-session.
+           */
+          button.dataset.next = String(allowed && action === rule.next);
         }
       }
 
@@ -1007,13 +1178,16 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
         if (state === null) {
           setText("phase", "brak sesji");
+          setText("question-index", "—");
           setText("player-count", "—");
           setText("version", "—");
           liveCount = null;
           setHidden(participationBox, true);
+          setHidden(distributionPanel, true);
           setHidden(acceptedAnswerBox, true);
           setHidden(standingsBox, true);
           setHidden(wordCloudBox, true);
+          setHidden(wordCloudPanel, true);
           stopPolling();
           /**
            * A purge or an expiry, so the next session starts from nothing. Without this the
@@ -1038,6 +1212,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         setText("phase", PHASE_LABELS[state.phase] ?? state.phase);
         setText("player-count", liveCount ?? state.playerCount);
         setText("version", state.version);
+
+        /**
+         * The top strip's counter.
+         *
+         * Derived from the question's position in the published definition rather than from
+         * a field on the snapshot: the order is the definition's, the page already holds it,
+         * and a number on the wire would be a second copy able to disagree with the prompt
+         * beneath it. `—` in a phase with no current question, which is the lobby and the
+         * gap between a purge and the next `start`.
+         *
+         * One-based, because it is read by a room rather than by a program.
+         */
+        const questionPosition = config.questions.findIndex(
+          (candidate) => candidate.id === state.currentQuestionId
+        );
+        setText("question-index", questionPosition < 0 ? "—" : questionPosition + 1);
 
         // Before any panel renders, so neither can paint the previous question's numbers
         // under a new prompt. Both polled panels read the state this clears.
@@ -1144,9 +1334,18 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         else stopPolling();
       }
 
+      /**
+       * Still binary, and still wrong about two of its callers — `applied:false` and the
+       * closing button's arming line are neither a success nor a failure. Widening it to a
+       * register is step 6 of the redesign and is deliberately a separate commit: it is the
+       * one behavioural change in the whole thing, and it should be revertable without
+       * taking the styling with it. This step only re-sizes the line for the control bar.
+       */
       function say(text: string, bad: boolean): void {
         setText("message", text);
-        el("message").className = bad ? "text-xl text-red-400" : "text-xl text-emerald-400";
+        el("message").className = bad
+          ? "text-[40px] leading-[52px] text-quiz-signal"
+          : "text-[40px] leading-[52px] text-quiz-mint";
       }
 
       function stopPolling(): void {
