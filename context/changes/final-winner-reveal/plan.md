@@ -556,9 +556,9 @@ for free.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 A failed rank read in `ended` yields 200 with a total and a null rank
+- [x] 2.1 Unit tests pass: `bun run test` — 404f7c3
+- [x] 2.2 Type checking passes: `bun run type-check` — 404f7c3
+- [x] 2.3 A failed rank read in `ended` yields 200 with a total and a null rank — 404f7c3
 
 #### Manual
 
@@ -569,9 +569,9 @@ for free.
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 `boundary.test.ts` still passes
+- [x] 3.1 Unit tests pass: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 `boundary.test.ts` still passes
 
 #### Manual
 

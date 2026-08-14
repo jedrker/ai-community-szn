@@ -517,16 +517,28 @@ import { publicQuiz } from "../../quiz/public";
          * copies of one rule and the next branch added would inherit none of them — the
          * board would then survive into a question and sit under it. The standings branch
          * unhides it as its first act.
+         *
+         * **Keyed on the field, not on the phase** (roadmap S-10). Two phases carry a board
+         * now — the beat and the close — and the schema is what decides which; a phase list
+         * here would be a second copy of that rule, and the copy is what falls behind. Same
+         * rule the host view uses, for the same reason.
          */
-        setHidden(standingsBox, state === null || state.phase !== "standings");
+        setHidden(standingsBox, state === null || state.standings === null);
 
-        // `null` here is what a purge looks like from a phone. Render it as the end of
-        // the session, never as the name form — the session really is over, and sending
-        // someone back to a form they cannot complete is the worse of the two wrongs.
+        /**
+         * The session is over — either closed by the host (`ended`) or gone (`null`, which
+         * is what a purge looks like from a phone).
+         *
+         * **The two halves diverge below, and S-10 is why.** Everything in this block is
+         * common: the answering state must go in both cases. What follows it splits, because
+         * a closed session has a result to show and a purged one has nothing at all —
+         * including no rank state worth keeping.
+         *
+         * Rendered as the end of the session either way, never as the name form: the session
+         * really is over, and sending someone back to a form they cannot complete is the
+         * worse of the two wrongs.
+         */
         if (state === null || state.phase === "ended") {
-          setText("follow-status", "To już koniec. Dzięki za grę!");
-          setHidden(questionBox, true);
-          hideAnswerControls();
           // Question ids are stable across sessions, so paint times left behind here
           // would be read back by the next one and score this device at the floor.
           // This is the one moment every still-watching device agrees it is over.
@@ -544,16 +556,6 @@ import { publicQuiz } from "../../quiz/public";
           selections.clear();
           results.clear();
           resultRequested.clear();
-          /**
-           * The same cleanup for the same reason, and it is not hypothetical (roadmap
-           * S-07). A host who purges and restarts mid-event gets a session whose versions
-           * begin again at 1, so a stale `rankVersion` from the previous room can match a
-           * beat in the new one — and this device would then show a position it earned in
-           * a session that no longer exists, without issuing a fetch that would correct it.
-           */
-          rank = null;
-          rankVersion = null;
-          rankPending = false;
           // The field itself is a live DOM element and holds its own value; without
           // this the reconciliation guard sees an unchanged question id and never
           // rewrites it.
@@ -563,6 +565,34 @@ import { publicQuiz } from "../../quiz/public";
           delete answerNumber.dataset.questionId;
           answerWord.value = "";
           delete answerWord.dataset.questionId;
+
+          /**
+           * THE SPLIT (roadmap S-10). A purged session clears the rank state; a closed one
+           * must not.
+           *
+           * The clearing half is not hypothetical (roadmap S-07): a host who purges and
+           * restarts mid-event gets a session whose versions begin again at 1, so a stale
+           * `rankVersion` from the previous room can match a beat in the new one — and this
+           * device would then show a position it earned in a session that no longer exists,
+           * without issuing a fetch that would correct it.
+           *
+           * Doing the same on `ended` would be worse than useless: `renderBoard` below keys
+           * its one fetch per beat on `rankVersion !== state.version`, and `render()` runs
+           * again on every connection transition, so clearing here would re-issue the
+           * request on each one — a fetch loop on the closing screen, which is the moment
+           * every device in the room is still watching.
+           */
+          if (state === null) {
+            setText("follow-status", "To już koniec. Dzięki za grę!");
+            setHidden(questionBox, true);
+            hideAnswerControls();
+            rank = null;
+            rankVersion = null;
+            rankPending = false;
+            return;
+          }
+
+          renderBoard(state);
           return;
         }
 
@@ -574,7 +604,7 @@ import { publicQuiz } from "../../quiz/public";
         }
 
         if (state.phase === "standings") {
-          renderStandingsBeat(state);
+          renderBoard(state);
           return;
         }
 
@@ -609,7 +639,8 @@ import { publicQuiz } from "../../quiz/public";
       }
 
       /**
-       * The leaderboard beat, on the attendee's own phone (roadmap S-07, FR-014).
+       * The leaderboard, on the attendee's own phone — **the beat and the close, in one
+       * function** (roadmap S-07, FR-014; extended by S-10, FR-006).
        *
        * Two halves that fail independently, and keeping them independent is the point:
        *
@@ -620,22 +651,42 @@ import { publicQuiz } from "../../quiz/public";
        * - **The position is per device** and arrives from `/api/quiz/result`. A failure
        *   costs this one line and nothing else — the same split S-03 established for the
        *   accepted answer and the score, and for the same reason.
+       *
+       * **One function rather than a closing copy of it**, because the version-keyed fetch
+       * below has a guard that took an implementation review to get right (F6). A second
+       * copy would be a second chance to get it wrong, on the screen the room ends on.
+       * What the phase changes is the heading and the winner's emphasis.
        */
-      function renderStandingsBeat(state: NonNullable<ReturnType<SessionClient["current"]>>): void {
-        setText("follow-status", "Ranking");
+      function renderBoard(state: NonNullable<ReturnType<SessionClient["current"]>>): void {
+        const closing = state.phase === "ended";
+        const board = state.standings;
+
+        setText(
+          "follow-status",
+          closing
+            ? // A close whose board read failed lands here with nothing to show, and says
+              // what it always said rather than promising a result that is not coming.
+              board === null
+              ? "To już koniec. Dzięki za grę!"
+              : "Koniec! Oto wyniki."
+            : "Ranking"
+        );
         setHidden(questionBox, true);
         hideAnswerControls();
         setHidden(resultPanel, true);
         setHidden(answerAccepted, true);
-
-        const board = state.standings;
 
         renderStandings(standingsBoard, board?.rows, {
           // Its own row, matched on the name this device stored — which is the one the
           // server returned, so exact equality is enough and no fold is needed. See
           // `renderStandings`.
           ownDisplayName: player?.displayName ?? null,
-          list: "flex flex-col gap-2",
+          // The winner set apart at the close, as a first-child variant rather than a new
+          // `renderStandings` option: it is presentation, and the renderer's job is the
+          // published order. `[&>li:first-child>span]` reaches the spans a row is built from.
+          list: closing
+            ? "flex flex-col gap-2 [&>li:first-child>span]:text-2xl"
+            : "flex flex-col gap-2",
           row: "grid grid-cols-[auto_1fr_auto] items-baseline gap-4 rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl",
           rowOwn: "border-brand-purple-light bg-brand-purple/20 font-semibold",
           rank: "tabular-nums text-text-secondary",
@@ -651,9 +702,22 @@ import { publicQuiz } from "../../quiz/public";
           return;
         }
 
+        /**
+         * A close whose board read failed (roadmap S-10). `render()` hides the whole section
+         * when there is no board, so a position fetched here would paint into a hidden line
+         * — one request per device spent on nothing, on the one path where the store is
+         * already known to be struggling. Unreachable in the `standings` phase, where the
+         * schema requires a board.
+         */
+        if (board === null) {
+          setText("standings-you", "");
+          return;
+        }
+
         // A fresh beat. Keyed by version rather than by question, because the host may
         // show the standings twice between the same pair of questions and each is a new
-        // board — see the note on `rankVersion`.
+        // board — see the note on `rankVersion`. The close is one more such beat: it has
+        // its own version, so it asks once and re-renders freely afterwards.
         if (rankVersion !== state.version) {
           rankVersion = state.version;
           rank = null;
@@ -662,7 +726,20 @@ import { publicQuiz } from "../../quiz/public";
 
           const beat = state.version;
 
-          void fetchResult(player.id, state.currentQuestionId ?? "").then((own) => {
+          /**
+           * **The closing snapshot carries no question id, and the route refuses a request
+           * without one** — a 400, which would reach this device as a silently absent
+           * position. So the close sends the last question in the definition.
+           *
+           * It is not a lie and not a workaround around the gate: `/api/quiz/result` ignores
+           * the field in both the standings and the ended branches, because a *position* is
+           * not about a question. The field stays required there because rejecting a formless
+           * request is the cheaper contract, and this is what paying it looks like.
+           */
+          const askAbout =
+            state.currentQuestionId ?? config.questions[config.questions.length - 1]?.id ?? "";
+
+          void fetchResult(player.id, askAbout).then((own) => {
             /**
              * **Guarded against the LIVE state, not against `rankVersion`** (impl review F6).
              *
@@ -678,9 +755,15 @@ import { publicQuiz } from "../../quiz/public";
              * The phase check also closes the purge hole: versions restart at 1, so a reply
              * captured at version 7 could otherwise land inside a new session's version-7
              * beat.
+             *
+             * **Both board-carrying phases pass it** (roadmap S-10), and the check is on the
+             * board rather than on a phase list for the reason the visibility rule in
+             * `render()` is: the schema decides where a board may appear, and a list here
+             * would be a copy of that rule able to fall behind it. A reply landing after the
+             * room moved to a question still fails — that state carries no board.
              */
             const live = client.current();
-            if (live === null || live.phase !== "standings" || live.version !== beat) return;
+            if (live === null || live.standings === null || live.version !== beat) return;
             rankPending = false;
             rank = own?.rank ?? null;
             // From the live snapshot rather than the captured one — same field either way

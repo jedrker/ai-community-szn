@@ -228,8 +228,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         truncates with an ellipsis rather than wrapping — five rows that became seven
         would push the board off the screen it was measured for.
       -->
+      <!-- The heading carries an id because the closing beat renames it (roadmap S-10):
+           the same board is a leaderboard between questions and a result at the end, and a
+           projector that still says "Ranking" after the session closed leaves the room
+           unsure whether anything has finished. -->
       <section id="standings" hidden class="flex flex-col gap-3">
-        <p class="text-text-secondary text-lg uppercase tracking-wide">Ranking</p>
+        <p
+          id="standings-title"
+          class="text-text-secondary text-lg uppercase tracking-wide"
+        >
+          Ranking
+        </p>
         <div id="standings-board"></div>
       </section>
     </main>
@@ -791,13 +800,32 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          */
         const standings = state.standings;
         setHidden(standingsBox, standings === null);
+        /**
+         * The closing beat (roadmap S-10, FR-006).
+         *
+         * **The same board, told apart by phase and by nothing else.** The visibility rule
+         * above is unchanged and still keys on the field alone — the schema is what decides
+         * where a board may appear, and a phase test there would be a second place for that
+         * rule to live. What the phase decides here is only how it reads: a heading, and the
+         * winner's row set larger than the four under it.
+         *
+         * The emphasis is a first-child variant on the list rather than a new
+         * `renderStandings` option, because it is presentation and the renderer's job is the
+         * published order. `[&>li:first-child>span]` reaches the three spans a row is built
+         * from — see `renderStandings`.
+         */
+        const closing = state.phase === "ended";
+        setText("standings-title", closing ? "Zwycięzca" : "Ranking");
         // The board replaces the question rather than sitting under it. The phase keeps a
         // `currentQuestionId` — that is what stops `advance` reopening question 1 — so
         // without this the finished question stays on the projector above the standings.
         setHidden(questionBox, standings !== null);
         renderStandings(standingsBoard, standings?.rows, {
           ownDisplayName: null,
-          list: "flex flex-col gap-3",
+          list: closing
+            ? "flex flex-col gap-3 [&>li:first-child]:border-brand-purple-light " +
+              "[&>li:first-child]:bg-brand-purple/20 [&>li:first-child>span]:text-7xl"
+            : "flex flex-col gap-3",
           row: "grid grid-cols-[auto_1fr_auto] items-baseline gap-6 rounded-xl border border-surface-border bg-surface-secondary px-6 py-4",
           rank: "text-5xl font-bold tabular-nums text-brand-purple-light",
           // `truncate` rather than a wrap: five rows that became seven would push the
