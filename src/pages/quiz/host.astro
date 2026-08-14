@@ -129,7 +129,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
     -->
     <header
       class="flex shrink-0 items-center justify-between border-b-2 border-quiz-divider
-             pt-[56px] pr-[72px] pb-[40px] pl-[72px]"
+             pt-[40px] pr-[72px] pb-[28px] pl-[72px]"
     >
       <p class="flex items-baseline gap-4 leading-none">
         <span
@@ -143,6 +143,30 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         </span>
       </p>
 
+      <!--
+        **The one thing the band shapes cannot say on their own** (plan §3).
+
+        A multiple-choice question's slabs are outlined rather than filled, and the rule the
+        room is meant to read off that is "an empty square means more than one is allowed".
+        Nobody derives that from the first question they see, so the shape carries the
+        distinction *after* this sentence has taught it once.
+
+        **In the strip rather than under the prompt, which is where the artboard puts it.**
+        Two reasons, and the second is the load-bearing one: `renderQuestion` emits the prompt
+        and the option list as one block, so a line between them would have to come from the
+        renderer — and a line above the prompt costs the stage ~56px, which on the longest
+        multiple-choice prompt is exactly the height of the fourth band. The strip has the
+        room and the stage does not. It reads as a badge on the question it belongs to, and it
+        sits beside the counter that says which question that is.
+      -->
+      <p
+        id="multiple-note"
+        hidden
+        class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-chrome"
+      >
+        Możesz wybrać więcej niż jedną
+      </p>
+
       <!-- Scan, or read the address off the same block. Both routes to the same place,
            side by side, at a size that survives the back of the room. -->
       <div class="flex items-center gap-8">
@@ -154,7 +178,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             {joinDisplayUrl}
           </p>
         </div>
-        <div class="h-[132px] w-[132px] rounded-[20px] bg-white p-2 [&>svg]:h-full [&>svg]:w-full">
+        <div class="h-[112px] w-[112px] rounded-[20px] bg-white p-2 [&>svg]:h-full [&>svg]:w-full">
           <Fragment set:html={joinQrSvg} />
         </div>
       </div>
@@ -169,11 +193,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         end.
       -->
       <main
-        class="flex min-w-0 flex-1 flex-col justify-between overflow-hidden pt-[48px]
-               pr-[72px] pb-[40px] pl-[72px]"
+        class="flex min-w-0 flex-1 flex-col justify-between overflow-hidden pt-[32px]
+               pr-[72px] pb-[24px] pl-[72px]"
       >
-        <div class="flex min-h-0 flex-col gap-[40px]">
-          <section id="question" class="flex flex-col gap-5"></section>
+        <div class="flex min-h-0 flex-col gap-[24px]">
+          <section id="question" class="flex flex-col gap-[24px]"></section>
 
           <!--
             The distribution bars, at a reveal (roadmap S-04, FR-005).
@@ -280,11 +304,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
               <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
                 Odpowiedzi
               </p>
-              <p
-                id="participation-count"
-                class="text-[116px] font-extrabold leading-none tracking-[-0.05em] tabular-nums"
-              >
-                —
+              <!-- The two halves are separate elements because they are set at different
+                   sizes: `12 / 40` as one string at the hero size does not fit a 440px rail,
+                   and dropping the size to make it fit costs the figure the room's attention
+                   more than the denominator is worth. -->
+              <p class="flex items-baseline gap-3">
+                <span
+                  id="participation-count"
+                  class="text-[116px] font-extrabold leading-[112px] tracking-[-0.05em] tabular-nums"
+                >
+                  —
+                </span>
+                <span id="participation-total" class="text-[40px] font-semibold text-quiz-zinc">
+                  z —
+                </span>
               </p>
               <!-- Beside the number, not in place of it: the count keeps its last value on a
                    failed poll, and this is what says the value is not fresh. -->
@@ -312,11 +345,16 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
               <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
                 Odpowiedzi
               </p>
-              <p
-                id="word-cloud-answered"
-                class="text-[116px] font-extrabold leading-none tracking-[-0.05em] tabular-nums"
-              >
-                —
+              <p class="flex items-baseline gap-3">
+                <span
+                  id="word-cloud-answered"
+                  class="text-[116px] font-extrabold leading-[112px] tracking-[-0.05em] tabular-nums"
+                >
+                  —
+                </span>
+                <span id="word-cloud-total" class="text-[40px] font-semibold text-quiz-zinc">
+                  z —
+                </span>
               </p>
             </div>
             <div class="flex flex-col gap-2">
@@ -350,7 +388,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           </p>
           <p
             data-countdown-text
-            class="text-[116px] font-extrabold leading-none tracking-[-0.05em] tabular-nums
+            class="text-[116px] font-extrabold leading-[112px] tracking-[-0.05em] tabular-nums
                    text-quiz-chrome"
           >
             —
@@ -377,8 +415,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       host has to find again mid-session.
     -->
     <footer
-      class="flex shrink-0 flex-col gap-5 border-t-2 border-quiz-divider bg-quiz-asphalt
-             px-[72px] py-[32px]"
+      class="flex shrink-0 flex-col gap-4 border-t-2 border-quiz-divider bg-quiz-asphalt
+             px-[72px] py-[24px]"
     >
       <!--
         The host's own line: the secret, and what the connection is doing.
@@ -399,90 +437,18 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         />
         <span id="secret-note" class="text-[26px] text-quiz-zinc"></span>
         <p id="connection" class="ml-auto text-[26px] text-quiz-zinc">połączenie: —</p>
-      </div>
 
-      <div class="flex flex-wrap items-center gap-4">
-        <!--
-          The flow verbs. Which one is offered — and which one is ringed as the next step —
-          is decided by `CONTROL_RULES` and applied by `syncControls`, which is the table's
-          only reader. Nothing here states a phase condition of its own.
-
-          `data-next` rather than a class toggle: the filled and outlined treatments set the
-          same three properties, and two competing utility classes on one element are
-          resolved by stylesheet order rather than by the order they were added. A variant
-          always wins over the base utility, so the state is unambiguous.
-        -->
-        <button
-          data-action="start"
-          data-next="false"
-          class="rounded-full border-2 border-quiz-pill-border px-8 py-3 text-[40px]
-                 font-semibold tracking-[-0.01em] text-quiz-signwhite
-                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
-                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
-                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
-        >
-          start
-        </button>
-        <button
-          data-action="advance"
-          data-next="false"
-          class="rounded-full border-2 border-quiz-pill-border px-8 py-3 text-[40px]
-                 font-semibold tracking-[-0.01em] text-quiz-signwhite
-                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
-                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
-                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
-        >
-          dalej
-        </button>
-        <button
-          data-action="reveal"
-          data-next="false"
-          class="rounded-full border-2 border-quiz-pill-border px-8 py-3 text-[40px]
-                 font-semibold tracking-[-0.01em] text-quiz-signwhite
-                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
-                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
-                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
-        >
-          pokaż odpowiedź
-        </button>
-        <!-- The FR-014 beat. Reachable only from a reveal, which is why it is disabled
-             everywhere else rather than relying on the route's 409 — the refusal is the
-             backstop, not the interaction. -->
-        <button
-          data-action="standings"
-          data-next="false"
-          class="rounded-full border-2 border-quiz-pill-border px-8 py-3 text-[40px]
-                 font-semibold tracking-[-0.01em] text-quiz-signwhite
-                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
-                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
-                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
-        >
-          pokaż ranking
-        </button>
         <!-- No join publishes anything (that would be the O(N^2) fan-out the spine
-             contract forbids), so this is how the host watches the lobby fill. -->
+             contract forbids), so this is how the host watches the lobby fill. A utility
+             rather than a flow verb: it moves nothing, so it sits on the utility line and
+             leaves the row below to the four verbs that do. -->
         <button
           id="refresh"
-          class="rounded-full border-2 border-quiz-divider px-8 py-3 text-[40px] font-semibold
-                 tracking-[-0.01em] text-quiz-zinc disabled:text-quiz-pill-disabled"
+          class="rounded-full border-2 border-quiz-divider px-5 py-1 text-[26px] font-semibold
+                 text-quiz-zinc disabled:text-quiz-pill-disabled"
         >
           odśwież
         </button>
-
-        <!-- The phase, which used to be a metric of its own above the prompt. It is the
-             host's own reading of where the session is, so it belongs on the host's plane —
-             and the version beside it, kept in the DOM and out of the hierarchy: nothing on
-             stage needs it, and the closing beat's confirmation quotes it back.
-
-             The join count sits here too for the phases where nothing else shows it. It is
-             the *denominator* of the rail's `answered / joined` while a question is open,
-             and the lobby will put it on the stage at full size — between the two, this is
-             the host's own copy of a figure they should never have to ask for. -->
-        <p class="ml-auto flex items-baseline gap-4">
-          <span id="phase" class="text-[26px] font-semibold uppercase tracking-[0.16em]">—</span>
-          <span id="player-count" class="text-[26px] tabular-nums text-quiz-zinc">—</span>
-          <span id="version" class="text-[26px] tabular-nums text-quiz-pill-disabled">—</span>
-        </p>
 
         <!--
           The closing beat (roadmap S-10, FR-006), and **the reversal of a deliberate F-03
@@ -490,10 +456,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
           Three things keep that reversal defensible, and all three are load-bearing:
 
-          - **It is set apart.** Pushed past the phase label to the far end of the bar,
-            outlined in `signal` rather than filled like a flow verb, and it carries no
-            `data-action` — so a mis-reach lands on a flow verb and the blanket handler that
-            drives them cannot fire it.
+          - **It is set apart.** On the utility line rather than in the row of flow verbs,
+            outlined in `signal`, and it carries no `data-action` — so a mis-reach lands on
+            a flow verb and the blanket handler that drives them cannot fire it.
           - **It takes two taps.** The first arms it and rewrites the label; the second
             fires. Any action that moves the session disarms it again, so it can never fire
             into a state the host has not looked at.
@@ -510,12 +475,92 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         <button
           id="end"
           disabled
-          class="rounded-full border-2 border-quiz-signal px-8 py-3 text-[40px] font-semibold
-                 tracking-[-0.01em] text-quiz-signal disabled:border-quiz-divider
-                 disabled:text-quiz-pill-disabled"
+          class="rounded-full border-2 border-quiz-signal px-5 py-1 text-[26px] font-semibold
+                 text-quiz-signal disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
         >
           zakończ sesję
         </button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-4">
+        <!--
+          The flow verbs. Which one is offered — and which one is ringed as the next step —
+          is decided by `CONTROL_RULES` and applied by `syncControls`, which is the table's
+          only reader. Nothing here states a phase condition of its own.
+
+          `data-next` rather than a class toggle: the filled and outlined treatments set the
+          same three properties, and two competing utility classes on one element are
+          resolved by stylesheet order rather than by the order they were added. A variant
+          always wins over the base utility, so the state is unambiguous.
+        -->
+        <button
+          data-action="start"
+          data-next="false"
+          class="rounded-full border-2 border-quiz-pill-border px-8 py-2 text-[40px]
+                 font-semibold tracking-[-0.01em] text-quiz-signwhite
+                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+        >
+          start
+        </button>
+        <button
+          data-action="advance"
+          data-next="false"
+          class="rounded-full border-2 border-quiz-pill-border px-8 py-2 text-[40px]
+                 font-semibold tracking-[-0.01em] text-quiz-signwhite
+                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+        >
+          dalej
+        </button>
+        <button
+          data-action="reveal"
+          data-next="false"
+          class="rounded-full border-2 border-quiz-pill-border px-8 py-2 text-[40px]
+                 font-semibold tracking-[-0.01em] text-quiz-signwhite
+                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+        >
+          pokaż odpowiedź
+        </button>
+        <!-- The FR-014 beat. Reachable only from a reveal, which is why it is disabled
+             everywhere else rather than relying on the route's 409 — the refusal is the
+             backstop, not the interaction. -->
+        <button
+          data-action="standings"
+          data-next="false"
+          class="rounded-full border-2 border-quiz-pill-border px-8 py-2 text-[40px]
+                 font-semibold tracking-[-0.01em] text-quiz-signwhite
+                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+        >
+          pokaż ranking
+        </button>
+        <!-- The phase, which used to be a metric of its own above the prompt. It is the
+             host's own reading of where the session is, so it belongs on the host's plane —
+             and the version beside it, kept in the DOM and out of the hierarchy: nothing on
+             stage needs it, and the closing beat's confirmation quotes it back.
+
+             The join count sits here too for the phases where nothing else shows it. It is
+             the *denominator* of the rail's `answered / joined` while a question is open,
+             and the lobby will put it on the stage at full size — between the two, this is
+             the host's own copy of a figure they should never have to ask for.
+
+             Each number carries a word, because a bare `0 6` beside a phase name reads as
+             debris rather than as two facts. -->
+        <p class="ml-auto flex items-baseline gap-6 text-[26px]">
+          <span id="phase" class="font-semibold uppercase tracking-[0.16em]">—</span>
+          <span class="text-quiz-zinc">
+            <span id="player-count" class="tabular-nums">—</span> w sali
+          </span>
+          <span class="text-quiz-pill-disabled">
+            v<span id="version" class="tabular-nums">—</span>
+          </span>
+        </p>
       </div>
 
       <p id="message" role="status" aria-live="polite" class="text-[40px] leading-[52px]"></p>
@@ -597,6 +642,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const standingsBoard = el("standings-board");
       const wordCloudBox = el("word-cloud");
       const wordCloudPanel = el("word-cloud-panel");
+      const multipleNote = el("multiple-note");
       const wordCloudWords = el("word-cloud-words");
       const wordCloudStale = el("word-cloud-stale");
       const hostCountdownBox = el("host-countdown");
@@ -799,6 +845,107 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         },
       });
 
+      /**
+       * THE STAGE'S TYPE AND THE ANSWER BANDS (signage redesign, step 3).
+       *
+       * `render.ts` owns no styling — every class it applies arrives from here — so the
+       * projector's whole visual language is these few strings. They are written once and
+       * shared by the two call sites, because a second copy is how the sessionless first
+       * paint ends up a different size from every subsequent one.
+       *
+       * ## The letter is a CSS counter, not markup
+       *
+       * The band's slab carries A, B, C… and `renderQuestion` renders an option as one
+       * element with `textContent` — there is no child to put a letter in. Rather than
+       * change the renderer for a presentational detail, the slab is a `::before` fed by a
+       * counter on the list. The letters therefore follow the *rendered* order, which is what
+       * the room reads and what `publicQuiz` deliberately shuffles; nothing derives them from
+       * the definition's order, so the two cannot disagree.
+       *
+       * The distribution rows use the same counter over the same options in the same order,
+       * so a band and its bar carry the same letter at the reveal.
+       *
+       * ## State travels by `data-` attribute, never by an appended class
+       *
+       * `renderQuestion` marks a correct option with `data-correct` and `renderDistribution`
+       * marks its row the same way. Both are read here as Tailwind variants rather than
+       * through the `optionCorrect` / `rowCorrect` hooks, because an appended utility and the
+       * base utility it means to override are the same kind of rule — which of them wins is
+       * decided by stylesheet order, not by the order they were joined. A variant always
+       * wins. The same reasoning as the control bar's `data-next`.
+       */
+      const PROMPT_BASE = "font-extrabold tracking-[-0.035em] text-balance";
+      /**
+       * Where the prompt drops a step, in characters.
+       *
+       * The stage is ~1336px wide and 92px Archivo at weight 800 averages close to 26
+       * characters a line, so a prompt past two lines takes the next setting down rather than
+       * pushing the option list off a screen with no scrollbar. A character count is a coarse
+       * stand-in for measuring the rendered line count — which nothing here can do before
+       * paint — and the two thresholds are calibrated against the definition's own prompts,
+       * the longest of which is 71 characters.
+       *
+       * The plan's rule is *cut words or drop a line, do not go smaller*, and this does not
+       * contradict it: the two sizes below are both from the plan's own table, and everything
+       * that could be spent instead of the prompt — the strip's height, the bar's padding,
+       * the gaps between bands — already was.
+       */
+      const PROMPT_LONG_THRESHOLD = 52;
+      const PROMPT_LONGEST_THRESHOLD = 58;
+
+      function promptClass(prompt: string | undefined): string {
+        const length = prompt?.length ?? 0;
+        if (length > PROMPT_LONGEST_THRESHOLD) return `${PROMPT_BASE} text-[60px] leading-[62px]`;
+        if (length > PROMPT_LONG_THRESHOLD) return `${PROMPT_BASE} text-[72px] leading-[74px]`;
+        return `${PROMPT_BASE} text-[92px] leading-[92px]`;
+      }
+
+      /** The band itself: geometry and type, with no colour and no slab fill. */
+      const BAND_BASE =
+        "flex min-h-[92px] items-center overflow-hidden rounded-[20px] pr-8 text-[50px] " +
+        "font-semibold leading-[58px] tracking-[-0.02em] [counter-increment:option] " +
+        "before:mr-8 before:flex before:shrink-0 before:items-center before:justify-center " +
+        "before:text-[48px] before:font-extrabold before:tracking-[-0.02em] " +
+        "before:[--tw-content:counter(option,_upper-alpha)]";
+
+      /**
+       * The slab, and the one place the two choice kinds are told apart.
+       *
+       * **Filled means pick one; outlined means more than one is allowed.** That is the whole
+       * distinction, it is load-bearing, and it is why a multiple-choice question does not
+       * simply reuse the single-choice band with a different sentence above it.
+       */
+      const SLAB_SINGLE =
+        "before:w-[92px] before:self-stretch before:bg-quiz-chrome before:text-quiz-ink";
+      const SLAB_MULTIPLE =
+        "ml-0 pl-3 before:h-[80px] before:w-[80px] before:rounded-[8px] before:border-4 " +
+        "before:border-quiz-chrome before:text-quiz-chrome";
+
+      /**
+       * The reveal's colours, keyed on the renderer's `data-correct`.
+       *
+       * The correct band takes mint and its tint; every other band steps back to `#C9C9C4`
+       * with an inactive slab — a reveal in which the wrong answers look exactly as they did
+       * a second earlier makes the room hunt for what changed.
+       */
+      const BAND_REVEALED =
+        "bg-quiz-asphalt text-quiz-echo before:bg-quiz-slab-inactive before:text-quiz-zinc " +
+        "before:border-quiz-slab-inactive data-[correct=true]:bg-quiz-mint-tint " +
+        "data-[correct=true]:text-quiz-mint data-[correct=true]:before:bg-quiz-mint " +
+        "data-[correct=true]:before:border-quiz-mint data-[correct=true]:before:text-quiz-ink";
+      const BAND_OPEN = "bg-quiz-asphalt text-quiz-signwhite";
+
+      function bandClass(kind: string | undefined, revealed: boolean): string {
+        return [
+          BAND_BASE,
+          kind === "multiple-choice" ? SLAB_MULTIPLE : SLAB_SINGLE,
+          revealed ? BAND_REVEALED : BAND_OPEN,
+        ].join(" ");
+      }
+
+      /** Shared by the bands and the bars, so their letters line up. */
+      const BAND_LIST = "flex flex-col gap-2 [counter-reset:option]";
+
       const PHASE_LABELS: Record<string, string> = {
         lobby: "poczekalnia",
         "question-open": "pytanie otwarte",
@@ -912,23 +1059,56 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           // The denominator is the join count the page already maintains, which the
           // poll's own `playerCount` keeps fresh — so the join figure stops needing a
           // manual refresh while a question is open.
-          setText("participation-count", `${answered ?? "—"} / ${liveCount ?? state.playerCount}`);
+          setText("participation-count", answered ?? "—");
+          setText("participation-total", `z ${liveCount ?? state.playerCount}`);
         }
 
+        /**
+         * The bars **are** the bands at a reveal: same letters, same order, same geometry,
+         * with the room's share added at the right end. `renderQuestion` drops the option
+         * list whenever a distribution exists, so the two never appear together — which is
+         * what lets these carry the band's shape rather than looking like a second widget.
+         *
+         * The share is `count · share%` because neither number answers the other's question:
+         * the share is what the room compares, the count is what makes it trustworthy. It is
+         * computed against people, not selections, so on a multiple-choice question the bars
+         * sum past 100% — see `renderDistribution`.
+         */
         renderDistribution(
           distributionBox,
           state.currentQuestionId === null ? undefined : questionFor(state),
           {
             distribution,
             correctOptionIds: state.revealedOptionIds,
-            list: "flex flex-col gap-3",
-            row: "grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 rounded-xl border border-surface-border bg-surface-secondary px-5 py-4",
-            rowCorrect: "border-emerald-400",
-            label: "text-3xl",
-            count: "text-3xl font-bold tabular-nums",
-            bar: "col-span-2 h-3 rounded-full bg-surface-primary",
-            barFill: "h-full rounded-full bg-brand-purple-light",
-            empty: "text-text-secondary text-2xl",
+            list: BAND_LIST,
+            row:
+              "relative grid min-h-[92px] grid-cols-[92px_1fr_auto] items-center gap-x-8 " +
+              "overflow-hidden rounded-[20px] bg-quiz-asphalt pr-8 [counter-increment:option] " +
+              "before:flex before:h-[92px] before:items-center before:justify-center " +
+              "before:bg-quiz-slab-inactive before:text-[48px] before:font-extrabold " +
+              "before:tracking-[-0.02em] before:text-quiz-zinc " +
+              "before:[--tw-content:counter(option,_upper-alpha)] " +
+              "data-[correct=true]:bg-quiz-mint-tint data-[correct=true]:before:bg-quiz-mint " +
+              "data-[correct=true]:before:text-quiz-ink",
+            label:
+              "text-[50px] font-semibold leading-[58px] tracking-[-0.02em] text-quiz-echo " +
+              "[[data-correct=true]>&]:text-quiz-mint",
+            count:
+              "text-[52px] font-extrabold tabular-nums text-quiz-zinc " +
+              "[[data-correct=true]>&]:text-quiz-mint",
+            /**
+             * The share as a rule along the foot of the band, not as a row of its own.
+             *
+             * Absolutely positioned so a bar costs no height: eight bands with their own bar
+             * rows do not fit a 1080p stage under a prompt, and the honest fixes — a smaller
+             * band or a smaller prompt — both spend something the room needs to read. It
+             * starts where the text does, so the slab stays a solid block of colour.
+             */
+            bar: "absolute inset-x-0 bottom-0 left-[92px] h-[8px] bg-quiz-divider",
+            barFill:
+              "h-full bg-quiz-slab-inactive [[data-correct=true]_&]:bg-quiz-mint",
+            // `echo`, not `zinc`: this is a sentence about the room, and zinc is for labels.
+            empty: "text-[40px] leading-[52px] text-quiz-echo",
           }
         );
       }
@@ -970,12 +1150,19 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * Same shape and same fallbacks as the participation count: `—` until the first reply,
          * and the denominator prefers the freshest join count the page holds.
          */
-        setText("word-cloud-answered", `${answered ?? "—"} / ${liveCount ?? state.playerCount}`);
+        setText("word-cloud-answered", answered ?? "—");
+        setText("word-cloud-total", `z ${liveCount ?? state.playerCount}`);
 
         renderWordCloud(wordCloudWords, cloudWords ?? undefined, {
-          list: "flex flex-wrap items-baseline gap-x-8 gap-y-3",
-          chip: "font-bold leading-none text-brand-purple-light",
-          empty: "text-text-secondary text-3xl",
+          list: "flex flex-wrap items-baseline gap-x-10 gap-y-6",
+          /**
+           * `signwhite`, not chrome. A cloud is thirty chips at once, and chrome is rationed
+           * to one intense moment per screen — a chrome cloud spends the whole budget on the
+           * one panel that has no single thing to point at. The size scale is what carries
+           * the emphasis here, and it is set inline by the renderer rather than by class.
+           */
+          chip: "font-extrabold leading-none tracking-[-0.02em] text-quiz-signwhite",
+          empty: "text-[40px] leading-[52px] text-quiz-echo",
           // Measured for this projector: small enough that thirty fit, large enough that a
           // one-vote word is still readable from the back.
           minRem: 1.75,
@@ -1198,7 +1385,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            */
           resetPanels(null);
           cloudFinalReadFor = null;
-          renderQuestion(questionBox, undefined, { prompt: "text-4xl font-bold leading-tight" });
+          setHidden(multipleNote, true);
+          renderQuestion(questionBox, undefined, { prompt: promptClass(undefined) });
           // Before the early return, not after it: this branch is a purge, an expiry, or
           // the first paint, and in all three the closing button must be out of reach and
           // holding no arm from a session that is gone — while the flow verbs must fall
@@ -1295,22 +1483,37 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * or a non-choice kind) the ordinary revealed rendering stands, so
          * `revealedOptionIds` still marks the correct answer and FR-016 holds either way.
          */
-        renderQuestion(
-          questionBox,
+        const revealed = state.phase === "question-revealed";
+        const shownQuestion =
           state.currentQuestionId === null
             ? undefined
             : distribution !== null && question
               ? { ...question, options: undefined }
-              : question,
-          {
-            prompt: "text-6xl font-bold leading-tight",
-            list: "grid gap-3 sm:grid-cols-2",
-            option:
-              "rounded-xl border border-surface-border bg-surface-secondary px-5 py-4 text-3xl",
-            mode: state.phase === "question-revealed" ? "revealed" : "static",
-            correctOptionIds: state.revealedOptionIds,
-            optionCorrect: "border-emerald-400",
-          }
+              : question;
+
+        renderQuestion(questionBox, shownQuestion, {
+          prompt: promptClass(shownQuestion?.prompt),
+          list: BAND_LIST,
+          option: bandClass(question?.kind, revealed),
+          mode: revealed ? "revealed" : "static",
+          correctOptionIds: state.revealedOptionIds,
+        });
+
+        /**
+         * The multiple-choice sentence, shown exactly when its bands are on screen — so it
+         * never explains an outline the room cannot see. `shownQuestion` rather than
+         * `question`, because the reveal replaces the option list with the bars and the rule
+         * about empty squares has nothing to say about a bar chart.
+         */
+        setHidden(
+          multipleNote,
+          !(
+            question?.kind === "multiple-choice" &&
+            Boolean(shownQuestion?.options?.length) &&
+            // The board replaces the question, and the sentence goes with it. Keyed on the
+            // same `standings === null` the question box is, so the two cannot disagree.
+            standings === null
+          )
         );
 
         /**
