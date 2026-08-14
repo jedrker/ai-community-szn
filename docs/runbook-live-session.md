@@ -214,6 +214,23 @@ Open the attendee-facing view on a phone that is *not* the host machine, on the 
 possible. This is the minimum failure detection this project has: without monitoring, a second device
 is how you notice a problem before the room does.
 
+**While you are holding it, reload it. (S-09 — 30 seconds, and it is the only check of its kind.)**
+
+Join on that phone, take one answer if a question is open, then **pull-to-refresh**. It must come
+back as the same player, with the same name, showing a *Wracasz z wynikiem N pkt* line rather than
+the join form.
+
+This is worth its own step because **no test in the project can see it**. The store is mocked in the
+suite, so the Lua that enforces the per-device cap never executes anywhere, and the property this
+check covers is the one that would hurt most: a phone whose screen locks mid-segment must not lose
+its player or its score. A screen lock during fifteen minutes is close to certain, so this is not a
+rare path.
+
+Then, if you have a minute: claim three more names in the same browser. The fourth must be refused
+with *Z tego urządzenia dołączyło już zbyt wielu graczy* — and that same browser must **still** resume
+its existing player on reload. If the refusal reaches the reload, the cap has been wired to the wrong
+path and someone in the room will be eliminated by a locked screen.
+
 **4. Reset the session. (S-02 — mandatory, not tidy.)**
 
 ```bash

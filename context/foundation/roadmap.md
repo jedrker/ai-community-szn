@@ -58,7 +58,7 @@ an attendee is scoring on their own device.
 | S-06  | `guess-the-number-answers`            | Attendee can guess a number and score by how close they were                           | S-03          | US-01, FR-013                                                             | done     |
 | S-07  | `leaderboard-beat`                    | Host can show the leaderboard between questions, and attendees can find themselves on it | S-03        | US-01, US-02, FR-014                                                      | done     |
 | S-08  | `word-cloud-question`                 | Attendee can submit one word and watch the cloud fill on the large screen               | S-03          | US-01, US-02, FR-012, FR-015                                              | done     |
-| S-09  | `resilient-join`                      | Attendee can reload or unlock their phone and resume as the same player                 | S-02          | US-01, FR-009, FR-018                                                     | proposed |
+| S-09  | `resilient-join`                      | Attendee can reload or unlock their phone and resume as the same player                 | S-02          | US-01, FR-009, FR-018                                                     | done     |
 | S-10  | `final-winner-reveal`                 | Host can close the session with a winner-reveal sequence                                | S-07          | US-02, FR-006                                                             | proposed |
 
 ## Streams
@@ -495,14 +495,38 @@ and do NOT re-scaffold them.
 - **Parallel with:** S-03, S-04, S-05, S-06, S-07, S-08
 - **Blockers:** —
 - **Unknowns:**
-  - How many players from one device is "unreasonable", given a venue network can put many attendees
-    behind one address and handsets do get shared? — Owner: user. Block: no.
+  - ~~How many players from one device is "unreasonable", given a venue network can put many attendees
+    behind one address and handsets do get shared?~~ — **RESOLVED 2026-08-14: three, cumulative,
+    never decremented.** It covers the honest shared-handset cases (a couple, a parent and child, one
+    lent phone) while making farming tedious. Two would refuse a lent handset on the first try, which
+    lands the refusal on someone who did nothing wrong; five is already enough fake players to
+    distort a board in a room of 150. The number buys friction rather than prevention — which is what
+    FR-018 asks for. The venue-NAT half of the question is answered by *not* keying on IP at all: the
+    device identifies itself with an id it mints and stores, so a shared address is irrelevant and
+    the cost lands instead on a genuinely shared handset. Original question kept struck through per
+    this file's convention.
 - **Risk:** Both halves are device-scoped identity pulling in opposite directions: resume needs the
   device remembered, the flood guard needs the device counted. The PRD accepts that a borrowed handset
   inherits someone else's player, and that the guard is lightweight and defeatable by design. A screen
   lock during a 15-minute segment is near-certain, so this is not optional polish. Resume also has to
   survive the spine's own reconnects, not just a manual reload.
-- **Status:** proposed
+- **Status:** done
+
+  **Delivered 2026-08-14.** Resume turned out to be ~80% built already — S-02 shipped the identity
+  handshake and S-03 the persisted paint times and submitted flag — so the slice was mostly the cap
+  plus two honest gaps: the running total was invisible after a mid-question reload, and a device
+  whose storage is unavailable met a bare "name taken" with nowhere to go.
+
+  **The exemption is the part S-10 must not undo:** the cap governs the claim path and never the
+  resume path, or a phone that registered three players and then locked its screen loses a score it
+  had already earned. Read
+  `context/changes/resilient-join/resume-contract.md` before adding anything that refuses a request.
+
+  **One limit stated rather than left to be found:** the redis client is mocked in the suite, so the
+  Lua cap never executes in any test. Its two orderings are pinned as structural properties of the
+  script text — `host.test.ts`'s position — and the behaviour rests on the runbook's live two-device
+  check. Following the boundary S-07 and S-08 drew, no room-scale rehearsal was re-run: both halves
+  are per-device properties rather than concurrency ones.
 
 ### S-10: Final winner reveal
 
@@ -535,7 +559,7 @@ and do NOT re-scaffold them.
 | S-06       | `guess-the-number-answers`            | Numeric guesses scored by relative error                           | done                  | **Delivered 2026-08-09.** First partial-credit answer: `AnswerRecord.correct` is exact-hit-only for this kind |
 | S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | done                  | **Delivered 2026-08-11.** First snapshot field carrying display names — S-08/S-10 must read `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` before adding a snapshot field or a phase |
 | S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | done                  | **Delivered 2026-08-14.** The one aggregate that does NOT ride the snapshot — a host-side poll of `/api/quiz/host/words`, because a continuously-filling display has no host action to attach to and 150-way fan-out would exceed Ably's 100 msg/s ceiling. Added the project's **third fold** (`foldWord`, keeps diacritics because its output is rendered) and a third `livequiz:tallies` field family, which stopped that key being counters-only. **S-09/S-10 must read `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md` before adding any continuously-updating display** |
-| S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | no                    | Needs S-02                                                    |
+| S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | done                  | **Delivered 2026-08-14.** Cap is 3 per device, cumulative, enforced inside `CLAIM_PLAYER`; the resume path is exempt and that exemption is the slice. Added `livequiz:devices` (a count, the one registered key that is not attendee data) and a third browser-storage key. **S-10 must read `context/changes/resilient-join/resume-contract.md` before adding anything that refuses a request** |
 | S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | no                    | Needs S-07; nice-to-have, first candidate to cut               |
 
 ## Open Roadmap Questions

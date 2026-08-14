@@ -288,6 +288,14 @@ Name the two failure modes, because the rule reads arbitrary without them:
 and import server modules. That is how the views get the channel name to pass down. Do not "fix" a
 boundary failure by deleting a frontmatter import.
 
+**Three modules write to `localStorage`, and one of them behaves oppositely to the other two.**
+`player.ts` and `answer.ts` absorb every storage failure and report *nothing stored* — a join must
+never fail over a storage quirk. `device.ts` (S-09) absorbs the same failures but **always returns an
+id**, minting one in memory when it cannot persist. The asymmetry is load-bearing: `/api/quiz/join`
+**refuses a claim that carries no `deviceId`**, because an absent id treated as un-counted is the
+per-device cap's bypass, and a shared "unknown device" bucket would let a few private-mode attendees
+consume the room's whole allowance. A client that forgets to send one gets a 400, not a free pass.
+
 ## Server-side modules (`src/lib/`, except `src/lib/client/`)
 
 Named exports, no default exports. Secrets come from `import.meta.env` and are documented in
@@ -333,6 +341,20 @@ strong to leave standing: its **field names are attendee-authored text**, folded
 still keyed by no player id and no display name, so nothing in it says *who* wrote or chose anything —
 and it is still re-armed by `end` and deleted by `purge`. Note also that the word family is the only
 one whose field count grows with the **room** rather than with the quiz, up to one field per attendee.
+
+**`livequiz:devices` is a count per device, and it is the one key that is not attendee data.**
+S-09 added it for the per-device player cap (FR-018): opaque device id → how many players that device
+has claimed. The id is minted by the browser about itself and stored beside no name, no player id and
+no answer, so nothing in it says *who* played. It is registered anyway, for two reasons worth keeping
+apart — the registry has no exemption list, and a device id left behind after a session would still
+be a stable handle on a returning phone.
+
+Read and written **only inside `CLAIM_PLAYER`**, where the count going up is part of the same atomic
+claim. Two orderings there are load-bearing and silent when wrong: the cap check sits *before* the
+collision check, so a device that is both capped and typing a taken name hears the final reason; the
+increment sits *after* it, so a claim refused as taken charges nobody. The counter only ever goes up
+— a releasable slot could be cycled indefinitely, which is the guard defeated by a mechanism built to
+be forgiving.
 
 Before adding any key or any field to a published snapshot, read
 `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md`. It also records the one

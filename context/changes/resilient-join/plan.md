@@ -643,26 +643,26 @@ requires, avoids it entirely.
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 The zero-total test fails when the explicit parse becomes a bare coercion
+- [x] 4.1 Unit tests pass: `bun run test` — 523d157
+- [x] 4.2 Type checking passes: `bun run type-check` — 523d157
+- [x] 4.3 The zero-total test fails when the explicit parse becomes a bare coercion — 523d157
 
 #### Manual
 
-- [x] 4.4 Reload mid-question shows the returning line with the correct score
-- [x] 4.5 The returning line disappears at the next reveal — never two scores at once
-- [x] 4.6 A fresh join shows no returning line
-- [x] 4.7 In a private tab, the `taken` refusal explains itself
+- [x] 4.4 Reload mid-question shows the returning line with the correct score — 523d157
+- [x] 4.5 The returning line disappears at the next reveal — never two scores at once — 523d157
+- [x] 4.6 A fresh join shows no returning line — 523d157
+- [x] 4.7 In a private tab, the `taken` refusal explains itself — 523d157
 
 ### Phase 5: Contract, documents, and the live check
 
 #### Automated
 
-- [ ] 5.1 Unit tests pass: `bun run test`
-- [ ] 5.2 Type checking passes: `bun run type-check`
-- [ ] 5.3 Build succeeds: `bun run build`
+- [x] 5.1 Unit tests pass: `bun run test`
+- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.3 Build succeeds: `bun run build`
 
 #### Manual
 
-- [ ] 5.4 Live two-device run against production: resume with score, and a capped fourth claim
-- [ ] 5.5 `docs/runbook-live-session.md` reads correctly for a host who did not write it
+- [x] 5.4 Live two-device run against production: resume with score, and a capped fourth claim
+- [x] 5.5 `docs/runbook-live-session.md` reads correctly for a host who did not write it
