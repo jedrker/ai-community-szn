@@ -1,9 +1,10 @@
 ---
 change_id: resilient-join
 title: Resilient join
-status: impl_reviewed
+status: archived
 created: 2026-08-14
 updated: 2026-08-14
+archived_at: 2026-08-14T15:37:19Z
 ---
 
 ## Notes

@@ -520,7 +520,7 @@ and do NOT re-scaffold them.
   **The exemption is the part S-10 must not undo:** the cap governs the claim path and never the
   resume path, or a phone that registered three players and then locked its screen loses a score it
   had already earned. Read
-  `context/changes/resilient-join/resume-contract.md` before adding anything that refuses a request.
+  `context/archive/2026-08-14-resilient-join/resume-contract.md` before adding anything that refuses a request.
 
   **One limit stated rather than left to be found:** the redis client is mocked in the suite, so the
   Lua cap never executes in any test. Its two orderings are pinned as structural properties of the
@@ -559,7 +559,7 @@ and do NOT re-scaffold them.
 | S-06       | `guess-the-number-answers`            | Numeric guesses scored by relative error                           | done                  | **Delivered 2026-08-09.** First partial-credit answer: `AnswerRecord.correct` is exact-hit-only for this kind |
 | S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | done                  | **Delivered 2026-08-11.** First snapshot field carrying display names — S-08/S-10 must read `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` before adding a snapshot field or a phase |
 | S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | done                  | **Delivered 2026-08-14.** The one aggregate that does NOT ride the snapshot — a host-side poll of `/api/quiz/host/words`, because a continuously-filling display has no host action to attach to and 150-way fan-out would exceed Ably's 100 msg/s ceiling. Added the project's **third fold** (`foldWord`, keeps diacritics because its output is rendered) and a third `livequiz:tallies` field family, which stopped that key being counters-only. **S-09/S-10 must read `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md` before adding any continuously-updating display** |
-| S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | done                  | **Delivered 2026-08-14.** Cap is 3 per device, cumulative, enforced inside `CLAIM_PLAYER`; the resume path is exempt and that exemption is the slice. Added `livequiz:devices` (a count, the one registered key that is not attendee data) and a third browser-storage key. **S-10 must read `context/changes/resilient-join/resume-contract.md` before adding anything that refuses a request** |
+| S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | done                  | **Delivered 2026-08-14.** Cap is 3 per device, cumulative, enforced inside `CLAIM_PLAYER`; the resume path is exempt and that exemption is the slice. Added `livequiz:devices` (a count, the one registered key that is not attendee data) and a third browser-storage key. **S-10 must read `context/archive/2026-08-14-resilient-join/resume-contract.md` before adding anything that refuses a request** |
 | S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | no                    | Needs S-07; nice-to-have, first candidate to cut               |
 
 ## Open Roadmap Questions
@@ -930,3 +930,27 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   as the host leaves the board up. The exposure was accepted; the reasoning recorded in the plan was
   simply wrong, and implementation review caught it rather than a test. Archived with 11 manual
   verification rows still open, by explicit decision.
+
+- **S-09: Attendee can reload the page or unlock their phone and resume as the same player with their
+  score intact, and a single device cannot register an unreasonable number of players.** — Archived
+  2026-08-14 → `context/archive/2026-08-14-resilient-join/`. **Most of the slice was already built.**
+  S-02 shipped the identity handshake and S-03 the persisted paint times and submitted flag, so resume
+  arrived ~80% done; what remained was the cap, which did not exist at all, plus two honest gaps — the
+  running total was invisible after a mid-question reload, and a device whose storage is unavailable
+  met a bare "name taken" with nowhere to go. The cap is **3 per device, cumulative, never
+  decremented**, enforced inside `CLAIM_PLAYER` where two orderings carry the behaviour silently (cap
+  check before the collision check; increment after it). **The exemption is the slice**: the cap
+  governs the claim path and never the resume path, because applying it to a resume turns
+  anti-farming into elimination. Added `livequiz:devices` — a count per device, the one registered key
+  that is not attendee data — and a third browser-storage key. **A limit worth carrying forward: the
+  redis client is mocked in the suite, so the Lua cap is executed by nothing in any test.** Its
+  orderings are pinned as structural properties of the script text, and the behaviour rests entirely
+  on runbook step 6. Lessons: (1) **a guard installed by plain assignment on a Proxy-backed object
+  installs nothing** — `answer.test.ts`'s `withBrokenWrite` had certified three storage branches for
+  four months while passing against code with its `try`/`catch` deleted, and CLAUDE.md documented the
+  broken half as the pattern to copy; (2) **an absent value with two causes needs the cause, not the
+  absence** — the storage-stranded copy was gated on "no stored player", which is equally true of
+  every first-time joiner, so the ordinary two-people-picked-Anna case was told its points could not
+  be recovered; implementation review caught it, no test could. (3) Two phases grew past their planned
+  boundaries because a signature change could not be contained — the plan's phase split, not the
+  implementation, was what turned out to be wrong.
