@@ -175,6 +175,15 @@ On success, log `session.ended` with `playerCount` and `rowCount` (both fields a
 null read, log `session.standings.failed` with a reason naming the close, then proceed. No new event
 name, no new `LogFields` member, and nothing that could carry a name or a total.
 
+> **Deviation, as implemented (2026-08-14, recorded in review F3).** The `session.ended` line stayed
+> where it already was — `endSession` in `src/lib/session/store.ts:730` — and gained `rowCount` there,
+> rather than a second line being emitted from the route. `endSession` was already emitting the event,
+> and the runbook tells a host to read the stream by "one line per mutation, one JSON object", which
+> two lines per close would break at the moment they are checking the session really closed.
+> `playerCount` was dropped from it: that layer holds no fresh count, and `session.action.applied`
+> already carries one. `purge`'s terminal write passes through the same function and reports
+> `rowCount: 0` by construction, which is correct — it abandons a session rather than landing it.
+
 #### 4. Tests
 
 **Files**: `src/lib/session/state.test.ts`, `src/pages/api/quiz/host/*` route tests
@@ -261,7 +270,7 @@ the fixture so it can only reach the `ended` branch (`lessons.md:48`).
 #### Manual Verification:
 
 - A phone that placed outside the top five sees its own position after the close
-- A phone that never joined sees the board and no position line, not an error
+- A device that never joined stays on the join form — no board, no position line, no error
 
 ---
 
@@ -462,6 +471,22 @@ backlog-handoff row, and a Delivered entry recording what was built and what was
 
 **Contract**: Prose only.
 
+#### 5. The agent instructions
+
+**File**: `CLAUDE.md`
+
+> **Added after the fact (2026-08-14, recorded in review F4, and now a `lessons.md` rule).** This entry
+> was missing from the plan and the edit happened anyway, because Phase 1 made two of its statements
+> false. It is written in rather than left out, so the plan matches what shipped.
+
+**Intent**: Phase 1 falsifies two claims: that each transition field "is set by exactly one
+constructor" (`standings` now has two), and the retention paragraph, which describes a window bounded
+by the host's attention. Both must be amended in the same change that breaks them (`lessons.md`).
+
+**Contract**: Correct both statements, quoting the overturned position rather than deleting it — the
+convention the PRD's Deviation 2 chain and `state.ts` already follow — and add the `BOARD_PHASES`
+asymmetry (permitted in two phases, required in one) as a rule of its own, pointing at the contract.
+
 ### Success Criteria:
 
 #### Automated Verification:
@@ -563,7 +588,7 @@ for free.
 #### Manual
 
 - [x] 2.4 A phone outside the top five sees its own position after the close — 72facda
-- [x] 2.5 A phone that never joined sees the board and no position line — 72facda
+- [x] 2.5 A device that never joined stays on the join form, not an error — 72facda
 
 ### Phase 3: The two closing screens
 

@@ -695,8 +695,18 @@ import { publicQuiz } from "../../quiz/public";
           empty: "text-text-secondary text-lg",
         });
 
-        // A device with no claim is a spectator: it can watch the board, and there is no
-        // position to tell it about.
+        /**
+         * A device with no claim: no position to tell it about.
+         *
+         * **Unreachable by construction, and kept deliberately** (S-10 implementation
+         * review, F1). `render()` returns early unless `joined`, and `joined` is set only
+         * inside `enterSession`, which sets `player` in the same breath — so nothing
+         * without a claim reaches this function at all. The comment here used to say "a
+         * spectator can watch the board", which described a mode this view does not have,
+         * and a plan's verification row was written against that sentence before the review
+         * traced it. Corrected rather than deleted: the guard costs nothing and is the right
+         * behaviour if the two flags ever decouple.
+         */
         if (!player) {
           setText("standings-you", "");
           return;

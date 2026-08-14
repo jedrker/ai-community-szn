@@ -160,3 +160,22 @@
   directions: confirm it passes on the correct code AND fails when the code is broken. A guard that
   only ever ran against one of the two has been checked, not verified.
 - **Applies to**: implement, impl-review
+
+## The CLAUDE.md edit is part of the slice, not a discovery at the end of it
+
+- **Context**: Any slice that changes a shared, documented invariant — a `SessionState` field's
+  ownership, a `livequiz:` key's contents, a fold, a boundary rule, the placement of an irreversible
+  verb. Sharpest in the planning step, where the documents to amend are listed.
+- **Problem**: S-10's plan named four documents for its docs phase — the contract, the runbook, the
+  PRD and the roadmap — and CLAUDE.md was not one of them. Phase 1 then made two of its statements
+  false ("each transition field is set by exactly one constructor", and the retention paragraph), so
+  the edit happened anyway, outside the plan. This is not a one-off: every slice from S-02 onward has
+  a CLAUDE.md commit (`3d0cca7`, `83fd5b7`, `e097d34`, `7eda8a2`, `96e8c68`, `6ff675a`), and in most
+  of them it arrived in the final docs phase rather than in the plan. The failure mode is not the
+  extra edit — it is the slice where nobody notices, leaving CLAUDE.md asserting an invariant the code
+  stopped holding, which is the one file every future agent reads first and trusts most.
+- **Rule**: When planning a slice that touches a documented invariant, grep CLAUDE.md for the claim
+  you are about to change and list the file in the docs phase's Changes Required, naming the sentences
+  that will become false. Amend it in the same change, quoting the position you overturn rather than
+  deleting it, as the PRD and `state.ts` already do.
+- **Applies to**: plan, plan-review, implement, impl-review

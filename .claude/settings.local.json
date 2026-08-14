@@ -26,9 +26,7 @@
       "Bash(bunx vitest *)",
       "Bash(bunx tsc *)",
       "Bash(bun scripts/rehearse-room.ts --clients=2)",
-      "Bash(vercel ls *)",
-      "Bash(grep -n \"pokaż ranking\\\\` → \\\\`dalej\\\\|sequence is\\\\|zakończ\" docs/runbook-live-session.md)",
-      "Bash(python3 -c ' *)"
+      "Bash(vercel ls *)"
     ]
   },
   "enabledPlugins": {
