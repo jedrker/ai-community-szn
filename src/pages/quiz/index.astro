@@ -105,6 +105,15 @@ import { publicQuiz } from "../../quiz/public";
 
       <section id="follow" hidden class="flex flex-col gap-6">
         <p id="player-name" class="text-text-secondary text-base"></p>
+        <!-- What this device came back with, on a resume only (roadmap S-09, FR-009).
+
+             Deliberately NOT a live score line. It is refreshed by nothing, and it says
+             so: it is phrased as a statement about the moment of resuming, which stays
+             true however long it sits there, and `paintTotal` retires it the first time
+             a fresh total reaches the result panel. A permanently-visible total updated
+             only at reveal is the affordance-vs-data-path defect `lessons.md` opens
+             with, and it would put two different scores on one screen. -->
+        <p id="resume-total" class="text-text-secondary text-base"></p>
         <p id="follow-status" class="text-xl font-semibold"></p>
 
         <!-- The backup-mode banner. Shown only while the channel is unavailable *and*
@@ -336,6 +345,13 @@ import { publicQuiz } from "../../quiz/public";
         player?: { id: string; displayName: string };
         state?: Parameters<SessionClient["apply"]>[0];
         error?: string;
+        /** Present on a resume only (roadmap S-09) — a fresh claim has nothing to carry. */
+        total?: number;
+        /**
+         * Which 409 this is (roadmap S-09). `taken` and `capped` are both 409s and the
+         * device does different things with them, so the status alone cannot decide.
+         */
+        refusal?: string;
       };
 
       const config = (window as unknown as { __liveQuiz: Config }).__liveQuiz;
@@ -1180,6 +1196,20 @@ import { publicQuiz } from "../../quiz/public";
         }
       }
 
+      /**
+       * Paints the running total, and retires the returning line in the same breath
+       * (roadmap S-09).
+       *
+       * One function rather than three call sites, because the retirement is not a
+       * separate concern from the paint: the returning line exists precisely until a
+       * fresher number arrives, and two places that both claim to be this device's score
+       * is the thing it must never become.
+       */
+      function paintTotal(total: number): void {
+        setText("result-total", `Twój wynik: ${total} pkt`);
+        setText("resume-total", "");
+      }
+
       function showResult(own: OwnResult, question: PublicQuestion): void {
         setHidden(resultPanel, false);
 
@@ -1198,7 +1228,7 @@ import { publicQuiz } from "../../quiz/public";
           setText("result-verdict", "Bez odpowiedzi");
           setText("result-award", "Tym razem nie zdążyliśmy zapisać Twojej odpowiedzi.");
           setText("result-answer", "");
-          setText("result-total", `Twój wynik: ${own.total} pkt`);
+          paintTotal(own.total);
           return;
         }
 
@@ -1228,7 +1258,7 @@ import { publicQuiz } from "../../quiz/public";
          * choice question's panel is unchanged.
          */
         setText("result-answer", own.text ? `Twoja odpowiedź: ${own.text}` : "");
-        setText("result-total", `Twój wynik: ${own.total} pkt`);
+        paintTotal(own.total);
       }
 
       /**
@@ -1268,7 +1298,7 @@ import { publicQuiz } from "../../quiz/public";
          * scoring dispute would start.
          */
         setText("result-answer", own.value === null ? "" : `Twoja odpowiedź: ${own.value}`);
-        setText("result-total", `Twój wynik: ${own.total} pkt`);
+        paintTotal(own.total);
       }
 
       /**
@@ -1387,7 +1417,17 @@ import { publicQuiz } from "../../quiz/public";
 
       async function enterSession(
         joining: { id: string; displayName: string },
-        state: Parameters<SessionClient["apply"]>[0]
+        state: Parameters<SessionClient["apply"]>[0],
+        /**
+         * What a resuming device is coming back with; `null` for a fresh join, which has
+         * nothing to come back with (roadmap S-09, FR-009).
+         *
+         * `null` rather than `0` on purpose — the two are different claims. A returning
+         * player who has genuinely scored nothing is told so, which is reassuring in its
+         * own way; a fresh joiner told "you are returning with 0 pkt" would be confused
+         * by a line about a session they just entered.
+         */
+        resumedTotal: number | null = null
       ): Promise<void> {
         joined = true;
         // Held for the rest of the segment: every submission and every result fetch is
@@ -1400,6 +1440,10 @@ import { publicQuiz } from "../../quiz/public";
         setHidden(joinSection, true);
         setHidden(followSection, false);
         setText("player-name", `Grasz jako ${joining.displayName}`);
+        // Retired by `paintTotal` the moment a fresher number arrives.
+        if (resumedTotal !== null) {
+          setText("resume-total", `Wracasz z wynikiem ${resumedTotal} pkt`);
+        }
 
         // Applied before connecting: the join response already carries the host's
         // current state, so the first render costs no extra round trip inside the
@@ -1428,7 +1472,11 @@ import { publicQuiz } from "../../quiz/public";
         const payload = (await response.json().catch(() => ({}))) as JoinResponse;
 
         if (response.ok && payload.player) {
-          await enterSession(payload.player, payload.state ?? null);
+          // Read explicitly rather than `payload.total ?? 0`: a response that omits the
+          // field is one from a server before this shipped, and it has not told us this
+          // device scored nothing — it has told us nothing. `null` shows no line at all.
+          const total = typeof payload.total === "number" ? payload.total : null;
+          await enterSession(payload.player, payload.state ?? null, total);
           return;
         }
 
@@ -1488,7 +1536,32 @@ import { publicQuiz } from "../../quiz/public";
             return;
           }
 
-          setText("join-error", payload.error ?? "Nie udało się dołączyć.");
+          /**
+           * A `taken` refusal on a device that remembers nobody (roadmap S-09, FR-009).
+           *
+           * The bare message is accurate and useless in precisely the case where the
+           * attendee knows the name is theirs: their storage is unavailable — a private
+           * tab, or site data cleared mid-session — so `readPlayer` reported "no stored
+           * player", they were shown the form, and they re-typed the name they are still
+           * holding. The server cannot tell them apart from someone else picking the
+           * same name, and this device has no id left to present, so there is nothing to
+           * recover. What it can do is stop looking like a bug and name the way forward.
+           *
+           * Gated on there being no stored player: a device that *does* hold one and
+           * still gets `taken` typed a name somebody else has, and the plain message is
+           * the right one.
+           */
+          const strandedByStorage =
+            payload.refusal === "taken" && readPlayer(config.storageKey) === null;
+
+          setText(
+            "join-error",
+            strandedByStorage
+              ? "Ta nazwa jest już zajęta. Jeśli to Twoja — to urządzenie jej nie pamięta " +
+                  "(tryb prywatny lub wyczyszczone dane). Wybierz inną nazwę, żeby grać " +
+                  "dalej; wcześniejszych punktów nie odzyskamy."
+              : (payload.error ?? "Nie udało się dołączyć.")
+          );
         } catch {
           setText("join-error", "Brak połączenia. Spróbuj ponownie.");
         } finally {

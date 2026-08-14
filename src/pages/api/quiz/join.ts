@@ -102,6 +102,18 @@ export const POST: APIRoute = async ({ request }) => {
         player: { id: lookup.player.id, displayName: lookup.player.displayName },
         state: lookup.state,
         resumed: true,
+        /**
+         * What this device is coming back with (roadmap S-09, FR-009).
+         *
+         * **No new exposure**: it is the requesting device's own score, returned to the
+         * id that owns it, on a response that already carries that device's own name.
+         * It travels here rather than on the snapshot for the reason every per-player
+         * value does — a published snapshot is readable by anyone with a token.
+         *
+         * Returned on this path only. A fresh claim's total is zero, and saying so would
+         * be a second place the number is spelled and a second thing to keep in step.
+         */
+        total: lookup.total,
       });
     }
 
@@ -171,12 +183,22 @@ export const POST: APIRoute = async ({ request }) => {
   // room's current state, not a permission the attendee could ever have been granted.
   if (claim.outcome === "capped") {
     logSessionEvent("session.join.rejected", { rejection: "capped" });
-    return json(409, { error: MESSAGES.capped });
+    return json(409, { error: MESSAGES.capped, refusal: "capped" });
   }
 
   if (claim.outcome === "taken") {
     logSessionEvent("session.join.rejected", { rejection: "taken" });
-    return json(409, { error: MESSAGES.taken });
+    /**
+     * **`refusal` exists because `capped` is a 409 too** (roadmap S-09). The client
+     * shows a longer, storage-specific message when a `taken` lands on a device that
+     * remembers nobody, and without a discriminator it would show that message to a
+     * capped device as well — telling an attendee their storage failed when what
+     * actually happened is that their device spent its allowance.
+     *
+     * A short machine-readable class beside the human string, never instead of it: the
+     * client renders `error` directly on every other branch and that must keep working.
+     */
+    return json(409, { error: MESSAGES.taken, refusal: "taken" });
   }
 
   // "Not started yet" and "already over" are different things for an attendee to read,

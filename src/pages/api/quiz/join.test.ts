@@ -70,7 +70,12 @@ beforeEach(() => {
   publishSnapshotMock.mockReset();
   readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
   claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
-  readPlayerByIdMock.mockResolvedValue({ outcome: "not-found", player: null, state: lobby });
+  readPlayerByIdMock.mockResolvedValue({
+    outcome: "not-found",
+    player: null,
+    state: lobby,
+    total: 0,
+  });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -237,7 +242,12 @@ describe("claiming a name", () => {
 
 describe("a device coming back", () => {
   it("recognises a stored player id and reports it as resumed", async () => {
-    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 0,
+    });
 
     const response = await join({ request: request({ playerId: "player-abc" }) } as never);
 
@@ -257,7 +267,12 @@ describe("a device coming back", () => {
    * for the rest of the session.
    */
   it("never attempts a fresh claim for a device presenting an id", async () => {
-    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 0,
+    });
 
     await join({ request: request({ playerId: "player-abc" }) } as never);
 
@@ -277,7 +292,12 @@ describe("a device coming back", () => {
    * handler, which is the natural place to put it and the one place it must not go.
    */
   it("resumes a device that sends no device id at all, so the cap can never refuse it", async () => {
-    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 0,
+    });
 
     const response = await join({ request: request({ playerId: "player-abc" }) } as never);
 
@@ -291,7 +311,12 @@ describe("a device coming back", () => {
    * `capped` can only ever come back from a claim.
    */
   it("resumes without consulting the cap even when a device id is present", async () => {
-    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 0,
+    });
     claimPlayerMock.mockResolvedValue({ outcome: "capped", state: lobby });
 
     const response = await join({
@@ -302,8 +327,59 @@ describe("a device coming back", () => {
     expect(claimPlayerMock).not.toHaveBeenCalled();
   });
 
+  /**
+   * WHAT THE DEVICE IS COMING BACK WITH (roadmap S-09, FR-009).
+   *
+   * The score survives a reload by construction — it lives in the scores hash keyed by
+   * player id, and nothing on this path touches it. What did not survive was the
+   * attendee's *knowledge* of that: `result-total` is painted only from inside the
+   * result panel, so a reload during an open question left a screen with no score on it
+   * until the next reveal.
+   */
+  it("carries the running total back to a resuming device", async () => {
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 1_200,
+    });
+
+    const payload = await body(
+      await join({ request: request({ playerId: "player-abc" }) } as never)
+    );
+
+    expect(payload.total).toBe(1_200);
+  });
+
+  /**
+   * Zero is a real answer here, not a missing one: `HINCRBY` only writes when something
+   * was awarded, so every player is absent from the scores hash until their first
+   * scoring answer. The client tells `0` apart from an absent field — a response without
+   * one has said nothing about this device's score, and shows no line at all.
+   */
+  it("reports a scoreless player as zero rather than omitting the field", async () => {
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 0,
+    });
+
+    const payload = await body(
+      await join({ request: request({ playerId: "player-abc" }) } as never)
+    );
+
+    expect(payload.total).toBe(0);
+    expect("total" in payload).toBe(true);
+  });
+
   it("prefers the stored id even when a name is also sent", async () => {
-    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 0,
+    });
 
     await join({ request: request({ playerId: "player-abc", displayName: "Anna" }) } as never);
 
@@ -356,7 +432,12 @@ describe("what joining must never do", () => {
     claimPlayerMock.mockResolvedValue({ outcome: "taken", state: lobby });
     await join({ request: claiming({ displayName: "Anna" }) } as never);
 
-    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 0,
+    });
     await join({ request: request({ playerId: "player-abc" }) } as never);
 
     expect(publishSnapshotMock).not.toHaveBeenCalled();
@@ -378,7 +459,12 @@ describe("what joining must never do", () => {
     claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
     await join({ request: claiming({ displayName: "Anna" }) } as never);
 
-    readPlayerByIdMock.mockResolvedValue({ outcome: "found", player: stored, state: lobby });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "found",
+      player: stored,
+      state: lobby,
+      total: 0,
+    });
     await join({ request: request({ playerId: "player-abc" }) } as never);
 
     expect(readSessionMock).not.toHaveBeenCalled();

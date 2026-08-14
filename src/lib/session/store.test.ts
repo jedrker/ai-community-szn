@@ -690,30 +690,75 @@ describe("readPlayerById", () => {
   beforeEach(configure);
 
   it("resolves an id through the reverse index in one round trip", async () => {
-    redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby)]);
+    redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby), 800]);
 
     await expect(readPlayerById("player-abc")).resolves.toEqual({
       outcome: "found",
       player,
       state: lobby,
+      total: 800,
     });
 
-    // One round trip for both the record and the session document — a reloading
-    // device needs both, and the script has both in hand.
+    // One round trip for the record, the session document and the running total — a
+    // reloading device needs all three, and the script has all three in hand.
     expect(redisMock.eval).toHaveBeenCalledTimes(1);
     const [, keys] = redisMock.eval.mock.calls[0]!;
-    expect(keys).toEqual([PLAYER_IDS_KEY, PLAYERS_KEY, SESSION_KEY]);
+    expect(keys).toEqual([PLAYER_IDS_KEY, PLAYERS_KEY, SESSION_KEY, SCORES_KEY]);
   });
 
   it("accepts an already-deserialized record", async () => {
     // `automaticDeserialization` defaults to true; depending on it silently would
     // mean every lookup failing if it ever changed.
-    redisMock.eval.mockResolvedValue([player, lobby]);
+    redisMock.eval.mockResolvedValue([player, lobby, 800]);
 
     await expect(readPlayerById("player-abc")).resolves.toEqual({
       outcome: "found",
       player,
       state: lobby,
+      total: 800,
+    });
+  });
+
+  /**
+   * A PLAYER WHO HAS SCORED NOTHING (roadmap S-09, FR-009).
+   *
+   * `HINCRBY` only writes when something was awarded, so absence from the scores hash is
+   * the *normal* state of every player before the first reveal and of anyone who has not
+   * scored since. It has to read as `0` rather than as a failure, and `0` is what the
+   * resume line then says — which is honest and still reassuring.
+   *
+   * Note what this test does *not* prove: a bare `Number(raw)` also yields `0` here,
+   * because `Number(false)` is `0` — by accident rather than by decision. The corrupt
+   * case below is the one that separates the two, and it is the reason `storedTotal`
+   * exists rather than the coercion.
+   */
+  it("reads an absent total as zero, not as a failure", async () => {
+    redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby), false]);
+
+    await expect(readPlayerById("player-abc")).resolves.toMatchObject({
+      outcome: "found",
+      total: 0,
+    });
+  });
+
+  /**
+   * A CORRUPT TOTAL READS AS ZERO, NEVER AS `NaN` (roadmap S-09).
+   *
+   * The case that makes `storedTotal` worth calling: a bare `Number(raw)` turns store
+   * garbage into `NaN`, which travels through the route as `null` in JSON and renders on
+   * a phone as a line about a score that is not a number. `HINCRBY` only writes integers,
+   * so only corruption can produce one — rare, and rendered in front of the room when it
+   * happens.
+   *
+   * Unlike the leaderboard, which reserves `null` for "could not say", this number has no
+   * such rendering: it is one device's own reassurance, so it degrades to `0`.
+   */
+  it("reads a corrupt total as zero rather than NaN", async () => {
+    redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby), "not-a-number"]);
+
+    await expect(readPlayerById("player-abc")).resolves.toMatchObject({
+      outcome: "found",
+      total: 0,
     });
   });
 
@@ -730,12 +775,13 @@ describe("readPlayerById", () => {
    * reasoning held. What they need opposite treatment for is `localStorage`.
    */
   it("reports an unknown id as not-found, with the session it did read", async () => {
-    redisMock.eval.mockResolvedValue([false, JSON.stringify(lobby)]);
+    redisMock.eval.mockResolvedValue([false, JSON.stringify(lobby), false]);
 
     await expect(readPlayerById("nobody")).resolves.toEqual({
       outcome: "not-found",
       player: null,
       state: lobby,
+      total: 0,
     });
   });
 
@@ -747,7 +793,7 @@ describe("readPlayerById", () => {
 
     // The assertion that matters: `failed`, distinct from the unknown-id case above.
     // Asserting only `player: null` would pass against the lockout bug.
-    expect(result).toEqual({ outcome: "failed", player: null, state: null });
+    expect(result).toEqual({ outcome: "failed", player: null, state: null, total: 0 });
   });
 
   it("reports an unconfigured store as failed rather than as an unknown player", async () => {
@@ -758,11 +804,16 @@ describe("readPlayerById", () => {
       outcome: "failed",
       player: null,
       state: null,
+      total: 0,
     });
   });
 
   it("returns null on a malformed stored record", async () => {
-    redisMock.eval.mockResolvedValue([JSON.stringify({ id: "abc" }), JSON.stringify(lobby)]);
+    redisMock.eval.mockResolvedValue([
+      JSON.stringify({ id: "abc" }),
+      JSON.stringify(lobby),
+      false,
+    ]);
 
     await expect(readPlayerById("player-abc")).resolves.toMatchObject({
       outcome: "not-found",

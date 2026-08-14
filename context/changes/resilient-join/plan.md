@@ -627,32 +627,32 @@ requires, avoids it entirely.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 `boundary.test.ts` passes for the new `<script>` usage
-- [x] 3.4 The exemption test fails when the cap is applied to the `playerId` branch
-- [x] 3.5 The absent-`deviceId` test fails when the guard is removed
+- [x] 3.1 Unit tests pass: `bun run test` — 189f69a
+- [x] 3.2 Type checking passes: `bun run type-check` — 189f69a
+- [x] 3.3 `boundary.test.ts` passes for the new `<script>` usage — 189f69a
+- [x] 3.4 The exemption test fails when the cap is applied to the `playerId` branch — 189f69a
+- [x] 3.5 The absent-`deviceId` test fails when the guard is removed — 189f69a
 
 #### Manual
 
-- [x] 3.6 Joining from a fresh device works and lands inside the 30-second target
-- [x] 3.7 A fourth claim is refused with copy that does not read as "try another name"
-- [x] 3.8 A capped device still resumes its existing player on reload
+- [x] 3.6 Joining from a fresh device works and lands inside the 30-second target — 189f69a
+- [x] 3.7 A fourth claim is refused with copy that does not read as "try another name" — 189f69a
+- [x] 3.8 A capped device still resumes its existing player on reload — 189f69a
 
 ### Phase 4: The phone — score-intact resume and a recoverable refusal
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 The zero-total test fails when the explicit parse becomes a bare coercion
+- [x] 4.1 Unit tests pass: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 The zero-total test fails when the explicit parse becomes a bare coercion
 
 #### Manual
 
-- [ ] 4.4 Reload mid-question shows the returning line with the correct score
-- [ ] 4.5 The returning line disappears at the next reveal — never two scores at once
-- [ ] 4.6 A fresh join shows no returning line
-- [ ] 4.7 In a private tab, the `taken` refusal explains itself
+- [x] 4.4 Reload mid-question shows the returning line with the correct score
+- [x] 4.5 The returning line disappears at the next reveal — never two scores at once
+- [x] 4.6 A fresh join shows no returning line
+- [x] 4.7 In a private tab, the `taken` refusal explains itself
 
 ### Phase 5: Contract, documents, and the live check
 

@@ -303,10 +303,17 @@ return { 1, redis.call('HLEN', KEYS[2]), raw }
  * does: a returning device needs both, and fetching the session separately would
  * double the cost of the reload path.
  *
- * KEYS[1] = player-ids hash, KEYS[2] = players hash, KEYS[3] = session doc
+ * **The running total travels with it (roadmap S-09, FR-009).** One more `HGET` in a
+ * script that already runs once per reload, so a returning device learns what it is
+ * coming back with at no extra round trip. It is read on the unknown-id path too — the
+ * shape stays one tuple rather than two, and the total is `false` there anyway.
+ *
+ * KEYS[1] = player-ids hash, KEYS[2] = players hash, KEYS[3] = session doc,
+ * KEYS[4] = scores hash
  * ARGV[1] = player id
- * Returns { recordJson, sessionJson }, or { false, sessionJson } when the id is
- * unknown. `sessionJson` is itself `false` when no session exists.
+ * Returns { recordJson, sessionJson, total }, or { false, sessionJson, false } when the
+ * id is unknown. `sessionJson` is itself `false` when no session exists, and `total` is
+ * `false` for a player who has scored nothing.
  */
 const READ_PLAYER_BY_ID = `
 local session = redis.call('GET', KEYS[3])
@@ -316,10 +323,15 @@ end
 
 local key = redis.call('HGET', KEYS[1], ARGV[1])
 if not key then
-  return { false, session }
+  return { false, session, false }
 end
 
-return { redis.call('HGET', KEYS[2], key), session }
+local total = redis.call('HGET', KEYS[4], ARGV[1])
+if not total then
+  total = false
+end
+
+return { redis.call('HGET', KEYS[2], key), session, total }
 `;
 
 /**
@@ -865,6 +877,20 @@ export type LookupResult = {
   readonly outcome: "found" | "not-found" | "failed";
   readonly player: PlayerRecord | null;
   readonly state: SessionState | null;
+  /**
+   * The running total this device is coming back with (roadmap S-09, FR-009).
+   *
+   * **Absent from the scores hash is `0`, not a failure** — `HINCRBY` only writes when
+   * something was awarded, so everyone who has scored nothing is absent, which includes
+   * every player before the first reveal. `storedTotal` owns that reading and the
+   * corrupt case beside it; a corrupt entry becomes `0` here rather than `null`, because
+   * unlike the leaderboard this number is a reassurance to one device and there is no
+   * "could not say" to render.
+   *
+   * `0` on `not-found` and `failed` for the same reason it is on a scoreless player: the
+   * caller has no player to attach it to on either path.
+   */
+  readonly total: number;
 };
 
 /**
@@ -876,18 +902,18 @@ export type LookupResult = {
  */
 export async function readPlayerById(id: string): Promise<LookupResult> {
   const redis = client();
-  if (!redis) return { outcome: "failed", player: null, state: null };
+  if (!redis) return { outcome: "failed", player: null, state: null, total: 0 };
 
-  let result: [unknown, unknown] | null;
+  let result: [unknown, unknown, unknown] | null;
   try {
-    result = await redis.eval<[string], [unknown, unknown]>(
+    result = await redis.eval<[string], [unknown, unknown, unknown]>(
       READ_PLAYER_BY_ID,
-      [PLAYER_IDS_KEY, PLAYERS_KEY, SESSION_KEY],
+      [PLAYER_IDS_KEY, PLAYERS_KEY, SESSION_KEY, SCORES_KEY],
       [id]
     );
   } catch (err) {
     console.error("Player lookup failed:", describe(err));
-    return { outcome: "failed", player: null, state: null };
+    return { outcome: "failed", player: null, state: null, total: 0 };
   }
 
   const rawPlayer = result?.[0];
@@ -904,7 +930,11 @@ export async function readPlayerById(id: string): Promise<LookupResult> {
     return parsed.ok ? parsed.state : null;
   })();
 
-  return { outcome: player ? "found" : "not-found", player, state };
+  // `?? 0` covers the corrupt case `storedTotal` reports as null — see the field's note
+  // on why this one has no "could not say" to render.
+  const total = storedTotal(result?.[2] === false ? null : result?.[2]) ?? 0;
+
+  return { outcome: player ? "found" : "not-found", player, state, total };
 }
 
 /**
