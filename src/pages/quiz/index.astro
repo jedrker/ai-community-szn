@@ -866,11 +866,6 @@ import { publicQuiz } from "../../quiz/public";
        * actually have to change.
        */
       let countdownTimer: number | null = null;
-      /**
-       * Whether the open question's window has closed, derived on every render and never
-       * stored. A stale `true` would lock a phone out of the *next* question.
-       */
-      let timeUp = false;
       /** What the running timer is counting, so the tick needs no lookup. */
       let countdownFor: { id: string; deadline: number; limitMs: number } | null = null;
 
@@ -880,53 +875,89 @@ import { publicQuiz } from "../../quiz/public";
           countdownTimer = null;
         }
         countdownFor = null;
-        timeUp = false;
         setHidden(countdownBox, true);
       }
 
       /**
-       * Paints the clock for the open question and arms the next tick.
+       * Paints the clock for the open question, arms the next tick, and answers **whether
+       * the window has already closed**.
        *
        * `openedAt` is the snapshot's `updatedAt` — the moment the host opened this
        * question, which is the same value the server measures the window from. That is
        * what keeps this phone, every other phone and the projector on one clock: nothing
        * here is derived from when *this* device happened to paint.
        *
-       * A question with no limit (the two unscored ones) gets no clock at all.
+       * A question with no limit (the two unscored ones) gets no clock, and is never
+       * closed by one.
+       *
+       * **It returns the closed state rather than setting a shared flag, and that is the
+       * fix for a real defect rather than a preference.** The first version held
+       * `let timeUp` beside the two above and cleared it in `stopCountdown` — which
+       * `render` calls as its first statement. So on an expired question the sequence was
+       * `render → stopCountdown (timeUp = false) → renderOpen → startCountdown → paint →
+       * "not flagged yet, flag it and re-render" → render → …`, unbounded: the flag meant
+       * to break the cycle was cleared by the first line of the function it called.
+       * Reproduced at ~1900 frames before `RangeError`, on every phone, the moment a
+       * question's clock reached zero — with the timed-out screen unreachable and the page
+       * frozen on whatever it had last painted.
+       *
+       * A returned value cannot be stale and cannot be reset by anyone else, so the class
+       * is gone rather than the instance. **Nothing on the paint path may call `render`;**
+       * only `tick` may, exactly once, at the crossing. `index.test.ts` asserts both.
        */
-      function startCountdown(question: PublicQuestion, openedAt: number): void {
-        if (question.timeLimitSeconds === undefined) return;
+      function startCountdown(question: PublicQuestion, openedAt: number): boolean {
+        if (question.timeLimitSeconds === undefined) return false;
 
         const limitMs = question.timeLimitSeconds * 1_000;
         const deadline = openedAt + limitMs;
         countdownFor = { id: question.id, deadline, limitMs };
 
         setHidden(countdownBox, false);
-        paintCountdown();
+
+        const remaining = deadline - Date.now();
+        renderCountdown(countdownBox, remaining, limitMs);
+
+        // Already over — paint the zero, arm nothing, and let the caller decide. A device
+        // joining or reloading past the deadline lands here.
+        if (remaining <= 0) return true;
+
+        armNextTick(remaining);
+        return false;
       }
 
-      function paintCountdown(): void {
+      /**
+       * Lands on the next whole second rather than a fixed 1000 ms, so the digits change
+       * when the number changes instead of drifting a few hundred ms per tick.
+       */
+      function armNextTick(remaining: number): void {
+        const untilNextSecond = remaining % 1_000 || 1_000;
+        countdownTimer = window.setTimeout(() => {
+          countdownTimer = null;
+          tick();
+        }, untilNextSecond);
+      }
+
+      /**
+       * One second of the clock.
+       *
+       * **Repaints only, except at the crossing.** A full `render()` every second would
+       * run `replaceChildren()` on the option list and rebuild the buttons under an
+       * attendee's thumb. At zero it hands back to the state machine exactly once, and
+       * `render` re-derives everything from scratch — including, through
+       * `startCountdown`'s return, that the window is now closed.
+       */
+      function tick(): void {
         if (countdownFor === null) return;
 
         const remaining = countdownFor.deadline - Date.now();
         renderCountdown(countdownBox, remaining, countdownFor.limitMs);
 
         if (remaining <= 0) {
-          // Reached zero: take the controls away, once, through the normal state machine.
-          if (!timeUp) {
-            timeUp = true;
-            render();
-          }
+          render();
           return;
         }
 
-        // Land on the next whole second rather than a fixed 1000ms, so the digits change
-        // when the number changes instead of drifting a few hundred ms per tick.
-        const untilNextSecond = remaining % 1_000 || 1_000;
-        countdownTimer = window.setTimeout(() => {
-          countdownTimer = null;
-          paintCountdown();
-        }, untilNextSecond);
+        armNextTick(remaining);
       }
 
       /** Every answering control off, in one call, so no branch can leave one behind. */
@@ -983,7 +1014,7 @@ import { publicQuiz } from "../../quiz/public";
          * The clock starts before the kind dispatch, because the rule is the same for all
          * of them and because `timeUp` below has to be decided once.
          */
-        startCountdown(question, openedAt);
+        const timeUp = startCountdown(question, openedAt);
 
         /**
          * **Out of time, and this device never answered.**

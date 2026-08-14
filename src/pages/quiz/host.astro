@@ -1003,6 +1003,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       function render(): void {
+        /**
+         * **The countdown's single clearing point, and it is here rather than in its own
+         * renderer because that was a bug.**
+         *
+         * `renderCountdownPanel` cleared the clock at its own top — but it is called near
+         * the *end* of `render`, and the `state === null` branch below returns long before
+         * reaching it. So a purge, a TTL expiry or a `bun run quiz:reset` left the timer
+         * chain re-arming and `#host-countdown` on screen, counting a question down over
+         * the "brak sesji" panel. Its own null handling was unreachable, which is the tell.
+         *
+         * Cleared before the first branch, every branch therefore passes through it, and
+         * only the `question-open` path arms a clock again — the same shape the attendee
+         * page uses, for the same reason.
+         */
+        stopCountdown();
+
         const state = client.current();
 
         if (state === null) {
@@ -1195,9 +1211,16 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * would be a copy of that rule able to fall behind it. The same reasoning both views
        * apply to the standings board's visibility.
        */
+      /**
+       * Arms the clock for a scored open question, and nothing otherwise.
+       *
+       * **Arm-only: the clearing lives at the top of `render`.** This function used to
+       * clear as well, which read as safe and was not — it is called near the end of
+       * `render`, so every early return above it skipped the clear entirely. Splitting the
+       * two means the clear cannot be missed by a branch and this one cannot be reached
+       * without it having already happened.
+       */
       function renderCountdownPanel(state: State | null): void {
-        stopCountdown();
-
         if (state === null || state.phase !== "question-open") return;
         if (state.currentQuestionId === null) return;
 

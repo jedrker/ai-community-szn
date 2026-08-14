@@ -45,7 +45,8 @@ describe("the scan can see the code it is checking", () => {
   it("still has the countdown's code left after comments are stripped", () => {
     expect(CODE).toContain("function stopCountdown");
     expect(CODE).toContain("function startCountdown");
-    expect(CODE).toContain("function paintCountdown");
+    expect(CODE).toContain("function tick");
+    expect(CODE).toContain("function armNextTick");
   });
 
   it("still has the state machine's code left after comments are stripped", () => {
@@ -150,9 +151,40 @@ describe("an expired answer is never recorded as submitted", () => {
     expect(occurrences("markSubmitted(config.seenStorageKey")).toBe(2);
   });
 
-  it("does not lock a timed-out device out of the next question", () => {
-    // `timeUp` is derived on every render and reset by `stopCountdown`. A version that
-    // persisted it would carry one question's expiry into the next.
-    expect(CODE).toContain("timeUp = false");
+  /**
+   * THE RECURSION GUARD, and it replaces an assertion that pinned the bug in place.
+   *
+   * This test used to read `expect(CODE).toContain("timeUp = false")` — the exact statement
+   * that caused the defect. `render` called `stopCountdown` first, which cleared that flag;
+   * the paint path then saw it clear on an expired question, set it, and called `render`
+   * again, unbounded. The assertion was written to protect "a device is not locked out of
+   * the next question" and instead certified the crash — `lessons.md`'s "a scan for an
+   * expression that exists today certifies whatever is there, defects included", exactly.
+   *
+   * What replaces it asserts the *property* that makes recursion impossible: the paint path
+   * cannot re-enter the state machine, and the tick hands back to it exactly once.
+   */
+  it("never re-enters the state machine from the paint path", () => {
+    const start = /function startCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    // Non-vacuity: the body must have been found.
+    expect(start).toContain("countdownFor =");
+    // `startCountdown` runs *inside* `render`. A `render()` here is the cycle.
+    expect(start).not.toContain("render()");
+  });
+
+  it("hands back to the state machine from the tick alone, once", () => {
+    const tick = /function tick\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(tick).toContain("countdownFor");
+    expect(tick.match(/\brender\(\)/g) ?? []).toHaveLength(1);
+  });
+
+  it("answers the closed state by return value, not by a shared flag", () => {
+    // A module-level flag is what the first version used, and `stopCountdown` — the first
+    // statement of `render` — reset it out from under the caller about to read it. A
+    // returned value cannot be stale and cannot be cleared by anyone else.
+    expect(CODE).not.toMatch(/\blet\s+timeUp\b/);
+    expect(CODE).toContain("const timeUp = startCountdown(");
   });
 });

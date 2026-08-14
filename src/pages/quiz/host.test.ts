@@ -195,19 +195,39 @@ describe("there is exactly one poll loop", () => {
  * own it would keep looking live while doing it.
  */
 describe("the countdown cannot outlive its question", () => {
-  it("clears before its renderer can return early", () => {
+  /**
+   * **This assertion used to scope itself to `renderCountdownPanel`'s body, and that is
+   * exactly how it missed a live bug.**
+   *
+   * The panel renderer cleared at its own top, which looked correct in isolation — but it
+   * is called near the *end* of `render`, and the `state === null` branch returns long
+   * before reaching it. A purge or a TTL expiry therefore left the clock ticking over the
+   * "brak sesji" screen, and the renderer's own null handling was dead code. The guard
+   * passed throughout, because it never looked at the call site.
+   *
+   * So it now asserts the property where the property lives: the clear happens at the top
+   * of `render`, ahead of every branch, so no early return can skip it.
+   */
+  it("clears at the top of render, ahead of every branch", () => {
+    const renderAt = CODE.indexOf("function render(): void");
+    expect(renderAt).toBeGreaterThan(-1);
+
+    const clearAt = CODE.indexOf("stopCountdown();", renderAt);
+    const firstBranch = CODE.indexOf("if (state === null)", renderAt);
+
+    expect(clearAt).toBeGreaterThan(renderAt);
+    expect(firstBranch).toBeGreaterThan(-1);
+    expect(clearAt).toBeLessThan(firstBranch);
+  });
+
+  it("arms from the panel renderer without clearing there, so the two cannot drift", () => {
     const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     // Non-vacuity: the body must have been found.
     expect(panel).toContain("state.phase");
-
-    const clearAt = panel.indexOf("stopCountdown();");
-    const firstReturn = panel.indexOf("return;");
-
-    expect(clearAt).toBeGreaterThan(-1);
-    expect(firstReturn).toBeGreaterThan(-1);
-    // Ahead of every early return, so no branch can leave the previous question's clock up.
-    expect(clearAt).toBeLessThan(firstReturn);
+    // Arm-only. A clear here would re-create the split that hid the bug above.
+    expect(panel).not.toContain("stopCountdown()");
+    expect(panel).toContain("paintCountdown()");
   });
 
   it("stops wherever the poll stops", () => {
