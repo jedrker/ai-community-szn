@@ -870,12 +870,12 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 
 #### Automated
 
-- [x] 6.1 `bun run test` passes
-- [x] 6.2 `bun run type-check` reports 0 errors
-- [x] 6.3 `bun run build` succeeds
-- [x] 6.4 No document asserts the two falsified claims or points at `context/changes/leaderboard-beat/`
+- [x] 6.1 `bun run test` passes — 7eda8a2
+- [x] 6.2 `bun run type-check` reports 0 errors — 7eda8a2
+- [x] 6.3 `bun run build` succeeds — 7eda8a2
+- [x] 6.4 No document asserts the two falsified claims or points at `context/changes/leaderboard-beat/` — 7eda8a2
 
 #### Manual
 
-- [x] 6.5 The contract is a one-page pointer
-- [x] 6.6 A reader coming from `leaderboard-contract.md` can pick up this slice's decisions from it
+- [x] 6.5 The contract is a one-page pointer — 7eda8a2
+- [x] 6.6 A reader coming from `leaderboard-contract.md` can pick up this slice's decisions from it — 7eda8a2
