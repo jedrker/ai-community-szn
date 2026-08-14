@@ -36,6 +36,34 @@
   --color-text-primary: #f0f0f0;
   --color-text-secondary: #999999;
   --font-family-archivo: "Archivo", sans-serif;
+
+  /*
+   * LiveQuiz signage palette. Scoped by the `quiz-` prefix on purpose: the
+   * tokens above serve the whole community site and must not be repointed.
+   * Every `quiz-` class name is therefore self-evident in a diff.
+   */
+  --color-quiz-ink: #0b0b0c;
+  --color-quiz-asphalt: #141416;
+  --color-quiz-float: #1b1b1f;
+  --color-quiz-signwhite: #f5f5f2;
+  --color-quiz-zinc: #8a8a87;
+  --color-quiz-chrome: #ffd400;
+  --color-quiz-mint: #3ddc84;
+  --color-quiz-signal: #e5342a;
+
+  /* Hairlines and tints derived from the eight above. */
+  --color-quiz-divider: #26262a;
+  --color-quiz-slab-inactive: #2a2a2e;
+  --color-quiz-field-border: #33333a;
+  --color-quiz-pill-border: #3a3a40;
+  --color-quiz-pill-disabled: #4e4e52;
+  --color-quiz-echo: #c9c9c4;
+  --color-quiz-chrome-tint: #231f05;
+  --color-quiz-mint-tint: #13211b;
+  --color-quiz-locked-tint: #1c1905;
+  --color-quiz-locked-slab: #6b5a00;
+  --color-quiz-locked-letter: #e8d26a;
+  --color-quiz-ink-on-chrome: #7a6300;
 }
 
 @layer components {
