@@ -562,41 +562,41 @@ for free.
 
 #### Manual
 
-- [ ] 2.4 A phone outside the top five sees its own position after the close
-- [ ] 2.5 A phone that never joined sees the board and no position line
+- [x] 2.4 A phone outside the top five sees its own position after the close
+- [x] 2.5 A phone that never joined sees the board and no position line
 
 ### Phase 3: The two closing screens
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 `boundary.test.ts` still passes
+- [x] 3.1 Unit tests pass: `bun run test` — fc966b2
+- [x] 3.2 Type checking passes: `bun run type-check` — fc966b2
+- [x] 3.3 `boundary.test.ts` still passes — fc966b2
 
 #### Manual
 
-- [ ] 3.4 Projector: the winner is legible from the back of the room
-- [ ] 3.5 Phone: own row highlighted and own position agreeing with the projector
-- [ ] 3.6 A reloaded phone still shows the board and the position
-- [ ] 3.7 A purge mid-session returns the phone to the plain closing screen
-- [ ] 3.8 Ending after a `standings` beat shows the closing screen, not the old board
+- [x] 3.4 Projector: the winner is legible from the back of the room
+- [x] 3.5 Phone: own row highlighted and own position agreeing with the projector
+- [x] 3.6 A reloaded phone still shows the board and the position
+- [x] 3.7 A purge mid-session returns the phone to the plain closing screen
+- [x] 3.8 Ending after a `standings` beat shows the closing screen, not the old board
 
 ### Phase 4: The host's closing button
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 `host.test.ts` still finds one poll timer, one in-flight flag and one polled fetch site
-- [ ] 4.4 Each new scan assertion fails when the guard it names is removed
+- [x] 4.1 Unit tests pass: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 `host.test.ts` still finds one poll timer, one in-flight flag and one polled fetch site
+- [x] 4.4 Each new scan assertion fails when the guard it names is removed
 
 #### Manual
 
-- [ ] 4.5 A single tap does not end the session
-- [ ] 4.6 A second tap ends it and the room lands on the closing screen
-- [ ] 4.7 Another action landing disarms the armed button
-- [ ] 4.8 A stale version surfaces the route's confirmation-mismatch message
-- [ ] 4.9 The button is disabled while a question is open
+- [x] 4.5 A single tap does not end the session
+- [x] 4.6 A second tap ends it and the room lands on the closing screen
+- [x] 4.7 Another action landing disarms the armed button
+- [x] 4.8 A stale version surfaces the route's confirmation-mismatch message
+- [x] 4.9 The button is disabled while a question is open
 
 ### Phase 5: Contract, runbook, PRD
 

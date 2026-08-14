@@ -41,6 +41,15 @@ function occurrences(needle: string): number {
 
 describe("the scan can see the code it is checking", () => {
   /**
+   * The closing button's half of the non-vacuity check (roadmap S-10). Its guards are
+   * scanned below and every one of those assertions would pass on an empty string.
+   */
+  it("still has the closing button's code left after comments are stripped", () => {
+    expect(CODE).toContain("function syncEndButton");
+    expect(CODE).toContain("endButton.addEventListener");
+  });
+
+  /**
    * Without this, a stripper that over-matched would empty the source and turn every
    * assertion below green by vacuity — the failure mode `keys.test.ts` guards with its own
    * non-empty-registry check.
@@ -233,6 +242,99 @@ describe("nothing on the polled path writes", () => {
   it("reaches a host action only through the button handler", () => {
     // `fire` is the only place an action URL is built, and it is driven by a click.
     expect(occurrences("/api/quiz/host/${action}")).toBe(1);
+  });
+});
+
+/**
+ * THE CLOSING BUTTON (roadmap S-10, FR-006).
+ *
+ * This page's docstring used to say `end` was deliberately not here, and this slice reversed
+ * that for the one verb FR-006 asks the host to trigger. What made the reversal defensible is
+ * a set of guards, none of which any test can execute — an Astro inline script has no
+ * harness — so what is protected here is the structure they consist of.
+ *
+ * Every assertion below was verified in both directions: it passes on the code as written and
+ * fails when the guard it names is removed. A scan that has only ever seen correct code has
+ * been written, not verified (`lessons.md`).
+ */
+describe("the closing button cannot fire by accident", () => {
+  const handler = /endButton\.addEventListener\([\s\S]*?\n {6}\}\);/.exec(CODE)?.[0] ?? "";
+  const sync = /function syncEndButton[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+  it("finds the handler and the sync it is checking", () => {
+    // The two extractions above are what every assertion in this block reads. An empty
+    // match would make all of them vacuously true.
+    expect(handler.length).toBeGreaterThan(0);
+    expect(sync.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * **The blanket handler must not be able to reach it.** Every flow verb is driven by one
+   * `click` listener over `button[data-action]`; giving the closing button that attribute
+   * would wire it into the same path — firing on a single tap, with no body, so the route's
+   * confirmation would arrive absent rather than stale.
+   */
+  it("is not wired into the flow verbs' blanket click handler", () => {
+    expect(CODE).toContain('id="end"');
+    expect(CODE).not.toContain('data-action="end"');
+  });
+
+  /**
+   * **Two taps, and the first one only arms.** The early return on `!endArmed` is the
+   * whole mechanism; without it the first tap ends the session.
+   */
+  it("returns after arming rather than firing on the first tap", () => {
+    expect(handler).toContain("if (!endArmed)");
+    expect(handler.indexOf("if (!endArmed)")).toBeLessThan(handler.indexOf('fire("end"'));
+  });
+
+  /**
+   * **The confirmed version travels with the request.** `end` reads it from the form and
+   * from nowhere else, so a request without one is refused as unconfirmed — and a request
+   * carrying a *freshly read* version would make the confirmation a formality that always
+   * matches.
+   */
+  it("sends the version it was armed at, not a freshly read one", () => {
+    expect(handler).toContain('body.set("version", String(version))');
+    expect(handler).toContain("endArmedVersion ?? state.version");
+    expect(handler).not.toContain('body.set("version", String(state.version))');
+  });
+
+  /** One call site, reached only through the handler above. */
+  it("reaches the end route from exactly one place", () => {
+    expect(occurrences('fire("end"')).toBe(1);
+  });
+
+  /**
+   * **An arm does not survive the session moving.** Any accepted action bumps the version,
+   * so an arm taken against an older one is a statement about a state the host is no longer
+   * looking at — exactly the mis-click the reversal had to answer.
+   */
+  it("disarms when the session has moved under the armed version", () => {
+    expect(sync).toContain("endArmedVersion");
+    expect(sync).toContain("state?.version !== endArmedVersion");
+    expect(sync).toContain("endArmed = false");
+  });
+
+  /**
+   * **The phase rule wins over `fire`'s blanket re-enable**, which is why
+   * `syncStandingsButton` is called in that `finally` too. Missing here, an action would
+   * hand back a closing button enabled in a phase that refuses it — and still armed.
+   */
+  it("re-applies the phase rule after every action's blanket re-enable", () => {
+    const fireBody = /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(fireBody.length).toBeGreaterThan(0);
+    expect(fireBody).toContain("syncEndButton()");
+  });
+
+  /**
+   * **`purge` did not come along.** S-10 reversed the F-03 placement for `end` alone; the
+   * verb that deletes with no undo and no ten-minute window stays on the harness page.
+   */
+  it("leaves purge off this page entirely", () => {
+    expect(CODE).not.toContain('fire("purge"');
+    expect(CODE).not.toContain("/api/quiz/host/purge");
   });
 });
 
