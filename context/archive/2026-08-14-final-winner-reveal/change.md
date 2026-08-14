@@ -1,10 +1,10 @@
 ---
 change_id: final-winner-reveal
 title: Final winner reveal
-status: impl_reviewed
+status: archived
 created: 2026-08-14
 updated: 2026-08-14
-archived_at: null
+archived_at: 2026-08-14T19:56:23Z
 ---
 
 ## Notes
