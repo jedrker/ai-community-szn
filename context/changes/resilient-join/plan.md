@@ -658,11 +658,11 @@ requires, avoids it entirely.
 
 #### Automated
 
-- [x] 5.1 Unit tests pass: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
-- [x] 5.3 Build succeeds: `bun run build`
+- [x] 5.1 Unit tests pass: `bun run test` — 96e8c68
+- [x] 5.2 Type checking passes: `bun run type-check` — 96e8c68
+- [x] 5.3 Build succeeds: `bun run build` — 96e8c68
 
 #### Manual
 
-- [x] 5.4 Live two-device run against production: resume with score, and a capped fourth claim
-- [x] 5.5 `docs/runbook-live-session.md` reads correctly for a host who did not write it
+- [x] 5.4 Live two-device run against production: resume with score, and a capped fourth claim — 96e8c68
+- [x] 5.5 `docs/runbook-live-session.md` reads correctly for a host who did not write it — 96e8c68

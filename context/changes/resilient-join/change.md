@@ -1,7 +1,7 @@
 ---
 change_id: resilient-join
 title: Resilient join
-status: implementing
+status: implemented
 created: 2026-08-14
 updated: 2026-08-14
 ---
