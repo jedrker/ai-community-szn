@@ -8,6 +8,7 @@ import {
 } from "./answers";
 import {
   ANSWERS_KEY,
+  DEVICES_KEY,
   PLAYER_IDS_KEY,
   PLAYERS_KEY,
   registeredKeys,
@@ -16,7 +17,7 @@ import {
   TALLIES_KEY,
 } from "./keys";
 import { logSessionEvent } from "./log";
-import { parsePlayerRecord, type PlayerRecord } from "./players";
+import { MAX_PLAYERS_PER_DEVICE, parsePlayerRecord, type PlayerRecord } from "./players";
 import { buildStandings, rankOf, type Standings } from "./standings";
 import { initialSessionState, parseSessionState, type SessionState } from "./state";
 import { answeredField, optionField, wordField, wordFromField } from "./tallies";
@@ -235,11 +236,31 @@ return { 1, ARGV[1] }
  * the claim it accompanies. Returning it also means the state a device receives is
  * provably the state its claim was checked against.
  *
- * KEYS[1] = session doc, KEYS[2] = players hash, KEYS[3] = player-ids hash
- * ARGV[1] = folded name, ARGV[2] = record JSON, ARGV[3] = player id, ARGV[4] = ttl
+ * ## The per-device cap lives here too (roadmap S-09, FR-018)
+ *
+ * Inside the script for the third time and for the same reason: a count read from
+ * TypeScript is a count that can change before the write lands, and two fast taps on one
+ * phone are the ordinary thing to do against a thirty-second clock.
+ *
+ * **It is checked after the phase checks and before the collision check, deliberately.**
+ * A device that is both capped and typing a name somebody else holds must be told it is
+ * capped — "that name is taken" invites a retry that will also fail, and the attendee
+ * would work through three names before learning the real reason.
+ *
+ * **The counter is incremented on the claimed path only.** Above the collision check it
+ * would charge a device for a name it did not get, so three unlucky collisions with
+ * common first names would cap an attendee who never held a single player. The
+ * increment therefore sits with the two `HSET`s, where it inherits the same
+ * all-or-nothing property they have.
+ *
+ * KEYS[1] = session doc, KEYS[2] = players hash, KEYS[3] = player-ids hash,
+ * KEYS[4] = devices hash
+ * ARGV[1] = folded name, ARGV[2] = record JSON, ARGV[3] = player id, ARGV[4] = ttl,
+ * ARGV[5] = device id, ARGV[6] = max players per device
  * Returns { 1, playerCount, sessionJson } on a claim, { 0, 0, sessionJson } when the
- * name is taken, { -1, 0, false } when there is no session, and
- * { -2, 0, sessionJson } when the session has ended.
+ * name is taken, { -1, 0, false } when there is no session,
+ * { -2, 0, sessionJson } when the session has ended, and
+ * { -3, 0, sessionJson } when the device has already claimed its allowance.
  */
 const CLAIM_PLAYER = `
 local raw = redis.call('GET', KEYS[1])
@@ -251,14 +272,21 @@ if cjson.decode(raw).phase == 'ended' then
   return { -2, 0, raw }
 end
 
+local claimed = tonumber(redis.call('HGET', KEYS[4], ARGV[5])) or 0
+if claimed >= tonumber(ARGV[6]) then
+  return { -3, 0, raw }
+end
+
 if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 1 then
   return { 0, 0, raw }
 end
 
 redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
 redis.call('HSET', KEYS[3], ARGV[3], ARGV[1])
+redis.call('HINCRBY', KEYS[4], ARGV[5], 1)
 redis.call('EXPIRE', KEYS[2], tonumber(ARGV[4]))
 redis.call('EXPIRE', KEYS[3], tonumber(ARGV[4]))
+redis.call('EXPIRE', KEYS[4], tonumber(ARGV[4]))
 
 return { 1, redis.call('HLEN', KEYS[2]), raw }
 `;
@@ -701,6 +729,15 @@ export async function endSession(
 export type ClaimResult =
   | { outcome: "claimed"; playerCount: number; state: SessionState | null }
   | { outcome: "taken"; state: SessionState | null }
+  /**
+   * This device has already registered `MAX_PLAYERS_PER_DEVICE` players (roadmap S-09,
+   * FR-018).
+   *
+   * An ordinary outcome, like `taken` — not an error and not a failure. The difference
+   * from `taken` is that it is *final*: no other name will work from this device, so the
+   * route's message must not read as a prompt to try again.
+   */
+  | { outcome: "capped"; state: SessionState | null }
   | { outcome: "no-session" }
   | { outcome: "closed"; state: SessionState | null }
   | { outcome: "unconfigured"; reason: string }
@@ -721,16 +758,31 @@ export type ClaimResult =
  * O(N²) fan-out the spine contract forbids — the count reaches the room on the host's
  * next action instead.
  */
-export async function claimPlayer(key: string, record: PlayerRecord): Promise<ClaimResult> {
+export async function claimPlayer(
+  key: string,
+  record: PlayerRecord,
+  deviceId: string
+): Promise<ClaimResult> {
   const redis = client();
   if (!redis) return unconfigured();
 
   let result: [number, number, unknown] | null;
   try {
-    result = await redis.eval<[string, string, string, string], [number, number, unknown]>(
+    result = await redis.eval<
+      [string, string, string, string, string, string],
+      [number, number, unknown]
+    >(
       CLAIM_PLAYER,
-      [SESSION_KEY, PLAYERS_KEY, PLAYER_IDS_KEY],
-      [key, JSON.stringify(record), record.id, String(SESSION_TTL_SECONDS)]
+      [SESSION_KEY, PLAYERS_KEY, PLAYER_IDS_KEY, DEVICES_KEY],
+      [
+        key,
+        JSON.stringify(record),
+        record.id,
+        String(SESSION_TTL_SECONDS),
+        deviceId,
+        // Read here rather than passed in by the route, so the number is spelled once.
+        String(MAX_PLAYERS_PER_DEVICE),
+      ]
     );
   } catch (err) {
     return { outcome: "failed", reason: describe(err) };
@@ -758,6 +810,7 @@ export async function claimPlayer(key: string, record: PlayerRecord): Promise<Cl
 
   if (status === -1) return { outcome: "no-session" };
   if (status === -2) return { outcome: "closed", state };
+  if (status === -3) return { outcome: "capped", state };
   if (status === 0) return { outcome: "taken", state };
 
   const playerCount = Number(result?.[1]) || 0;

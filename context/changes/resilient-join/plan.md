@@ -599,29 +599,29 @@ requires, avoids it entirely.
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 `keys.test.ts` still passes — new `livequiz:` names appear only in `keys.ts`
-- [x] 1.4 `boundary.test.ts` still passes for `device.ts`
-- [x] 1.5 The broken-storage test is verified in both directions
+- [x] 1.1 Unit tests pass: `bun run test` — ecd9d12
+- [x] 1.2 Type checking passes: `bun run type-check` — ecd9d12
+- [x] 1.3 `keys.test.ts` still passes — new `livequiz:` names appear only in `keys.ts` — ecd9d12
+- [x] 1.4 `boundary.test.ts` still passes for `device.ts` — ecd9d12
+- [x] 1.5 The broken-storage test is verified in both directions — ecd9d12
 
 #### Manual
 
-- [x] 1.6 Nothing user-visible changed — the join flow behaves as before
+- [x] 1.6 Nothing user-visible changed — the join flow behaves as before — ecd9d12
 
 ### Phase 2: The claim script enforces the cap
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 The single-`eval` assertion in `store.test.ts` still passes
-- [ ] 2.4 The cap boundary test fails with the `-3` branch removed, passes when restored
-- [ ] 2.5 The "taken consumes no slot" test fails with the `HINCRBY` moved above the collision check
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 The single-`eval` assertion in `store.test.ts` still passes
+- [x] 2.4 The cap boundary test fails with the `-3` branch removed, passes when restored
+- [x] 2.5 The "taken consumes no slot" test fails with the `HINCRBY` moved above the collision check
 
 #### Manual
 
-- [ ] 2.6 Nothing user-visible changed — no claim is capped yet
+- [x] 2.6 Nothing user-visible changed — no claim is capped yet
 
 ### Phase 3: The route, and the resume exemption
 

@@ -45,11 +45,19 @@ const {
   SESSION_KEY,
   SESSION_TTL_SECONDS,
 } = await import("./store");
-const { registeredKeys, ANSWERS_KEY, PLAYER_IDS_KEY, PLAYERS_KEY, SCORES_KEY, TALLIES_KEY } =
-  await import("./keys");
+const {
+  registeredKeys,
+  ANSWERS_KEY,
+  DEVICES_KEY,
+  PLAYER_IDS_KEY,
+  PLAYERS_KEY,
+  SCORES_KEY,
+  TALLIES_KEY,
+} = await import("./keys");
 const { answeredField, optionField, wordField } = await import("./tallies");
 const { WORD_CLOUD_SIZE } = await import("./words");
 const { quiz } = await import("../../quiz/index");
+const { MAX_PLAYERS_PER_DEVICE } = await import("./players");
 
 const NOW = 1_785_000_000_000;
 
@@ -80,6 +88,15 @@ const firstQuestionOpen = {
 };
 
 const player = { id: "player-abc", displayName: "Anna", joinedAt: NOW };
+
+/**
+ * The claiming device's own opaque id (roadmap S-09).
+ *
+ * A constant rather than a per-test literal: what these tests can check about the cap is
+ * that the id reaches the script and that the statuses map, and a fixture that varied
+ * would suggest they check more than that.
+ */
+const DEVICE = "device-xyz";
 
 function configure(): void {
   vi.stubEnv("KV_REST_API_URL", "https://probe.upstash.io");
@@ -450,7 +467,7 @@ describe("claimPlayer", () => {
   it("claims a free name and reports the new count", async () => {
     redisMock.eval.mockResolvedValue([1, 7, JSON.stringify(lobby)]);
 
-    await expect(claimPlayer("anna", player)).resolves.toEqual({
+    await expect(claimPlayer("anna", player, DEVICE)).resolves.toEqual({
       outcome: "claimed",
       playerCount: 7,
       // The document the script checked, carried out so the route needs no second
@@ -472,27 +489,103 @@ describe("claimPlayer", () => {
   it("performs the claim as exactly one atomic store call", async () => {
     redisMock.eval.mockResolvedValue([1, 1, JSON.stringify(lobby)]);
 
-    await claimPlayer("anna", player);
+    await claimPlayer("anna", player, DEVICE);
 
     expect(redisMock.eval).toHaveBeenCalledTimes(1);
     expect(redisMock.get).not.toHaveBeenCalled();
     expect(redisMock.hlen).not.toHaveBeenCalled();
   });
 
-  it("passes the three keys and arms both hash TTLs inside that same call", async () => {
+  it("passes the four keys and arms every hash TTL inside that same call", async () => {
     redisMock.eval.mockResolvedValue([1, 1, JSON.stringify(lobby)]);
 
-    await claimPlayer("anna", player);
+    await claimPlayer("anna", player, DEVICE);
 
     const [script, keys, args] = redisMock.eval.mock.calls[0]!;
-    expect(keys).toEqual([SESSION_KEY, PLAYERS_KEY, PLAYER_IDS_KEY]);
+    expect(keys).toEqual([SESSION_KEY, PLAYERS_KEY, PLAYER_IDS_KEY, DEVICES_KEY]);
     expect(args[3]).toBe(String(SESSION_TTL_SECONDS));
-    // Both EXPIREs in the script, not as follow-up calls that can fail on their own
-    // and leave a hash of attendee names on no lifetime at all.
-    expect(script.match(/EXPIRE/g)).toHaveLength(2);
+    // Every EXPIRE in the script, not as follow-up calls that can fail on their own
+    // and leave a hash of attendee names on no lifetime at all. Three since S-09 added
+    // the devices hash — a count rather than a name, but a key on no lifetime is still
+    // a key `end` and `purge` are the only things standing behind.
+    expect(script.match(/EXPIRE/g)).toHaveLength(3);
     // And the phase check is in the script too — read outside, it would be a check
     // against a session that could end before the claim lands.
     expect(script).toContain("ended");
+  });
+
+  /**
+   * The device id and the cap reach the script (roadmap S-09, FR-018).
+   *
+   * The cap is read from `players.ts` rather than passed by the route, so the number is
+   * spelled once — asserted against the constant rather than against `3`, which would
+   * pass unchanged if the two ever drifted apart.
+   */
+  it("passes the device id and the cap into the same call", async () => {
+    redisMock.eval.mockResolvedValue([1, 1, JSON.stringify(lobby)]);
+
+    await claimPlayer("anna", player, DEVICE);
+
+    const [, , args] = redisMock.eval.mock.calls[0]!;
+    expect(args[4]).toBe(DEVICE);
+    expect(args[5]).toBe(String(MAX_PLAYERS_PER_DEVICE));
+  });
+
+  /**
+   * A device that has spent its allowance (roadmap S-09, FR-018).
+   *
+   * `capped` and `taken` are both ordinary outcomes and neither is an error, but they
+   * are not interchangeable: `taken` invites another name and `capped` is final for this
+   * device, so the route's two messages have to be able to differ.
+   */
+  it("reports a device at its allowance as `capped`, distinctly from `taken`", async () => {
+    redisMock.eval.mockResolvedValue([-3, 0, JSON.stringify(lobby)]);
+
+    await expect(claimPlayer("anna", player, DEVICE)).resolves.toEqual({
+      outcome: "capped",
+      // The document travels out, as it does on every other refusal, so the refused
+      // device can still be shown what the room is currently doing.
+      state: lobby,
+    });
+  });
+
+  /**
+   * ORDERING, AND WHAT THIS TEST CAN AND CANNOT SEE.
+   *
+   * The redis client is mocked, so the Lua never executes here — nothing in this suite
+   * can watch a fourth claim actually be refused. What is checkable is the script's
+   * *structure*, and that is exactly what `host.test.ts` does for the Astro inline
+   * script and for the same reason: the thing under test has no harness.
+   *
+   * Two orderings carry the whole behaviour and both are silent when wrong:
+   *
+   * - **The cap check precedes the collision check.** After it, a device that is capped
+   *   *and* typing a taken name is told the name is taken — so the attendee tries a
+   *   second and a third, each refused for a reason that is true and not the reason.
+   * - **The increment follows the collision check.** Before it, a claim refused as taken
+   *   still charges the device, so three collisions with common first names cap an
+   *   attendee who never held a player.
+   *
+   * Asserted as relative positions rather than by matching the lines' current text, so
+   * rewording a line does not fail the test and reordering one does. Verified in both
+   * directions by swapping the blocks in `CLAIM_PLAYER` and watching this fail.
+   */
+  it("checks the cap before the collision, and counts the claim only after it", async () => {
+    redisMock.eval.mockResolvedValue([1, 1, JSON.stringify(lobby)]);
+
+    await claimPlayer("anna", player, DEVICE);
+
+    const [script] = redisMock.eval.mock.calls[0]!;
+    const capCheck = script.indexOf("HGET");
+    const collision = script.indexOf("HEXISTS");
+    const increment = script.indexOf("HINCRBY");
+
+    expect(capCheck).toBeGreaterThan(-1);
+    expect(collision).toBeGreaterThan(-1);
+    expect(increment).toBeGreaterThan(-1);
+
+    expect(capCheck).toBeLessThan(collision);
+    expect(increment).toBeGreaterThan(collision);
   });
 
   it("reports a taken name as `taken`, not as an error", async () => {
@@ -500,7 +593,7 @@ describe("claimPlayer", () => {
 
     // The ordinary outcome of two people in a room of 150 picking the same first
     // name. The route renders it as a prompt, not a failure.
-    await expect(claimPlayer("anna", player)).resolves.toEqual({
+    await expect(claimPlayer("anna", player, DEVICE)).resolves.toEqual({
       outcome: "taken",
       state: lobby,
     });
@@ -510,7 +603,7 @@ describe("claimPlayer", () => {
     redisMock.eval.mockResolvedValue([-1, 0, false]);
 
     // No session means no document to carry out — the only outcome without state.
-    await expect(claimPlayer("anna", player)).resolves.toEqual({ outcome: "no-session" });
+    await expect(claimPlayer("anna", player, DEVICE)).resolves.toEqual({ outcome: "no-session" });
   });
 
   /**
@@ -521,7 +614,7 @@ describe("claimPlayer", () => {
   it("refuses a session that has ended, distinctly from one that has not started", async () => {
     redisMock.eval.mockResolvedValue([-2, 0, JSON.stringify({ ...lobby, phase: "ended", version: 9 })]);
 
-    const result = await claimPlayer("anna", player);
+    const result = await claimPlayer("anna", player, DEVICE);
     expect(result).toMatchObject({ outcome: "closed" });
     // The ended document travels too, so a late joiner can be shown the closing
     // screen rather than a bare error.
@@ -531,7 +624,7 @@ describe("claimPlayer", () => {
   it("reports a transport failure without throwing", async () => {
     redisMock.eval.mockRejectedValue(new Error("upstash unreachable"));
 
-    await expect(claimPlayer("anna", player)).resolves.toEqual({
+    await expect(claimPlayer("anna", player, DEVICE)).resolves.toEqual({
       outcome: "failed",
       reason: "upstash unreachable",
     });
@@ -549,7 +642,7 @@ describe("claimPlayer", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     redisMock.eval.mockResolvedValue([1, 3, JSON.stringify(lobby)]);
 
-    await claimPlayer("anna", player);
+    await claimPlayer("anna", player, DEVICE);
 
     const lines = log.mock.calls.map(([first]) => String(first)).join("\n");
     expect(lines).not.toContain("Anna");
@@ -559,7 +652,7 @@ describe("claimPlayer", () => {
   it("reports an unconfigured store rather than throwing", async () => {
     vi.unstubAllEnvs();
 
-    await expect(claimPlayer("anna", player)).resolves.toMatchObject({
+    await expect(claimPlayer("anna", player, DEVICE)).resolves.toMatchObject({
       outcome: "unconfigured",
     });
   });

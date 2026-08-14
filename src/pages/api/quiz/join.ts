@@ -39,6 +39,17 @@ const MESSAGES = {
   notStarted: "Sesja jeszcze się nie rozpoczęła. Poczekaj na prowadzącego.",
   ended: "Sesja została już zakończona.",
   unknownPlayer: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie.",
+  /**
+   * **Not a prompt to try another name.** `taken` above is; this is final for this
+   * device, and copy that invited a retry would send an attendee through three more
+   * refusals before they learned the reason.
+   */
+  capped: "Z tego urządzenia dołączyło już zbyt wielu graczy.",
+  /**
+   * Recoverable in one tap, which is the whole reason an absent device id is refused
+   * rather than let through — see the guard below.
+   */
+  noDevice: "Odśwież stronę i spróbuj ponownie.",
   unconfigured: "Sesja nie jest skonfigurowana.",
   failed: "Nie udało się dołączyć. Spróbuj ponownie.",
 } as const;
@@ -106,13 +117,40 @@ export const POST: APIRoute = async ({ request }) => {
     return json(400, { error: validated.error });
   }
 
+  /**
+   * THE DEVICE ID, AND WHY AN ABSENT ONE IS REFUSED (roadmap S-09, FR-018).
+   *
+   * Read only on this path. The resuming branch above never sees it — see the route
+   * docstring for why that exemption is the guard's most important property.
+   *
+   * An absent id is refused rather than treated as un-counted, and the alternatives are
+   * both worse. Letting it through is the cap's bypass: anything that omits one field
+   * claims freely. Bucketing every id-less device into one shared counter is worse still
+   * — a handful of private-mode attendees would consume the whole room's allowance and
+   * refuse everyone behind them.
+   *
+   * Refusing is safe here because our own client always sends one: `device.ts` mints an
+   * id in memory when storage is unavailable, so even a private tab has a value. An
+   * absent field therefore means a caller that is not our client — which is the farming
+   * case — or a page cached from before this shipped, and the message tells that
+   * attendee to reload.
+   */
+  const deviceId = form.get("deviceId");
+  if (typeof deviceId !== "string" || deviceId.length === 0) {
+    return json(400, { error: MESSAGES.noDevice });
+  }
+
   const record = {
     id: newPlayerId(),
     displayName: validated.displayName,
     joinedAt: Date.now(),
   };
 
-  const claim = await claimPlayer(validated.key, record);
+  const claim = await claimPlayer(validated.key, record, deviceId);
+
+  if (claim.outcome === "capped") {
+    return json(409, { error: MESSAGES.capped });
+  }
 
   if (claim.outcome === "taken") {
     logSessionEvent("session.join.rejected", { rejection: "taken" });

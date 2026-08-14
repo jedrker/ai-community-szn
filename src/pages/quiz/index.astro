@@ -1,7 +1,11 @@
 ---
 import "../../styles/global.css";
 
-import { PLAYER_STORAGE_KEY, QUESTION_SEEN_STORAGE_KEY } from "../../lib/session/keys";
+import {
+  DEVICE_STORAGE_KEY,
+  PLAYER_STORAGE_KEY,
+  QUESTION_SEEN_STORAGE_KEY,
+} from "../../lib/session/keys";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
 import { MAX_GUESS_INPUT_LENGTH } from "../../lib/session/guess";
 import { MAX_TEXT_ANSWER_LENGTH } from "../../lib/session/scoring";
@@ -274,10 +278,18 @@ import { publicQuiz } from "../../quiz/public";
         snapshotEvent: SNAPSHOT_EVENT,
         storageKey: PLAYER_STORAGE_KEY,
         seenStorageKey: QUESTION_SEEN_STORAGE_KEY,
+        deviceStorageKey: DEVICE_STORAGE_KEY,
         questions: publicQuiz.questions,
       }}
     >
-      window.__liveQuiz = { channelName, snapshotEvent, storageKey, seenStorageKey, questions };
+      window.__liveQuiz = {
+        channelName,
+        snapshotEvent,
+        storageKey,
+        seenStorageKey,
+        deviceStorageKey,
+        questions,
+      };
     </script>
 
     <script>
@@ -288,6 +300,7 @@ import { publicQuiz } from "../../quiz/public";
         type SessionClient,
       } from "../../lib/client/session";
       import { clearPlayer, readPlayer, writePlayer } from "../../lib/client/player";
+      import { deviceId } from "../../lib/client/device";
       import {
         clearSeen,
         fetchResult,
@@ -315,6 +328,7 @@ import { publicQuiz } from "../../quiz/public";
         snapshotEvent: string;
         storageKey: string;
         seenStorageKey: string;
+        deviceStorageKey: string;
         questions: PublicQuestion[];
       };
 
@@ -1461,6 +1475,9 @@ import { publicQuiz } from "../../quiz/public";
 
         const body = new FormData();
         body.set("displayName", nameInput.value);
+        // Only on this path. The resume request below deliberately sends nothing but
+        // the player id — the cap must never be able to refuse a returning device.
+        body.set("deviceId", deviceId(config.deviceStorageKey));
 
         try {
           const response = await fetch("/api/quiz/join", { method: "POST", body });
