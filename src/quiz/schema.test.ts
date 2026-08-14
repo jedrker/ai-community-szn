@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { quizSchema } from "./schema";
+import { MAX_TIME_LIMIT_SECONDS, MIN_TIME_LIMIT_SECONDS, quizSchema } from "./schema";
 
 /**
  * Synthetic fixtures only — the real quiz is Phase 2's concern. Keeping them
  * apart means a failure in the definition test is unambiguously a content
  * problem, not a schema problem.
+ *
+ * **Every scored fixture carries `timeLimitSeconds` (S-11) because the schema now
+ * requires one.** Spelled out on each rather than spread from a shared base: the
+ * clauses below turn the field's presence into a domain rule, and a fixture that
+ * inherited it would make the "missing limit" test depend on a base object rather than
+ * on what the test says it is about (`lessons.md`, "prove the fixture reaches the
+ * branch the test names").
  */
 
 const singleChoice = {
@@ -13,6 +20,7 @@ const singleChoice = {
   id: "llm-skrot",
   prompt: "Co oznacza skrót LLM?",
   points: 1000,
+  timeLimitSeconds: 25,
   options: [
     { id: "a", text: "Large Language Model" },
     { id: "b", text: "Linear Logic Machine" },
@@ -25,6 +33,7 @@ const multipleChoice = {
   id: "summer-tour-final",
   prompt: "Czym kończy się dzisiejszy Summer Tour?",
   points: 1000,
+  timeLimitSeconds: 40,
   options: [
     { id: "kino", text: "Kinem plenerowym" },
     { id: "networking", text: "Networkingiem" },
@@ -38,6 +47,7 @@ const text = {
   id: "halucynacje",
   prompt: "Jak nazywa się zjawisko, gdy AI zmyśla fakty?",
   points: 1000,
+  timeLimitSeconds: 40,
   acceptedAnswers: ["halucynacje", "hallucinations"],
 };
 
@@ -46,6 +56,7 @@ const number = {
   id: "lyro-procent",
   prompt: "Ile procent rozmów automatyzuje Lyro AI?",
   points: 1000,
+  timeLimitSeconds: 40,
   correctValue: 67,
 };
 
@@ -85,8 +96,12 @@ describe("accepts a valid question of every kind", () => {
   });
 
   it("accepts an unscored choice question with no correct options (the gather question)", () => {
+    // The limit is *dropped*, not overridden — an unscored question with one is refused
+    // (see below), so spreading `multipleChoice` and only nulling `points` would make
+    // this test fail for a reason that has nothing to do with what it is checking.
+    const { timeLimitSeconds: _unused, ...base } = multipleChoice;
     const gather = {
-      ...multipleChoice,
+      ...base,
       id: "czy-gotowi",
       points: null,
       correctOptionIds: [],
@@ -187,6 +202,64 @@ describe("rejects a violation of every domain invariant", () => {
     const message = rejectionMessage(quizOf({ ...wordCloud, points: 1000 }));
     expect(message).toContain("smieszne-slowo");
     expect(message).toContain("niepunktowane");
+  });
+
+  it("rejects a scored question with no time limit, naming the question", () => {
+    const { timeLimitSeconds: _unused, ...noLimit } = singleChoice;
+    const message = rejectionMessage(quizOf(noLimit));
+    expect(message).toContain("llm-skrot");
+    expect(message).toContain("musi mieć timeLimitSeconds");
+  });
+
+  it.each([
+    ["word-cloud", { ...wordCloud, timeLimitSeconds: 30 }],
+    ["the gather question", { ...multipleChoice, points: null, correctOptionIds: [] }],
+  ])("rejects a time limit on an unscored question (%s)", (_label, question) => {
+    // Refused rather than ignored: a limit nothing enforces is worse than no limit,
+    // because the author believes it is enforced. Both unscored shapes are covered —
+    // the word cloud and the choice question whose answers are all "right".
+    const message = rejectionMessage(quizOf(question));
+    expect(message).toContain("nie może mieć timeLimitSeconds");
+  });
+
+  it.each([
+    ["below the floor", MIN_TIME_LIMIT_SECONDS - 1],
+    ["above the ceiling", MAX_TIME_LIMIT_SECONDS + 1],
+  ])("rejects a time limit %s, naming the question and the range", (_label, value) => {
+    // Built from the exported bounds, so widening them cannot leave this test asserting
+    // a range the schema no longer enforces.
+    const message = rejectionMessage(quizOf({ ...singleChoice, timeLimitSeconds: value }));
+    expect(message).toContain("llm-skrot");
+    expect(message).toContain(`${MIN_TIME_LIMIT_SECONDS}–${MAX_TIME_LIMIT_SECONDS}`);
+    expect(message).toContain(String(value));
+  });
+
+  it.each([
+    ["the floor exactly", MIN_TIME_LIMIT_SECONDS],
+    ["the ceiling exactly", MAX_TIME_LIMIT_SECONDS],
+  ])("accepts a time limit at %s", (_label, value) => {
+    // The bounds are inclusive. Without these two, a `<=` written for a `<` would pass
+    // every rejection test above and quietly refuse a legal value.
+    expect(
+      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: value })).success
+    ).toBe(true);
+  });
+
+  it("rejects a fractional or non-integer time limit", () => {
+    expect(
+      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: 25.5 })).success
+    ).toBe(false);
+    expect(
+      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: "25" })).success
+    ).toBe(false);
+  });
+
+  it("accepts a time limit shorter than the speed window, which is a legal tradeoff", () => {
+    // Below 20s the speed weight can never reach its floor. That is an authoring
+    // decision the gate deliberately permits — see the bounds' docstring.
+    expect(quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: 10 })).success).toBe(
+      true
+    );
   });
 
   it("rejects an empty quiz", () => {

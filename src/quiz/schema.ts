@@ -8,12 +8,34 @@ import { normalizeAnswer } from "./normalize";
  * to parse in a bare `vitest run` and inside a serverless function, and
  * `astro:content` resolves in neither. See CLAUDE.md.
  *
- * Scoring lives elsewhere by design. `points` is the only scoring field here —
+ * Scoring lives elsewhere by design. `points` is the only *scoring* field here —
  * the speed weighting (FR-019) and the relative-error curve (FR-013) are global
  * rules owned by later slices, so this file stays a data contract.
+ *
+ * **`timeLimitSeconds` (S-11) is the one field that looks like an exception and is
+ * not.** It is pacing, not scoring: it decides how long a question accepts answers,
+ * never what an answer is worth. Nothing here weighs anything, and the deadline
+ * arithmetic it feeds lives in `src/lib/session/deadline.ts` for the same reason
+ * `scoring.ts` is not in this directory.
  */
 
 const QUESTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * The authorable range for a question's time budget, in seconds (S-11).
+ *
+ * Bounds live here rather than beside the scoring rules because they constrain
+ * *authoring* — the same job `QUESTION_ID` does. The floor keeps a typo of `1` from
+ * shipping a question nobody in a 150-person room can physically answer; the ceiling
+ * keeps a stray `1800` from producing a clock that outlives the segment.
+ *
+ * **A value below `SPEED_WINDOW_MS` (20 s) is deliberately legal.** On such a question
+ * the speed weight can never reach its floor, so the reward spread compresses. That is
+ * a real authoring tradeoff rather than an error, and refusing it here would be this
+ * file deciding a scoring question it has no business deciding.
+ */
+export const MIN_TIME_LIMIT_SECONDS = 5;
+export const MAX_TIME_LIMIT_SECONDS = 180;
 
 const optionSchema = z.object({
   id: z.string().regex(QUESTION_ID, "option id must be a lowercase slug"),
@@ -28,6 +50,21 @@ const baseFields = {
   id: z.string().regex(QUESTION_ID, "question id must be a lowercase slug"),
   prompt: z.string().min(1, "question prompt must not be empty"),
   points: z.number().positive().nullable(),
+  /**
+   * How long this question accepts answers, in seconds (S-11).
+   *
+   * **Optional in the shape, mandatory in the domain — and only for a scored
+   * question.** `checkQuestion` requires it wherever `points !== null` and refuses it
+   * wherever `points === null`, so the two states are "scored, with a clock" and
+   * "unscored, host-paced", never anything in between. Expressed as an optional field
+   * plus refinements rather than as a required one because a *missing* limit and an
+   * *out-of-range* one deserve different messages, and both must name the question.
+   *
+   * The range is checked there too rather than with `.min()/.max()` here, for the
+   * reason `correctValue` checks its finiteness there: a bare Zod bound reports
+   * "too small" against a path, which names neither the question nor the fix.
+   */
+  timeLimitSeconds: z.number().int().positive().optional(),
 };
 
 const choiceFields = {
@@ -174,6 +211,43 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
     ctx.addIssue({
       code: "custom",
       message: `${where}: pytanie typu word-cloud musi być niepunktowane (points: null).`,
+    });
+  }
+
+  /**
+   * The time budget, required exactly where it means something (S-11).
+   *
+   * Keyed on `scored` rather than on `kind` deliberately: the clock exists to bound
+   * *answering for points*, so the rule follows `points`, and marking a question
+   * unscored is enough to take its clock away. That also means these two clauses
+   * cannot disagree with the word-cloud clause above — an unscored word cloud is
+   * simply covered by the same branch as the unscored gather question.
+   */
+  if (scored && question.timeLimitSeconds === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `${where}: punktowane pytanie musi mieć timeLimitSeconds (limit czasu na odpowiedź).`,
+    });
+  }
+
+  // Refused rather than ignored. A limit sitting on an unscored question would be a
+  // number the author believes is enforced and nothing enforces — the word cloud fills
+  // until the host reveals it, and that is the documented behaviour.
+  if (!scored && question.timeLimitSeconds !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `${where}: niepunktowane pytanie nie może mieć timeLimitSeconds — jego tempo należy do hosta.`,
+    });
+  }
+
+  if (
+    question.timeLimitSeconds !== undefined &&
+    (question.timeLimitSeconds < MIN_TIME_LIMIT_SECONDS ||
+      question.timeLimitSeconds > MAX_TIME_LIMIT_SECONDS)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: `${where}: timeLimitSeconds musi być w zakresie ${MIN_TIME_LIMIT_SECONDS}–${MAX_TIME_LIMIT_SECONDS} s (jest ${question.timeLimitSeconds}).`,
     });
   }
 }

@@ -12,9 +12,23 @@ import type { Quiz } from "./schema";
  * `points: null` marks a question unscored (FR-017). Everything scored is worth
  * the same: nothing in the PRD asks for per-question weighting, so inventing one
  * here would be a decision without a reason.
+ *
+ * **`timeLimitSeconds` is the one thing that does vary per question (S-11), and it
+ * varies by how much work the answer is, not by how hard it is.** Tapping one of four
+ * options is `TAP_SECONDS`; typing a Polish word or reading a magnitude is
+ * `TYPE_SECONDS`. Both sit at or above the 20-second speed window in `scoring.ts`, so
+ * the whole reward curve stays reachable on every question — a shorter limit is legal
+ * but compresses it, which the schema documents. The two unscored questions carry no
+ * limit at all: their pacing is the host's, and the schema refuses a limit on them.
  */
 
 const POINTS = 1000;
+
+/** Long enough to read four options and tap one, on a phone, in a dark room. */
+const TAP_SECONDS = 25;
+
+/** Long enough to type an answer, including a correction. */
+const TYPE_SECONDS = 40;
 
 export const quizDefinition = {
   questions: [
@@ -48,6 +62,7 @@ export const quizDefinition = {
       id: "llm-skrot",
       prompt: "Co oznacza skrót LLM?",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "large-language-model", text: "Large Language Model" },
         { id: "long-learning-machine", text: "Long Learning Machine" },
@@ -68,6 +83,7 @@ export const quizDefinition = {
       id: "zmyslanie-faktow",
       prompt: "Jak nazywa się zjawisko, gdy AI z pełnym przekonaniem zmyśla fakty?",
       points: POINTS,
+      timeLimitSeconds: TYPE_SECONDS,
       acceptedAnswers: ["halucynacje", "halucynacja", "hallucinations", "hallucination"],
     },
 
@@ -76,6 +92,7 @@ export const quizDefinition = {
       id: "temperatura-parametr",
       prompt: "Co reguluje parametr „temperatura” w modelach językowych?",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "losowosc", text: "Losowość i kreatywność odpowiedzi" },
         { id: "dlugosc", text: "Maksymalną długość odpowiedzi" },
@@ -90,6 +107,7 @@ export const quizDefinition = {
       id: "hashtag-brave",
       prompt: "Jaki hashtag jest znakiem rozpoznawczym społeczności BRAVE?",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "verybrave", text: "#veryBrave" },
         { id: "staybrave", text: "#stayBrave" },
@@ -104,6 +122,7 @@ export const quizDefinition = {
       id: "brave-liczba-brandow",
       prompt: "Ile brandów/programów liczy obecnie rodzina BRAVE?",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "trzy", text: "3" },
         { id: "piec", text: "5" },
@@ -120,6 +139,7 @@ export const quizDefinition = {
       id: "summer-tour-zakonczenie",
       prompt: "Czym kończy się dzisiejszy Summer Tour w Szczecinie?",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "kino", text: "Kinem plenerowym" },
         { id: "networking", text: "Networkingiem" },
@@ -134,6 +154,7 @@ export const quizDefinition = {
       id: "hackathon-brave",
       prompt: "Jak nazywa się hackathon BRAVE, na który rozgrzewką był Summer Tour?",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "unaited", text: "BRAVE UnAIted" },
         { id: "hackai", text: "BRAVE HackAI" },
@@ -150,6 +171,7 @@ export const quizDefinition = {
       id: "lyro-automatyzacja",
       prompt: "Ile procent rozmów z klientami automatyzuje Lyro AI?",
       points: POINTS,
+      timeLimitSeconds: TYPE_SECONDS,
       correctValue: 67,
     },
 
@@ -158,6 +180,7 @@ export const quizDefinition = {
       id: "huuuge-games",
       prompt: "Huuuge Games, partner naszego eventu, to producent:",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "mobilne", text: "Gier mobilnych" },
         { id: "konsolowe", text: "Gier konsolowych" },
@@ -172,6 +195,7 @@ export const quizDefinition = {
       id: "10xdevs-start",
       prompt: "Jesienna edycja 10xDevs 4.0 startuje:",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "1-wrzesnia", text: "1 września" },
         { id: "14-wrzesnia", text: "14 września" },
@@ -186,6 +210,7 @@ export const quizDefinition = {
       id: "ai-sales-prowadzacy",
       prompt: "Kto prowadzi program AI_Sales?",
       points: POINTS,
+      timeLimitSeconds: TAP_SECONDS,
       options: [
         { id: "negacz", text: "Szymon Negacz" },
         { id: "gospodarczyk", text: "Adam Gospodarczyk" },
@@ -201,6 +226,7 @@ export const quizDefinition = {
       prompt:
         "Ilu absolwentów ma sam kurs AI_devs — najpopularniejszy kurs AI dla developerów w Polsce?",
       points: POINTS,
+      timeLimitSeconds: TYPE_SECONDS,
       correctValue: 10000,
     },
   ],

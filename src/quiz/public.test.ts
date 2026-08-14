@@ -143,6 +143,65 @@ describe("the public projection is complete enough to render", () => {
     expect(serialized).not.toContain("1000");
   });
 
+  /**
+   * S-11's addition, and the one value in this projection that exists *to* be seen:
+   * both the phone and the projector build their countdown from this plus the
+   * snapshot's `updatedAt`, so a question missing it would render no clock at all while
+   * the server still enforced one.
+   */
+  it("carries the time limit for scored questions and omits it for unscored ones", () => {
+    for (const question of quiz.questions) {
+      const projected = getPublicQuestionById(question.id);
+
+      if (question.points === null) {
+        // Absent as a *key*, not present holding undefined — a view checking for a
+        // clock with `in` or `Object.keys` must see nothing here.
+        expect(projected && "timeLimitSeconds" in projected).toBe(false);
+      } else {
+        expect(projected?.timeLimitSeconds).toBe(question.timeLimitSeconds);
+        expect(typeof projected?.timeLimitSeconds).toBe("number");
+      }
+    }
+  });
+
+  it("covers both limit cases, so neither branch is asserted vacuously", () => {
+    const withLimit = publicQuiz.questions.filter((q) => q.timeLimitSeconds !== undefined);
+    const withoutLimit = publicQuiz.questions.filter((q) => q.timeLimitSeconds === undefined);
+
+    // The same two unscored questions as the `scored` pair above, from the other side.
+    expect(withoutLimit).toHaveLength(2);
+    expect(withLimit.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The allowlist, asserted positively — the counterpart to `FORBIDDEN_KEYS`.
+   *
+   * That list catches the four fields we already know are dangerous; this catches the
+   * *next* one, whatever it is called. The projection is built by allowlist precisely
+   * so a new `schema.ts` field is invisible here by default, and this test is what
+   * fails if someone widens `toPublicQuestion` without deciding to.
+   *
+   * It is also the guard on the server's grace window: the enforced cutoff sits past
+   * the visible zero, and a client that knew by how much would show a clock that lies
+   * in the generous direction. Nothing about the grace may appear in a payload a phone
+   * can read.
+   */
+  it("exposes only the keys on the allowlist, so a new field cannot ride along", () => {
+    const seen = new Set<string>();
+    for (const question of publicQuiz.questions) {
+      for (const key of Object.keys(question)) seen.add(key);
+    }
+
+    expect([...seen].sort()).toEqual([
+      "id",
+      "kind",
+      "options",
+      "prompt",
+      "scored",
+      "timeLimitSeconds",
+    ]);
+  });
+
   it("returns undefined for an unknown id rather than throwing", () => {
     // A question id arriving from a device is untrusted input.
     expect(getPublicQuestionById("nie-ma-takiego-pytania")).toBeUndefined();

@@ -49,6 +49,24 @@ export type PublicQuestion = {
    * still does not travel.
    */
   readonly scored: boolean;
+  /**
+   * How long this question accepts answers, in seconds (S-11) — present exactly when
+   * `scored` is true, because the schema requires a limit on a scored question and
+   * refuses one on an unscored question.
+   *
+   * **This one travels because the room is meant to see it.** Every other value the
+   * allowlist above holds back is something an attendee could use to answer; a
+   * countdown is the opposite — it is only useful if it is on screen, and both the
+   * phone and the projector compute their clock from this plus the snapshot's
+   * `updatedAt`. `points` stays forbidden, so how much a question is worth still does
+   * not travel with how long it lasts.
+   *
+   * What deliberately does *not* travel is the server's grace window: the enforced
+   * cutoff sits a couple of seconds past the visible zero so an answer already in
+   * flight is not lost, and a client that knew the grace would show a clock that lies
+   * in the generous direction. See `src/lib/session/deadline.ts`.
+   */
+  readonly timeLimitSeconds?: number;
   /** Present for the two choice kinds; absent for text, number and word-cloud. */
   readonly options?: readonly PublicOption[];
 };
@@ -147,6 +165,13 @@ function toPublicQuestion(question: Question): PublicQuestion {
     prompt: question.prompt,
     // Whether, never how much. `points` itself remains forbidden.
     scored: question.points !== null,
+    // Spread rather than assigned, so an unscored question has no `timeLimitSeconds`
+    // key at all instead of one holding `undefined`. The two serialize identically and
+    // differ under `in` and `Object.keys`, which is what a view checking for a clock
+    // would reach for.
+    ...(question.timeLimitSeconds === undefined
+      ? {}
+      : { timeLimitSeconds: question.timeLimitSeconds }),
   } as const;
 
   // The only kinds with anything more to show. `text`, `number` and `word-cloud` are
