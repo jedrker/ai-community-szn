@@ -602,10 +602,10 @@ for free.
 
 #### Automated
 
-- [x] 5.1 `bun run test` and `bun run type-check` still pass
+- [x] 5.1 `bun run test` and `bun run type-check` still pass — 6ff675a
 
 #### Manual
 
-- [ ] 5.2 The runbook's closing section describes the button that now exists
-- [ ] 5.3 The PRD's Deviation 2 chain reads as a sequence of amendments
-- [ ] 5.4 The contract fits on a page
+- [x] 5.2 The runbook's closing section describes the button that now exists — 6ff675a
+- [x] 5.3 The PRD's Deviation 2 chain reads as a sequence of amendments — 6ff675a
+- [x] 5.4 The contract fits on a page — 6ff675a
