@@ -385,7 +385,7 @@ attention**, which is longer and out of anyone's hands once the close lands. Acc
 reached the same devices minutes earlier, and both fixes break something built on purpose (shortening
 the TTL removes the reload window F-03 chose; stripping the field from the state route recreates the
 failure S-07 rejected it for). Recorded in the PRD's retention guardrail and
-`context/changes/final-winner-reveal/winner-reveal-contract.md`.
+`context/archive/2026-08-14-final-winner-reveal/winner-reveal-contract.md`.
 
 **`SessionState` has one decoration field and four transition fields, and they behave oppositely.**
 `playerCount` is decoration: `applyHostAction` overwrites it on every action and a stale value costs
@@ -407,7 +407,7 @@ projector and the route refuses the transition — while `end` is what moves eve
 falls back to the plain closing screen. Widening the requires-clause to both phases makes a transient
 store blip un-closeable. Both views therefore key the board's *visibility* on `standings !== null`
 rather than on a phase list — the schema owns that rule, and a list in a view is a copy that falls
-behind. Read `context/changes/final-winner-reveal/winner-reveal-contract.md` before touching either.
+behind. Read `context/archive/2026-08-14-final-winner-reveal/winner-reveal-contract.md` before touching either.
 
 The three reveal fields carry quiz content about a question the host has already closed, so none of
 them touches the retention reasoning above. What an attendee *typed* is per-player and travels on

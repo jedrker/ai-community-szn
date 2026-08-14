@@ -541,7 +541,7 @@ and do NOT re-scaffold them.
 - **Risk:** The only nice-to-have in the PRD and the last item sequenced, so it is the natural cut if
   effort runs out — a session can end on the plain leaderboard from S-07 without failing any success
   criterion. The drafted quiz ends in a leaderboard reveal, so the plain path is already sufficient.
-- **Status:** done — delivered 2026-08-14, `context/changes/final-winner-reveal/`
+- **Status:** done — delivered 2026-08-14, `context/archive/2026-08-14-final-winner-reveal/`
 
 ## Backlog Handoff
 
@@ -560,7 +560,7 @@ and do NOT re-scaffold them.
 | S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | done                  | **Delivered 2026-08-11.** First snapshot field carrying display names — S-08/S-10 must read `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` before adding a snapshot field or a phase |
 | S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | done                  | **Delivered 2026-08-14.** The one aggregate that does NOT ride the snapshot — a host-side poll of `/api/quiz/host/words`, because a continuously-filling display has no host action to attach to and 150-way fan-out would exceed Ably's 100 msg/s ceiling. Added the project's **third fold** (`foldWord`, keeps diacritics because its output is rendered) and a third `livequiz:tallies` field family, which stopped that key being counters-only. **S-09/S-10 must read `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md` before adding any continuously-updating display** |
 | S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | done                  | **Delivered 2026-08-14.** Cap is 3 per device, cumulative, enforced inside `CLAIM_PLAYER`; the resume path is exempt and that exemption is the slice. Added `livequiz:devices` (a count, the one registered key that is not attendee data) and a third browser-storage key. **S-10 must read `context/archive/2026-08-14-resilient-join/resume-contract.md` before adding anything that refuses a request** |
-| S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | done                  | **Delivered 2026-08-14.** The `ended` phase carries the S-07 board and `end` moved onto the host view behind a two-tap confirmation — the first reversal of an F-03 placement decision. Read `context/changes/final-winner-reveal/winner-reveal-contract.md` before touching the `ended` phase or the closing screen |
+| S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | done                  | **Delivered 2026-08-14.** The `ended` phase carries the S-07 board and `end` moved onto the host view behind a two-tap confirmation — the first reversal of an F-03 placement decision. Read `context/archive/2026-08-14-final-winner-reveal/winner-reveal-contract.md` before touching the `ended` phase or the closing screen |
 
 ## Open Roadmap Questions
 
@@ -956,7 +956,7 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   implementation, was what turned out to be wrong.
 
 - **S-10: Host can close the session with a winner reveal, and every attendee learns where they
-  finished.** — Delivered 2026-08-14 → `context/changes/final-winner-reveal/`. **No new phase, no new
+  finished.** — Delivered 2026-08-14 → `context/archive/2026-08-14-final-winner-reveal/`. **No new phase, no new
   snapshot field and no new store key**: the `ended` phase simply stopped clearing S-07's `standings`,
   which is the shape the leaderboard contract had already handed over. What made it more than a
   one-line change was the asymmetry it forced — `standings` *requires* a board because the board is the
@@ -974,4 +974,4 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   shaped exposure. Lesson: **a docstring naming a future slice is a decision waiting to be taken, not a
   TODO** — `state.ts` and `result.ts` both carried "S-10 owns this", and both were right about the
   shape, which is why this landed in a day. Contract:
-  `context/changes/final-winner-reveal/winner-reveal-contract.md`.
+  `context/archive/2026-08-14-final-winner-reveal/winner-reveal-contract.md`.

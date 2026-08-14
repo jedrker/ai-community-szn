@@ -204,7 +204,7 @@ during an event.
   > already rejected it for. What an attendee typed, their own total and their own position remain
   > per-device on `/api/quiz/result`; names still reach no log line and still live in `livequiz:players`,
   > which `end` re-arms and `purge` deletes. See
-  > `context/changes/final-winner-reveal/winner-reveal-contract.md`.
+  > `context/archive/2026-08-14-final-winner-reveal/winner-reveal-contract.md`.
   >
   > **Checked and unchanged 2026-08-14 (S-08).** The word cloud publishes **nothing**: it added no
   > snapshot field and no phase, and its aggregate reaches the projector through a host-secret-gated
