@@ -402,9 +402,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const wordCloudBox = el("word-cloud");
       const wordCloudWords = el("word-cloud-words");
       const wordCloudStale = el("word-cloud-stale");
-      const standingsButton = document.querySelector<HTMLButtonElement>(
-        '[data-action="standings"]'
-      );
       const endButton = el("end") as HTMLButtonElement;
 
       const actionButtons = (): HTMLButtonElement[] =>
@@ -784,18 +781,142 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
-       * The leaderboard beat is reachable only from a reveal (roadmap S-07).
+       * The key `CONTROL_RULES` is read under when there is no session yet — before the
+       * first `start`, and after a purge or an expiry. A real key rather than a null
+       * branch, so the table below answers every state the view can be in and no phase
+       * falls through to "whatever was on screen before".
+       */
+      const NO_SESSION = "none";
+
+      /**
+       * WHICH FLOW VERB IS OFFERED IN WHICH PHASE, AND WHICH ONE IS THE NEXT STEP.
        *
-       * Disabled elsewhere so the host is not offered an action that will come back 409.
-       * The route's refusal is the backstop; this is the interaction.
+       * S-07 wrote the principle on the standings button alone: *disabled everywhere else
+       * rather than relying on the route's 409 — the refusal is the backstop, not the
+       * interaction*. `start`, `advance` and `reveal` never got it, so the host could tap
+       * `pokaż odpowiedź` in the lobby and be answered by an error. This table extends the
+       * rule to all four verbs and adds `next`, the one button highlighted as the step the
+       * session is waiting for.
+       *
+       * **One table, not four conditions.** The phase rule for a flow verb lives here and
+       * nowhere else — the same discipline `pollTargetFor` is held to by `host.test.ts`,
+       * and for the same reason: a second place to state it is a second place for it to
+       * drift from what the routes actually accept.
+       *
+       * `allow` mirrors route legality (`src/pages/api/quiz/host/*`), with three entries
+       * that look inconsistent and are not:
+       *
+       * - **`advance` stays offered while a question is open.** It is the host's only lever
+       *   on stage: if something appears on the projector that should not be there, the way
+       *   out is to advance past it. It is simply not the *next* step there.
+       * - **`standings` is offered in the `standings` phase too**, where the route treats it
+       *   as a no-op that re-broadcasts. That is the recovery path its own 502 asks for —
+       *   "Ranking jest zapisany, ale nie dotarł do urządzeń. Kliknij ponownie…" — and the
+       *   state is already `standings` by the time the host reads it, so gating it out of
+       *   that phase took away the retry the message names.
+       * - **`start` is offered only with no session.** The route is create-if-absent and
+       *   idempotent, so tapping it mid-quiz does nothing; an enabled button that does
+       *   nothing is the thing this change exists to remove.
+       *
+       * `end` is deliberately absent: it is not a `data-action` button, it carries arming
+       * state, and `syncEndButton` owns it — including the decision that it stays out of
+       * reach in `lobby` even though the route would accept it.
+       */
+      type ControlRule = {
+        allow: readonly string[];
+        next: string | null;
+        why: Record<string, string>;
+      };
+
+      const ALREADY_RUNNING = "Sesja już trwa.";
+      const NOT_STARTED = "Sesja nie została jeszcze rozpoczęta.";
+      const ALREADY_ENDED = "Sesja została zakończona.";
+      const NEEDS_REVEAL = "Ranking można pokazać dopiero po ujawnieniu odpowiedzi.";
+
+      const CONTROL_RULES: Record<string, ControlRule> = {
+        [NO_SESSION]: {
+          allow: ["start"],
+          next: "start",
+          why: { advance: NOT_STARTED, reveal: NOT_STARTED, standings: NOT_STARTED },
+        },
+        lobby: {
+          allow: ["advance"],
+          next: "advance",
+          why: {
+            start: ALREADY_RUNNING,
+            reveal: "Żadne pytanie nie jest otwarte — nie ma czego pokazać.",
+            standings: NEEDS_REVEAL,
+          },
+        },
+        "question-open": {
+          allow: ["advance", "reveal"],
+          next: "reveal",
+          why: { start: ALREADY_RUNNING, standings: NEEDS_REVEAL },
+        },
+        "question-revealed": {
+          allow: ["advance", "standings"],
+          next: "advance",
+          why: {
+            start: ALREADY_RUNNING,
+            reveal: "Odpowiedź jest już pokazana — przejdź do następnego pytania.",
+          },
+        },
+        standings: {
+          allow: ["advance", "standings"],
+          next: "advance",
+          why: {
+            start: ALREADY_RUNNING,
+            reveal: "Ranking jest już pokazany — przejdź do następnego pytania.",
+          },
+        },
+        ended: {
+          allow: [],
+          next: null,
+          why: {
+            start: ALREADY_ENDED,
+            advance: ALREADY_ENDED,
+            reveal: ALREADY_ENDED,
+            standings: ALREADY_ENDED,
+          },
+        },
+      };
+
+      /**
+       * The highlight on the next step. A ring rather than a size or padding change: the
+       * button row is measured for a projector and sits in a `flex-wrap` container, so a
+       * button that grew when it became the next step would reflow the whole row mid-session.
+       */
+      const NEXT_STEP_CLASSES = ["ring-4", "ring-white/70"];
+
+      /**
+       * The phase rules above, applied to the buttons.
        *
        * Called from `render` AND from `fire`'s `finally`, because that block re-enables
-       * every button unconditionally — without the second call, showing the standings
-       * would leave its own button enabled in a phase that refuses it.
+       * every button unconditionally — without the second call, an action would hand back
+       * buttons enabled in a phase that refuses them, which is the exact bug the two
+       * previously-gated buttons already carry a warning about.
        */
-      function syncStandingsButton(): void {
-        if (!standingsButton) return;
-        standingsButton.disabled = client.current()?.phase !== "question-revealed";
+      function syncControls(): void {
+        const state = client.current();
+        const phase = state === null ? NO_SESSION : state.phase;
+        const rule = CONTROL_RULES[phase] ?? CONTROL_RULES[NO_SESSION];
+
+        for (const button of actionButtons()) {
+          const action = button.dataset.action ?? "";
+          const allowed = rule.allow.includes(action);
+          const reason = rule.why[action];
+
+          button.disabled = !allowed;
+          // The reason travels on the button itself, so a host who reaches for a dark
+          // button learns why it is dark without leaving the panel.
+          if (!allowed && reason !== undefined) button.title = reason;
+          else button.removeAttribute("title");
+
+          const isNext = allowed && action === rule.next;
+          for (const className of NEXT_STEP_CLASSES) {
+            button.classList.toggle(className, isNext);
+          }
+        }
       }
 
       /**
@@ -816,7 +937,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * The closing button's phase rule and its arming state, in one place.
        *
        * Called from `render` AND from `fire`'s `finally`, for the reason
-       * `syncStandingsButton` is: that block re-enables every button unconditionally, so
+       * `syncControls` is: that block re-enables every button unconditionally, so
        * without the second call an action would leave this one enabled in a phase that
        * refuses it — and, worse, still armed.
        *
@@ -870,7 +991,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           renderQuestion(questionBox, undefined, { prompt: "text-4xl font-bold leading-tight" });
           // Before the early return, not after it: this branch is a purge, an expiry, or
           // the first paint, and in all three the closing button must be out of reach and
-          // holding no arm from a session that is gone.
+          // holding no arm from a session that is gone — while the flow verbs must fall
+          // back to offering `start` alone, which is the only one a sessionless view can
+          // honour.
+          syncControls();
           syncEndButton();
           return;
         }
@@ -976,7 +1100,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
         renderParticipation(state);
         renderWordCloudPanel(state);
-        syncStandingsButton();
+        syncControls();
         syncEndButton();
 
         if (pollWanted(state)) schedulePoll();
@@ -1268,7 +1392,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           // After the blanket re-enable, not before: the phase rule has to win. The same
           // applies to the closing button, which must not come back enabled in a phase that
           // refuses it — nor still armed after the action it was armed alongside.
-          syncStandingsButton();
+          syncControls();
           syncEndButton();
         }
       }

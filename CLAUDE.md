@@ -423,6 +423,27 @@ publishing per submission is the O(N²) fan-out the spine contract forbids. Inst
 the single most plausible way to break the room, and it would look correct in every test.
 See `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md`.
 
+## The host panel offers only the action the phase accepts
+
+**Which flow verb is enabled in which phase is stated once, as `CONTROL_RULES` in
+`src/pages/quiz/host.astro`, and read only by `syncControls`.** The table mirrors route legality and
+also names the one button ringed as the next step, so the panel leads the sequence instead of leaving
+it in the runbook. S-07 wrote the principle on `pokaż ranking` alone — *disabled elsewhere rather than
+relying on the route's 409; the refusal is the backstop, not the interaction* — and `start`, `dalej`
+and `pokaż odpowiedź` never got it.
+
+Do not write a phase condition for a flow verb anywhere else; `host.test.ts` fails the suite if the
+table gains a second reader, and a second copy is how the panel and the routes come apart. Three rows
+look inconsistent and are not: **`dalej` stays offered while a question is open** (the host's only
+lever if the wrong thing is on the projector), **`pokaż ranking` stays offered in `standings`** (a
+no-op that re-broadcasts — the retry its own 502 asks for, in the phase the state is already in), and
+**`start` is offered only with no session** (the route is idempotent, so mid-quiz it does nothing).
+
+`syncControls` must be called from all three sites — `render`'s ordinary path, `render`'s sessionless
+early return, and `fire`'s `finally`, which re-enables every button unconditionally. `zakończ sesję`
+is deliberately outside the table: it carries arming state and `syncEndButton` owns it, including the
+decision that it stays out of reach in `lobby` even though the route accepts it there.
+
 ## Polling: two loops, three endpoints, and why every one has to be nameable
 
 The runbook's command tripwire is a polling detector, so **an unaccounted-for loop reads as an

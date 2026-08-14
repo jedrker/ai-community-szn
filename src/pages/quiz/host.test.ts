@@ -54,6 +54,15 @@ describe("the scan can see the code it is checking", () => {
    * assertion below green by vacuity — the failure mode `keys.test.ts` guards with its own
    * non-empty-registry check.
    */
+  /**
+   * The flow verbs' half. Every assertion in "flow verbs are offered only where they
+   * apply" reads one of these two, and an empty match makes all of them vacuously true.
+   */
+  it("still has the control table's code left after comments are stripped", () => {
+    expect(CODE).toContain("function syncControls");
+    expect(CODE).toContain("CONTROL_RULES");
+  });
+
   it("still has the loop's code left after comments are stripped", () => {
     expect(CODE).toContain("function runPoll");
     expect(CODE).toContain("function schedulePoll");
@@ -242,6 +251,93 @@ describe("nothing on the polled path writes", () => {
   it("reaches a host action only through the button handler", () => {
     // `fire` is the only place an action URL is built, and it is driven by a click.
     expect(occurrences("/api/quiz/host/${action}")).toBe(1);
+  });
+});
+
+/**
+ * THE FLOW VERBS' PHASE RULE.
+ *
+ * S-07 wrote the principle on the standings button alone — *disabled everywhere else rather
+ * than relying on the route's 409; the refusal is the backstop, not the interaction* — and
+ * `start`, `advance` and `reveal` never got it, so the host could tap `pokaż odpowiedź` in
+ * the lobby and be answered by an error. `CONTROL_RULES` extends it to all four verbs.
+ *
+ * What this file can protect is the structure, not the behaviour: an Astro inline script has
+ * no harness, so which button is dark in which phase is verified by hand. What is asserted
+ * here is that the rule still exists **in one place** and is still applied at **every** site
+ * that can undo it — the two properties whose loss is silent on screen.
+ *
+ * Every assertion below was verified in both directions.
+ */
+describe("flow verbs are offered only where they apply", () => {
+  const sync = /function syncControls[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+  const table = /const CONTROL_RULES[\s\S]*?\n {6}};/.exec(CODE)?.[0] ?? "";
+
+  it("finds the function and the table it is checking", () => {
+    expect(sync.length).toBeGreaterThan(0);
+    expect(table.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * **Every state the view can be in has a row.** A missing phase falls back to the
+   * sessionless row, which on a projector looks like a panel that stopped responding to
+   * the session.
+   *
+   * **Scoped to the table, not to the file**, and the first version of this got that
+   * wrong: it asserted `ended:` appeared in `CODE`, which stayed true when the row was
+   * renamed, because `PHASE_LABELS` carries the same key. Verified by renaming the row and
+   * watching it pass — the assertion was measuring the wrong map entirely.
+   */
+  it("answers all five phases and the sessionless state", () => {
+    expect(table).toContain("[NO_SESSION]:");
+    expect(table).toContain("lobby:");
+    expect(table).toContain('"question-open":');
+    expect(table).toContain('"question-revealed":');
+    expect(table).toContain("standings:");
+    expect(table).toContain("ended:");
+  });
+
+  /**
+   * **The table is read only by `syncControls`.** A second reader is a second place for the
+   * rule to drift from what the routes accept — the same discipline `pollTargetFor` is held
+   * to above, and for the same reason.
+   */
+  it("reads the table from nowhere but the sync", () => {
+    expect(sync).toContain("CONTROL_RULES[");
+    expect(CODE.replace(sync, "")).not.toContain("CONTROL_RULES[");
+  });
+
+  /**
+   * **Enablement is derived from the table, not written per button.** The `allow` list is
+   * the whole condition; a hand-written `phase === …` beside a button is how the panel and
+   * the routes come apart.
+   */
+  it("derives every flow verb's enablement from the allow list", () => {
+    expect(sync).toContain("rule.allow.includes(action)");
+    expect(sync).toContain("button.disabled = !allowed");
+  });
+
+  /**
+   * **Applied at all three sites.** `render`'s ordinary path, `render`'s sessionless early
+   * return, and `fire`'s `finally` — which re-enables every button unconditionally, so
+   * missing it there hands back a panel that offers actions the phase refuses. Missing it in
+   * the early return leaves the previous session's buttons live after a purge or an expiry.
+   */
+  it("re-applies the rule everywhere a button could come back wrongly enabled", () => {
+    // The trailing semicolon is what separates the three calls from the declaration.
+    expect(occurrences("syncControls();")).toBe(3);
+
+    const fireBody = /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    expect(fireBody.length).toBeGreaterThan(0);
+    expect(fireBody).toContain("syncControls()");
+  });
+
+  /**
+   * The per-button rule it replaced. Left behind, it would be a second owner of the
+   * standings button's phase condition.
+   */
+  it("leaves no per-button phase rule behind", () => {
+    expect(CODE).not.toContain("syncStandingsButton");
   });
 });
 
