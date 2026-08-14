@@ -33,10 +33,10 @@ fixes_applied:
   - 2
   - 3
   - 5
+  - 7
 fixes_outstanding:
   - 4
   - 6
-  - 7
   - 8
   - 9
 ---
@@ -71,7 +71,7 @@ bun audit            → 25 advisories (1 critical, 11 high, 11 moderate, 2 low)
 | #5 Type checking unenforced | high | **Fixed** | `@astrojs/check` + `typescript@^6` added; `type-check` script added. Reports 0 errors. |
 | #4 Triage remaining advisories | medium | Outstanding | Partially superseded — the acceptance rationale is recorded below, but no in-range transitive sweep was run. |
 | #6 No formatter / linter | medium | Outstanding | Not in this pass's scope. |
-| #7 Stale `@astrojs/tailwind` | medium | Outstanding | Still declared and installed. It is also the path through which two `postcss` HIGH advisories enter the tree. |
+| #7 Stale `@astrojs/tailwind` | medium | **Fixed (2026-08-14)** | `bun remove @astrojs/tailwind`. It was declared *and* installed while `astro.config.ts` never referenced it, so an agent could import it and get a plausible-looking second, conflicting Tailwind setup — that is what the removal buys. **This row previously claimed it was "the path through which two `postcss` HIGH advisories enter the tree", and that overstated it**: `vite` is a direct devDependency and pulls `postcss` itself, so the advisories remain and only one of two paths closed. The dependency-health section below always said so; this summary did not. Verified after removal: `type-check` 0 errors, 1188 tests, `bun run build` clean, CSS still emitted with brand tokens intact, `zod` still single-copy. |
 | #8 In-range dependency updates | low | Outstanding | Deliberately skipped — `bun update` would move `resend` 6.9.4 → 6.18.1 in the same change as the signup rewrite, which cannot be verified without production credentials. Do it as a separate change. |
 | #9 `.editorconfig` | low | Outstanding | Not in this pass's scope. |
 
@@ -142,6 +142,15 @@ Direct vs transitive: 1 vulnerable direct dependency (astro); 13 transitive
 
 > **Post-fix**: both runtime-reachable advisories are cleared. Everything below that is still open is
 > transitive and build-time. Per-finding status is annotated inline.
+
+> **Re-measured 2026-08-14, after fix #7**: `bun audit` reports **29 (1 critical, 14 high, 12
+> moderate, 2 low)**, against the 25 recorded above on 2026-08-05. **Read that as drift, not
+> regression.** Removing `@astrojs/tailwind` closed one of two paths to `postcss`, and `vite` still
+> pulls the other, so the removal cleared nothing and could not have *added* anything — the delta is
+> nine days of newly published advisories against an unchanged tree. The exposure split is unchanged:
+> still transitive, still build-time, still not reachable from a request against the deployed site.
+> The counts in the frontmatter and in the block above are deliberately left at their 2026-08-05
+> values, because they are what that pass measured; this note is the current reading.
 
 **Read this section with the exposure split in mind.** Most of the volume is build-time and
 dev-server tooling reached through `astro`'s own dependency tree — real advisories, but not
@@ -684,7 +693,7 @@ order, what is left:
 
 1. Verify the signup repair against the deployed site once it ships (fix #2's outstanding half).
 2. `bun update` as its own change, then smoke-test a signup and redo the triage (fixes #8, #4).
-3. `bun remove @astrojs/tailwind` (fix #7) — cheap, and it removes one of the two `postcss` paths.
+3. ~~`bun remove @astrojs/tailwind` (fix #7)~~ — **done 2026-08-14.** Removed one of the two `postcss` paths; `vite` still pulls the other, so the advisories stand.
 4. Prettier + ESLint (fix #6) and `.editorconfig` (fix #9).
 5. Agent onboarding, using the conventions block drafted in `stack-assessment.md` — its
    `bun run type-check` and `bun run test` references now point at commands that exist.

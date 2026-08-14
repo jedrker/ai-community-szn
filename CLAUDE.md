@@ -255,10 +255,11 @@ or unparseable field is refused, never coerced.
 
 Tailwind CSS 4, wired through **`@tailwindcss/vite`** in `astro.config.ts`'s `vite.plugins`.
 
-`@astrojs/tailwind@6.0.2` is also declared *and installed* in `node_modules`, but the config never
-references it. It is a leftover from the Tailwind 3 integration style. Do not import it or add it to
-the Astro `integrations` array — it will appear to work and produce a second, conflicting Tailwind
-setup. It should be removed (`bun remove @astrojs/tailwind`).
+**`@astrojs/tailwind` is gone as of 2026-08-14** (health-check fix #7) and must not come back. It was
+a leftover from the Tailwind 3 integration style: declared *and* installed while `astro.config.ts`
+never referenced it, so it was importable and would have appeared to work while producing a second,
+conflicting Tailwind setup. If a future task seems to want it, the answer is `@tailwindcss/vite` in
+`vite.plugins` — the line above — not an entry in the Astro `integrations` array.
 
 ## Client interactivity — vanilla modules, and no framework
 
