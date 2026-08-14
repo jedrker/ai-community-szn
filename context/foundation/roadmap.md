@@ -3,7 +3,7 @@ project: "LiveQuiz"
 version: 3
 status: draft
 created: 2026-08-05
-updated: 2026-08-12
+updated: 2026-08-14
 prd_version: 1
 main_goal: quality
 top_blocker: decisions
@@ -656,6 +656,29 @@ and do NOT re-scaffold them.
 
 (Empty on first generation. `/10x-archive` appends here — and flips that item's `Status` to `done` —
 when a change whose `Change ID` matches a roadmap item is archived.)
+
+- **S-08: Attendee can submit a single word to an unscored word-cloud question and watch the aggregate
+  visibly fill on the large screen as the room answers.** — Archived 2026-08-14 →
+  `context/archive/2026-08-12-word-cloud-question/`. **The slice's named risk turned out not to be the
+  real one.** The roadmap expected the spine and the message allowance to be strained by a
+  continuously-updating view; the resolution was to keep the cloud **off the snapshot entirely** — a
+  host-secret-gated poll of `GET /api/quiz/host/words` on one device, 2 billed commands per tick, nothing
+  on the Ably budget. No `SessionState` field, no phase, no new store key. What *did* bite was the poll
+  loop: implementation review found three behavioural defects in it (no request timeout, so a stall
+  showed a frozen cloud that looked live; the final-read flag keyed off the arrival phase, so revealing
+  mid-flight dropped late words permanently; and a staleness marker cleared on a body that carried no
+  cloud) — none visible to 1130 passing tests, a manual two-device run, or the structural scan written
+  for that very loop. Also added the project's **third fold** (`foldWord`, which keeps diacritics
+  because its output is *rendered* on the projector, unlike the two comparison folds) and a third
+  `livequiz:tallies` field family, which ended that key's "NOT attendee data" status — corrected in
+  place in the registry rather than reworded. Lessons: (1) **a source-scanning guard can certify the
+  defect it was written to prevent** — one assertion pinned the buggy expression's shape and passed for
+  four commits, failing only when the bug was fixed (now `lessons.md` entry 8); (2) the
+  "assertion right, fixture pointed at the wrong branch" failure recurred **four times in one change**,
+  including in guards written specifically to catch regressions. **Accepted and unmeasured:** no
+  room-scale rehearsal was re-run, so the top-30 truncation and the `HGETALL` payload at ~150 distinct
+  words are untested at scale — and that read is the first in the project whose payload an attendee can
+  inflate, via the deliberately open join.
 
 - **S-02: Attendee can open the session link, enter an unused display name, and see the host's current
   question appear on their phone as the host starts the session and advances through it.** — Archived
