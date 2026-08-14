@@ -852,30 +852,30 @@ parse, or `readOwnResult` reports `answered: false` to a device that watched its
 
 #### Automated
 
-- [x] 5.1 `bun run test` passes
-- [x] 5.2 `bun run type-check` reports 0 errors
-- [x] 5.3 `client/answer.test.ts` covers the word arm and the 400-vs-409 split
-- [x] 5.4 `boundary.test.ts` passes
-- [x] 5.5 `render.test.ts` covers the reveal-echo helper's absent-word branch
+- [x] 5.1 `bun run test` passes — c107230
+- [x] 5.2 `bun run type-check` reports 0 errors — c107230
+- [x] 5.3 `client/answer.test.ts` covers the word arm and the 400-vs-409 split — c107230
+- [x] 5.4 `boundary.test.ts` passes — c107230
+- [x] 5.5 `render.test.ts` covers the reveal-echo helper's absent-word branch — c107230
 
 #### Manual
 
-- [x] 5.6 Two phones submit and each sees its own word echoed with no score line
-- [x] 5.7 Empty, two-word and over-length submissions behave as specified
-- [x] 5.8 Reload keeps the clock and restores the locked word
-- [x] 5.9 The reveal shows the word and no verdict; the next question clears the field
-- [x] 5.10 A diacritic-bearing word reaches the projector spelled correctly
+- [x] 5.6 Two phones submit and each sees its own word echoed with no score line — c107230
+- [x] 5.7 Empty, two-word and over-length submissions behave as specified — c107230
+- [x] 5.8 Reload keeps the clock and restores the locked word — c107230
+- [x] 5.9 The reveal shows the word and no verdict; the next question clears the field — c107230
+- [x] 5.10 A diacritic-bearing word reaches the projector spelled correctly — c107230
 
 ### Phase 6: Contract and documents
 
 #### Automated
 
-- [ ] 6.1 `bun run test` passes
-- [ ] 6.2 `bun run type-check` reports 0 errors
-- [ ] 6.3 `bun run build` succeeds
-- [ ] 6.4 No document asserts the two falsified claims or points at `context/changes/leaderboard-beat/`
+- [x] 6.1 `bun run test` passes
+- [x] 6.2 `bun run type-check` reports 0 errors
+- [x] 6.3 `bun run build` succeeds
+- [x] 6.4 No document asserts the two falsified claims or points at `context/changes/leaderboard-beat/`
 
 #### Manual
 
-- [ ] 6.5 The contract is a one-page pointer
-- [ ] 6.6 A reader coming from `leaderboard-contract.md` can pick up this slice's decisions from it
+- [x] 6.5 The contract is a one-page pointer
+- [x] 6.6 A reader coming from `leaderboard-contract.md` can pick up this slice's decisions from it

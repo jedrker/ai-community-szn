@@ -144,15 +144,29 @@ Polish diacritic decomposes under NFD and is removed by `\p{Diacritic}`, but `ł
 codepoint with no decomposition, so the idiomatic fold leaves it untouched — `"żółć łódź"` becomes
 `"zołc łodz"`.
 
-**`normalize.ts` exports TWO folds, and merging them back into one is a bug with no visible symptom
-until a live session.** They differ by exactly one rule — trailing sentence punctuation — and they
-have different jobs:
+**There are THREE folds in this project, two of them in `normalize.ts`, and merging any pair of
+them is a bug with no visible symptom until a live session.** The two here differ by exactly one
+rule — trailing sentence punctuation. The third lives in `src/lib/session/words.ts` and differs from
+both by keeping diacritics:
 
-| | `normalizePolish` | `normalizeAnswer` |
-| --- | --- | --- |
-| Folds | case, whitespace, diacritics | the same, plus trailing `. ! ? , ; :` |
-| Used by | the display-name claim key (`src/lib/session/players.ts`) | answer matching (`scoreTextAnswer`) **and** the authoring-collision check in `schema.ts` |
-| Owns | FR-008 name uniqueness | FR-011 answer matching |
+| | `normalizePolish` | `normalizeAnswer` | `foldWord` |
+| --- | --- | --- | --- |
+| Where | `src/quiz/normalize.ts` | `src/quiz/normalize.ts` | **`src/lib/session/words.ts`** |
+| Folds | case, whitespace, diacritics | the same, plus trailing `. ! ? , ; :` | case and whitespace **only** |
+| Used by | the display-name claim key (`src/lib/session/players.ts`) | answer matching (`scoreTextAnswer`) **and** the authoring-collision check in `schema.ts` | word-cloud grouping (`wordField`, `readWordCloud`) |
+| Owns | FR-008 name uniqueness | FR-011 answer matching | FR-012/FR-015 word grouping |
+
+**`foldWord` keeps diacritics because its output is *rendered*.** The other two are comparison
+artefacts nobody ever sees; the folded word *is* the chip on the projector, so folding `ó` away would
+put a misspelt Polish word on the big screen in front of the room. The accepted cost: a word typed
+both with and without its diacritics counts as two entries — cosmetic on an unscored question, where
+the same slip in `normalizeAnswer` would cost somebody points. Its tripwire is in
+`src/lib/session/words.test.ts`, and that test's fixture is `Gęś` rather than `Żółw` on purpose:
+`ł` survives a bare NFD pass, so a `żółw`-based assertion still holds against a fold that has lost
+every *other* diacritic.
+
+It lives outside `src/quiz/` because it is a session-aggregation rule rather than a rule about the
+quiz definition — the same reasoning that keeps `scoring.ts` out of that directory.
 
 The narrower one must keep punctuation because `.` is a legal display-name character
 (`players.ts`'s `ALLOWED_CHARACTERS`), and the claim keys already stored in `livequiz:players` were
@@ -172,9 +186,19 @@ A number question's `correctValue` **may not be zero**, and the schema refuses o
 alongside a non-finite value. The closeness rule divides by the true value, and there is no reading of
 "within 5% of zero".
 
+A **word-cloud question must be unscored** (`points: null`), refused at the build gate alongside the
+two rules above. FR-015 lets its aggregate display live precisely because it has no correct answer to
+leak, and scoring one would break that reasoning. It also takes no scoring function at all: the route
+writes `correct: false, awarded: 0` directly, because there is nothing to weigh.
+
 Scoring rules deliberately do **not** live here. `points` (a number, or `null` for an unscored
 question per FR-017) is the only scoring field; the speed weighting, the answer-length bound
 (`MAX_TEXT_ANSWER_LENGTH`) and the numeric-closeness curve live in `src/lib/session/scoring.ts`.
+The word bound (`MAX_WORD_LENGTH`, 24) lives in `src/lib/session/words.ts` for the same reason, and it
+is **24 rather than the text field's 80 because a word goes on a projector** — the same number and the
+same reasoning as `MAX_DISPLAY_NAME_LENGTH`. It has three readers that must not drift: the route's
+visible refusal, `answerRecordSchema`'s `.max()`, and the input's `maxlength` (which reaches the markup
+through frontmatter, never through a `<script>` block).
 
 ## Numeric answers carry partial credit, and one flag lies about it
 
@@ -290,6 +314,15 @@ alongside one. Do not restore the index signature or add a catch-all field; add 
 you need. Logs are retained ~1 hour and are covered by no TTL, no purge and no rollback, so anything
 written there outlives the session document by design.
 
+**`livequiz:tallies` has three field families, and it is no longer counters-only.**
+`answered:<questionId>`, `opt:<questionId>:<optionId>` and — since S-08 — `word:<questionId>:<foldedWord>`,
+all spelled by `src/lib/session/tallies.ts` and nowhere else. That module's registry entry used to
+open "NOT attendee data — the first registered key that is not", and the word family made it too
+strong to leave standing: its **field names are attendee-authored text**, folded only for case. It is
+still keyed by no player id and no display name, so nothing in it says *who* wrote or chose anything —
+and it is still re-armed by `end` and deleted by `purge`. Note also that the word family is the only
+one whose field count grows with the **room** rather than with the quiz, up to one field per attendee.
+
 Before adding any key or any field to a published snapshot, read
 `context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md`. It also records the one
 constraint that is not enforceable in code: Ably retains published snapshots for ~2 minutes and that
@@ -307,23 +340,63 @@ A count carries nothing about who played, and a device knows only its own name. 
 publishes nothing at all: 150 joins fanning out to 150 subscribers is the O(N²) shape the spine
 contract forbids, so the count reaches the room on the host's next action instead.
 
-S-07 still owns the open half — a leaderboard needs names on 150 screens. See
-`context/archive/2026-08-07-join-and-follow-host/join-contract.md`.
+**S-07 took that open half and reversed the position**: `SessionState.standings` publishes up to
+`STANDINGS_SIZE` (5) display names, and the binding exposure turned out to be the deliberately
+unauthenticated `GET /api/quiz/state` rather than the Ably floor. Read
+`context/archive/2026-08-07-join-and-follow-host/join-contract.md` for the decision it was handed and
+`context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` for what it did with it.
 
-**`SessionState` now has one decoration field and three transition fields, and they behave
-oppositely.** `playerCount` is decoration: `applyHostAction` overwrites it on every action and a
-stale value costs nothing. `revealedOptionIds`, `revealedDistribution` and `revealedAnswerText` are
-*part of* the reveal transition — each is set by `reveal.ts` alone, nulled by every other
-constructor, and guarded by its own `superRefine` clause so the failure names the field. **Never
-inject one of the three in `applyHostAction`**, which is where a reader who pattern-matched on
-"aggregate fact about the room" would naturally put them: that publishes one question's answer key,
-bar chart or accepted answer while the *next* question is open, and it looks entirely correct on
-screen. Each carries `.default(null)` so a document written before it shipped still parses — required,
-the host's next action 409s mid-segment.
+**`SessionState` has one decoration field and four transition fields, and they behave oppositely.**
+`playerCount` is decoration: `applyHostAction` overwrites it on every action and a stale value costs
+nothing. `revealedOptionIds`, `revealedDistribution`, `revealedAnswerText` and `standings` are *part
+of* a transition — each is set by exactly one constructor (`reveal.ts` for the first three, the
+standings route for the fourth), nulled by every other, and guarded by its own `superRefine` clause so
+the failure names the field. **Never inject one of the four in `applyHostAction`**, which is where a
+reader who pattern-matched on "aggregate fact about the room" would naturally put them: that publishes
+one question's answer key, bar chart, accepted answer or leaderboard while the *next* question is
+open, and it looks entirely correct on screen. Each carries `.default(null)` so a document written
+before it shipped still parses — required, the host's next action 409s mid-segment.
 
-All three carry quiz content about a question the host has already closed, so none of them touches
-the retention reasoning above. What an attendee *typed* is per-player and travels on
+The three reveal fields carry quiz content about a question the host has already closed, so none of
+them touches the retention reasoning above. What an attendee *typed* is per-player and travels on
 `/api/quiz/result`, never on the snapshot.
+
+**The word cloud is the one aggregate that does NOT ride the snapshot, and it must stay that way.**
+S-08 added no field, no phase and no change to `state.ts` at all. Every other aggregate here reaches
+the room attached to a *host action* — but a cloud that fills as the room types has none, and Ably's
+allowance bills one broadcast to 150 clients as 150 messages against a 100/second ceiling, so
+publishing per submission is the O(N²) fan-out the spine contract forbids. Instead the projector polls
+`GET /api/quiz/host/words` on its own device. Moving the cloud onto the snapshot "for consistency" is
+the single most plausible way to break the room, and it would look correct in every test.
+See `context/changes/word-cloud-question/word-cloud-contract.md`.
+
+## Polling: two loops, three endpoints, and why every one has to be nameable
+
+The runbook's command tripwire is a polling detector, so **an unaccounted-for loop reads as an
+incident.** There are exactly two, and they are bounded differently:
+
+| Loop | Where | Bounded by |
+| --- | --- | --- |
+| The host panel poll | `src/pages/quiz/host.astro` | one device; a question kind; ~2.5 s with exponential backoff; tab visibility |
+| The connection fallback | `src/lib/client/session.ts` | the channel outage; tab visibility; the session ending |
+
+The host loop serves **two** endpoints — `/api/quiz/host/participation` for a choice question's
+answered count, `/api/quiz/host/words` for the word cloud — chosen by question kind in
+`pollTargetFor`. **One loop, not two**, and that is load-bearing: `host.astro`'s `polling` flag exists
+because a tick armed from `render` while a fetch was open held several requests at once, worst exactly
+when the venue network was worst. Two loops would mean two backoffs, two in-flight flags and two
+chances to leave a timer running for a panel that is off screen. `src/pages/quiz/host.test.ts` is a
+structural source scan that fails if a second timer, a second fetch site or a second copy of the
+predicate appears — it cannot check behaviour, because an Astro page's inline script has no harness.
+
+The word-cloud target is the only one that runs in `question-revealed`, so the host keeps a complete
+cloud to talk over; `cloudFinalReadFor` closes the loop after that final read, since no submission can
+arrive in that phase.
+
+**Nothing polled may write.** During `question-open` the session document's `updatedAt` *is* the moment
+the question opened, and it is the upper bound `clampElapsed` measures every award against — so a
+host-side write on a polled path inflates every award after it, with nothing on any screen to say
+scoring changed. Both route tests assert the ban against their own source.
 
 ## API route conventions
 

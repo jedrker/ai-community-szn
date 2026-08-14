@@ -181,7 +181,23 @@ during an event.
   > the field from that route — would leave any device on the connection-limit polling fallback looking
   > at a standings phase with no board in it. Names still reach no log line (`LogFields` has no field
   > one would fit in) and still live in `livequiz:players`, which `end` re-arms and `purge` deletes.
-  > See `context/changes/leaderboard-beat/leaderboard-contract.md`.
+  > See `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md`.
+  >
+  > **Checked and unchanged 2026-08-14 (S-08).** The word cloud publishes **nothing**: it added no
+  > snapshot field and no phase, and its aggregate reaches the projector through a host-secret-gated
+  > poll of `GET /api/quiz/host/words` rather than over Ably. So neither deviation above widens, and the
+  > sentence "display names are published" still describes exactly five leaderboard rows and nothing
+  > else. A word carries no name and is not joinable to one.
+  >
+  > *One thing did change, and it is recorded here rather than only in the code.* `livequiz:tallies`
+  > used to hold nothing but integer counters and its registry entry said so — "NOT attendee data, the
+  > first registered key that is not". The word cloud's counters are keyed by the **word itself**, so
+  > that key now holds attendee-authored text in its field names. It remains keyed by no player id and
+  > no display name, so nothing in it says *who* wrote anything; it is in the registry, so `end` re-arms
+  > it and `purge` deletes it; and it reaches no log line. The guardrail above is therefore still
+  > satisfied on the same terms — but the claim that one registered key was free of attendee content is
+  > no longer true, and the entry in `src/lib/session/keys.ts` was corrected in place rather than
+  > quietly reworded. See `context/changes/word-cloud-question/word-cloud-contract.md`.
 - Every capability the existing site provides today continues to work unchanged: event browsing,
   speaker profiles, both signup forms, and the practice of publishing content by committing Markdown.
 
@@ -217,6 +233,10 @@ during an event.
 - While a scored question is open the large screen shows how many have answered but not what they
   chose; the distribution appears only at reveal
 - The word-cloud question's aggregate visibly updates as answers arrive
+  > **Delivered 2026-08-14 (S-08).** It updates by the projector **polling**, ~2.5 s, not by broadcast:
+  > a display that fills continuously has no host action to ride, and one snapshot to 150 clients bills
+  > as 150 messages against a 100/second ceiling. "Visibly updates" is therefore true within a poll tick
+  > rather than instantly, which is the trade this criterion was met by and is worth stating plainly.
 - No answer submitted before a reveal is lost from the tally
 
 ## Scope of Change

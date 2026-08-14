@@ -57,7 +57,7 @@ an attendee is scoring on their own device.
 | S-05  | `free-text-answers`                   | Attendee can answer a free-text question without being punished for diacritics         | S-03          | US-01, FR-011                                                             | done     |
 | S-06  | `guess-the-number-answers`            | Attendee can guess a number and score by how close they were                           | S-03          | US-01, FR-013                                                             | done     |
 | S-07  | `leaderboard-beat`                    | Host can show the leaderboard between questions, and attendees can find themselves on it | S-03        | US-01, US-02, FR-014                                                      | done     |
-| S-08  | `word-cloud-question`                 | Attendee can submit one word and watch the cloud fill on the large screen               | S-03          | US-01, US-02, FR-012, FR-015                                              | proposed |
+| S-08  | `word-cloud-question`                 | Attendee can submit one word and watch the cloud fill on the large screen               | S-03          | US-01, US-02, FR-012, FR-015                                              | done     |
 | S-09  | `resilient-join`                      | Attendee can reload or unlock their phone and resume as the same player                 | S-02          | US-01, FR-009, FR-018                                                     | proposed |
 | S-10  | `final-winner-reveal`                 | Host can close the session with a winner-reveal sequence                                | S-07          | US-02, FR-006                                                             | proposed |
 
@@ -138,7 +138,7 @@ and do NOT re-scaffold them.
   in the project to carry attendee display names.** S-02's "no display name is ever published" is true
   about S-02 and false from here; the reversal, its bound and its real exposure surface (the open
   `GET /api/quiz/state`, not Ably's ~120 s floor) are recorded in the PRD's Deviation 2 and in
-  `context/changes/leaderboard-beat/leaderboard-contract.md`. **S-08 and S-10 must read that contract
+  `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md`. **S-08 and S-10 must read that contract
   before adding a snapshot field or a phase.** Two rules from it that are easy to break by accident:
   the `standings` phase deliberately keeps `currentQuestionId` (questionless, `advance` would reopen
   question 1), and row *order* and rank *number* are computed by different rules on purpose — merging
@@ -458,7 +458,7 @@ and do NOT re-scaffold them.
   segment stays short.
 - **Status:** done — delivered 2026-08-11. The transport risk above held: the board is computed once
   server-side and broadcast, so no device sorts and presence is not involved. See
-  `context/changes/leaderboard-beat/leaderboard-contract.md`.
+  `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md`.
 
 ### S-08: Word-cloud question
 
@@ -475,7 +475,15 @@ and do NOT re-scaffold them.
   the only view that pushes updates continuously rather than on host action, so it is the mechanic most
   likely to strain the spine and the message allowance — worth running after F-04 has measured the
   headroom. Word-cloud submissions reach the projector unmoderated by explicit decision.
-- **Status:** proposed
+- **Status:** done — **delivered 2026-08-14.** The risk above was resolved by keeping the cloud **off
+  the snapshot entirely**: it reaches the projector through a host-secret-gated poll of
+  `GET /api/quiz/host/words` on one device, so nothing about it touches the Ably message allowance and
+  the spine was never the constraint. No `SessionState` field, no phase, no new store key — the counters
+  are a third field family in `livequiz:tallies`, and the increment rides the existing submission script
+  below its `HSETNX`, so a duplicate tap cannot double-count. **The residual risk is unmeasured rather
+  than absent**: following the boundary S-07 drew, no room-scale rehearsal was re-run, so the top-30
+  truncation and the `HGETALL` payload at ~150 distinct words are untested at scale. See
+  `context/changes/word-cloud-question/word-cloud-contract.md`.
 
 ### S-09: Join survives a real room
 
@@ -525,8 +533,8 @@ and do NOT re-scaffold them.
 | S-04       | `host-participation-and-distribution` | Large screen: answer count while open, distribution at reveal      | no                    | Needs S-03                                                    |
 | S-05       | `free-text-answers`                   | Free-text answers matched ignoring case, spacing and diacritics    | no                    | Needs S-03                                                    |
 | S-06       | `guess-the-number-answers`            | Numeric guesses scored by relative error                           | done                  | **Delivered 2026-08-09.** First partial-credit answer: `AnswerRecord.correct` is exact-hit-only for this kind |
-| S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | done                  | **Delivered 2026-08-11.** First snapshot field carrying display names — S-08/S-10 must read `context/changes/leaderboard-beat/leaderboard-contract.md` before adding a snapshot field or a phase |
-| S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | no                    | Needs S-03; run after F-04 measures headroom                  |
+| S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | done                  | **Delivered 2026-08-11.** First snapshot field carrying display names — S-08/S-10 must read `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` before adding a snapshot field or a phase |
+| S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | done                  | **Delivered 2026-08-14.** The one aggregate that does NOT ride the snapshot — a host-side poll of `/api/quiz/host/words`, because a continuously-filling display has no host action to attach to and 150-way fan-out would exceed Ably's 100 msg/s ceiling. Added the project's **third fold** (`foldWord`, keeps diacritics because its output is rendered) and a third `livequiz:tallies` field family, which stopped that key being counters-only. **S-09/S-10 must read `context/changes/word-cloud-question/word-cloud-contract.md` before adding any continuously-updating display** |
 | S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | no                    | Needs S-02                                                    |
 | S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | no                    | Needs S-07; nice-to-have, first candidate to cut               |
 

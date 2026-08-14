@@ -1496,10 +1496,21 @@ async function runRehearsal(
   }
 
   /**
-   * One more advance, which opens the first *scored choice* question in the drafted
-   * quiz — the rhythm above walks a word cloud and the unscored gather beat, and
-   * neither can be answered by this slice. Then the submission burst, then the reveal
-   * that pays it off.
+   * One more advance, which opens the first *scored choice* question in the drafted quiz —
+   * the rhythm above walks the word cloud and the unscored gather beat.
+   *
+   * **The word cloud IS answerable now (S-08 took that seam), and this harness deliberately
+   * does not exercise it.** The submission burst below stays on the choice question, so the
+   * two things only a room-scale run can measure about the cloud go unmeasured: the top-30
+   * truncation at ~150 distinct words, and the `HGETALL` payload that carries them. That
+   * follows the boundary S-07 drew when it declined to re-run this harness for the
+   * leaderboard, and it is recorded as an accepted risk in the slice's roadmap entry and in
+   * `context/changes/word-cloud-question/word-cloud-contract.md` rather than left to be
+   * discovered here. Closing it means a second burst that posts a `word` field to
+   * `/api/quiz/answer` while the cloud question is open, plus one `GET
+   * /api/quiz/host/words` afterwards.
+   *
+   * Then the submission burst, then the reveal that pays it off.
    */
   const answerable = await measureAction(config, "advance", devices, {
     label: "advance",

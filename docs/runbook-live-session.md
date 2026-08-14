@@ -83,6 +83,11 @@ reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `c
 - **Ten events a month reaches ~324k, about 65% of the 500K ceiling** — up from ~54% after S-03 and
   roughly 1% before. Not a blocker and not an incident; it is simply no longer noise, and every slice
   from here (S-05 through S-08) adds another per-attendee path on top of this one.
+  - **S-05, S-06 and S-08 have now landed and moved that figure by essentially nothing.** Each added an
+    answer *kind* rather than a per-attendee path: a text, numeric or word submission bills exactly what
+    a single-choice one does. S-08's word cloud adds the only new polled path — 2 commands per tick on
+    the host's device alone, under 100 for the whole beat — so the estimate above stands unrevised.
+    S-07's leaderboard is the one that added a real per-device cost (~5 per device per beat).
 - **The console counter lags. Do not quote a reading taken minutes after a burst.** Measured: a
   reading 7 minutes after three N=150 runs was 2526 commands short of the same counter 85 minutes
   later, with ~15 commands of work in between. A premature reading looks settled and is not — this is
@@ -285,6 +290,25 @@ raise it before the event rather than after.
   - If it answers **"Nie udało się odczytać rankingu"**, the store did not respond and the room stayed
     on the reveal rather than getting a blank board. Tap it again; if it fails twice, carry on with
     `dalej` — the segment does not depend on the beat.
+
+- **Q1 is the word cloud, and it is the one beat that fills by itself** (S-08, FR-012/FR-015). Attendees
+  type one word; the projector shows them as a cloud whose type size grows with how many people wrote
+  each word, refreshing roughly every 2.5 seconds. Four things worth knowing on stage:
+
+  - **It needs the host secret like the answer count does.** Without it the panel says
+    "Wpisz sekret hosta, żeby zobaczyć chmurę słów" rather than filling. Type the secret before you
+    advance to Q1 — it is the same field you already need for every action.
+  - **The words are NOT moderated, by explicit decision** (PRD §Non-Goals). Whatever an attendee types
+    reaches the projector unreviewed, subject only to a 24-character limit and letters/digits (no
+    emoji). There is no hide button and no per-word delete. **Your only lever on stage is `dalej`** —
+    if something appears that you do not want on screen, advance past the question. Know this before
+    you are standing in front of it.
+  - **It keeps filling until you reveal, then freezes.** `pokaż odpowiedź` takes one last reading and
+    stops the refresh, so you can talk over a complete cloud. There is no correct answer to show — the
+    green "Poprawna odpowiedź" box stays hidden for this question, which is not a fault.
+  - **"(nieaktualne)" beside the count means the refresh failed, not that the room stopped writing.**
+    The cloud you can see is the last one that arrived. It recovers on its own; if it does not, the
+    segment does not depend on it — carry on with `dalej`.
 
 - **Watch the log stream**, not the dashboard. The stream is the only place a runtime error appears in
   time to act on.
