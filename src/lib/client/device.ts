@@ -46,6 +46,22 @@
 const minted = new Map<string, string>();
 
 /**
+ * Whether this device could actually *keep* its id, per storage key.
+ *
+ * Recorded as a side effect of `deviceId` rather than probed separately, because a probe
+ * would have to write a key of its own to find out — and the write it would be imitating
+ * is the one happening here anyway.
+ *
+ * **Its consumer is a piece of copy, and getting the question wrong is what made it
+ * necessary** (impl review F1). The join view wants to explain a `taken` refusal to
+ * someone whose device forgot them, and gated that on "no stored player" — which is also
+ * true of every first-time joiner, so the ordinary two-people-picked-Anna case was told
+ * its points could not be recovered. "Can this device persist anything?" is the question
+ * that actually separates the two.
+ */
+const persisted = new Map<string, boolean>();
+
+/**
  * A v4 UUID, or a last-resort substitute.
  *
  * `crypto.randomUUID` is undefined rather than throwing outside a secure context, and
@@ -82,6 +98,8 @@ export function deviceId(storageKey: string): string {
     // route, which is the one outcome this module exists to make impossible.
     if (typeof raw === "string" && raw.length > 0) {
       minted.set(storageKey, raw);
+      // It read back what a previous load wrote, so persistence demonstrably works.
+      persisted.set(storageKey, true);
       return raw;
     }
   } catch {
@@ -93,11 +111,32 @@ export function deviceId(storageKey: string): string {
 
   try {
     window.localStorage.setItem(storageKey, id);
+    persisted.set(storageKey, true);
   } catch {
     // Private mode, quota, disabled storage. The id still works for this page load;
     // the next one gets a different one and a fresh cap allowance. `player.ts`'s
     // reasoning, and the accepted cost named in the module docstring.
+    persisted.set(storageKey, false);
   }
 
   return id;
+}
+
+/**
+ * Whether anything this device stores will survive a reload.
+ *
+ * `false` means storage is genuinely unavailable — a private tab, disabled storage, a
+ * full quota — so this device cannot hold a player either, and a `taken` refusal may
+ * honestly be the attendee's own name coming back at them.
+ *
+ * **`true` is not a promise that nothing was lost.** Site data cleared mid-session
+ * leaves working storage and no player, and this cannot see the difference. That is the
+ * accepted narrowness of the fix: it never misfires on a first-time joiner, which the
+ * previous test — "no stored player" — did on the most common refusal in the room.
+ *
+ * Defaults to `true` when `deviceId` has not run: absent evidence of a storage problem
+ * is not evidence of one, and the fallback is the plain, always-correct message.
+ */
+export function deviceStoragePersists(storageKey: string): boolean {
+  return persisted.get(storageKey) !== false;
 }

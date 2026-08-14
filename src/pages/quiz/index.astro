@@ -309,7 +309,7 @@ import { publicQuiz } from "../../quiz/public";
         type SessionClient,
       } from "../../lib/client/session";
       import { clearPlayer, readPlayer, writePlayer } from "../../lib/client/player";
-      import { deviceId } from "../../lib/client/device";
+      import { deviceId, deviceStoragePersists } from "../../lib/client/device";
       import {
         clearSeen,
         fetchResult,
@@ -1537,22 +1537,27 @@ import { publicQuiz } from "../../quiz/public";
           }
 
           /**
-           * A `taken` refusal on a device that remembers nobody (roadmap S-09, FR-009).
+           * A `taken` refusal on a device that cannot remember anything (roadmap S-09).
            *
-           * The bare message is accurate and useless in precisely the case where the
-           * attendee knows the name is theirs: their storage is unavailable — a private
-           * tab, or site data cleared mid-session — so `readPlayer` reported "no stored
-           * player", they were shown the form, and they re-typed the name they are still
-           * holding. The server cannot tell them apart from someone else picking the
-           * same name, and this device has no id left to present, so there is nothing to
-           * recover. What it can do is stop looking like a bug and name the way forward.
+           * The bare message is accurate and useless in one case: the attendee's storage
+           * is unavailable — a private tab, or storage disabled — so they were shown the
+           * form despite already holding this name, re-typed it, and were refused by
+           * their own claim. Nothing can recover it (there is no id left to present), but
+           * the view can stop looking like a bug and name the way forward.
            *
-           * Gated on there being no stored player: a device that *does* hold one and
-           * still gets `taken` typed a name somebody else has, and the plain message is
-           * the right one.
+           * **Gated on storage, not on player absence** (impl review F1). The first
+           * version asked `readPlayer(...) === null`, which is equally true of every
+           * first-time joiner — so the ordinary case of two people in 150 picking "Anna"
+           * was told its earlier points could not be recovered. That is the most common
+           * refusal in the room, and it is exactly the absent-value conflation
+           * `store.ts` documents for not-found versus failed.
+           *
+           * Narrower on purpose: site data cleared mid-session leaves working storage and
+           * no player, and no code can tell that from a first join. Those attendees get
+           * the plain message, which is at least always true.
            */
           const strandedByStorage =
-            payload.refusal === "taken" && readPlayer(config.storageKey) === null;
+            payload.refusal === "taken" && !deviceStoragePersists(config.deviceStorageKey);
 
           setText(
             "join-error",

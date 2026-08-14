@@ -1,7 +1,11 @@
 import type { APIRoute } from "astro";
 
 import { logSessionEvent } from "../../../lib/session/log";
-import { newPlayerId, validateDisplayName } from "../../../lib/session/players";
+import {
+  MAX_DEVICE_ID_LENGTH,
+  newPlayerId,
+  validateDisplayName,
+} from "../../../lib/session/players";
 import { claimPlayer, readPlayerById } from "../../../lib/session/store";
 
 /**
@@ -166,7 +170,13 @@ export const POST: APIRoute = async ({ request }) => {
    * attendee to reload.
    */
   const deviceId = form.get("deviceId");
-  if (typeof deviceId !== "string" || deviceId.length === 0) {
+  if (
+    typeof deviceId !== "string" ||
+    deviceId.length === 0 ||
+    // Same refusal as an absent one: both mean "no usable device id", and both are fixed
+    // by reloading a page that mints one properly.
+    deviceId.length > MAX_DEVICE_ID_LENGTH
+  ) {
     logSessionEvent("session.join.rejected", { rejection: "no-device" });
     return json(400, { error: MESSAGES.noDevice });
   }

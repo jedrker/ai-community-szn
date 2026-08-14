@@ -27,6 +27,7 @@ vi.mock("../../../lib/session/realtime", () => ({
 }));
 
 const { POST: join } = await import("./join");
+const { MAX_DEVICE_ID_LENGTH } = await import("../../../lib/session/players");
 
 const NOW = 1_785_000_000_000;
 
@@ -214,6 +215,38 @@ describe("claiming a name", () => {
     // Recoverable in one tap — the honest way to hit this is a page cached from before
     // the guard shipped.
     expect(String((await body(response)).error)).toContain("Odśwież");
+  });
+
+  /**
+   * The bound every other attendee-supplied field already has (impl review F3). A device
+   * id becomes a hash *field name*, and this route is deliberately open, so an
+   * unbounded one is a needlessly enormous write on any successful claim.
+   *
+   * Built from the constant rather than from a literal length: a test that hardcoded 65
+   * would keep passing if the two ever drifted apart.
+   */
+  it("refuses a claim whose device id is longer than the bound", async () => {
+    const response = await join({
+      request: request({
+        displayName: "Anna",
+        deviceId: "d".repeat(MAX_DEVICE_ID_LENGTH + 1),
+      }),
+    } as never);
+
+    expect(response.status).toBe(400);
+    expect(claimPlayerMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts a device id exactly at the bound", async () => {
+    const response = await join({
+      request: request({
+        displayName: "Anna",
+        deviceId: "d".repeat(MAX_DEVICE_ID_LENGTH),
+      }),
+    } as never);
+
+    expect(response.status).toBe(200);
+    expect(claimPlayerMock).toHaveBeenCalled();
   });
 
   it("refuses a claim whose device id is present but empty", async () => {

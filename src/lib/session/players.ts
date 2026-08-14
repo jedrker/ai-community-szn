@@ -51,6 +51,26 @@ export const MAX_DISPLAY_NAME_LENGTH = 24;
 export const MAX_PLAYERS_PER_DEVICE = 3;
 
 /**
+ * The longest device id the join route will accept (roadmap S-09, impl review F3).
+ *
+ * Sixty-four, which is comfortably above both shapes `device.ts` produces — a v4 UUID is
+ * 36 characters and the insecure-context fallback is around 20 — and far below anything
+ * that could bloat the hash it becomes a *field name* in.
+ *
+ * The bound is here for consistency rather than because a specific attack needs it:
+ * every other attendee-supplied field in this project is bounded (a display name at 24,
+ * a word at 24, a text answer at 80, a typed guess), and the id travels as an `EVAL`
+ * argument so there is no injection to prevent. The realistic exposure is a claim that
+ * succeeds and writes a needlessly enormous field name into `DEVICES_KEY`.
+ *
+ * Note the sibling gap this does *not* close: `playerId` on the resume path carries the
+ * same unbounded shape and predates this. Left alone deliberately — widening the fix
+ * would put a new refusal on the resume path, which is the one path this whole slice
+ * exists to keep open.
+ */
+export const MAX_DEVICE_ID_LENGTH = 64;
+
+/**
  * Polish letters, digits, spaces, and a small set of marks people actually put in a
  * nickname. Deliberately permissive about *what* a name says and strict about what it
  * is made of: PRD §Non-Goals accepts unmoderated content on the projector, so this is

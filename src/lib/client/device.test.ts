@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { deviceId } from "./device";
+import { deviceId, deviceStoragePersists } from "./device";
 
 /**
  * The device's own opaque id (roadmap S-09).
@@ -107,6 +107,49 @@ describe("deviceId", () => {
     withBrokenRead(() => {
       expect(deviceId(key).length).toBeGreaterThan(0);
     });
+  });
+
+  /**
+   * THE DISCRIMINATOR (impl review F1).
+   *
+   * The join view explains a `taken` refusal differently to a device that cannot keep
+   * anything. It first asked "is there a stored player?" — equally true of every
+   * first-time joiner, so the ordinary case of two people picking the same name was told
+   * its earlier points could not be recovered. These three cases are the ones that must
+   * come apart, and the first is the one that was wrong.
+   */
+  it("reports working storage on a first-ever load, so a first-time joiner is not misread", () => {
+    const key = "test:device:persists-fresh";
+
+    deviceId(key);
+
+    expect(deviceStoragePersists(key)).toBe(true);
+  });
+
+  it("reports working storage when the id was read back from a previous load", () => {
+    const key = "test:device:persists-stored";
+    window.localStorage.setItem(key, "already-here");
+
+    deviceId(key);
+
+    expect(deviceStoragePersists(key)).toBe(true);
+  });
+
+  it("reports storage as not persisting when the write throws", () => {
+    const key = "test:device:persists-broken";
+
+    withBrokenWrite(() => {
+      deviceId(key);
+      expect(deviceStoragePersists(key)).toBe(false);
+    });
+  });
+
+  /**
+   * Absent evidence of a problem is not evidence of one: with `deviceId` never called,
+   * the answer must be the one whose copy is always true.
+   */
+  it("assumes storage works when nothing has asked for an id yet", () => {
+    expect(deviceStoragePersists("test:device:never-touched")).toBe(true);
   });
 
   /**

@@ -622,6 +622,9 @@ requires, avoids it entirely.
 #### Manual
 
 - [x] 2.6 Nothing user-visible changed — no claim is capped yet — 893575f
+      <br>Superseded at the gate: the route wiring moved into this phase, so claims *are* capped from
+      here. Verified instead: joining still works from a fresh browser, and a fourth claim is refused
+      with the Polish capped message.
 
 ### Phase 3: The route, and the resume exemption
 
@@ -646,6 +649,9 @@ requires, avoids it entirely.
 - [x] 4.1 Unit tests pass: `bun run test` — 523d157
 - [x] 4.2 Type checking passes: `bun run type-check` — 523d157
 - [x] 4.3 The zero-total test fails when the explicit parse becomes a bare coercion — 523d157
+      <br>Substituted: the zero test could not fail, because `Number(false)` is `0` — it passed
+      against the very coercion it was meant to catch. Verified instead with the corrupt-total test
+      (`NaN` against `0`), which does fail when the parse is replaced.
 
 #### Manual
 
