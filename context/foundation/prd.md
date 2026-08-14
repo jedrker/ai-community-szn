@@ -206,7 +206,7 @@ during an event.
   > says who wrote what; the window is bounded, self-expiring, and escapable by the explicit purge.
   > The alternative was deleting the word family at `end` instead of re-arming it, which adds a branch
   > to the one Lua path whose failure mode is "the session never ends" in order to shorten a window
-  > that carries no name. See `context/changes/word-cloud-question/word-cloud-contract.md`.
+  > that carries no name. See `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md`.
 - Every capability the existing site provides today continues to work unchanged: event browsing,
   speaker profiles, both signup forms, and the practice of publishing content by committing Markdown.
 

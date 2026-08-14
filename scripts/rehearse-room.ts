@@ -1505,7 +1505,7 @@ async function runRehearsal(
    * truncation at ~150 distinct words, and the `HGETALL` payload that carries them. That
    * follows the boundary S-07 drew when it declined to re-run this harness for the
    * leaderboard, and it is recorded as an accepted risk in the slice's roadmap entry and in
-   * `context/changes/word-cloud-question/word-cloud-contract.md` rather than left to be
+   * `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md` rather than left to be
    * discovered here. Closing it means a second burst that posts a `word` field to
    * `/api/quiz/answer` while the cloud question is open, plus one `GET
    * /api/quiz/host/words` afterwards.

@@ -368,7 +368,7 @@ allowance bills one broadcast to 150 clients as 150 messages against a 100/secon
 publishing per submission is the O(N²) fan-out the spine contract forbids. Instead the projector polls
 `GET /api/quiz/host/words` on its own device. Moving the cloud onto the snapshot "for consistency" is
 the single most plausible way to break the room, and it would look correct in every test.
-See `context/changes/word-cloud-question/word-cloud-contract.md`.
+See `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md`.
 
 ## Polling: two loops, three endpoints, and why every one has to be nameable
 

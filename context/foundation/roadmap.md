@@ -483,7 +483,7 @@ and do NOT re-scaffold them.
   below its `HSETNX`, so a duplicate tap cannot double-count. **The residual risk is unmeasured rather
   than absent**: following the boundary S-07 drew, no room-scale rehearsal was re-run, so the top-30
   truncation and the `HGETALL` payload at ~150 distinct words are untested at scale. See
-  `context/changes/word-cloud-question/word-cloud-contract.md`.
+  `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md`.
 
 ### S-09: Join survives a real room
 
@@ -534,7 +534,7 @@ and do NOT re-scaffold them.
 | S-05       | `free-text-answers`                   | Free-text answers matched ignoring case, spacing and diacritics    | no                    | Needs S-03                                                    |
 | S-06       | `guess-the-number-answers`            | Numeric guesses scored by relative error                           | done                  | **Delivered 2026-08-09.** First partial-credit answer: `AnswerRecord.correct` is exact-hit-only for this kind |
 | S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | done                  | **Delivered 2026-08-11.** First snapshot field carrying display names — S-08/S-10 must read `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` before adding a snapshot field or a phase |
-| S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | done                  | **Delivered 2026-08-14.** The one aggregate that does NOT ride the snapshot — a host-side poll of `/api/quiz/host/words`, because a continuously-filling display has no host action to attach to and 150-way fan-out would exceed Ably's 100 msg/s ceiling. Added the project's **third fold** (`foldWord`, keeps diacritics because its output is rendered) and a third `livequiz:tallies` field family, which stopped that key being counters-only. **S-09/S-10 must read `context/changes/word-cloud-question/word-cloud-contract.md` before adding any continuously-updating display** |
+| S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | done                  | **Delivered 2026-08-14.** The one aggregate that does NOT ride the snapshot — a host-side poll of `/api/quiz/host/words`, because a continuously-filling display has no host action to attach to and 150-way fan-out would exceed Ably's 100 msg/s ceiling. Added the project's **third fold** (`foldWord`, keeps diacritics because its output is rendered) and a third `livequiz:tallies` field family, which stopped that key being counters-only. **S-09/S-10 must read `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md` before adding any continuously-updating display** |
 | S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | no                    | Needs S-02                                                    |
 | S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | no                    | Needs S-07; nice-to-have, first candidate to cut               |
 
