@@ -226,9 +226,12 @@ bun run quiz:reset
 its phase, and the room joins a quiz already halfway through. The four-hour TTL will not save you —
 it is longer than the gap between a rehearsal and the event.
 
-There is no button for this. `end` and `purge` live only on `/quiz/spine-check`, which 404s in
-production by design (it renders the host secret into HTML), so **the terminal is the only reset path
-at an event.** Do it before the room arrives, not after they start joining.
+There is no button for *this*. The host view has a **zakończ sesję** button (S-10) which ends the
+session cleanly, but ending is not resetting: the document survives on the ~10-minute lifetime, and
+`start` during that window still picks the old session up. `purge` is what deletes on the spot, and it
+lives only on `/quiz/spine-check`, which 404s in production by design (it renders the host secret into
+HTML) — so **the terminal is the only reset path at an event.** Do it before the room arrives, not
+after they start joining.
 
 **5. Open `/quiz/host` and paste the host secret.**
 
@@ -294,9 +297,15 @@ raise it before the event rather than after.
   broadcasting to 150 devices is the O(N²) fan-out the spine is built to avoid, so nothing is
   published when someone joins. While the lobby fills, tap **odśwież** to watch it climb.
 
-- **`end` and `purge` are not on the host view.** Only `start`, `dalej`, `pokaż odpowiedź`,
-  `pokaż ranking` and `odśwież` are — the irreversible verbs were deliberately kept off a screen you
-  drive from a stage. To close a session, use `bun run quiz:reset` from the terminal.
+- **`zakończ sesję` is on the host view now (S-10); `purge` is still not.** The buttons are `start`,
+  `dalej`, `pokaż odpowiedź`, `pokaż ranking`, `odśwież` and — set apart at the far end, outlined in
+  red — `zakończ sesję`. It **takes two taps**: the first arms it and changes its label to
+  "na pewno? kliknij ponownie", the second closes the session. Anything that moves the session in
+  between disarms it, so a tap you made a minute ago cannot fire into a state you have not looked at.
+  See "After the session" below for what closing does.
+
+  `purge` stayed off this screen deliberately — it deletes with no undo and no ten-minute window.
+  It lives on `/quiz/spine-check`, or use `bun run quiz:reset` from the terminal.
 
 - **`pokaż ranking` is the leaderboard beat, and it only works right after a reveal** (S-07, FR-014).
   The button is disabled in every other phase, so the sequence is `dalej` → `pokaż odpowiedź` →
@@ -352,12 +361,12 @@ raise it before the event rather than after.
   | `session.publish.ok` | the snapshot reached Ably | nothing |
   | `session.action.stale` | two actions raced; the second was a no-op | nothing, unless you did not double-tap — then something else is driving the session |
   | `session.standings.shown` | the leaderboard reached the room; `rowCount` is how many rows it carried | nothing. A `rowCount` below 5 means the room is smaller than the board |
-  | `session.standings.failed` | the board could not be read, so the beat did not happen | tap **pokaż ranking** again; if it fails twice, move on with **dalej** |
+  | `session.standings.failed` | the board could not be read. Its `reason` says which beat: the leaderboard beat, or the close | for the beat, tap **pokaż ranking** again and move on with **dalej** if it fails twice. **For the close, nothing** — the session still ended, just without the winner screen |
   | `session.auth.rejected` | someone tried a host action with a wrong or missing secret | **if it was not you mis-clicking, someone else has the control URL.** One line is noise; a stream of them during a session means stop and rotate `LIVEQUIZ_HOST_SECRET` |
   | `session.publish.failed` | state is committed but did **not** reach devices | repeat the action; it re-broadcasts and is safe to retry |
   | `session.unconfigured` | an environment variable is missing | the session cannot run; check `vercel env ls` |
   | `session.read.invalid` | stored state does not match the quiz definition | a deploy changed the quiz mid-session — roll back |
-  | `session.ended` | the segment is closed; every key is now on the ~10-minute lifetime | nothing, if you meant it. **If you did not, act within ten minutes** — after that the session is gone and cannot be resumed |
+  | `session.ended` | the segment is closed; every key is now on the ~10-minute lifetime. `rowCount` is how many rows the closing board carried | nothing, if you meant it. **A `rowCount` of 0 means the winner screen did not appear** — the close was still correct. **If you did not mean to end, act within ten minutes** — after that the session is gone and cannot be resumed |
   | `session.purged` | every key was deleted | nothing, if you meant it. This one is not recoverable at all — there is no undo and `vercel rollback` does not reach it |
 
   `version` should only ever climb, and it climbs by exactly one per applied action. Two `applied` lines
@@ -375,19 +384,31 @@ raise it before the event rather than after.
 
 ## After the session
 
-**End the session.** This is the closing beat, and it is deliberate — there is no automatic end.
-Ending writes a terminal state that every connected device renders, and moves the room's data onto a
-**~10-minute lifetime** instead of the four-hour one. That window exists so an attendee who reloads
-right after the finish still sees the final standings.
+**End the session with `zakończ sesję`.** This is the closing beat, and it is deliberate — there is no
+automatic end. Ending writes a terminal state that every connected device renders, and moves the room's
+data onto a **~10-minute lifetime** instead of the four-hour one. That window exists so an attendee who
+reloads right after the finish still sees the final standings.
 
-Two things about it are worth knowing before you press it:
+**It is also the winner reveal** (S-10, FR-006). The closing snapshot carries the same top five the
+leaderboard beat shows, with the winner's row set large and the heading changed to "Zwycięzca", and each
+phone shows those five rows plus its own final position — including everyone outside the top five. So
+end the session **in front of the room**, not afterwards on the way out: this is the last thing the
+segment shows.
 
-- **`end` is refused while a question is open.** Reveal first. That guard exists so the one
-  irreversible verb cannot fire mid-question.
+Four things about it are worth knowing before you press it:
+
+- **It takes two taps.** The first arms the button; the second closes the session. Any action in
+  between disarms it.
+- **It is refused while a question is open.** Reveal first. That guard exists so the one irreversible
+  verb cannot fire mid-question. The button is disabled there, so you should not meet the refusal.
 - **It asks for the session's current version as confirmation.** Every other host verb is safe to
   double-tap because a repeat is a harmless no-op; `end` is safe for the opposite reason — a repeated
   or stale request is *refused*. If you get a message about the confirmation not matching, refresh
   the view rather than retrying blind.
+- **If the board cannot be read, the session still ends** — you get the plain "To już koniec" screen
+  instead of the winner. That is deliberate: closing is what puts the room's data on the short
+  lifetime, so it is never blocked by a leaderboard. The log line says so (`session.ended` with
+  `rowCount: 0`). There is no way to re-show the winner afterwards; carry on and announce it yourself.
 
 **Reach for `purge` when ten minutes is too long, or when a session has to be abandoned.** It removes
 everything immediately. Unlike `end` it has **no phase guard** — that is deliberate, because

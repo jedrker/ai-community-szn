@@ -183,6 +183,29 @@ during an event.
   > one would fit in) and still live in `livequiz:players`, which `end` re-arms and `purge` deletes.
   > See `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md`.
   >
+  > **Amended 2026-08-14 (S-10). The same five names now also ride the *terminal* document, and the
+  > window changed shape.** FR-006's closing beat lands the segment on the leaderboard, so
+  > `endedSessionState` carries a `standings` field instead of clearing it. The bound is unchanged — at
+  > most five rows of `{ rank, displayName, points }`, still no player id — and the binding surface is
+  > again `GET /api/quiz/state`, not the Ably floor.
+  >
+  > What is *new* is the window's bound. In the `standings` phase the names are readable for as long as
+  > the host leaves the board up — an interval a person controls and can shorten by acting. On the
+  > terminal document they are readable for `ENDED_TTL_SECONDS` (~10 minutes) whatever anyone does,
+  > because that is how long the closing screen has to survive for a reloading attendee to find their
+  > result. **Bounded by a TTL rather than by attention** is the honest way to state the difference, and
+  > it is stated here rather than folded into the S-07 paragraph because that entry's reasoning does not
+  > cover it.
+  >
+  > Accepted rather than mitigated, for two reasons. The same five names reached the same devices minutes
+  > earlier during the leaderboard beat, so the set is not new — only its residency is. And both fixes
+  > break something built on purpose: shortening the TTL removes the ten-minute window Deviation 1 above
+  > accepted *deliberately*, and stripping the field from the state route recreates the failure S-07
+  > already rejected it for. What an attendee typed, their own total and their own position remain
+  > per-device on `/api/quiz/result`; names still reach no log line and still live in `livequiz:players`,
+  > which `end` re-arms and `purge` deletes. See
+  > `context/changes/final-winner-reveal/winner-reveal-contract.md`.
+  >
   > **Checked and unchanged 2026-08-14 (S-08).** The word cloud publishes **nothing**: it added no
   > snapshot field and no phase, and its aggregate reaches the projector through a host-secret-gated
   > poll of `GET /api/quiz/host/words` rather than over Ably. So neither deviation above widens, and the

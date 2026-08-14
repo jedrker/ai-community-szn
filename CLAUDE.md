@@ -379,16 +379,35 @@ unauthenticated `GET /api/quiz/state` rather than the Ably floor. Read
 `context/archive/2026-08-07-join-and-follow-host/join-contract.md` for the decision it was handed and
 `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` for what it did with it.
 
+**S-10 changed the window's shape, not its bound.** The same five names now also ride the *terminal*
+document, so they are readable for `ENDED_TTL_SECONDS` — **bounded by a TTL rather than by the host's
+attention**, which is longer and out of anyone's hands once the close lands. Accepted: the same names
+reached the same devices minutes earlier, and both fixes break something built on purpose (shortening
+the TTL removes the reload window F-03 chose; stripping the field from the state route recreates the
+failure S-07 rejected it for). Recorded in the PRD's retention guardrail and
+`context/changes/final-winner-reveal/winner-reveal-contract.md`.
+
 **`SessionState` has one decoration field and four transition fields, and they behave oppositely.**
 `playerCount` is decoration: `applyHostAction` overwrites it on every action and a stale value costs
 nothing. `revealedOptionIds`, `revealedDistribution`, `revealedAnswerText` and `standings` are *part
-of* a transition — each is set by exactly one constructor (`reveal.ts` for the first three, the
-standings route for the fourth), nulled by every other, and guarded by its own `superRefine` clause so
-the failure names the field. **Never inject one of the four in `applyHostAction`**, which is where a
-reader who pattern-matched on "aggregate fact about the room" would naturally put them: that publishes
-one question's answer key, bar chart, accepted answer or leaderboard while the *next* question is
-open, and it looks entirely correct on screen. Each carries `.default(null)` so a document written
-before it shipped still parses — required, the host's next action 409s mid-segment.
+of* a transition — set by the constructor that owns the transition (`reveal.ts` for the first three;
+the standings route **and, since S-10, `endedSessionState`** for the fourth), nulled by every other,
+and guarded by its own `superRefine` clause so the failure names the field. **Never inject one of the
+four in `applyHostAction`**, which is where a reader who pattern-matched on "aggregate fact about the
+room" would naturally put them: that publishes one question's answer key, bar chart, accepted answer or
+leaderboard while the *next* question is open, and it looks entirely correct on screen. Each carries
+`.default(null)` so a document written before it shipped still parses — required, the host's next
+action 409s mid-segment.
+
+**`standings` is the one with two owners, and its two phases are asymmetric** (S-10, FR-006).
+`BOARD_PHASES` in `state.ts` permits a board in `standings` and in `ended`; only `standings` *requires*
+one. That is not an oversight to tidy: the board **is** the standings phase, so a null one is a blank
+projector and the route refuses the transition — while `end` is what moves every key onto
+`ENDED_TTL_SECONDS`, so it may never be refused over a board read that failed, and a boardless close
+falls back to the plain closing screen. Widening the requires-clause to both phases makes a transient
+store blip un-closeable. Both views therefore key the board's *visibility* on `standings !== null`
+rather than on a phase list — the schema owns that rule, and a list in a view is a copy that falls
+behind. Read `context/changes/final-winner-reveal/winner-reveal-contract.md` before touching either.
 
 The three reveal fields carry quiz content about a question the host has already closed, so none of
 them touches the retention reasoning above. What an attendee *typed* is per-player and travels on

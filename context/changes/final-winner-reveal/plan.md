@@ -562,8 +562,8 @@ for free.
 
 #### Manual
 
-- [x] 2.4 A phone outside the top five sees its own position after the close
-- [x] 2.5 A phone that never joined sees the board and no position line
+- [x] 2.4 A phone outside the top five sees its own position after the close — 72facda
+- [x] 2.5 A phone that never joined sees the board and no position line — 72facda
 
 ### Phase 3: The two closing screens
 
@@ -575,34 +575,34 @@ for free.
 
 #### Manual
 
-- [x] 3.4 Projector: the winner is legible from the back of the room
-- [x] 3.5 Phone: own row highlighted and own position agreeing with the projector
-- [x] 3.6 A reloaded phone still shows the board and the position
-- [x] 3.7 A purge mid-session returns the phone to the plain closing screen
-- [x] 3.8 Ending after a `standings` beat shows the closing screen, not the old board
+- [x] 3.4 Projector: the winner is legible from the back of the room — 72facda
+- [x] 3.5 Phone: own row highlighted and own position agreeing with the projector — 72facda
+- [x] 3.6 A reloaded phone still shows the board and the position — 72facda
+- [x] 3.7 A purge mid-session returns the phone to the plain closing screen — 72facda
+- [x] 3.8 Ending after a `standings` beat shows the closing screen, not the old board — 72facda
 
 ### Phase 4: The host's closing button
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 `host.test.ts` still finds one poll timer, one in-flight flag and one polled fetch site
-- [x] 4.4 Each new scan assertion fails when the guard it names is removed
+- [x] 4.1 Unit tests pass: `bun run test` — 72facda
+- [x] 4.2 Type checking passes: `bun run type-check` — 72facda
+- [x] 4.3 `host.test.ts` still finds one poll timer, one in-flight flag and one polled fetch site — 72facda
+- [x] 4.4 Each new scan assertion fails when the guard it names is removed — 72facda
 
 #### Manual
 
-- [x] 4.5 A single tap does not end the session
-- [x] 4.6 A second tap ends it and the room lands on the closing screen
-- [x] 4.7 Another action landing disarms the armed button
-- [x] 4.8 A stale version surfaces the route's confirmation-mismatch message
-- [x] 4.9 The button is disabled while a question is open
+- [x] 4.5 A single tap does not end the session — 72facda
+- [x] 4.6 A second tap ends it and the room lands on the closing screen — 72facda
+- [x] 4.7 Another action landing disarms the armed button — 72facda
+- [x] 4.8 A stale version surfaces the route's confirmation-mismatch message — 72facda
+- [x] 4.9 The button is disabled while a question is open — 72facda
 
 ### Phase 5: Contract, runbook, PRD
 
 #### Automated
 
-- [ ] 5.1 `bun run test` and `bun run type-check` still pass
+- [x] 5.1 `bun run test` and `bun run type-check` still pass
 
 #### Manual
 

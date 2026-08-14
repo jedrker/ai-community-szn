@@ -59,7 +59,7 @@ an attendee is scoring on their own device.
 | S-07  | `leaderboard-beat`                    | Host can show the leaderboard between questions, and attendees can find themselves on it | S-03        | US-01, US-02, FR-014                                                      | done     |
 | S-08  | `word-cloud-question`                 | Attendee can submit one word and watch the cloud fill on the large screen               | S-03          | US-01, US-02, FR-012, FR-015                                              | done     |
 | S-09  | `resilient-join`                      | Attendee can reload or unlock their phone and resume as the same player                 | S-02          | US-01, FR-009, FR-018                                                     | done     |
-| S-10  | `final-winner-reveal`                 | Host can close the session with a winner-reveal sequence                                | S-07          | US-02, FR-006                                                             | proposed |
+| S-10  | `final-winner-reveal`                 | Host can close the session with a winner-reveal sequence                                | S-07          | US-02, FR-006                                                             | done     |
 
 ## Streams
 
@@ -541,7 +541,7 @@ and do NOT re-scaffold them.
 - **Risk:** The only nice-to-have in the PRD and the last item sequenced, so it is the natural cut if
   effort runs out — a session can end on the plain leaderboard from S-07 without failing any success
   criterion. The drafted quiz ends in a leaderboard reveal, so the plain path is already sufficient.
-- **Status:** proposed
+- **Status:** done — delivered 2026-08-14, `context/changes/final-winner-reveal/`
 
 ## Backlog Handoff
 
@@ -560,7 +560,7 @@ and do NOT re-scaffold them.
 | S-07       | `leaderboard-beat`                    | Host-controlled leaderboard between questions                      | done                  | **Delivered 2026-08-11.** First snapshot field carrying display names — S-08/S-10 must read `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` before adding a snapshot field or a phase |
 | S-08       | `word-cloud-question`                 | Unscored word-cloud question with a live-filling large-screen view | done                  | **Delivered 2026-08-14.** The one aggregate that does NOT ride the snapshot — a host-side poll of `/api/quiz/host/words`, because a continuously-filling display has no host action to attach to and 150-way fan-out would exceed Ably's 100 msg/s ceiling. Added the project's **third fold** (`foldWord`, keeps diacritics because its output is rendered) and a third `livequiz:tallies` field family, which stopped that key being counters-only. **S-09/S-10 must read `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md` before adding any continuously-updating display** |
 | S-09       | `resilient-join`                      | Same-device resume plus per-device player cap                      | done                  | **Delivered 2026-08-14.** Cap is 3 per device, cumulative, enforced inside `CLAIM_PLAYER`; the resume path is exempt and that exemption is the slice. Added `livequiz:devices` (a count, the one registered key that is not attendee data) and a third browser-storage key. **S-10 must read `context/archive/2026-08-14-resilient-join/resume-contract.md` before adding anything that refuses a request** |
-| S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | no                    | Needs S-07; nice-to-have, first candidate to cut               |
+| S-10       | `final-winner-reveal`                 | Closing winner-reveal sequence                                     | done                  | **Delivered 2026-08-14.** The `ended` phase carries the S-07 board and `end` moved onto the host view behind a two-tap confirmation — the first reversal of an F-03 placement decision. Read `context/changes/final-winner-reveal/winner-reveal-contract.md` before touching the `ended` phase or the closing screen |
 
 ## Open Roadmap Questions
 
@@ -954,3 +954,24 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   be recovered; implementation review caught it, no test could. (3) Two phases grew past their planned
   boundaries because a signature change could not be contained — the plan's phase split, not the
   implementation, was what turned out to be wrong.
+
+- **S-10: Host can close the session with a winner reveal, and every attendee learns where they
+  finished.** — Delivered 2026-08-14 → `context/changes/final-winner-reveal/`. **No new phase, no new
+  snapshot field and no new store key**: the `ended` phase simply stopped clearing S-07's `standings`,
+  which is the shape the leaderboard contract had already handed over. What made it more than a
+  one-line change was the asymmetry it forced — `standings` *requires* a board because the board is the
+  phase, while `ended` merely permits one, because `end` is what moves every key onto the ~10-minute
+  lifetime and may never be refused over an `HGETALL` that blipped. A failed board read closes the
+  session on the plain screen and says so with `rowCount: 0`. `result.ts`'s `ended` branch gained the
+  rank the contract named as an open gap, degrading to `null` rather than 503 for the same reason: at
+  the close there is no beat to retry into. **The slice's real decision was a placement one** — `end`
+  moved onto the host view, reversing F-03, because FR-006 asks the *host* to trigger the closing beat
+  and a terminal window in front of a room is not a trigger. The mis-click risk is answered by guards
+  rather than by distance: no `data-action` so the blanket handler cannot reach it, disabled in markup
+  and by phase, two taps, disarmed by anything that moves the session, and a confirmed version the
+  route refuses if stale. `purge` did not come along. Suite 1177 → 1188; retention window restated in
+  the PRD as bounded by a TTL rather than by the host's attention — the same five names, a differently
+  shaped exposure. Lesson: **a docstring naming a future slice is a decision waiting to be taken, not a
+  TODO** — `state.ts` and `result.ts` both carried "S-10 owns this", and both were right about the
+  shape, which is why this landed in a day. Contract:
+  `context/changes/final-winner-reveal/winner-reveal-contract.md`.
