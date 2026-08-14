@@ -4,7 +4,8 @@
 - **Plan**: `context/changes/per-question-timer/plan.md`
 - **Scope**: Full plan — Phases 1–5 of 5 (commits `ea1ef22`, `d62c914`, `3949043`, `206e4c3`, `1311a96`, `9554ab7`)
 - **Date**: 2026-08-15
-- **Verdict**: REJECTED as landed → **NEEDS ATTENTION** after the two in-review fixes
+- **Verdict**: REJECTED as landed → **NEEDS ATTENTION**; all 10 findings triaged and fixed
+  (`8825875`, `309a885`). Ten manual rows remain open pending a live pass — see F5.
 - **Findings**: 1 critical · 6 warnings · 3 observations
 
 ## Verdicts
@@ -126,7 +127,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
   - Tradeoff: The next defect of a shape nobody predicted is invisible again.
   - Confidence: MEDIUM — depends entirely on the countdown not changing further.
   - Blind spot: None significant.
-- **Decision**: FIXED via Fix A — `src/lib/client/countdown.ts` + `countdown.test.ts` (24 tests,
+- **Decision**: FIXED via Fix A (309a885) — `src/lib/client/countdown.ts` + `countdown.test.ts` (24 tests,
   fake timers). Both pages wire to it; `index.astro` now owns no timer and `host.astro` is back
   to one. F1 and F2 are covered as named executable regressions, and four sabotage runs
   (announce-on-start, non-clearing stop, fixed interval, no drop-on-restart) each failed the
@@ -146,7 +147,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
   precisely what it exists to catch.
 - **Fix**: Re-run the live pass for Phases 3 and 4 against the fixed code before the change is
   archived, and treat a manual row as unconfirmed unless it was actually exercised.
-- **Decision**: FIXED — rows 3.6-3.10 and 4.7-4.11 reset to unchecked in `plan.md`, each phase's
+- **Decision**: FIXED (309a885) — rows 3.6-3.10 and 4.7-4.11 reset to unchecked in `plan.md`, each phase's
   Manual block carrying a note explaining why. 3.11 stays checked; that break-the-guard pass did
   run. The change now has ten open manual rows and should not be archived until a live pass
   closes them.
@@ -167,7 +168,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
 - **Fix**: Clamp the text to `[0, limitMs]` as the bar already is, and treat an implausible
   remainder (`> limitMs` or `< -limitMs`) as "no reliable clock" — show the panel without
   locking, since the server is the authority regardless.
-- **Decision**: FIXED, partially and deliberately. The clamp landed: `renderCountdown` now
+- **Decision**: FIXED (309a885), partially and deliberately. The clamp landed: `renderCountdown` now
   derives one clamped value and paints both the text and the bar from it, so a device running
   behind can no longer render "325 s" beside a full bar. The "implausibly negative means
   untrusted clock" half was **not** implemented, and should not be: a fast clock and a question
@@ -193,7 +194,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
   still accepts answers).
 - **Fix**: Add a one-line note to the plan's Progress or the contract recording the 40→30
   decision and its reason.
-- **Decision**: FIXED — `timer-contract.md` gains "The authored budgets, and the one that
+- **Decision**: FIXED (309a885) — `timer-contract.md` gains "The authored budgets, and the one that
   changed", recording both values, that no reason was captured at the time, and that the number
   is provisional until one live rehearsal settles it. The plan is left reading 40: it is the
   historical contract, and rewriting it would destroy the record of what was planned.
@@ -211,7 +212,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
   it claims to demonstrate.
 - **Fix**: Derive the probe from the two fixtures' own limits (e.g. midway between them) and
   correct the comment.
-- **Decision**: FIXED — the probe is now `(shortLimitMs + longLimitMs) / 2`, derived from the
+- **Decision**: FIXED (309a885) — the probe is now `(shortLimitMs + longLimitMs) / 2`, derived from the
   fixtures themselves, with an assertion that the two limits actually differ so the case cannot
   go vacuous. Verified by hard-coding one shared limit in `deadlineAt`, which fails it.
 
@@ -226,7 +227,7 @@ change to any award arithmetic, no host override, and no write on a polled or co
   justifying it ("the bar is decoration for the number above it") clearly intends the attribute
   to apply to the bar's wrapper only.
 - **Fix**: Move `aria-hidden` to the bar wrapper.
-- **Decision**: FIXED — `aria-hidden` now sits on the bar's wrapper, so the seconds value is
+- **Decision**: FIXED (309a885) — `aria-hidden` now sits on the bar's wrapper, so the seconds value is
   announced and only the width is hidden.
 
 ### F10 — Two small inconsistencies in the countdown state
@@ -243,6 +244,6 @@ change to any award arithmetic, no host override, and no write on a polled or co
   now reads as deliberate when it is not.
 - **Fix**: Use `countdownFor.id` in the tick as a staleness check, and mirror the host page's
   lifecycle handlers.
-- **Decision**: FIXED — the dead `countdownFor.id` is gone with the extraction (F4), and the
+- **Decision**: FIXED (309a885) — the dead `countdownFor.id` is gone with the extraction (F4), and the
   attendee page gained `visibilitychange` / `pagehide` handlers matching the host view. Both
   verified by removing each clear in turn.
