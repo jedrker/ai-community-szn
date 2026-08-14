@@ -140,3 +140,23 @@
   the fixture cannot reach the branch, or the change is behaviour-neutral — in which case say so
   plainly instead of reporting it as a fix.
 - **Applies to**: implement, impl-review
+
+## A source-scanning guard must assert the property, not the shape — and be verified both ways
+
+- **Context**: Any test that asserts a property by scanning source text rather than executing it —
+  `src/pages/quiz/host.test.ts`, `keys.test.ts`, `boundary.test.ts`, `participation.test.ts`'s and
+  `words.test.ts`'s writes-nothing scans. These exist because the thing under test has no harness (an
+  Astro inline script) or because the property is about what code *can* reach rather than what it does.
+- **Problem**: A scan for an expression that exists today certifies whatever is there, defects
+  included. S-08's `host.test.ts` asserted `client.current()?.phase === "question-revealed"` — the
+  arrival-phase form, which *was* the defect: it passed for four commits and failed only when the bug
+  was fixed, at which point the tempting move is to "fix the test" back toward the bug. A second
+  assertion pinned a *name* (`let pollTimer` occurring once) and stayed true when `let cloudTimer` was
+  declared beside it. Two more counted an occurrence file-wide and so failed on *correct* code, because
+  the predicate legitimately states its condition twice and `resetPanels` legitimately clears the same
+  flag. Four instances in one change, one of them in a guard written specifically to catch regressions.
+- **Rule**: A guard must assert the property, never the code's current shape — a scan for an expression
+  that exists today certifies whatever is there, defects included. Verify every guard in both
+  directions: confirm it passes on the correct code AND fails when the code is broken. A guard that
+  only ever ran against one of the two has been checked, not verified.
+- **Applies to**: implement, impl-review
