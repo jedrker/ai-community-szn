@@ -498,6 +498,43 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
              px-[72px] py-[24px]"
     >
       <!--
+        THE MESSAGE BUBBLE (signage redesign, step 5).
+
+        **It docks as the first row inside the control bar, never as an overlay.** An overlaid
+        bubble covers an answer option while the room is reading it — that was tried and
+        rejected. Docked, the bar grows and the stage shrinks by the same amount, which is a
+        layout the room can absorb because nothing it was reading moves out from under it.
+
+        The marker bar carries the whole register system: what happened, what is in flight,
+        what needs a decision, what was refused. Its colour is the message's meaning, so the
+        host reads the register from across the stage and only then reads the words.
+
+        Hidden while there is nothing to say, so an empty bubble never takes the stage's
+        height. `say` is the only writer.
+
+        `role="status"` sits on the copy rather than on the bubble: the live region should
+        announce the sentence, not the decorative bar beside it.
+      -->
+      <div
+        id="message-bubble"
+        hidden
+        class="flex items-stretch gap-6 rounded-[20px] border-2 border-quiz-field-border
+               bg-quiz-float px-6 py-3"
+      >
+        <span
+          id="message-marker"
+          class="w-[10px] shrink-0 rounded-full bg-quiz-pill-border"
+        ></span>
+        <p
+          id="message"
+          role="status"
+          aria-live="polite"
+          class="text-[40px] font-semibold leading-[52px] tracking-[-0.015em]"
+        >
+        </p>
+      </div>
+
+      <!--
         The host's own line: the secret, and what the connection is doing.
 
         Above the verbs, because the secret is the first thing to fix when an action comes
@@ -657,7 +694,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         </p>
       </div>
 
-      <p id="message" role="status" aria-live="polite" class="text-[40px] leading-[52px]"></p>
     </footer>
 
     <script
@@ -751,6 +787,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const railBox = el("rail");
       const controlRow = el("control-row");
       const endedNote = el("ended-note");
+      const messageBubble = el("message-bubble");
+      const messageMarker = el("message-marker");
       const wordCloudWords = el("word-cloud-words");
       const wordCloudStale = el("word-cloud-stale");
       const hostCountdownBox = el("host-countdown");
@@ -1741,9 +1779,24 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        */
       function say(text: string, bad: boolean): void {
         setText("message", text);
-        el("message").className = bad
-          ? "text-[40px] leading-[52px] text-quiz-signal"
-          : "text-[40px] leading-[52px] text-quiz-mint";
+
+        // Nothing to say, no bubble. An empty one would hold the stage's height open for a
+        // sentence that is not there.
+        setHidden(messageBubble, text.length === 0);
+
+        /**
+         * **Still binary, and still wrong about two of its callers.** `applied:false` and the
+         * closing button's arming line are neither a success nor a failure, and both come out
+         * mint here. Widening this to a four-way register is step 6 of the redesign and is
+         * deliberately its own commit — it is the only behavioural change in the whole thing,
+         * so it should be revertable without taking the styling with it.
+         *
+         * The marker is what will carry that register. Until then it says what the boolean
+         * says, in the two colours the register system already assigns to those two meanings.
+         */
+        messageMarker.className = bad
+          ? "w-[10px] shrink-0 rounded-full bg-quiz-signal"
+          : "w-[10px] shrink-0 rounded-full bg-quiz-mint";
       }
 
       function stopPolling(): void {
