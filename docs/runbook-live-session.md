@@ -246,8 +246,11 @@ the log stream anyway, so this costs nothing extra. A wrong or missing secret sh
 Polish message, *Brak uprawnień hosta*. Finding that out at the front of a room is the failure this
 step exists to prevent.
 
-Then put the attendee view on the large screen if you want the room to see it, and point them at
-**`/quiz`** — the host view shows a QR code and the URL side by side for exactly that.
+Then point the room at **`/quiz`** — you do not need a second screen for it. **In the lobby the
+projector is the join screen**: a white plate carrying a QR big enough to scan from the back row,
+and beside it the address in yellow and the number of people who have arrived. Once a question is
+open the same two move into the top strip, small but never gone, for whoever walks in at question
+four.
 
 **6. Reload the second device, and try to trip the cap. (S-09 — two minutes.)**
 
@@ -297,9 +300,12 @@ raise it before the event rather than after.
   broadcasting to 150 devices is the O(N²) fan-out the spine is built to avoid, so nothing is
   published when someone joins. While the lobby fills, tap **odśwież** to watch it climb.
 
-- **`zakończ sesję` is on the host view now (S-10); `purge` is still not.** The buttons are `start`,
-  `dalej`, `pokaż odpowiedź`, `pokaż ranking`, `odśwież` and — set apart at the far end, outlined in
-  red — `zakończ sesję`. It **takes two taps**: the first arms it and changes its label to
+- **`zakończ sesję` is on the host view now (S-10); `purge` is still not.** The control bar has two
+  lines. The lower one is the four flow verbs in a fixed order — `start`, `dalej`,
+  `pokaż odpowiedź`, `pokaż ranking` — and they never move; only which one is reachable changes.
+  The upper one is the host's own row: the secret field, the `połączenie:` line, `odśwież`, and —
+  set apart there, outlined in red — `zakończ sesję`. It **takes two taps**: the first arms it and
+  changes its label to
   "na pewno? kliknij ponownie", the second closes the session. Anything that moves the session in
   between disarms it, so a tap you made a minute ago cannot fire into a state you have not looked at.
   See "After the session" below for what closing does.
@@ -314,11 +320,27 @@ raise it before the event rather than after.
   exception is `dalej`, which stays live while a question is open even though it is not the ringed
   step: it is your only lever if something is on the projector that should not be. `odśwież` is never
   gated. The routes still refuse an illegal action — that refusal is now the backstop, not something
-  you should meet.
+  you should meet. The **ringed** button is filled yellow; the others are outlined.
+
+- **Read the bar's message by its colour before you read its words.** Every reply the panel gives you
+  appears in one bubble at the top of the control bar, with a coloured marker down its left edge, and
+  the marker is the whole point — from the stage you have time for a colour, not a sentence:
+
+  | Marker | Means | What to do |
+  | --- | --- | --- |
+  | green | it happened | carry on |
+  | grey | in flight | wait a beat |
+  | **yellow** | **nothing broke, but you have to decide something** | read it — this is the arming prompt, and "nic do zrobienia" when an action was a no-op |
+  | red | refused, or it did not reach the devices | read it; a 502 asks you to repeat the same action |
+
+  Yellow is the one that used to lie: before the redesign both of its cases came out green, so an
+  action that had quietly done nothing looked exactly like one that had worked. The bubble stays until
+  the next thing happens — nothing fades on its own.
 
 - **Every scored question now has a clock, and it does not move the session** (S-11, FR-020). The
-  projector shows the time left under the prompt and every phone shows the same number, counted
-  from the moment you tapped `dalej`. Five things worth knowing on stage:
+  projector carries it in the right-hand rail, under the answered count; every phone shows the same
+  number above its prompt. Both are counted from the moment you tapped `dalej`. Five things worth
+  knowing on stage:
 
   - **Nothing happens when it reaches zero.** The question stays on screen, the phones lock their
     inputs, and the room waits for you exactly as before. Advancing, revealing, the leaderboard beat
@@ -429,6 +451,10 @@ phone shows those five rows plus its own final position — including everyone o
 end the session **in front of the room**, not afterwards on the way out: this is the last thing the
 segment shows.
 
+**The projector inverts when it lands** — the whole screen turns yellow with the winner's name in
+black across it, and the row of verbs is replaced by one sentence. That inversion is the signal to the
+room that it is over, so you will know the close took without reading anything.
+
 Four things about it are worth knowing before you press it:
 
 - **It takes two taps.** The first arms the button; the second closes the session. Any action in
@@ -482,9 +508,10 @@ Time-to-revert is seconds, because prior deployments stay immutable and pre-buil
    already created, or anything held at an external realtime provider. Once LiveQuiz exists, a rollback
    will not undo session state.
 
-### Attendees report an amber "tryb zapasowy" banner
+### Attendees report a yellow-marked "tryb zapasowy" banner
 
-**What it means.** Those devices could not open an Ably channel and have fallen back to polling
+**What it means.** The banner reads *"Tryb zapasowy — odpowiedzi działają, ale punkty za czas mogą
+być niższe."* Those devices could not open an Ably channel and have fallen back to polling
 `/api/quiz/state` every ~6 seconds. They are still in the quiz: they see each question, can submit
 answers, and get their result. They are a few seconds behind the room.
 
