@@ -141,8 +141,21 @@ export type AnswerPayload =
  * until the reveal, so an attendee who reloads sees a disabled empty box above
  * "Odpowiedź zapisana". `clearSeen` wipes it on the `ended` transition, so it does not
  * outlive the session on the device.
+ *
+ * `optionIds` is `text`'s counterpart for the two choice kinds, and it is here for exactly
+ * the reason `text` is. **Without it a reload loses which option this device picked**: the
+ * view held the selection in memory only, so an attendee who answered and then reloaded
+ * watched the reveal mark the correct option with nothing saying which one had been
+ * theirs — and on a question they got right, no way to tell that from a lucky guess by
+ * the person beside them. The two fields are mutually exclusive by kind and both stay
+ * absent on entries written before they shipped.
  */
-type SeenEntry = { at: number; submitted?: boolean; text?: string };
+type SeenEntry = {
+  at: number;
+  submitted?: boolean;
+  text?: string;
+  optionIds?: readonly string[];
+};
 
 type SeenMap = Record<string, SeenEntry>;
 
@@ -165,7 +178,12 @@ function readSeen(storageKey: string): SeenMap {
       }
 
       if (typeof value === "object" && value !== null) {
-        const entry = value as { at?: unknown; submitted?: unknown; text?: unknown };
+        const entry = value as {
+          at?: unknown;
+          submitted?: unknown;
+          text?: unknown;
+          optionIds?: unknown;
+        };
         if (typeof entry.at === "number" && Number.isFinite(entry.at) && entry.at > 0) {
           map[questionId] = {
             at: entry.at,
@@ -174,6 +192,14 @@ function readSeen(storageKey: string): SeenMap {
             // answer — both read back as `undefined`, which is the same as "nothing to
             // restore".
             ...(typeof entry.text === "string" ? { text: entry.text } : {}),
+            // The same, mirrored for the choice kinds. Element-wise checked rather than
+            // trusted as an array: this is hand-editable storage, and a stray value would
+            // reach `renderQuestion`'s option matching as an id that can never match — a
+            // silent nothing rather than a visible fault.
+            ...(Array.isArray(entry.optionIds) &&
+            entry.optionIds.every((id): id is string => typeof id === "string")
+              ? { optionIds: entry.optionIds }
+              : {}),
           };
         }
       }
@@ -239,7 +265,7 @@ export function markSeen(storageKey: string, questionId: string, now = Date.now(
 export function markSubmitted(
   storageKey: string,
   questionId: string,
-  options: { text?: string; now?: number } = {}
+  options: { text?: string; optionIds?: readonly string[]; now?: number } = {}
 ): void {
   const seen = readSeen(storageKey);
   const existing = seen[questionId];
@@ -251,6 +277,8 @@ export function markSubmitted(
     // Only for a free-text answer. A choice answer passes nothing and the key stays
     // absent, so the record does not grow a field it has no use for.
     ...(options.text === undefined ? {} : { text: options.text }),
+    // And the mirror image: only for a choice answer.
+    ...(options.optionIds === undefined ? {} : { optionIds: [...options.optionIds] }),
   };
   writeSeen(storageKey, seen);
 }
@@ -269,6 +297,24 @@ export function hasSubmitted(storageKey: string, questionId: string): boolean {
  */
 export function submittedText(storageKey: string, questionId: string): string | null {
   return readSeen(storageKey)[questionId]?.text ?? null;
+}
+
+/**
+ * The options this device sent for this question, or `null`.
+ *
+ * `submittedText`'s counterpart, with the same three ways of being `null` and the same
+ * treatment for all of them: a text answer, a question this device stayed silent on, and an
+ * answer submitted before this was persisted. In every case there is nothing to mark.
+ *
+ * **`null` rather than `[]`**, because the caller falls back to what is in memory: an empty
+ * array would read as "this device picked nothing", which is a claim, and would then paint
+ * over a live selection that has not been submitted yet.
+ */
+export function submittedOptionIds(
+  storageKey: string,
+  questionId: string
+): readonly string[] | null {
+  return readSeen(storageKey)[questionId]?.optionIds ?? null;
 }
 
 /**

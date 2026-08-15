@@ -444,6 +444,7 @@ import { publicQuiz } from "../../quiz/public";
         markSubmitted,
         submitAnswer,
         submittedText,
+        submittedOptionIds,
         type AnswerPayload,
         type OwnResult,
       } from "../../lib/client/answer";
@@ -1266,7 +1267,7 @@ import { publicQuiz } from "../../quiz/public";
 
         markSeen(config.seenStorageKey, question.id);
 
-        const selected = selections.get(question.id) ?? [];
+        const selected = pickedOptionIds(question.id);
         // Read from storage, not from memory: a reload mid-question must not re-offer
         // the controls for an answer the store has already accepted.
         const locked = hasSubmitted(config.seenStorageKey, question.id);
@@ -1503,6 +1504,26 @@ import { publicQuiz } from "../../quiz/public";
         answerSubmit.disabled = !hasTypedWord();
       }
 
+      /**
+       * Which options this device has on this question — submitted, or still being chosen.
+       *
+       * **Storage first, memory second, and the order is the fix.** `selections` is a `Map`
+       * that a reload empties, so before this the locked screen and the reveal both lost the
+       * mark on an attendee's own answer the moment they refreshed. The store holds what was
+       * actually accepted, so it wins wherever it has something; memory covers the live case,
+       * where nothing has been submitted yet and there is nothing in the store to find.
+       *
+       * The same shape as `submittedText`'s use for the typed kinds, which had this right
+       * from S-05 — this is the choice kinds catching up.
+       */
+      function pickedOptionIds(questionId: string): readonly string[] {
+        return (
+          submittedOptionIds(config.seenStorageKey, questionId) ??
+          selections.get(questionId) ??
+          []
+        );
+      }
+
       /** Whether the field holds anything but whitespace. The server is the real judge. */
       function hasTypedAnswer(): boolean {
         return answerText.value.trim().length > 0;
@@ -1621,7 +1642,7 @@ import { publicQuiz } from "../../quiz/public";
           // `OPTION_CLASS`. An appended class here would be the same kind of rule as the base
           // it overrides, and stylesheet order would decide the reveal's colours.
           mode: "revealed",
-          selectedOptionIds: selections.get(question?.id ?? "") ?? [],
+          selectedOptionIds: pickedOptionIds(question?.id ?? ""),
           correctOptionIds: revealedOptionIds,
         });
 
@@ -1926,8 +1947,7 @@ import { publicQuiz } from "../../quiz/public";
         answerSubmit.textContent = "Wyślij odpowiedź";
 
         // A typed answer — free text, a raw guess, or a word — is kept so a reload can put
-        // it back in the locked field. A choice answer passes nothing and the stored entry
-        // stays exactly as it was before.
+        // it back in the locked field.
         const sentText =
           payload.kind === "text"
             ? payload.text
@@ -1937,8 +1957,21 @@ import { publicQuiz } from "../../quiz/public";
                 ? payload.word
                 : undefined;
 
+        /**
+         * And the choice kinds' equivalent, kept for the same reason.
+         *
+         * **Without it a reload loses which option this device picked.** The selection lives
+         * in a `Map` that a reload empties, so an attendee who answered and then reloaded
+         * reached the reveal with the correct option marked and nothing saying which one had
+         * been theirs — worst on a question they got right, where the mark they were looking
+         * for is the one that says *you* got it.
+         */
+        const sentOptionIds = payload.kind === "choice" ? payload.optionIds : undefined;
+
+        const submission = { text: sentText, optionIds: sentOptionIds };
+
         if (outcome.outcome === "accepted") {
-          markSubmitted(config.seenStorageKey, questionId, { text: sentText });
+          markSubmitted(config.seenStorageKey, questionId, submission);
           render();
           return;
         }
@@ -1960,7 +1993,7 @@ import { publicQuiz } from "../../quiz/public";
         if (outcome.outcome === "rejected") {
           // The server's own Polish message — "already answered", "no longer open".
           // Treated as final: the answer is not going to be accepted by retrying.
-          markSubmitted(config.seenStorageKey, questionId, { text: sentText });
+          markSubmitted(config.seenStorageKey, questionId, submission);
           setText("answer-error", outcome.error);
           render();
           return;

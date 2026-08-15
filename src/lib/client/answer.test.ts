@@ -10,6 +10,7 @@ import {
   markSubmitted,
   submitAnswer,
   submittedText,
+  submittedOptionIds,
   type AnswerPayload,
 } from "./answer";
 
@@ -266,6 +267,105 @@ describe("submittedText", () => {
     clearSeen(SEEN_KEY);
 
     expect(submittedText(SEEN_KEY, "q1")).toBeNull();
+  });
+});
+
+/**
+ * The choice kinds' half of the same problem (signage redesign, step 9 follow-up).
+ *
+ * `submittedText` fixed the typed kinds in S-05: a reload emptied the in-memory map, so a
+ * locked field came back blank. The choice kinds kept the bug — the selection lived only in
+ * that map, so an attendee who answered and then reloaded reached the reveal with the correct
+ * option marked and **nothing saying which one had been theirs**. Worst on a question they got
+ * right, where the mark they are looking for is the one that says they got it.
+ */
+describe("submittedOptionIds", () => {
+  it("gives back the options an accepted answer was sent with", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+    markSubmitted(SEEN_KEY, "q1", { optionIds: ["b", "d"] });
+
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toEqual(["b", "d"]);
+  });
+
+  /** THE RELOAD, which is the whole point — a fresh read of the same storage. */
+  it("survives a reload", () => {
+    markSubmitted(SEEN_KEY, "q1", { optionIds: ["c"] });
+
+    const raw = window.localStorage.getItem(SEEN_KEY);
+    window.localStorage.clear();
+    window.localStorage.setItem(SEEN_KEY, raw!);
+
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toEqual(["c"]);
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
+  });
+
+  /**
+   * **`null`, not `[]`.** The view falls back to what is in memory, so an empty array would
+   * be a claim that this device picked nothing — and would paint over a live selection that
+   * has not been submitted yet.
+   */
+  it("is null for a typed answer, which passes no options", () => {
+    markSubmitted(SEEN_KEY, "q1", { text: "halucynacje" });
+
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  it("is null for a question this device stayed silent on", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  it("is null for an entry written before the field existed", () => {
+    // The mid-deploy shape: submitted, with no options recorded.
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify({ q1: { at: NOW, submitted: true } }));
+
+    expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  it("ignores a stored value that is not an array of strings", () => {
+    window.localStorage.setItem(
+      SEEN_KEY,
+      JSON.stringify({ q1: { at: NOW, submitted: true, optionIds: "b" }, q2: { at: NOW, submitted: true, optionIds: ["b", 7] } })
+    );
+
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toBeNull();
+    // Element-wise, not just the outer shape: one stray member and the whole record is
+    // discarded rather than half-restored.
+    expect(submittedOptionIds(SEEN_KEY, "q2")).toBeNull();
+  });
+
+  it("does not share a record with the text field", () => {
+    markSubmitted(SEEN_KEY, "q1", { text: "halucynacje" });
+    markSubmitted(SEEN_KEY, "q2", { optionIds: ["a"] });
+
+    expect(submittedText(SEEN_KEY, "q2")).toBeNull();
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  it("keeps the original paint time when recording the options", () => {
+    markSeen(SEEN_KEY, "q1", NOW);
+    markSubmitted(SEEN_KEY, "q1", { optionIds: ["a"], now: NOW + 5_000 });
+
+    expect(markSeen(SEEN_KEY, "q1", NOW + 9_000)).toBe(NOW);
+  });
+
+  it("is cleared with the rest of the store, so it does not outlive the session", () => {
+    markSubmitted(SEEN_KEY, "q1", { optionIds: ["a"] });
+    clearSeen(SEEN_KEY);
+
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toBeNull();
+  });
+
+  /** Stored by value: a later mutation of the caller's array must not rewrite the record. */
+  it("keeps a copy rather than the caller's array", () => {
+    const picked = ["a"];
+    markSubmitted(SEEN_KEY, "q1", { optionIds: picked });
+    picked.push("b");
+
+    expect(submittedOptionIds(SEEN_KEY, "q1")).toEqual(["a"]);
   });
 });
 
