@@ -529,7 +529,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           id="message"
           role="status"
           aria-live="polite"
-          class="text-[40px] font-semibold leading-[52px] tracking-[-0.015em]"
+          class="text-[40px] font-semibold leading-[52px] tracking-[-0.015em] text-quiz-signwhite"
         >
         </p>
       </div>
@@ -1777,26 +1777,58 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * one behavioural change in the whole thing, and it should be revertable without
        * taking the styling with it. This step only re-sizes the line for the control bar.
        */
-      function say(text: string, bad: boolean): void {
+      /**
+       * FOUR REGISTERS, BECAUSE TWO OF THEM WERE LYING (signage redesign, step 6).
+       *
+       * `say(text, bad)` was binary, and a boolean has no room for the two outcomes that are
+       * neither: `applied: false` — the state is not where the host thought, nothing broke,
+       * retrying does nothing — and the closing button's arming line, which is a question
+       * being put to the host. Both came out mint, which is the colour this page uses for
+       * *it worked*. On stage that is the difference between a host moving on and a host
+       * pressing the same button again.
+       *
+       * - `ok` — it happened.
+       * - `pending` — in flight. Nothing to do but wait.
+       * - `attention` — nothing broke; the host has to decide something.
+       * - `refused` — refused or not delivered.
+       *
+       * **This is the only behavioural change in the redesign**, which is why it is its own
+       * commit: it can be reverted without taking the styling with it.
+       *
+       * The bubble is deliberately **persistent** — it stays until the next thing is said
+       * (decided with the user; plan §7 open question 2). Nothing here expires, so a host who
+       * looked away still finds the last outcome on screen, and `pending` is always overwritten
+       * by the outcome that follows it.
+       */
+      type Register = "ok" | "pending" | "attention" | "refused";
+
+      /**
+       * The colours are whole class names, spelled out.
+       *
+       * Tailwind finds classes by scanning source text, so it sees these four literals and
+       * emits them — but it would see nothing in a `bg-quiz-${register}` built at runtime, and
+       * the marker would come out transparent in production while working in dev. Never
+       * assemble a class name from parts here.
+       */
+      const MARKER_BASE = "w-[10px] shrink-0 rounded-full";
+      const MARKER_COLOURS: Record<Register, string> = {
+        ok: "bg-quiz-mint",
+        pending: "bg-quiz-pill-border",
+        attention: "bg-quiz-chrome",
+        refused: "bg-quiz-signal",
+      };
+
+      function say(text: string, register: Register): void {
         setText("message", text);
 
         // Nothing to say, no bubble. An empty one would hold the stage's height open for a
         // sentence that is not there.
         setHidden(messageBubble, text.length === 0);
 
-        /**
-         * **Still binary, and still wrong about two of its callers.** `applied:false` and the
-         * closing button's arming line are neither a success nor a failure, and both come out
-         * mint here. Widening this to a four-way register is step 6 of the redesign and is
-         * deliberately its own commit — it is the only behavioural change in the whole thing,
-         * so it should be revertable without taking the styling with it.
-         *
-         * The marker is what will carry that register. Until then it says what the boolean
-         * says, in the two colours the register system already assigns to those two meanings.
-         */
-        messageMarker.className = bad
-          ? "w-[10px] shrink-0 rounded-full bg-quiz-signal"
-          : "w-[10px] shrink-0 rounded-full bg-quiz-mint";
+        // The marker carries the register; the copy stays `signwhite` in every one of them.
+        // Four sentence colours would make the words themselves the signal, and a refusal set
+        // in red reads as an error in the *page* rather than an answer from the route.
+        messageMarker.className = `${MARKER_BASE} ${MARKER_COLOURS[register]}`;
       }
 
       function stopPolling(): void {
@@ -1959,7 +1991,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
               target.kind === "words"
                 ? "Wpisz sekret hosta, żeby zobaczyć chmurę słów."
                 : "Wpisz sekret hosta, żeby zobaczyć liczbę odpowiedzi.",
-              true
+              "refused"
             );
 
             /**
@@ -2099,7 +2131,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         allButtons().forEach((button) => {
           button.disabled = true;
         });
-        say("…", false);
+        say("Wysyłam…", "pending");
 
         try {
           const response = await fetch(`/api/quiz/host/${action}`, {
@@ -2114,7 +2146,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           }
 
           if (response.status === 401) {
-            say(payload.error ?? "Brak uprawnień hosta.", true);
+            say(payload.error ?? "Brak uprawnień hosta.", "refused");
             secretField.focus();
             secretField.select();
             return;
@@ -2124,13 +2156,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             say(
               payload.error ??
                 "Zapisano, ale nie dotarło do urządzeń. Powtórz tę samą akcję.",
-              true
+              "refused"
             );
             return;
           }
 
           if (!response.ok) {
-            say(payload.error ?? `Błąd ${response.status}.`, true);
+            say(payload.error ?? `Błąd ${response.status}.`, "refused");
             return;
           }
 
@@ -2139,14 +2171,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
               payload.note === "no-op"
                 ? `${action}: nic do zrobienia (koniec pytań?). Stan bez zmian.`
                 : `${action}: ta akcja została już zastosowana. Stan bez zmian.`,
-              false
+              "attention"
             );
             return;
           }
 
-          say(`${action}: OK`, false);
+          say(`${action}: OK`, "ok");
         } catch (err) {
-          say(`${action}: żądanie nie doszło (${String(err)})`, true);
+          say(`${action}: żądanie nie doszło (${String(err)})`, "refused");
         } finally {
           allButtons().forEach((button) => {
             button.disabled = false;
@@ -2180,7 +2212,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         // The phase rule already disables the button here; this is the backstop for a click
         // that lands between a snapshot and the render that follows it.
         if (state === null) {
-          say("brak sesji do zakończenia", true);
+          say("brak sesji do zakończenia", "refused");
           return;
         }
 
@@ -2188,7 +2220,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           endArmed = true;
           endArmedVersion = state.version;
           syncEndButton();
-          say(`kliknij ponownie, aby zakończyć sesję (wersja ${state.version})`, false);
+          say(`kliknij ponownie, aby zakończyć sesję (wersja ${state.version})`, "attention");
           return;
         }
 
@@ -2208,8 +2240,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         refresh.disabled = true;
         client
           .refresh()
-          .then(() => say("odświeżono", false))
-          .catch((err: unknown) => say(`nie udało się odświeżyć: ${String(err)}`, true))
+          .then(() => say("odświeżono", "ok"))
+          .catch((err: unknown) => say(`nie udało się odświeżyć: ${String(err)}`, "refused"))
           .finally(() => {
             refresh.disabled = false;
           });
