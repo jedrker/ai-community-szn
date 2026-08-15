@@ -364,9 +364,16 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         Everything here is a figure *about the room*; anything about the question belongs on
         the stage. That division is what keeps the rail readable at a glance from the stage,
         which is the only reason it is a separate column at all.
+
+        `hidden` from the start, like the three sections inside it: `syncRail` owns whether it
+        is on screen, and the first paint is a state it has an answer for — the sessionless
+        one, where the rail is gone. Without it the server paints a 440px empty column that
+        the first `render` folds away, and a column that appears and collapses is the motion
+        the redesign spent its effort removing.
       -->
       <aside
         id="rail"
+        hidden
         class="flex w-[440px] shrink-0 flex-col justify-between border-l-2 border-quiz-divider
                pt-[48px] pr-[72px] pb-[40px] pl-[56px]"
       >
@@ -1973,6 +1980,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       function stopCountdown(): void {
         countdown.stop();
         setHidden(hostCountdownBox, true);
+        // Here rather than at the call sites, because a caller that forgets is silent. The
+        // rail's rule is derived from this box among others, and `visibilitychange` and
+        // `pagehide` clear the clock without passing through `render` — so without this they
+        // leave the rail on screen with nothing in it until the next paint.
+        syncRail();
       }
 
       /**

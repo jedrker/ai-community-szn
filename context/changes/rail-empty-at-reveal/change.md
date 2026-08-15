@@ -1,7 +1,7 @@
 ---
 change_id: rail-empty-at-reveal
 title: Hide the host rail at reveal instead of leaving an empty column
-status: implementing
+status: impl_reviewed
 created: 2026-08-15
 updated: 2026-08-15
 archived_at: null

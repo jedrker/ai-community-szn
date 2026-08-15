@@ -525,14 +525,20 @@ describe("the rail follows its contents", () => {
   });
 
   /**
-   * **Applied on both paths through `render`.** The ordinary tail and the sessionless early
-   * return, each after the panels they read have settled. Missing it in the early return
-   * leaves an empty rail beside "brak sesji" after a purge or a TTL expiry, which is one of
-   * the four states this rule exists to close.
+   * **Applied at all three sites.** `render`'s ordinary tail and its sessionless early return,
+   * each after the panels they read have settled — and `stopCountdown`, which is the one place
+   * a rail block is hidden without passing through `render` (`visibilitychange` and `pagehide`
+   * both call it directly). Missing it in the early return leaves an empty rail beside "brak
+   * sesji" after a purge or a TTL expiry; missing it in `stopCountdown` leaves one behind a
+   * backgrounded tab.
    */
-  it("re-applies the rule on every path that repaints the panels", () => {
+  it("re-applies the rule everywhere a block could go dark without a render", () => {
     // The trailing semicolon separates the calls from the declaration, as above.
-    expect(occurrences("syncRail();")).toBe(2);
+    expect(occurrences("syncRail();")).toBe(3);
+
+    const stopBody = /function stopCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    expect(stopBody.length).toBeGreaterThan(0);
+    expect(stopBody).toContain("syncRail()");
   });
 });
 
