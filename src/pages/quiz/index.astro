@@ -237,13 +237,7 @@ import { publicQuiz } from "../../quiz/public";
              **The classes here previously named colours this project does not define**
              (`text-content-secondary`, `bg-accent`), so the clock had been rendering in
              whatever it inherited since S-11. -->
-        <div
-          id="countdown"
-          hidden
-          data-urgent="false"
-          class="flex flex-col gap-2"
-          aria-hidden="true"
-        >
+        <div id="countdown" hidden data-urgent="false" class="flex flex-col gap-2">
           <div class="flex items-baseline justify-between gap-4">
             <span class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc">
               Pozostały czas
@@ -254,10 +248,11 @@ import { publicQuiz } from "../../quiz/public";
                      [[data-urgent=true]_&]:text-quiz-signal">0 s</span
             >
           </div>
-          <!-- The bar is decoration for the number above it, hence aria-hidden on the
-               container: a screen reader announcing a width every second is noise, and
-               the note that appears at zero is what actually has to be announced. -->
-          <div class="h-[8px] overflow-hidden rounded-full bg-quiz-divider">
+          <!-- The bar is decoration for the number above it, hence aria-hidden HERE and not on
+               the panel (impl review F5): a screen reader announcing a width every second is
+               noise, but the seconds value is the one thing on this panel a non-sighted
+               attendee needs. It sat on the whole panel, which hid the number too. -->
+          <div class="h-[8px] overflow-hidden rounded-full bg-quiz-divider" aria-hidden="true">
             <div
               data-countdown-bar
               class="h-full rounded-full bg-quiz-chrome transition-[width] duration-1000
@@ -416,7 +411,9 @@ import { publicQuiz } from "../../quiz/public";
           <!-- The verdict's colour is written by `verdict()`, which is also what writes the
                words — the two are one statement and must not be set apart. -->
           <p id="result-verdict"></p>
-          <p id="result-award" class="text-[72px] font-extrabold leading-[76px] tracking-[-0.04em]"></p>
+          <!-- Sized by `award()`, which also writes the words: a figure and a sentence do not
+               take the same type, and the element cannot tell which it is holding. -->
+          <p id="result-award"></p>
           <p id="result-answer" class="text-[30px] font-semibold leading-[38px] text-quiz-echo"></p>
           <p id="result-total" class="text-[28px] font-semibold leading-[36px] text-quiz-zinc"></p>
         </section>
@@ -590,7 +587,16 @@ import { publicQuiz } from "../../quiz/public";
        * Empty means *no refusal*, and the bubble goes with it — a cleared message that left
        * its frame behind would read as a refusal with the words missing.
        */
+      /**
+       * **Unhidden before the text is written, and that order is the whole point** (impl
+       * review F4). A node inside a `display:none` subtree is not in the accessibility tree,
+       * so writing into it announces nothing — and revealing a container that already holds
+       * its sentence is not reliably announced either. Before the bubble, these were
+       * always-present paragraphs whose text changed in place, which did announce; the frame
+       * is what took that away, and this is what gives it back.
+       */
       function joinError(text: string): void {
+        setHidden(joinErrorBubble, false);
         setText("join-error", text);
         setHidden(joinErrorBubble, text.length === 0);
       }
@@ -601,6 +607,8 @@ import { publicQuiz } from "../../quiz/public";
        * refusal whose sentence failed to load.
        */
       function answerError(text: string): void {
+        // Unhidden first, for the reason `joinError` states.
+        setHidden(answerErrorBubble, false);
         setText("answer-error", text);
         setHidden(answerErrorBubble, text.length === 0);
       }
@@ -985,9 +993,20 @@ import { publicQuiz } from "../../quiz/public";
             "data-[own=true]:bg-quiz-chrome-tint",
           // No `rowOwn`: the highlight rides `data-own`, which the renderer already sets, for
           // the reason the option rows carry theirs as variants.
-          rank: "tabular-nums text-quiz-zinc [li:first-child>&]:text-quiz-ink-on-chrome",
+          /**
+           * **The first-row colours are ink-on-chrome, so they may only apply where the
+           * chrome ground does** — which is the closing board and nowhere else (impl review
+           * F1). Unconditional, they painted the leader's points at ~1.06:1 against the
+           * asphalt row in the `standings` phase: the top score, invisible, on every phone,
+           * at every leaderboard beat.
+           */
+          rank: closing
+            ? "tabular-nums text-quiz-zinc [li:first-child>&]:text-quiz-ink-on-chrome"
+            : "tabular-nums text-quiz-zinc",
           name: "truncate",
-          points: "tabular-nums [li:first-child>&]:text-quiz-ink",
+          points: closing
+            ? "tabular-nums [li:first-child>&]:text-quiz-ink"
+            : "tabular-nums",
           empty: "text-[26px] leading-[32px] text-quiz-echo",
         });
 
@@ -1751,7 +1770,7 @@ import { publicQuiz } from "../../quiz/public";
            * there. A second, client-side fold would be the "two implementations that can
            * disagree" shape this project rejects for the guess parser, for a cosmetic line.
            */
-          setText("result-award", "Na dużym ekranie zobaczysz je małymi literami.");
+          award("Na dużym ekranie zobaczysz je małymi literami.", "sentence");
           // Through `wordEchoText`, which owns the absent-word branch — see that function.
           setText("result-answer", wordEchoText(submittedText(config.seenStorageKey, question.id)));
           setText("result-total", "");
@@ -1764,7 +1783,7 @@ import { publicQuiz } from "../../quiz/public";
         if (!question.scored) {
           setHidden(resultPanel, false);
           verdict("Dzięki za odpowiedź!", "landed");
-          setText("result-award", "To była rozgrzewka — bez punktów.");
+          award("To była rozgrzewka — bez punktów.", "sentence");
           setText("result-answer", "");
           setText("result-total", "");
           return;
@@ -1792,6 +1811,31 @@ import { publicQuiz } from "../../quiz/public";
             }
           });
         }
+      }
+
+      /**
+       * THE AWARD LINE, AND THE TWO THINGS IT HOLDS (impl review F2).
+       *
+       * `+800 pkt` is a figure and wants the hero size; "To była rozgrzewka — bez punktów." is
+       * a sentence and does not. Sized as a figure for both, the two unscored kinds — which
+       * are questions 1 and 2 of the definition, so the *first two reveals of every session* —
+       * filled a 390px screen with one sentence at 72px and pushed the echo and the running
+       * total off it.
+       *
+       * The caller says which, exactly as it says which tone the verdict is in. Same reason
+       * too: the size is part of what the line means, so it must be chosen where the words
+       * are, not assumed by the element.
+       */
+      type AwardShape = "figure" | "sentence";
+
+      const AWARD_SHAPES: Record<AwardShape, string> = {
+        figure: "text-[72px] font-extrabold leading-[76px] tracking-[-0.04em]",
+        sentence: "text-[30px] font-semibold leading-[38px]",
+      };
+
+      function award(text: string, shape: AwardShape): void {
+        setText("result-award", text);
+        el("result-award").className = AWARD_SHAPES[shape];
       }
 
       /**
@@ -1860,7 +1904,7 @@ import { publicQuiz } from "../../quiz/public";
          */
         if (!own.answered) {
           verdict("Bez odpowiedzi", "silent");
-          setText("result-award", "Tym razem nie zdążyliśmy zapisać Twojej odpowiedzi.");
+          award("Tym razem nie zdążyliśmy zapisać Twojej odpowiedzi.", "sentence");
           setText("result-answer", "");
           paintTotal(own.total);
           return;
@@ -1882,7 +1926,7 @@ import { publicQuiz } from "../../quiz/public";
         }
 
         verdict(own.correct ? "Dobrze!" : "Tym razem nie.", own.correct ? "landed" : "miss");
-        setText("result-award", own.correct ? `+${own.awarded ?? 0} pkt` : "+0 pkt");
+        award(own.correct ? `+${own.awarded ?? 0} pkt` : "+0 pkt", "figure");
         /**
          * The echo, for a free-text answer only — `null` on every other kind.
          *
@@ -1918,7 +1962,7 @@ import { publicQuiz } from "../../quiz/public";
           own.correct ? "Dokładnie!" : awarded > 0 ? "Blisko!" : "Tym razem daleko.",
           own.correct ? "landed" : awarded > 0 ? "partial" : "miss"
         );
-        setText("result-award", `+${awarded} pkt`);
+        award(`+${awarded} pkt`, "figure");
         /**
          * The guess from the server, not from the field — a reload empties the field
          * and the attendee should still see what they sent. `null` only if the record

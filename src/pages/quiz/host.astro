@@ -1819,10 +1819,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       };
 
       function say(text: string, register: Register): void {
+        /**
+         * **Unhidden before the text is written** (impl review F4). `#message` is a live
+         * region, and a node inside a `display:none` subtree is not in the accessibility tree
+         * — so writing into the hidden bubble announced nothing, and revealing a bubble that
+         * already held its sentence did not reliably announce either.
+         *
+         * Then hidden again when there is nothing to say: an empty bubble would hold the
+         * stage's height open for a sentence that is not there.
+         */
+        setHidden(messageBubble, false);
         setText("message", text);
-
-        // Nothing to say, no bubble. An empty one would hold the stage's height open for a
-        // sentence that is not there.
         setHidden(messageBubble, text.length === 0);
 
         // The marker carries the register; the copy stays `signwhite` in every one of them.

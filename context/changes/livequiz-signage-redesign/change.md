@@ -1,7 +1,7 @@
 ---
 change_id: livequiz-signage-redesign
 title: Restyle the LiveQuiz host and attendee views to the signage design
-status: implemented
+status: impl_reviewed
 created: 2026-08-15
 updated: 2026-08-15
 archived_at: null
