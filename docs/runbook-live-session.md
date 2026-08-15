@@ -226,8 +226,9 @@ bun run quiz:reset
 its phase, and the room joins a quiz already halfway through. The four-hour TTL will not save you —
 it is longer than the gap between a rehearsal and the event.
 
-There is no button for *this*. The host view has a **zakończ sesję** button (S-10) which ends the
-session cleanly, but ending is not resetting: the document survives on the ~10-minute lifetime, and
+There is no button for *this*. The host view has a **zakończ sesję i pokaż wyniki** button (S-10) — in
+**Menu prowadzącego**, behind the join QR, until the last question brings it out onto the control bar —
+which ends the session cleanly, but ending is not resetting: the document survives on the ~10-minute lifetime, and
 `start` during that window still picks the old session up. `purge` is what deletes on the spot, and it
 lives only on `/quiz/spine-check`, which 404s in production by design (it renders the host secret into
 HTML) — so **the terminal is the only reset path at an event.** Do it before the room arrives, not
@@ -240,6 +241,12 @@ on it worth guarding — but every action sends the secret as a header, so paste
 `LIVEQUIZ_HOST_SECRET` into the **Sekret hosta** field once. It is held in `sessionStorage` for that
 tab only: **close the tab and you re-paste it.** Do not open the host view in a tab you are going to
 close.
+
+**The field is not on the projector.** It lives in the host menu, which opens by **clicking the join
+QR in the top-right corner** — a password box on a 1080p screen is one being typed in front of the
+room. A tab with nothing stored opens the menu by itself on first paint, so on a fresh tab it is
+already waiting for you; on a reload mid-segment it stays out of the way. A refused action reopens it
+too. Escape closes it.
 
 **Confirm the field is accepted by taking one throwaway action** — which step 2 already requires for
 the log stream anyway, so this costs nothing extra. A wrong or missing secret shows the routes' own
@@ -295,17 +302,29 @@ raise it before the event rather than after.
 
 ## During the session
 
-- **The join count only moves when you make it move.** It refreshes on a host action or on the
-  **odśwież** button, and never on its own. **That is by design, not a bug**: 150 joins each
-  broadcasting to 150 devices is the O(N²) fan-out the spine is built to avoid, so nothing is
-  published when someone joins. While the lobby fills, tap **odśwież** to watch it climb.
+- **The join count only moves when you make it move.** It refreshes on a host action, on the
+  lobby's own poll, or on the **odśwież** button, and never on a join. **That is by design, not a
+  bug**: 150 joins each broadcasting to 150 devices is the O(N²) fan-out the spine is built to
+  avoid, so nothing is published when someone joins. While the lobby is on screen the figure
+  re-reads itself every few seconds, so you should not need to do anything. If it looks stuck,
+  **odśwież** is in **Menu prowadzącego** — click the join QR to open it.
 
-- **`zakończ sesję` is on the host view now (S-10); `purge` is still not.** The control bar has two
+- **`zakończ sesję i pokaż wyniki` is on the host view now (S-10); `purge` is still not.** The control bar has two
   lines. The lower one is the four flow verbs in a fixed order — `start`, `dalej`,
   `pokaż odpowiedź`, `pokaż ranking` — and they never move; only which one is reachable changes.
-  The upper one is the host's own row: the secret field, the `połączenie:` line, `odśwież`, and —
-  set apart there, outlined in red — `zakończ sesję`. It **takes two taps**: the first arms it and
-  changes its label to
+  (`pokaż odpowiedź` reads **`zamknij pytanie`** on the word cloud, which has no answer to show —
+  same button, same beat, honest name.)
+  The upper one is the host's own row, and it is empty until the last question, when
+  `zakończ sesję i pokaż wyniki` appears there, set apart and outlined in red.
+
+  **The rest of the session that button is not on the bar at all.** It lives in
+  **Menu prowadzącego** — the dialog you open by clicking the join QR in the top strip, the same
+  place the host secret is typed. That is where you end a session early: open the menu, and the
+  button is there. It is *not* a way around the phase rule — it goes dark in a phase the route
+  would refuse, exactly as it does on the bar, so you can close from a revealed answer or from the
+  ranking and not from an open question.
+
+  Wherever you press it, it **takes two taps**: the first arms it and changes its label to
   "na pewno? kliknij ponownie", the second closes the session. Anything that moves the session in
   between disarms it, so a tap you made a minute ago cannot fire into a state you have not looked at.
   See "After the session" below for what closing does.
@@ -318,15 +337,23 @@ raise it before the event rather than after.
   only while a question is open, and in the lobby the only ringed button is `dalej`. **Hold on a dark
   button to read why it is dark** — the reason is on the button itself, in Polish. The one deliberate
   exception is `dalej`, which stays live while a question is open even though it is not the ringed
-  step: it is your only lever if something is on the projector that should not be. `odśwież` is never
-  gated. The routes still refuse an illegal action — that refusal is now the backstop, not something
+  step: it is your only lever if something is on the projector that should not be. `odśwież`, in the
+  menu, is never gated. The routes still refuse an illegal action — that refusal is now the backstop, not something
   you should meet. The **ringed** button is filled yellow; the others are outlined.
 
-- **Read the bar's message by its colour before you read its words.** Every reply the panel gives you
-  appears in one bubble at the top of the control bar, with a coloured marker down its left edge, and
-  the marker is the whole point — from the stage you have time for a colour, not a sentence:
+- **On the last question the bar empties out and the ring moves to the closing button.** Once the
+  final question is the current one, `dalej` goes dark — there is nothing to advance to, and it used
+  to answer the tap with "nic do zrobienia" — and after you reveal that last answer, `pokaż ranking`
+  goes dark too: the closing beat publishes the final board itself, so the one step left is
+  `zakończ sesję i pokaż wyniki` — which **appears on the upper line at that moment**, ringed in red,
+  having been in **Menu prowadzącego** until then. It still takes two taps.
 
-  | Marker | Means | What to do |
+- **Read the bar's message by its colour before you read its words.** Every reply the panel gives you
+  appears in one bubble that floats in the bottom-right corner, just above the control bar, with a
+  coloured left edge, and that edge is the whole point — from the stage you have time for a colour,
+  not a sentence:
+
+  | Edge | Means | What to do |
   | --- | --- | --- |
   | green | it happened | carry on |
   | grey | in flight | wait a beat |
@@ -334,8 +361,16 @@ raise it before the event rather than after.
   | red | refused, or it did not reach the devices | read it; a 502 asks you to repeat the same action |
 
   Yellow is the one that used to lie: before the redesign both of its cases came out green, so an
-  action that had quietly done nothing looked exactly like one that had worked. The bubble stays until
-  the next thing happens — nothing fades on its own.
+  action that had quietly done nothing looked exactly like one that had worked.
+
+  **The bubble now clears itself, and that includes the red one.** It used to stay until the next
+  thing happened, which meant "start: OK" sat over the room for the rest of the segment. Green goes
+  after about four seconds, red after six, grey and yellow after nine — so if you look away and look
+  back to an empty corner, nothing is wrong and nothing is pending. If you missed a reply and need to
+  know, press the action again: everything on this panel is safe to repeat, and `odśwież` in the menu
+  will tell you where the session actually is. Two things you might expect to vanish with the message do not:
+  the buttons stay dark while an action is in flight, and the closing button stays reading
+  "na pewno? kliknij ponownie" for as long as it is armed.
 
 - **Every scored question now has a clock, and it does not move the session** (S-11, FR-020). The
   projector carries it in the right-hand rail, under the answered count; every phone shows the same
@@ -391,7 +426,8 @@ raise it before the event rather than after.
     emoji). There is no hide button and no per-word delete. **Your only lever on stage is `dalej`** —
     if something appears that you do not want on screen, advance past the question. Know this before
     you are standing in front of it.
-  - **It keeps filling until you reveal, then freezes.** `pokaż odpowiedź` takes one last reading and
+  - **It keeps filling until you close it, then freezes.** On this question the third flow verb reads
+    **`zamknij pytanie`** rather than `pokaż odpowiedź` — it takes one last reading and
     stops the refresh, so you can talk over a complete cloud. There is no correct answer to show — the
     green "Poprawna odpowiedź" box stays hidden for this question, which is not a fault.
   - **"(nieaktualne)" beside the count means the refresh failed, not that the room stopped writing.**
@@ -440,7 +476,7 @@ raise it before the event rather than after.
 
 ## After the session
 
-**End the session with `zakończ sesję`.** This is the closing beat, and it is deliberate — there is no
+**End the session with `zakończ sesję i pokaż wyniki`.** This is the closing beat, and it is deliberate — there is no
 automatic end. Ending writes a terminal state that every connected device renders, and moves the room's
 data onto a **~10-minute lifetime** instead of the four-hour one. That window exists so an attendee who
 reloads right after the finish still sees the final standings.
@@ -518,9 +554,14 @@ answers, and get their result. They are a few seconds behind the room.
 **During the session: do nothing.** There is no action that helps mid-segment, and the fallback is
 already the mitigation. Keep running the quiz normally.
 
-**Check your own screen.** If the host's `połączenie:` line reads `limit Ably wyczerpany (40111) — sala
+**Check your own screen.** Hover the connection lamp — the small dot in the bottom-right corner of the
+host view — and read the sentence it shows. If it reads `limit Ably wyczerpany (40111) — sala
 pełna`, the cause is the account's peak-connection ceiling — 200 on the free tier — and not the venue
 network. Any other wording points at the network instead.
+
+The lamp's colour is the same fact at a glance, and it is what you check without stopping: **green** is
+connected, **amber** is connecting or running on the fallback, **red** is a lost connection. Only amber
+and red are worth a hover.
 
 **The real fix is before the event, not during it.** A room above ~180 people needs a paid Ably plan;
 180 real attendees can already brush 200 once reloads, second tabs, the projector and your own device

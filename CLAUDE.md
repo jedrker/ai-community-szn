@@ -449,10 +449,40 @@ lever if the wrong thing is on the projector), **`pokaż ranking` stays offered 
 no-op that re-broadcasts — the retry its own 502 asks for, in the phase the state is already in), and
 **`start` is offered only with no session** (the route is idempotent, so mid-quiz it does nothing).
 
+**The table has a second dimension, `whenLast`, and it is not a phase.** `advance` is a no-op past the
+last question (`advance.ts` returns null when `nextQuestionId` does), and the phase cannot see that —
+`question-revealed` on question 3 and on question 14 are the same phase and want opposite bars. So each
+affected row carries a `whenLast` variant, read by `syncControls` via `atLastQuestion`, which derives
+the position from the published question order the page already holds rather than from a new snapshot
+field. The last `question-revealed` allows **nothing**: `dalej` does nothing there, and `pokaż ranking`
+would show a board the closing beat is about to publish itself.
+
+The reveal verb is also **named** by question kind: `zamknij pytanie` on a word cloud, which has no
+answer to show but still needs closing (`answer.ts` accepts only in `question-open`). Keyed on
+`pollTargetFor`, this file's single kind predicate — never on a fresh `kind === "word-cloud"` test, and
+never "fixed" by dropping `reveal` from the row, which would leave the cloud with no way to close.
+
 `syncControls` must be called from all three sites — `render`'s ordinary path, `render`'s sessionless
-early return, and `fire`'s `finally`, which re-enables every button unconditionally. `zakończ sesję`
-is deliberately outside the table: it carries arming state and `syncEndButton` owns it, including the
-decision that it stays out of reach in `lobby` even though the route accepts it there.
+early return, and `fire`'s `finally`, which re-enables every button unconditionally.
+`zakończ sesję i pokaż wyniki` is deliberately outside the table: it carries arming state and
+`syncEndButton` owns it, including the decision that it stays out of reach in `lobby` even though the
+route accepts it there — and, since the last question empties the lower line, the next-step ring,
+which it takes when `atLastQuestion` and the button is live.
+
+**That same function also owns *where* the button is, and it has two homes.** It is authored in
+`#host-menu` — the dialog behind the join QR — and moved out to `#end-slot-bar` on the utility line
+when `atLastQuestion` holds and the phase is not `ended`; `home.append(endButton)` is the only
+reparent in the file. **One element moved, never one per place**: two copies would be two arming
+labels, two `disabled` flags and two listeners, and the copy that fell behind is the one that fires
+unarmed. The bar's slot is an empty `display: contents` div, so it takes no `gap` while it is empty.
+
+Two halves, both load-bearing. For thirteen questions the one control with no undo takes opening a
+menu on purpose; on the fourteenth it is exactly where the host has always found it, ringed as the
+only step left. **The menu is a route, not a bypass** — the phase rule is unchanged in either place,
+so a host abandoning a session mid-quiz meets the same refusal `end` would give them. Do not answer
+"the host cannot end early" by widening the phase rule, and do not answer "the button is hidden" by
+`hidden` on a button that stays on the bar: it has to be somewhere while it is away, and a hidden
+button on the bar is a button in no place at all.
 
 **The projector's rail obeys the same discipline from the other direction: it is present exactly
 when one of its three blocks is, and `syncRail` is its only writer.** The blocks — the answered
@@ -478,21 +508,31 @@ incident.** There are exactly two loops that *fetch*, and they are bounded diffe
 
 | Loop | Where | Bounded by |
 | --- | --- | --- |
-| The host panel poll | `src/pages/quiz/host.astro` | one device; a question kind; ~2.5 s with exponential backoff; tab visibility |
+| The host panel poll | `src/pages/quiz/host.astro` | one device; the lobby or a question kind; ~2.5 s (~10 s in the lobby) with exponential backoff; tab visibility |
 | The connection fallback | `src/lib/client/session.ts` | the channel outage; tab visibility; the session ending |
 
-**Since S-11 there are also two timers that fetch nothing** — the countdowns in `host.astro` and
-`index.astro` — and the distinction is the point rather than a footnote. They issue no request, so
+**There are also timers that fetch nothing** — the countdowns in `host.astro` and `index.astro`
+(S-11), and the host toast's dismissal clock (`src/lib/client/toast.ts`) — and the distinction is
+the point rather than a footnote. They issue no request, so
 they spend no commands and cannot appear in the tripwire; what bounds them is their question, not a
-backoff. Their rule is narrower and different: cleared on every render, armed only while a question
-with a limit is open, stopped at both lifecycle exits. **Do not count timers and do not merge the two
-rules** — `host.test.ts`'s guard used to assert `occurrences("setTimeout") === 1`, a *shape*, and the
+backoff. Their rule is narrower and different — the countdown's is cleared on every render, armed
+only while a question with a limit is open, stopped at both lifecycle exits; the toast's is one
+pending hide, re-armed by whatever was said last. Both live in `src/lib/client/` rather than inline,
+because `host.test.ts` pins that page to the poll's single timer handle and single `clearTimeout`,
+and because a scan cannot execute a timer. **Do not count timers and do not merge the rules** — `host.test.ts`'s guard used to assert `occurrences("setTimeout") === 1`, a *shape*, and the
 only way to fit a countdown under it was to weaken it to `=== 2`, which protects nothing. It now
 asserts the property it always meant: exactly one timer whose callback can reach a `fetch`.
 
-The host loop serves **two** endpoints — `/api/quiz/host/participation` for a choice question's
-answered count, `/api/quiz/host/words` for the word cloud — chosen by question kind in
-`pollTargetFor`. **One loop, not two**, and that is load-bearing: `host.astro`'s `polling` flag exists
+The host loop serves **three** endpoints — `/api/quiz/host/participation` for a choice question's
+answered count, `/api/quiz/host/words` for the word cloud, and `/api/quiz/state` for the lobby's
+join count — chosen in `pollTargetFor` by phase, then by question kind. The lobby target exists
+because **a join publishes nothing**, so the snapshot's `playerCount` moves only on a host action:
+in the one phase where the host acts least and the number changes most, the figure sat frozen until
+somebody pressed `odśwież`. It is the only target with no panel of its own, so it writes nothing but
+`liveCount` and `pollFailed` marks nothing stale for it. It also ticks slower — a 10-second
+**floor** on the loop's single `pollDelay`, applied in `schedulePoll`, never a second interval
+variable: a second delay is a second backoff, which is most of what a second loop is. **One loop, not three**, and that is
+load-bearing: `host.astro`'s `polling` flag exists
 because a tick armed from `render` while a fetch was open held several requests at once, worst exactly
 when the venue network was worst. Two loops would mean two backoffs, two in-flight flags and two
 chances to leave a timer running for a panel that is off screen. `src/pages/quiz/host.test.ts` is a

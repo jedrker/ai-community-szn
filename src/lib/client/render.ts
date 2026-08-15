@@ -16,7 +16,14 @@ import type { PublicQuestion } from "../../quiz/public";
  * data through `define:vars`.
  */
 
-/** Polish, because it renders directly. */
+/**
+ * Polish, because it renders directly.
+ *
+ * Worded for the *gap between two questions*, which is the case that reaches here during a
+ * live session. A caller whose absent question means something else — the host view with no
+ * session at all, where the fix is an action the host has to take — passes its own
+ * `missingText` instead, because "za chwilę" is a promise nothing is going to keep there.
+ */
 const MISSING_QUESTION_TEXT = "Za chwilę pojawi się kolejne pytanie.";
 
 /**
@@ -66,6 +73,11 @@ export type QuestionMode = "static" | "answerable" | "revealed";
 
 export type RenderQuestionOptions = QuestionClassNames & {
   readonly mode?: QuestionMode;
+  /**
+   * What the prompt says when there is no question. Defaults to the between-questions
+   * wording; see the note on `MISSING_QUESTION_TEXT` for when a caller should override it.
+   */
+  readonly missingText?: string;
   /** What this device has picked so far. */
   readonly selectedOptionIds?: readonly string[];
   /** From `state.revealedOptionIds`. `null` outside a reveal; `[]` means nothing to mark. */
@@ -132,7 +144,9 @@ export function renderQuestion(
 
   const prompt = document.createElement("p");
   if (options.prompt) prompt.className = options.prompt;
-  prompt.textContent = question ? question.prompt : MISSING_QUESTION_TEXT;
+  prompt.textContent = question
+    ? question.prompt
+    : (options.missingText ?? MISSING_QUESTION_TEXT);
   container.append(prompt);
 
   if (!question?.options?.length) return;

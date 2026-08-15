@@ -324,6 +324,79 @@ describe("one predicate decides both the panels and the poll", () => {
 });
 
 /**
+ * THE LOBBY'S JOIN COUNT.
+ *
+ * A join publishes nothing — that is the spine contract, not an oversight — so the snapshot's
+ * `playerCount` only moves on a host action. In the lobby that is the phase where the host acts
+ * least and the number changes most, so the figure sat frozen until somebody pressed `odśwież`.
+ * The fix is a third target on the **same** loop; what these guard is that it stayed one loop,
+ * and that a target with no panel of its own cannot write into the two that have one.
+ */
+describe("the lobby's join count refreshes on the one loop", () => {
+  it("gives the lobby a target rather than a loop of its own", () => {
+    const predicate = /function pollTargetFor[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    // Non-vacuity: the body must have been found.
+    expect(predicate).toContain("PollTarget");
+    expect(predicate).toContain('state.phase === "lobby"');
+    expect(predicate).toContain('url: "/api/quiz/state"');
+
+    /**
+     * The endpoint is named once, so the lobby cannot grow a fetch beside the loop's. The
+     * `odśwież` button reaches the same route through `client.refresh()` and does not spell
+     * it here — a second literal would be a second request path with its own error handling.
+     *
+     * The *phase* is deliberately not counted: `applyShell` names the lobby too, and that is
+     * a layout rule with no poll to drift from — the same exclusion the countdown gets above.
+     */
+    expect(occurrences('"/api/quiz/state"')).toBe(1);
+  });
+
+  /**
+   * **The discard guard is about a question, so a target with no question must be exempt.**
+   * `/api/quiz/state` returns no `questionId`, and in the lobby `currentQuestionId` is `null`
+   * — so the unconditional form dropped every lobby reply on the floor, silently, leaving the
+   * count exactly as frozen as before while the requests went out.
+   */
+  it("exempts the lobby from the stale-question discard", () => {
+    const runner = /async function runPoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(runner).toContain("fetch(target.url");
+    expect(runner).toContain('target.kind !== "lobby" &&');
+  });
+
+  /**
+   * **The slower lobby tick is a floor on the one delay, not a second delay.**
+   *
+   * A second interval variable would be a second backoff, which is most of what a second loop
+   * is — so the guard above ("one timer handle, one in-flight flag and one delay") is what
+   * forces this shape, and `Math.max` is what keeps the backoff working on top of the floor.
+   */
+  it("slows the lobby with a floor rather than a second delay", () => {
+    const scheduler = /function schedulePoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(scheduler).toContain("LOBBY_POLL_MS");
+    // The backoff must survive the floor: pinned at the floor, a failing lobby tick would
+    // keep its fast interval exactly when the page is least able to pay for it.
+    expect(scheduler).toContain("Math.max(pollDelay,");
+    expect(CODE).toContain("const LOBBY_POLL_MS");
+  });
+
+  /**
+   * The lobby target feeds no panel, so a failed tick has no "(nieaktualne)" to set. The
+   * `else` this replaced would have marked the *participation* count stale for a question
+   * that is not open — a marker beside a number nobody is polling, which is the one thing
+   * `pollFailed`'s own docstring says it must not do.
+   */
+  it("marks only a panel that asked as stale", () => {
+    const failed = /function pollFailed\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(failed).toContain("pollDelay");
+    expect(failed).toContain('else if (kind === "participation")');
+  });
+});
+
+/**
  * THE FINAL-READ GATE (roadmap S-08).
  *
  * The word-cloud target covers `question-revealed` so the host keeps a complete cloud to talk
@@ -499,6 +572,65 @@ describe("flow verbs are offered only where they apply", () => {
   it("leaves no per-button phase rule behind", () => {
     expect(CODE).not.toContain("syncStandingsButton");
   });
+
+  /**
+   * THE REVEAL VERB'S NAME ON A QUESTION WITH NO ANSWER.
+   *
+   * A word-cloud question is unscored and has no correct answer, so `pokaż odpowiedź` names a
+   * beat that cannot happen — while the button still does the necessary work of closing
+   * submissions and freezing the cloud. The fix is the label, and the two ways to get it wrong
+   * are both silent: renaming it from a fresh `kind === "word-cloud"` test (a second kind
+   * predicate, free to drift from `pollTargetFor`), or "fixing" it by dropping `reveal` from
+   * the `question-open` row, which leaves the cloud with no way to close.
+   */
+  it("renames the reveal verb from the single predicate, and gates nothing on it", () => {
+    expect(sync).toContain('pollTargetFor(state)?.kind === "words"');
+    expect(sync).toContain("button.textContent = revealCloses");
+
+    // The rename must not have become a phase rule: `reveal` stays offered while the cloud
+    // is open, because closing it is the only way on to the standings beat.
+    expect(table).toContain('allow: ["advance", "reveal"]');
+    // …and the label lives outside the table, which states legality and nothing else.
+    expect(table).not.toContain("revealCloses");
+  });
+
+  /**
+   * THE LAST QUESTION.
+   *
+   * `advance` is a no-op past the last question — `advance.ts` returns null when
+   * `nextQuestionId` does — so the panel was ringing `dalej` as the next step and answering
+   * the tap with "nic do zrobienia. Stan bez zmian.", which is the exact interaction this
+   * table exists to remove. The phase cannot see it: `question-revealed` on question 3 and
+   * on question 14 are the same phase and want opposite bars.
+   *
+   * So the rule is a second dimension **of the table**, not a condition beside a button —
+   * the property below — and the position it reads comes from the published question order
+   * this page already holds, never from a new field on the wire.
+   */
+  it("answers the last question from the table rather than beside a button", () => {
+    expect(table).toContain("whenLast:");
+    expect(sync).toContain("atLastQuestion(state)");
+    expect(sync).toContain("base.whenLast");
+
+    // Nothing else re-decides where the end of the quiz is. `atLastQuestion` is the one
+    // reading, and `syncEndButton` asks it rather than counting questions again.
+    expect(occurrences("config.questions.length - 1")).toBe(1);
+  });
+
+  /**
+   * **The last `question-revealed` offers no flow verb at all**, so the ring has nowhere to
+   * sit on the lower line — which is why `syncEndButton` takes it. Exactly one filled pill
+   * still: the row that empties the bar is the row that sets `next: null`.
+   */
+  it("hands the next-step ring to the closing button when the bar empties", () => {
+    const endSync = /function syncEndButton[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    expect(endSync.length).toBeGreaterThan(0);
+
+    expect(endSync).toContain("endButton.dataset.next");
+    expect(endSync).toContain("atLastQuestion(state)");
+    // Never on a button the phase has already put out of reach.
+    expect(endSync).toContain("!endButton.disabled");
+  });
 });
 
 /**
@@ -626,6 +758,75 @@ describe("the closing button cannot fire by accident", () => {
   });
 
   /**
+   * **ONE BUTTON, MOVED — never one per place.**
+   *
+   * The closing verb now has two homes: `#host-menu` for most of the session, `#end-slot-bar`
+   * on the last question. The cheap way to build that is a second copy hidden in the other
+   * place, and it is wrong in a way nothing on screen would show: the arming label, the phase
+   * rule and the two-tap confirmation would each have two writers, and the copy that fell
+   * behind is the one that fires unarmed or fires in a phase `end` refuses.
+   *
+   * The markup is what this can see, so the markup is what it pins. `id="end-slot-bar"` and
+   * `id="end-slot-menu"` do not match `id="end"` — the closing quote is the difference.
+   */
+  it("authors exactly one closing button, in the menu", () => {
+    expect(occurrences('id="end"')).toBe(1);
+    expect(CODE).toContain('id="end-slot-menu"');
+    expect(CODE).toContain('id="end-slot-bar"');
+
+    // Authored inside the menu's slot: the bar's slot is the empty one, and the script is
+    // what fills it. Source order is the only reading a scan has of "which slot holds it".
+    expect(CODE.indexOf('id="end-slot-menu"')).toBeLessThan(CODE.indexOf('id="end"'));
+    expect(CODE).toContain('<div id="end-slot-bar" class="contents"></div>');
+  });
+
+  /**
+   * **`syncEndButton` is the only mover**, for the reason it is the only writer of the phase
+   * rule: where a one-way control is and whether it works are one statement about one button.
+   * A second `append(endButton)` — from `render`, from `applyShell`, from a menu handler — is
+   * how it ends up on the bar in a beat nobody meant to offer it in.
+   */
+  it("moves the button from exactly one place", () => {
+    expect(occurrences("append(endButton)")).toBe(1);
+    expect(sync).toContain("home.append(endButton)");
+    // Idempotent: a render that changes nothing must not reparent the element the host may be
+    // mid-tap on.
+    expect(sync).toContain("endButton.parentElement !== home");
+  });
+
+  /**
+   * **The placement reads `atLastQuestion` and the phase, and nothing else.**
+   *
+   * `last` is the same reading the next-step ring uses, so the ring can only ever light on the
+   * bar. The `ended` exclusion is part of the rule rather than a tidy-up: after the close the
+   * bar carries a sentence, and a dead red pill beside it is the "nothing works" row that
+   * sentence exists to replace.
+   *
+   * And never `hidden`: the button has to be somewhere while it is away from the bar, so a
+   * hidden button on the bar is a button in no place at all.
+   */
+  it("places the button on the last question only, and never by hiding it", () => {
+    expect(sync).toContain("const last = atLastQuestion(state)");
+    expect(sync).toContain('const home = last && phase !== "ended" ? endSlotBar : endSlotMenu');
+    expect(CODE).not.toContain("setHidden(endButton");
+    expect(CODE).not.toContain("endButton.hidden");
+  });
+
+  /**
+   * **The menu is a route to the button, not a bypass of its phase rule.** A host who has to
+   * abandon a session mid-quiz can reach the verb; what they meet in a phase `end` would refuse
+   * is the same disabled pill they would have met on the bar. Opening the menu must not touch
+   * `disabled`.
+   */
+  it("does not let the menu re-enable what the phase rule refused", () => {
+    const opener = /function openHostMenu\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(opener.length).toBeGreaterThan(0);
+    expect(opener).not.toContain("endButton");
+    expect(occurrences("endButton.disabled =")).toBe(1);
+  });
+
+  /**
    * **`purge` did not come along.** S-10 reversed the F-03 placement for `end` alone; the
    * verb that deletes with no undo and no ten-minute window stays on the harness page.
    */
@@ -661,5 +862,268 @@ describe("both polled panels reset together when the question changes", () => {
      * already revealed and then come back to.
      */
     expect(reset).not.toContain("cloudFinalReadFor");
+  });
+});
+
+/**
+ * THE TOAST'S RULES.
+ *
+ * The bubble was persistent and is now transient, which moves one thing out of this page and
+ * pins two things in it. The state machine went to `src/lib/client/toast.ts`, where it can be
+ * driven by fake timers — here, where the scan cannot execute anything, what is protectable is
+ * that this page did not grow its own copy.
+ */
+describe("the message toast dismisses itself from one place", () => {
+  /**
+   * **No inline dismissal timer.** The one-loop guards above already pin this file to a single
+   * timer handle and a single `clearTimeout`, both the poll's — so a hide written inline would
+   * fail them, and the tempting fix would be to weaken the count. The clock belongs to the
+   * module, and this asserts the page reaches for it.
+   */
+  it("arms the hide through the tested module", () => {
+    expect(CODE).toContain('from "../../lib/client/toast"');
+    expect(CODE).toContain("createAutoHide(");
+    expect(CODE).toContain("messageHide.show(MESSAGE_HIDE_MS[register])");
+  });
+
+  /**
+   * **`say` stays the bubble's only writer, hide included.** The hide reaches the element
+   * through the callback `say`'s clock was built with; a second `setHidden(messageBubble` — a
+   * teardown handler blanking it directly, say — is a second writer, and the two would drift
+   * on which registers survive what.
+   */
+  it("keeps every write to the bubble inside say", () => {
+    const say = /function say\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    // Non-vacuity: the body must actually have been found.
+    expect(say).toContain("EDGE_COLOURS[register]");
+
+    // Two inside `say` (the reveal and the empty-text hide), one in the hide callback.
+    expect(occurrences("setHidden(messageBubble")).toBe(3);
+    expect(say.split("setHidden(messageBubble").length - 1).toBe(2);
+  });
+
+  /**
+   * **The register's colour is swapped, not rebuilt.** It rides the bubble's own left border
+   * now, and the bubble carries its layout in the markup — so a `className =` here would be a
+   * second copy of that layout, kept in step by hand. `classList` has nothing to drift.
+   */
+  it("swaps the edge colour without rewriting the bubble's classes", () => {
+    const say = /function say\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(say).toContain("messageBubble.classList.remove(...Object.values(EDGE_COLOURS))");
+    expect(say).toContain("messageBubble.classList.add(EDGE_COLOURS[register])");
+    expect(CODE).not.toContain("messageBubble.className");
+  });
+
+  /**
+   * All four registers expire — the decision the user took over step 5's persistent bubble.
+   * A register missing from the table is a message that would fall back to the default and
+   * quietly get the wrong patience, so the table is asserted whole.
+   */
+  it("gives every register a duration", () => {
+    const table = /const MESSAGE_HIDE_MS[\s\S]*?\n {6}};/.exec(CODE)?.[0] ?? "";
+
+    expect(table).toContain("ok:");
+    expect(table).toContain("pending:");
+    expect(table).toContain("attention:");
+    expect(table).toContain("refused:");
+  });
+});
+
+/**
+ * The host secret is typed off the projector, behind the join QR.
+ *
+ * The field is unchanged — same id, same `sessionStorage` key, same `input` handler. What
+ * moved is where it sits, and the two things that keeps working are worth pinning: the field
+ * must actually be inside the dialog (a stray copy left on the control bar puts a password box
+ * back in front of the room), and every route that needs it must go through the one opener (a
+ * `focus()` on a field inside a closed `<dialog>` is a no-op, which is a 401 the host cannot
+ * act on and nothing on screen to say why).
+ */
+describe("the host secret is typed behind the menu", () => {
+  const menu = /<dialog[\s\S]*?<\/dialog>/.exec(CODE)?.[0] ?? "";
+
+  it("finds the dialog it is checking", () => {
+    expect(menu).toContain('id="host-menu"');
+  });
+
+  it("keeps the secret field inside it, and nowhere else", () => {
+    expect(menu).toContain('id="secret"');
+    expect(occurrences('id="secret"')).toBe(1);
+  });
+
+  /**
+   * The session version is a debugging figure the room cannot act on, so it is behind the menu
+   * too. Nothing depends on the element: the closing confirmation reads `state.version` in the
+   * script, which is what makes moving the display a presentation change and not a change to
+   * what `end` is armed at — asserted here so a later "the version should be visible again"
+   * cannot quietly become "the version should be *read from the DOM* again".
+   */
+  it("keeps the session version inside it, with no reader outside the script", () => {
+    expect(menu).toContain('id="version"');
+    expect(occurrences('id="version"')).toBe(1);
+    expect(CODE).toContain("endArmedVersion ?? state.version");
+    expect(CODE).not.toContain('el("version").textContent');
+  });
+
+  /**
+   * `odśwież` is in the menu beside the version it refreshes. Unlike the closing button it has
+   * no slot and no second home — it is a fallback for a count that S-11 taught to climb on its
+   * own, so there is no beat that wants it back on the bar. What matters is that it is authored
+   * once: two `odśwież` buttons would be two things to disable for the length of a request, and
+   * `allButtons` holds one named reference.
+   */
+  it("keeps the refresh button inside it, authored once", () => {
+    expect(menu).toContain('id="refresh"');
+    expect(occurrences('id="refresh"')).toBe(1);
+    expect(CODE).toContain("[...actionButtons(), refresh, endButton]");
+  });
+
+  /**
+   * Every button in the menu says what pressing it does. These are the controls the host has
+   * built no habit around — opened twice a session, one of them irreversible — so the sentence
+   * is part of the control, not decoration. Counted rather than read: what a scan can protect
+   * is that a button added later does not arrive bare.
+   */
+  it("gives every button in it a description", () => {
+    const buttons = menu.match(/<button\b/g) ?? [];
+    const notes = menu.match(/text-\[22px\]/g) ?? [];
+
+    expect(buttons).toHaveLength(3);
+    expect(notes).toHaveLength(buttons.length);
+  });
+
+  /**
+   * The closing button's sentence hides when the button leaves for the bar, decided by the
+   * statement that decided the move — a second reading of `home` is how an explanation ends up
+   * on screen with no control under it, or a control on the bar with its explanation stranded.
+   */
+  it("hides the closing sentence from the move that took its button away", () => {
+    const sync = /function syncEndButton\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    // Non-vacuity: the body must actually have been found.
+    expect(sync).toContain("home.append(endButton)");
+
+    expect(sync).toContain("setHidden(endNote, home !== endSlotMenu)");
+    expect(occurrences("setHidden(endNote")).toBe(1);
+  });
+
+  it("opens the menu from exactly one place", () => {
+    expect(occurrences(".showModal()")).toBe(1);
+    expect(CODE).toContain("function openHostMenu()");
+  });
+
+  /**
+   * Focusing the field is what `openHostMenu` exists to do *after* opening, so a `focus()`
+   * anywhere else is a caller that skipped the open — the 401 branch being the one that used
+   * to do exactly that, back when the field was on the bar.
+   */
+  it("reaches the field's focus only through the opener", () => {
+    const opener = /function openHostMenu\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(opener).toContain("secretField.focus()");
+    expect(occurrences("secretField.focus()")).toBe(1);
+    expect(occurrences("secretField.select()")).toBe(1);
+  });
+
+  /**
+   * The QR is the only visible way in, so it must not be swept up by anything that drives the
+   * flow verbs: no `data-action` (the blanket click handler), and not in `allButtons` (which
+   * disables its members for the length of every request).
+   */
+  it("leaves the QR button out of the action machinery", () => {
+    // Anchored on the id rather than on the first `<button` in the file, so the match cannot
+    // start at some earlier button and swallow the markup in between.
+    const opener = /<button\s+id="host-menu-open"[\s\S]*?>/.exec(CODE)?.[0] ?? "";
+
+    expect(opener).toContain('aria-label="Menu prowadzącego"');
+    expect(opener).toContain('type="button"');
+    expect(opener).not.toContain("data-action");
+    expect(CODE).toContain("[...actionButtons(), refresh, endButton]");
+  });
+});
+
+/**
+ * The connection report is a lamp with the sentence one hover away.
+ *
+ * What is protectable by a scan is that the lamp cannot go stale or ambiguous: every status
+ * has a colour, the swap does not rebuild the element's layout, and the tooltip stays CSS-only
+ * — a listener here would be a second thing on this page reacting to pointer state, and a
+ * timer here would be a third clock in a file whose whole guard set is about having one.
+ */
+describe("the connection status is a lamp, not a sentence", () => {
+  const table = /const CONNECTION_COLOURS[\s\S]*?\n {6}};/.exec(CODE)?.[0] ?? "";
+
+  /**
+   * Every `ConnectionStatus` in `session.ts`. A missing row is a lamp holding the previous
+   * status's colour — the one failure mode a colour-only report cannot survive, because there
+   * are no words on screen to contradict it.
+   */
+  it("answers every connection status", () => {
+    expect(table).toContain("Record<ConnectionStatus, string>");
+    expect(table).toContain("connecting:");
+    expect(table).toContain("connected:");
+    expect(table).toContain("degraded:");
+    expect(table).toContain("lost:");
+  });
+
+  /**
+   * The unlit class the markup opens with is not in the table, so it has to be named in the
+   * removal — two `bg-` utilities on one element resolve by stylesheet order, which is not a
+   * thing this page gets to decide.
+   */
+  it("clears the unlit colour along with the lit ones", () => {
+    const remove = /connection-dot"\)\.classList\.remove\([\s\S]*?\)/.exec(CODE)?.[0] ?? "";
+
+    expect(remove).toContain("CONNECTION_UNLIT");
+  });
+
+  /**
+   * Same rule as the toast's marker: the lamp's size, shape and focus ring live in the markup,
+   * so a `className =` here would be a hand-maintained second copy of them.
+   */
+  it("swaps the colour without rewriting the lamp's classes", () => {
+    expect(CODE).toContain("el(\"connection-dot\").classList.add(CONNECTION_COLOURS[status])");
+    expect(CODE).not.toContain("connection-dot\").className");
+    expect(CODE).not.toContain("el(\"connection\").className");
+  });
+
+  /**
+   * The tooltip is `group-hover` / `group-focus-within` in the markup and nothing else. A
+   * `mouseenter` handler would put pointer state into a script whose only other state machine
+   * is the poll, and the reveal has to work with no JS having run at all.
+   */
+  it("reveals the tooltip from CSS rather than from a listener", () => {
+    expect(CODE).toContain("group-hover:opacity-100");
+    expect(CODE).toContain("group-focus-within:opacity-100");
+    expect(CODE).not.toContain("mouseenter");
+    expect(CODE).not.toContain("mouseover");
+  });
+
+  /**
+   * The lamp sits in the shell's bottom-right corner, so the bubble has to open leftwards and
+   * upwards. Anchored `left-0` it would grow off the right edge of a page that is `h-dvh` with
+   * `overflow-hidden` and therefore cannot be scrolled to reach it — the sentence would be
+   * unreadable exactly when it is worth reading.
+   */
+  it("opens the tooltip away from the edges it is parked against", () => {
+    const tooltip = /<p\n\s+id="connection"[\s\S]*?>/.exec(SOURCE)?.[0] ?? "";
+
+    expect(tooltip).toContain("absolute");
+    expect(tooltip).toContain("bottom-full");
+    expect(tooltip).toContain("right-0");
+  });
+
+  /**
+   * `opacity`, not `hidden`: `role="status"` on a `display: none` element announces nothing,
+   * and the sentence is the only form of this report available to a host who cannot use the
+   * colour. `setHidden(` on it would also make it a second writer to an element `onConnection`
+   * already owns.
+   */
+  it("keeps the sentence in the accessibility tree while it is invisible", () => {
+    expect(CODE).toContain('id="connection"');
+    expect(CODE).toContain('aria-live="polite"');
+    expect(CODE).not.toContain("setHidden(el(\"connection\")");
   });
 });

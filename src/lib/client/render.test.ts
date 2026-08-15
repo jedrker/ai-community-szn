@@ -102,6 +102,25 @@ describe("static mode", () => {
     expect(container.querySelector("p")?.textContent).toBeTruthy();
     expect(options()).toHaveLength(0);
   });
+
+  /**
+   * The host view with no session at all is not the gap between two questions, and the
+   * default wording ("Za chwilę pojawi się kolejne pytanie.") promises something nothing is
+   * going to deliver there — the host has to type a secret and press `start`. The override
+   * is what lets one renderer serve both without either view owning a copy of the other's
+   * placeholder.
+   */
+  it("lets the caller replace the placeholder text", () => {
+    renderQuestion(container, undefined, { missingText: "Wpisz sekret hosta." });
+
+    expect(container.querySelector("p")?.textContent).toBe("Wpisz sekret hosta.");
+  });
+
+  it("ignores the override when there is a question to show", () => {
+    renderQuestion(container, single, { missingText: "Wpisz sekret hosta." });
+
+    expect(container.querySelector("p")?.textContent).toBe(single.prompt);
+  });
 });
 
 describe("answerable mode", () => {

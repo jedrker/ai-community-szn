@@ -29,6 +29,14 @@ import { publicQuiz } from "../../quiz/public";
  * That is the difference from `spine-check.astro`, which ships the secret to the
  * browser and is therefore only allowed to exist behind `LIVEQUIZ_HARNESS`.
  *
+ * **The field it is typed into is not on the projector.** It lives in `#host-menu`, a modal
+ * opened by clicking the join QR in the top strip — a password box on a 1080p screen in front
+ * of 150 people is one being typed in front of 150 people, and this one is touched twice a
+ * session at most. This is presentation, not protection: the secret was never in the HTML and
+ * still is not, and the routes remain the thing that guards the write path. Three doors lead
+ * in, all through `openHostMenu`: the QR, the 401 branch of `fire`, and the first paint of a
+ * tab with nothing in `sessionStorage`.
+ *
  * ## `end` is here now. `purge` is still not
  *
  * **This section previously read "`end` and `purge` are deliberately not here", and S-10
@@ -44,6 +52,13 @@ import { publicQuiz } from "../../quiz/public";
  * avoided: the button is set apart from the flow verbs, carries no `data-action` so the
  * blanket handler cannot reach it, requires two taps, disarms whenever the session moves,
  * and sends a version the route refuses if it is stale. See the button's own note below.
+ *
+ * **It is also not on the bar all session.** Its home is `#host-menu`; `syncEndButton` moves
+ * it out to `#end-slot-bar` on the last question, the one beat where closing is the next step
+ * rather than an escape hatch. Both halves matter: for thirteen questions the verb with no
+ * undo takes opening a menu on purpose, and on the fourteenth it is exactly where the host has
+ * always found it. Reaching it through the menu is a route, not a bypass — the phase rule that
+ * mirrors what `end` accepts is unchanged in either place.
  *
  * `purge` stays on the harness page. It deletes with no undo and no ten-minute window, and
  * nothing about FR-006 asks for it on stage.
@@ -188,8 +203,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       </p>
 
       <!-- Scan, or read the address off the same block. Both routes to the same place,
-           side by side, at a size that survives the back of the room. -->
-      <div class="flex items-center gap-8">
+           side by side, at a size that survives the back of the room.
+
+           `ml-auto` rather than relying on the strip's `justify-between`: both siblings above
+           are `hidden` in the states that matter most for joining — the lobby, and the
+           sessionless `brak sesji` fallback — and a lone flex child under `justify-between`
+           sits at the *start*, so the QR slid to the left edge exactly when the room was
+           looking for it. The margin pins it right regardless of how many siblings are up. -->
+      <div class="ml-auto flex items-center gap-8">
         <div class="flex flex-col items-end gap-2">
           <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
             Wejdź
@@ -198,11 +219,213 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             {joinDisplayUrl}
           </p>
         </div>
-        <div class="h-[112px] w-[112px] rounded-[20px] bg-white p-2 [&>svg]:h-full [&>svg]:w-full">
+        <!--
+          THE QR IS ALSO THE DOOR TO THE HOST'S MENU.
+
+          Clicking it opens `#host-menu`, which is where the host secret is typed. Nothing
+          about the button says so — no cursor change, no hover, no label the room can read —
+          because the point is that the projector shows the room a join code and shows them
+          nothing about how this screen is driven. The secret field used to sit on the
+          control bar in front of 150 people; the QR is the one element that is on screen in
+          every phase, so it is the one target that always works.
+
+          A `<button>` rather than a click handler on a `<div>`: it is keyboard-reachable and
+          announces itself to a screen reader through `aria-label`, and it carries no
+          `data-action`, so the blanket handler that drives the flow verbs cannot fire it and
+          `allButtons` (an explicit list) never disables it mid-action.
+        -->
+        <button
+          id="host-menu-open"
+          type="button"
+          aria-label="Menu prowadzącego"
+          class="h-[112px] w-[112px] cursor-default rounded-[20px] bg-white p-2
+                 [&>svg]:h-full [&>svg]:w-full"
+        >
           <Fragment set:html={joinQrSvg} />
-        </div>
+        </button>
       </div>
     </header>
+
+    <!--
+      THE HOST MENU: everything the host types, off the projector.
+
+      One modal `<dialog>`, opened from the QR above and from the 401 branch of `fire` — the
+      two moments it is needed: setting up, and being told the secret is wrong. `showModal`
+      rather than a hand-rolled overlay, so Escape closes it and focus is trapped without this
+      page growing a focus manager.
+
+      It holds the secret field and its note, the session version, and the closing button —
+      which lives here for every question but the last, and is the one thing in the dialog
+      that moves the session. That is the point rather than an exception to it: the flow verbs
+      and `odśwież` stay on the control bar where the host has learnt where they are and where
+      a mis-reach cannot be hidden behind a dialog, while the verb with no undo is reached on
+      purpose. On the last question it leaves and takes its place on the bar; see
+      `#end-slot-menu` below.
+    -->
+    <dialog
+      id="host-menu"
+      class="m-auto w-[720px] max-w-[90vw] rounded-[24px] border-2 border-quiz-divider
+             bg-quiz-asphalt p-[40px] text-quiz-signwhite backdrop:bg-black/70"
+    >
+      <div class="flex flex-col gap-6">
+        <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+          Menu prowadzącego
+        </p>
+
+        <div class="flex flex-col gap-3">
+          <label
+            for="secret"
+            class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc"
+          >
+            Sekret hosta
+          </label>
+          <input
+            id="secret"
+            type="password"
+            autocomplete="off"
+            class="rounded-[18px] border-2 border-quiz-field-border bg-quiz-ink px-4 py-2
+                   text-[26px] text-quiz-signwhite focus:border-quiz-chrome focus:outline-none"
+          />
+          <span id="secret-note" class="text-[26px] text-quiz-zinc"></span>
+        </div>
+
+        <!--
+          The session's version, off the projector for the same reason the secret is: the room
+          cannot act on `v7`, and a number that ticks up beside the phase invites being read as
+          if it meant something to them.
+
+          It stays *somewhere*, because it is what a 409 is about and what the closing
+          confirmation quotes — but the beat that needs it reads `state.version` in the script,
+          never this element, so nothing depends on the menu being open. It is written on every
+          render regardless, and is simply current whenever the host looks.
+        -->
+        <p class="text-[26px] text-quiz-zinc">
+          wersja sesji:
+          <span id="version" class="tabular-nums text-quiz-signwhite">—</span>
+        </p>
+
+        <!--
+          THE MENU'S BUTTONS: one column, each under its own sentence.
+
+          **Stacked rather than in a row, and every one of them explained.** The control bar
+          can leave its verbs unlabelled — the host presses those fourteen times a session and
+          the sequence teaches them. These are the opposite: opened twice, pressed rarely, and
+          one of them cannot be undone. A row of unlabelled pills in a dialog nobody has built
+          a habit around is where a host clicks the wrong thing under time pressure, so each
+          one says what the tap does, in the room's language, before it is pressed.
+
+          The sentences are 22px against the buttons' 26px — the only place on this page that
+          goes below the host scale, and it is deliberate: this is read leaning in at a
+          keyboard, not glanced at from a metre away, and a description set at the same size as
+          its control competes with it.
+        -->
+        <div class="flex flex-col gap-6">
+          <!--
+            **`odśwież` is off the bar because the bar is for the room's beat, and this is not
+            part of it.** A join publishes nothing, so this button was the lobby's manual pump
+            — but S-11 gave the lobby a polled target on the one loop, so the count now climbs
+            on its own and this is the fallback for when it does not. A fallback belongs where
+            the host goes on purpose, not in the row their hand lives in for the whole segment.
+
+            Its sentence is the one that has to say *nothing happens to the room*, because that
+            is the question a host asks before pressing anything during a live segment.
+          -->
+          <div class="flex flex-col items-start gap-2">
+            <button
+              id="refresh"
+              class="rounded-full border-2 border-quiz-divider px-5 py-1 text-[26px]
+                     font-semibold text-quiz-zinc disabled:text-quiz-pill-disabled"
+            >
+              odśwież
+            </button>
+            <p class="text-[22px] leading-[28px] text-quiz-zinc">
+              Pobiera aktualny stan sesji i odświeża liczby na tym ekranie. Niczego nie zmienia
+              — sala niczego nie zobaczy.
+            </p>
+          </div>
+
+          <!--
+          THE CLOSING BEAT (roadmap S-10, FR-006), and **the reversal of a deliberate F-03
+          decision** — see this page's docstring, which used to say `end` was not here.
+
+          Four things keep that reversal defensible, and all four are load-bearing:
+
+          - **It is set apart.** Never in the row of flow verbs, outlined in `signal`, and it
+            carries no `data-action` — so a mis-reach lands on a flow verb and the blanket
+            handler that drives them cannot fire it.
+          - **It takes two taps.** The first arms it and rewrites the label; the second fires.
+            Any action that moves the session disarms it again, so it can never fire into a
+            state the host has not looked at.
+          - **The route still guards it.** The second tap sends the version the host is
+            looking at, which `end` refuses if it has moved. The interaction is the first
+            line; the 409 is the backstop.
+          - **It is not on the bar until the bar is where it belongs.** This is its home for
+            every question but the last: reaching it mid-quiz means opening the menu on
+            purpose, which is the deliberateness a one-way action wants, while the last
+            question moves it out to `#end-slot-bar` where the host expects the closing verb
+            to be. Menu access is a *route*, not a bypass — `syncEndButton`'s phase rule
+            still refuses it outside `question-revealed` and `standings`, here as there.
+
+          Authored here rather than on the bar so that the element the script moves has one
+          birthplace, and so the sessionless first paint — which opens this menu anyway —
+          finds it where the host is already looking.
+
+          `purge` is deliberately still NOT here. S-10 reversed the placement for the verb a
+          host needs on stage, not for the one that deletes without an undo, and a menu the
+          host opens twice a session is not the argument that would change that.
+        -->
+        <!-- Disabled in the markup, not only by script: the page renders before the first
+             snapshot arrives, and the one button that cannot be undone must not be live
+             while the view still knows nothing about the session. -->
+        <!-- `data-next` in its own palette, for the reason the flow verbs carry one: on the
+             last question this is the only step left, and the bar has to say so. Filled in
+             `signal` rather than in `chrome`, so the button that cannot be undone never
+             looks like an ordinary flow verb even while it is the next one. -->
+          <div id="end-slot-menu" class="flex flex-col items-start gap-2">
+            <button
+              id="end"
+              disabled
+              data-next="false"
+              class="rounded-full border-2 border-quiz-signal px-5 py-1 text-[26px] font-semibold
+                     text-quiz-signal data-[next=true]:bg-quiz-signal data-[next=true]:font-bold
+                     data-[next=true]:text-quiz-ink
+                     disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+            >
+              zakończ sesję i pokaż wyniki
+            </button>
+            <!--
+              **The one sentence here that has to name a consequence rather than an effect.**
+              The others describe what appears on a screen; this one is about a door closing —
+              two taps, no undo, and the room's data on a short lifetime from that moment. It
+              says the second tap is the real one, because the arming interaction is invisible
+              until it has already happened once.
+
+              It hides when the button is away on the bar (`syncEndButton` owns that, as it
+              owns the move) — an explanation with no control under it is worse than none, and
+              on the bar the button is the ringed next step and needs no sentence at all.
+            -->
+            <p id="end-note" class="text-[22px] leading-[28px] text-quiz-zinc">
+              Kończy sesję i pokazuje zwycięzców na ekranie. Pierwsze kliknięcie tylko pyta o
+              potwierdzenie, drugie kończy naprawdę. Tego nie da się cofnąć.
+            </p>
+          </div>
+
+          <div class="flex flex-col items-start gap-2">
+            <button
+              id="host-menu-close"
+              type="button"
+              class="rounded-full border-2 border-quiz-divider px-5 py-1 text-[26px]
+                     font-semibold text-quiz-zinc"
+            >
+              zamknij
+            </button>
+            <p class="text-[22px] leading-[28px] text-quiz-zinc">
+              Chowa to menu i wraca do widoku sali. Sekret zostaje zapamiętany w tej karcie.
+            </p>
+          </div>
+        </div>
+      </div>
+    </dialog>
 
     <!--
       THE LOBBY: two plates, and nothing else on the screen.
@@ -501,108 +724,108 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       host has to find again mid-session.
     -->
     <footer
-      class="flex shrink-0 flex-col gap-4 border-t-2 border-quiz-divider bg-quiz-asphalt
-             px-[72px] py-[24px]"
+      class="relative flex shrink-0 flex-col gap-4 border-t-2 border-quiz-divider
+             bg-quiz-asphalt px-[72px] py-[24px]"
     >
       <!--
-        THE MESSAGE BUBBLE (signage redesign, step 5).
+        THE MESSAGE TOAST (signage redesign step 5; made transient afterwards, with the user).
 
-        **It docks as the first row inside the control bar, never as an overlay.** An overlaid
-        bubble covers an answer option while the room is reading it — that was tried and
-        rejected. Docked, the bar grows and the stage shrinks by the same amount, which is a
-        layout the room can absorb because nothing it was reading moves out from under it.
+        **It was a docked first row of the control bar, and is now a floating toast that
+        dismisses itself.** Two things changed together, and both were decisions taken with
+        the user against the earlier ones:
 
-        The marker bar carries the whole register system: what happened, what is in flight,
-        what needs a decision, what was refused. Its colour is the message's meaning, so the
-        host reads the register from across the stage and only then reads the words.
+        - *Transient.* Every register now goes away on its own, `refused` included. The
+          previous rule kept the last thing said on screen indefinitely so a host who looked
+          away still found it — the cost being that "start: OK" sat under the room's eyes for
+          the rest of the segment. Accepted trade: an outcome the host missed entirely is
+          gone, and the way back is to repeat the action. The durations are in
+          `MESSAGE_HIDE_MS`, and the arming clock is `src/lib/client/toast.ts`.
+        - *Floating.* `absolute bottom-full right-0` lifts it out of the bar's flex flow and
+          parks it in the stage's bottom-right corner, above the control bar. Anchored to
+          the footer rather than to the viewport so it never covers the host's own buttons —
+          the bar keeps its height whether or not there is anything to say, so nothing in the
+          layout moves when a message arrives or leaves. It does now overlay the foot of the
+          stage, which the docked version existed to avoid; it is bounded to `max-w` and
+          right-aligned, and it clears itself within seconds.
 
-        Hidden while there is nothing to say, so an empty bubble never takes the stage's
-        height. `say` is the only writer.
+        **Sized for the host, not for the room** — 26px copy, the same scale as the secret and
+        connection line under it, rather than the stage's 40px. It was stage-sized while it was
+        a docked row of the bar, where it read as signage; floating over the projector, that
+        size made every "start: OK" an announcement to 150 people. The host stands a metre from
+        this screen and is the only person the sentence is for.
+
+        The register is carried by the **left border**, not by a bar element inside the bubble.
+        It was a `<span>` while the bubble was stage-sized and the marker was a piece of signage
+        in its own right; at 26px that span was a stripe with a gap either side of it, which is
+        a lot of structure for one bit of information. The border is the same signal with no box
+        around it — one colour down the edge, so the shape of the toast *is* the register.
+
+        Colour still does the work words cannot at this size: the host reads the edge from where
+        they are standing and only then decides whether to read the sentence.
+
+        Hidden while there is nothing to say. `say` is the only writer — including the hide,
+        which reaches this element through the callback `say` installs and nowhere else.
 
         `role="status"` sits on the copy rather than on the bubble: the live region should
-        announce the sentence, not the decorative bar beside it.
+        announce the sentence, not the coloured edge around it.
       -->
       <div
         id="message-bubble"
         hidden
-        class="flex items-stretch gap-6 rounded-[20px] border-2 border-quiz-field-border
-               bg-quiz-float px-6 py-3"
+        class="absolute bottom-full right-[72px] z-30 mb-4 flex max-w-[640px] rounded-[14px]
+               border border-l-[6px] border-quiz-field-border border-l-quiz-pill-border
+               bg-quiz-float py-2 pl-4 pr-4 shadow-[0_10px_28px_rgba(0,0,0,0.45)]"
       >
-        <span
-          id="message-marker"
-          class="w-[10px] shrink-0 rounded-full bg-quiz-pill-border"
-        ></span>
         <p
           id="message"
           role="status"
           aria-live="polite"
-          class="text-[40px] font-semibold leading-[52px] tracking-[-0.015em] text-quiz-signwhite"
+          class="text-[26px] font-medium leading-[34px] tracking-[-0.01em] text-quiz-signwhite"
         >
         </p>
       </div>
 
       <!--
-        The host's own line: the secret, and what the connection is doing.
+        The host's own line: a slot, and nothing else in it for most of the session.
 
-        Above the verbs, because the secret is the first thing to fix when an action comes
-        back 401 and nothing else on this page works until it is right.
+        It carried three things and now carries none of them full-time. **The secret field**
+        moved into `#host-menu`, behind the QR in the top strip — a password box on a projector
+        is a password box 150 people are watching being typed, and it is touched twice a
+        session at most; the 401 branch of `fire` opens the menu, so the recovery path is
+        unchanged in effect. **The connection report** became the lamp in the footer's corner,
+        below. **`odśwież`** went into the menu too, beside the version it refreshes: S-11 gave
+        the lobby a polled target, so the count climbs on its own and the button is a fallback
+        rather than the pump it used to be. **The closing button** lives in that same menu and
+        comes back out here on the last question, which is the one beat it is the next step of.
+
+        **`min-h` because the row is now empty for thirteen questions out of fourteen.** The
+        bar's height is a thing the room learns in the first minute, and the shell exists so
+        nothing moves between questions except the content that is supposed to — an empty row
+        that collapses would take the whole control bar down with it and then push it back up
+        on the last question. The figure is the closing button's own height: 26px type,
+        `py-1`, and a 2px border on each side.
       -->
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <label for="secret" class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
-          Sekret hosta
-        </label>
-        <input
-          id="secret"
-          type="password"
-          autocomplete="off"
-          class="min-w-72 rounded-[18px] border-2 border-quiz-field-border bg-quiz-ink px-4 py-2
-                 text-[26px] text-quiz-signwhite focus:border-quiz-chrome focus:outline-none"
-        />
-        <span id="secret-note" class="text-[26px] text-quiz-zinc"></span>
-        <p id="connection" class="ml-auto text-[26px] text-quiz-zinc">połączenie: —</p>
-
-        <!-- No join publishes anything (that would be the O(N^2) fan-out the spine
-             contract forbids), so this is how the host watches the lobby fill. A utility
-             rather than a flow verb: it moves nothing, so it sits on the utility line and
-             leaves the row below to the four verbs that do. -->
-        <button
-          id="refresh"
-          class="rounded-full border-2 border-quiz-divider px-5 py-1 text-[26px] font-semibold
-                 text-quiz-zinc disabled:text-quiz-pill-disabled"
-        >
-          odśwież
-        </button>
-
+      <div class="flex min-h-[44px] flex-wrap items-center justify-end gap-x-6 gap-y-3">
         <!--
-          The closing beat (roadmap S-10, FR-006), and **the reversal of a deliberate F-03
-          decision** — see this page's docstring, which used to say `end` was not here.
+          WHERE THE CLOSING BUTTON LANDS ON THE LAST QUESTION — and nowhere else.
 
-          Three things keep that reversal defensible, and all three are load-bearing:
+          The button itself is authored in `#host-menu` (see there for what it is and what
+          guards it); this is the slot `syncEndButton` moves it into once `atLastQuestion`
+          holds. **An empty slot rather than a `hidden` button**, because the button has to be
+          in exactly one place at a time: two copies would be two labels to keep armed, two
+          `disabled` states and a second reader of a rule this file keeps to one owner.
 
-          - **It is set apart.** On the utility line rather than in the row of flow verbs,
-            outlined in `signal`, and it carries no `data-action` — so a mis-reach lands on
-            a flow verb and the blanket handler that drives them cannot fire it.
-          - **It takes two taps.** The first arms it and rewrites the label; the second
-            fires. Any action that moves the session disarms it again, so it can never fire
-            into a state the host has not looked at.
-          - **The route still guards it.** The second tap sends the version the host is
-            looking at, which `end` refuses if it has moved. The interaction is the first
-            line; the 409 is the backstop.
+          `display: contents`, so the slot itself is not a flex child — an empty box would
+          still take the row's `gap-x-6` with it, and the bar is measured for a projector. The
+          row's `justify-end` is what puts the button against the right edge when it arrives;
+          it used to inherit that position from `odśwież`'s `ml-auto`, which left with it.
 
-          `purge` is deliberately still NOT here. This slice reversed the placement for the
-          verb a host needs on stage, not for the one that deletes without an undo.
+          The move is what makes the bar mean something: for thirteen questions the utility
+          line offers *nothing*, so the one control that cannot be undone is not sitting under
+          the host's thumb for the whole session. On the last one it appears exactly where it
+          has always been, ringed as the only step left.
         -->
-        <!-- Disabled in the markup, not only by script: the page renders before the first
-             snapshot arrives, and the one button that cannot be undone must not be live
-             while the view still knows nothing about the session. -->
-        <button
-          id="end"
-          disabled
-          class="rounded-full border-2 border-quiz-signal px-5 py-1 text-[26px] font-semibold
-                 text-quiz-signal disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
-        >
-          zakończ sesję
-        </button>
+        <div id="end-slot-bar" class="contents"></div>
       </div>
 
       <!--
@@ -679,9 +902,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           pokaż ranking
         </button>
         <!-- The phase, which used to be a metric of its own above the prompt. It is the
-             host's own reading of where the session is, so it belongs on the host's plane —
-             and the version beside it, kept in the DOM and out of the hierarchy: nothing on
-             stage needs it, and the closing beat's confirmation quotes it back.
+             host's own reading of where the session is, so it belongs on the host's plane.
+
+             **The version used to sit beside it and now lives in the host menu.** It is a
+             debugging figure — the room cannot act on `v7` and should not be reading it off
+             the projector at all — and the one beat that genuinely needs it, the closing
+             confirmation, quotes the number back in its own sentence and reads it from
+             `state.version` rather than from any element. So the display had no reader left
+             on this bar.
 
              The join count sits here too for the phases where nothing else shows it. It is
              the *denominator* of the rail's `answered / joined` while a question is open,
@@ -695,12 +923,65 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           <span class="text-quiz-zinc">
             <span id="player-count" class="tabular-nums">—</span> w sali
           </span>
-          <span class="text-quiz-pill-disabled">
-            v<span id="version" class="tabular-nums">—</span>
-          </span>
         </p>
       </div>
 
+      <!--
+        THE CONNECTION LAMP, in the bottom-right corner of the shell.
+
+        **A sentence became a dot.** It read `połączenie: tryb zapasowy — limit Ably
+        wyczerpany (40011) — sala pełna, potrzebny wyższy plan` at 26px on the bar, which is a
+        paragraph of diagnosis parked permanently under the projector for a fact that is
+        "fine" for the whole of a good segment. The dot carries the same three-way meaning in
+        18px, and the sentence is one hover away.
+
+        **The colour is the message; the words are the detail.** That is the same division the
+        toast's marker makes and it holds for the same reason — colour survives being small in
+        a way that words do not, and what the host needs across the room is *whether* to look,
+        not what it says.
+
+        **Out of the utility row and into the corner**, positioned against the footer rather
+        than laid out in it: it is the one thing here that is not read in sequence with
+        anything else, so a slot in a row of buttons costs the row its rhythm for a fact the
+        host checks by glancing at a colour. Inside the footer's padding, so it clears the
+        `zakończ sesję` button's outline and stays inside the shell — the page is `h-dvh` with
+        `overflow-hidden` and `fixed` would put it in a different coordinate space for no gain.
+
+        The tooltip opens *leftwards* (`right-0`), which is the whole reason the corner needs
+        its own rule: anchored `left-0` it would grow off the right edge of a page that cannot
+        scroll to reach it.
+
+        The reveal is CSS-only, off `group-hover` and `group-focus-within` on the wrapper: no
+        listener, no timer, nothing for this page's one-timer guards to have to reason about.
+        `opacity` rather than `hidden`, deliberately — `role="status"` on a `display: none`
+        element announces nothing, so the live region keeps working for a host who cannot see
+        the colour at all, and `pointer-events-none` keeps the bubble from eating clicks aimed
+        at the buttons beside it.
+
+        `tabindex="0"` because a lamp nobody can focus is a lamp with no keyboard route to its
+        own text.
+      -->
+      <div class="group absolute bottom-[14px] right-[20px] flex items-center">
+        <span
+          id="connection-dot"
+          tabindex="0"
+          role="img"
+          aria-labelledby="connection"
+          class="block h-[18px] w-[18px] rounded-full bg-quiz-zinc focus:outline-none
+                 focus-visible:ring-2 focus-visible:ring-quiz-signwhite"
+        ></span>
+        <p
+          id="connection"
+          role="status"
+          aria-live="polite"
+          class="pointer-events-none absolute bottom-full right-0 z-30 mb-3 w-max
+                 max-w-[560px] rounded-[14px] border border-quiz-field-border
+                 bg-quiz-float px-4 py-2 text-[26px] text-quiz-signwhite opacity-0
+                 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          połączenie: —
+        </p>
+      </div>
     </footer>
 
     <script
@@ -721,6 +1002,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         type ConnectionStatus,
       } from "../../lib/client/session";
       import { createCountdown } from "../../lib/client/countdown";
+      import { createAutoHide } from "../../lib/client/toast";
       import {
         el,
         renderCountdown,
@@ -760,6 +1042,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const config = (window as unknown as { __liveQuizHost: Config }).__liveQuizHost;
 
       const secretField = el("secret") as HTMLInputElement;
+      const hostMenu = el("host-menu") as HTMLDialogElement;
       const questionBox = el("question");
       const refresh = el("refresh") as HTMLButtonElement;
       const participationBox = el("participation");
@@ -796,11 +1079,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const controlRow = el("control-row");
       const endedNote = el("ended-note");
       const messageBubble = el("message-bubble");
-      const messageMarker = el("message-marker");
       const wordCloudWords = el("word-cloud-words");
       const wordCloudStale = el("word-cloud-stale");
       const hostCountdownBox = el("host-countdown");
       const endButton = el("end") as HTMLButtonElement;
+      /**
+       * The closing button's two homes — the host's menu, and the utility line.
+       *
+       * **One button, moved**, rather than one per place. Two elements would be two labels to
+       * keep in step with the arming state, two `disabled` flags for the phase rule to write
+       * and two listeners to keep the two-tap confirmation identical across — and the copy
+       * that fell behind would be the one that fired unarmed. `syncEndButton` is the only
+       * caller of `append` on either of these.
+       */
+      const endSlotBar = el("end-slot-bar");
+      const endSlotMenu = el("end-slot-menu");
+      const endNote = el("end-note");
 
       const actionButtons = (): HTMLButtonElement[] =>
         Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-action]"));
@@ -813,6 +1107,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * exactly the race the version confirmation would then have to catch.
        */
       const allButtons = (): HTMLButtonElement[] => [...actionButtons(), refresh, endButton];
+
+      /**
+       * The one opener, so every route into the menu lands the host in the same place with
+       * the same field focused: the QR in the strip, a 401 from `fire`, and the first paint
+       * of a tab that has no secret stored yet.
+       *
+       * Guarded on `open` because `showModal` on an already-open dialog throws, and the 401
+       * path can fire while the host is looking at the menu — that is the *likeliest* moment
+       * for it, since a wrong secret is what they came here to fix.
+       */
+      function openHostMenu(): void {
+        if (!hostMenu.open) hostMenu.showModal();
+        secretField.focus();
+        secretField.select();
+      }
 
       function readSecret(): string {
         try {
@@ -850,7 +1159,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        *
        * The runbook's command tripwire is described there as a polling detector, so every
        * loop that exists has to be nameable. This one is bounded on purpose: **one
-       * device**, only while a choice question is open, ~2.5s — so an unexpected pattern
+       * device**, only in the phases `pollTargetFor` names — the lobby's join count, a
+       * choice question's answered count, a word cloud — ~2.5s, so an unexpected pattern
        * in the command counter is still detectable as one.
        *
        * The second is the connection fallback in `src/lib/client/session.ts`, which polls
@@ -867,6 +1177,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        */
       const POLL_BASE_MS = 2_500;
       const POLL_MAX_MS = 20_000;
+      /**
+       * The lobby target's floor, applied in `schedulePoll` rather than as a second delay.
+       *
+       * A room fills over minutes and the host reads the figure between other things, so the
+       * 2.5 s the participation count needs buys nothing here — see `schedulePoll` for why
+       * this raises a floor instead of replacing the interval.
+       */
+      const LOBBY_POLL_MS = 10_000;
       /**
        * How long a tick is given before it is abandoned (impl review F1).
        *
@@ -934,6 +1252,29 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       /** Which question the panel's numbers belong to, so a new one resets them. */
       let panelQuestionId: string | null = null;
 
+      /**
+       * WHAT THE CONNECTION LAMP IS LIT WITH.
+       *
+       * Every `ConnectionStatus` answered here, so the lamp can never hold a colour from a
+       * status that no longer applies — and a status added upstream fails the build rather
+       * than falling through to whatever was on screen.
+       */
+      const CONNECTION_COLOURS: Record<ConnectionStatus, string> = {
+        connecting: "bg-quiz-chrome",
+        connected: "bg-quiz-mint",
+        degraded: "bg-quiz-chrome",
+        lost: "bg-quiz-signal",
+      };
+
+      /**
+       * The colour the markup opens with, before the first connection event — it is *no
+       * report yet*, which is neither health nor failure. It has to be in the removal list
+       * even though nothing ever sets it: two background utilities on one element are
+       * resolved by their order in the stylesheet, not in the attribute, so leaving it on
+       * would make the lamp's colour a Tailwind implementation detail.
+       */
+      const CONNECTION_UNLIT = "bg-quiz-zinc";
+
       const client = createSessionClient({
         channelName: config.channelName,
         snapshotEvent: config.snapshotEvent,
@@ -989,13 +1330,23 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            * Three colours for three situations, because two would merge the one that
            * needs an action with the one that does not. Amber says the segment is running
            * on the fallback: worth knowing, not worth stopping for.
+           *
+           * **Swapped on the dot, not rebuilt.** The lamp carries its size, shape and focus
+           * ring in the markup; a `className =` here would be a second copy of that layout
+           * kept in step by hand — the same reasoning, and the same failure, as the toast's
+           * marker. `classList` has nothing to drift.
+           *
+           * The table is a `Record<ConnectionStatus, …>`, so a fifth status added upstream is
+           * a type error here rather than a lamp that silently keeps its last colour.
+           * `connecting` shares amber with `degraded` rather than the red the old line gave
+           * it: the first seconds of every page load pass through it, and a lamp that opens
+           * red teaches the host to ignore red.
            */
-          el("connection").className =
-            status === "connected"
-              ? "ml-auto text-[26px] text-quiz-zinc"
-              : status === "degraded"
-                ? "ml-auto text-[26px] text-quiz-chrome"
-                : "ml-auto text-[26px] text-quiz-signal";
+          el("connection-dot").classList.remove(
+            CONNECTION_UNLIT,
+            ...Object.values(CONNECTION_COLOURS)
+          );
+          el("connection-dot").classList.add(CONNECTION_COLOURS[status]);
         },
       });
 
@@ -1138,6 +1489,28 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
+       * Whether the session has run out of questions — the client's reading of
+       * `nextQuestionId` (`src/lib/session/state.ts`), which is what decides whether
+       * `advance` does anything at all.
+       *
+       * **From the published order this page already holds**, the same list the top strip's
+       * `pytanie N z M` counter counts through, so the panel and the route cannot disagree
+       * about where the end is. A field on the snapshot would be a second copy of a fact the
+       * definition already states.
+       *
+       * `false` with no current question: that is the lobby, where question 1 is still
+       * ahead — and `ended`, whose row offers nothing either way.
+       */
+      function atLastQuestion(state: State | null): boolean {
+        if (state === null || state.currentQuestionId === null) return false;
+
+        const at = config.questions.findIndex(
+          (candidate) => candidate.id === state.currentQuestionId
+        );
+        return at >= 0 && at === config.questions.length - 1;
+      }
+
+      /**
        * **ONE predicate governs both the panels and the poll**, and it is written once
        * (extended by roadmap S-08 from a boolean to a target).
        *
@@ -1153,10 +1526,37 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        *
        * Returns `null` when nothing should be polled, which is also what hides both panels.
        */
-      type PollTarget = { kind: "participation" | "words"; questionId: string; url: string };
+      type PollTarget = {
+        kind: "participation" | "words" | "lobby";
+        questionId: string | null;
+        url: string;
+      };
 
       function pollTargetFor(state: State | null): PollTarget | null {
         if (state === null) return null;
+
+        /**
+         * THE LOBBY'S JOIN COUNT — the third target, and the one with no panel of its own.
+         *
+         * A join publishes nothing: 150 joins fanning out to 150 subscribers is the O(N²)
+         * shape the spine contract forbids, so `playerCount` on the snapshot only ever moves
+         * on a host action. In every other phase that is invisible, because the host acts
+         * often and the participation poll carries a live count of its own while a question
+         * is open — but the lobby is exactly the phase where the host acts *last* and the
+         * number changes *most*, so the figure beside `dołączyło` sat frozen at whatever it
+         * was when `start` landed until somebody pressed `odśwież`.
+         *
+         * So the lobby polls the same open endpoint the refresh button uses, through the
+         * same one loop. `/api/quiz/state` needs no secret — it returns exactly what is
+         * broadcast anyway — so this target cannot reach the 401 branch in `runPoll`.
+         *
+         * Bounded like the other two: one device, one phase, ~2.5 s with the same backoff and
+         * the same visibility rule, and it ends the moment the host starts the first question.
+         * Two commands a tick, which is the figure `src/pages/api/quiz/state.ts` records.
+         */
+        if (state.phase === "lobby") {
+          return { kind: "lobby", questionId: null, url: "/api/quiz/state" };
+        }
 
         const questionId = state.currentQuestionId;
         if (questionId === null) return null;
@@ -1356,6 +1756,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const NO_SESSION = "none";
 
       /**
+       * What the stage says while `NO_SESSION` holds. Polish, because it renders directly.
+       *
+       * Names both halves of the fix in the order the host does them, because either alone
+       * fails silently: `start` without a secret is a 401 in the status line, and a typed
+       * secret without `start` is a page that keeps waiting.
+       *
+       * It names *where* the secret is typed since the field moved behind the QR: an
+       * instruction pointing at a box that is not on screen is worse than none, and this line
+       * is the one thing a host who has just opened the page is looking at.
+       */
+      const NO_SESSION_PROMPT =
+        "Kliknij kod QR u góry, wpisz sekret hosta, a potem kliknij „start”, żeby rozpocząć rozgrywkę.";
+
+      /**
        * WHICH FLOW VERB IS OFFERED IN WHICH PHASE, AND WHICH ONE IS THE NEXT STEP.
        *
        * S-07 wrote the principle on the standings button alone: *disabled everywhere else
@@ -1389,16 +1803,39 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * state, and `syncEndButton` owns it — including the decision that it stays out of
        * reach in `lobby` even though the route would accept it.
        */
-      type ControlRule = {
+      type PhaseRule = {
         allow: readonly string[];
         next: string | null;
         why: Record<string, string>;
+      };
+
+      type ControlRule = PhaseRule & {
+        /**
+         * The same row, read instead once the current question is the **last** one.
+         *
+         * **A second dimension of the table rather than a condition beside a button**, for
+         * the reason the table exists at all: `advance` is a no-op past the last question
+         * (`advance.ts` returns null when `nextQuestionId` does), so the panel was ringing
+         * `dalej` as the next step and answering the tap with "nic do zrobienia". The phase
+         * alone cannot see that — `question-revealed` on question 3 and on question 14 are
+         * the same phase and want opposite bars.
+         *
+         * The last question's `question-revealed` allows **nothing**: `dalej` does nothing,
+         * and the closing beat publishes the final board itself (S-10), so a separate
+         * `pokaż ranking` is a board the room is about to be shown again. The one way on is
+         * `zakończ sesję i pokaż wyniki`, which `syncEndButton` rings as the next step.
+         */
+        whenLast?: PhaseRule;
       };
 
       const ALREADY_RUNNING = "Sesja już trwa.";
       const NOT_STARTED = "Sesja nie została jeszcze rozpoczęta.";
       const ALREADY_ENDED = "Sesja została zakończona.";
       const NEEDS_REVEAL = "Ranking można pokazać dopiero po ujawnieniu odpowiedzi.";
+      const NO_MORE_QUESTIONS = "To było ostatnie pytanie — zakończ sesję.";
+      const FINAL_BOARD_ON_END = "Końcowe wyniki pokaże zakończenie sesji.";
+      const REVEAL_ALREADY_SHOWN = "Odpowiedź jest już pokazana — przejdź do następnego pytania.";
+      const STANDINGS_ALREADY_SHOWN = "Ranking jest już pokazany — przejdź do następnego pytania.";
 
       const CONTROL_RULES: Record<string, ControlRule> = {
         [NO_SESSION]: {
@@ -1419,21 +1856,53 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           allow: ["advance", "reveal"],
           next: "reveal",
           why: { start: ALREADY_RUNNING, standings: NEEDS_REVEAL },
+          // The lever is gone on the last question — there is nothing to advance *to* — but
+          // the reveal is still the step the room is waiting for.
+          whenLast: {
+            allow: ["reveal"],
+            next: "reveal",
+            why: {
+              start: ALREADY_RUNNING,
+              advance: NO_MORE_QUESTIONS,
+              standings: NEEDS_REVEAL,
+            },
+          },
         },
         "question-revealed": {
           allow: ["advance", "standings"],
           next: "advance",
-          why: {
-            start: ALREADY_RUNNING,
-            reveal: "Odpowiedź jest już pokazana — przejdź do następnego pytania.",
+          why: { start: ALREADY_RUNNING, reveal: REVEAL_ALREADY_SHOWN },
+          whenLast: {
+            allow: [],
+            next: null,
+            why: {
+              start: ALREADY_RUNNING,
+              advance: NO_MORE_QUESTIONS,
+              reveal: REVEAL_ALREADY_SHOWN,
+              standings: FINAL_BOARD_ON_END,
+            },
           },
         },
         standings: {
           allow: ["advance", "standings"],
           next: "advance",
-          why: {
-            start: ALREADY_RUNNING,
-            reveal: "Ranking jest już pokazany — przejdź do następnego pytania.",
+          why: { start: ALREADY_RUNNING, reveal: STANDINGS_ALREADY_SHOWN },
+          /**
+           * Unreachable going forward — the row above no longer offers `pokaż ranking` on
+           * the last question, so nothing can enter this phase there. Written anyway: a
+           * session that was already standing on the last question's board when this
+           * shipped still renders through this table, and the fallback row would offer it
+           * a `dalej` that does nothing.
+           */
+          whenLast: {
+            allow: [],
+            next: null,
+            why: {
+              start: ALREADY_RUNNING,
+              advance: NO_MORE_QUESTIONS,
+              reveal: STANDINGS_ALREADY_SHOWN,
+              standings: FINAL_BOARD_ON_END,
+            },
           },
         },
         ended: {
@@ -1449,6 +1918,28 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       };
 
       /**
+       * WHAT THE REVEAL VERB IS CALLED WHEN THE QUESTION HAS NO ANSWER TO SHOW.
+       *
+       * A word-cloud question is unscored by the build gate (FR-015) and carries no correct
+       * answer, so `pokaż odpowiedź` offers the host a beat that cannot happen — while the
+       * button itself is doing something real and necessary: the reveal is what closes
+       * submissions (`answer.ts` accepts only in `question-open`) and freezes the cloud on
+       * the projector for the host to talk over. So this is a naming fix, not a gate. Do
+       * **not** answer it by dropping `reveal` from the `question-open` row: that takes away
+       * the only way to close the cloud, and with it the `standings` beat that follows.
+       *
+       * **Keyed on `pollTargetFor`, not on a fresh `kind === "word-cloud"` test.** That is
+       * this file's single question-kind predicate — the same one `syncCloudPanel` asks —
+       * and it already answers exactly the two phases in which this button can be read: the
+       * cloud's own `question-open`, and the `question-revealed` it deliberately holds
+       * through. A second kind test here is the drift the panel guards against everywhere
+       * else.
+       */
+      const REVEAL_LABEL = "pokaż odpowiedź";
+      const REVEAL_LABEL_CLOSES = "zamknij pytanie";
+      const CLOUD_ALREADY_CLOSED = "Pytanie jest już zamknięte — przejdź do następnego pytania.";
+
+      /**
        * The phase rules above, applied to the buttons.
        *
        * Called from `render` AND from `fire`'s `finally`, because that block re-enables
@@ -1459,18 +1950,29 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       function syncControls(): void {
         const state = client.current();
         const phase = state === null ? NO_SESSION : state.phase;
-        const rule = CONTROL_RULES[phase] ?? CONTROL_RULES[NO_SESSION];
+        const base = CONTROL_RULES[phase] ?? CONTROL_RULES[NO_SESSION];
+        const rule = (atLastQuestion(state) ? base.whenLast : undefined) ?? base;
+        // The current question has no answer to reveal — only submissions to close.
+        const revealCloses = pollTargetFor(state)?.kind === "words";
 
         for (const button of actionButtons()) {
           const action = button.dataset.action ?? "";
           const allowed = rule.allow.includes(action);
-          const reason = rule.why[action];
+          const reason =
+            revealCloses && action === "reveal" && phase === "question-revealed"
+              ? CLOUD_ALREADY_CLOSED
+              : rule.why[action];
 
           button.disabled = !allowed;
           // The reason travels on the button itself, so a host who reaches for a dark
           // button learns why it is dark without leaving the panel.
           if (!allowed && reason !== undefined) button.title = reason;
           else button.removeAttribute("title");
+
+          // Naming only — the phase rule above is untouched by it. See `REVEAL_LABEL`.
+          if (action === "reveal") {
+            button.textContent = revealCloses ? REVEAL_LABEL_CLOSES : REVEAL_LABEL;
+          }
 
           /**
            * The highlight on the next step: exactly one filled chrome pill on the bar, and
@@ -1505,7 +2007,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       let endArmedVersion: number | null = null;
 
       /**
-       * The closing button's phase rule and its arming state, in one place.
+       * The closing button's phase rule, its placement and its arming state, in one place.
        *
        * Called from `render` AND from `fire`'s `finally`, for the reason
        * `syncControls` is: that block re-enables every button unconditionally, so
@@ -1516,6 +2018,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * `question-revealed` and `standings`. Not in `lobby` — a session nobody has played is
        * closed from the terminal, not by the one button on this page that cannot be undone;
        * not in `question-open`, which the route refuses anyway; not in `ended`.
+       *
+       * **Where it is, is a separate question from whether it works**, and this function owns
+       * both. Placement follows `atLastQuestion`; the phase rule above follows the phase; and
+       * the two are deliberately not folded together — the menu makes the verb reachable
+       * mid-quiz for the host who has to abandon a session, and it is the *route* that then
+       * refuses it in a phase `end` would not accept. A menu that bypassed the phase rule
+       * would be a second way to reach the one action with no undo.
        */
       function syncEndButton(): void {
         const state = client.current();
@@ -1534,7 +2043,50 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           endArmedVersion = null;
         }
 
-        endButton.textContent = endArmed ? "na pewno? kliknij ponownie" : "zakończ sesję";
+        const last = atLastQuestion(state);
+
+        /**
+         * **WHERE THE BUTTON IS AT ALL**, which is the other half of the phase rule above and
+         * belongs to this function for the same reason: it is one statement about one button,
+         * and a second place deciding it is how a control that cannot be undone ends up on
+         * screen in a beat nobody meant to offer it in.
+         *
+         * The menu is the home; the bar is the visit. For thirteen questions the closing verb
+         * takes opening the menu — deliberate, which is what a one-way action wants — and on
+         * the last one it comes out to the utility line ringed as the only step left. The
+         * `ended` exclusion is not tidiness: the close already happened, the bar says so in
+         * words, and a dead red pill beside that sentence is the "nothing works" row the
+         * sentence exists to replace.
+         *
+         * **Not `hidden` on a button that stays put**, because the menu has to hold it while
+         * it is away from the bar — a hidden button in one place is a button in no place.
+         * `append` is a move, so the element, its listener and the arming state above survive
+         * it untouched; the reparent is the whole of the operation.
+         */
+        const home = last && phase !== "ended" ? endSlotBar : endSlotMenu;
+        if (endButton.parentElement !== home) home.append(endButton);
+        // The menu's description goes with it, from the same statement that decided the move:
+        // the sentence explains a button, so it may not outlive the button's absence, and a
+        // second place deciding that is a second reading of `home`.
+        setHidden(endNote, home !== endSlotMenu);
+
+        /**
+         * **The ring moves here on the last question**, and it has to: the flow verbs' table
+         * offers nothing once the last answer is revealed, so without this the bar names no
+         * next step at the one beat where the host is being watched. Exactly one filled pill
+         * still, because `CONTROL_RULES`' `whenLast` row sets `next: null` in precisely the
+         * states this lights up.
+         *
+         * The same reading that placed the button, so the ring can only ever be lit on the
+         * bar: `last` is what puts it there.
+         */
+        endButton.dataset.next = String(!endButton.disabled && last);
+
+        // "…i pokaż wyniki" because that is what the tap does (S-10): the closing document
+        // carries the final board, so this verb is the winner reveal, not just a shutdown.
+        endButton.textContent = endArmed
+          ? "na pewno? kliknij ponownie"
+          : "zakończ sesję i pokaż wyniki";
       }
 
       /**
@@ -1654,7 +2206,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           resetPanels(null);
           cloudFinalReadFor = null;
           setHidden(multipleNote, true);
-          renderQuestion(questionBox, undefined, { prompt: promptClass(undefined) });
+          /**
+           * The stage says what to do, not what is about to happen.
+           *
+           * `renderQuestion`'s default placeholder — "Za chwilę pojawi się kolejne pytanie."
+           * — is worded for the gap *between* two questions, and this branch is not that: a
+           * purge, an expiry, or the first paint of a page nobody has started yet. Nothing
+           * arrives on its own here, so the promise reads as a page that is loading and
+           * leaves the host waiting instead of acting. The action is the one the panel below
+           * already offers — the secret field, then `start`, the only verb `syncControls`
+           * leaves live in this branch.
+           */
+          renderQuestion(questionBox, undefined, {
+            prompt: promptClass(undefined),
+            missingText: NO_SESSION_PROMPT,
+          });
           // After the three hides above, which is what it reads: this branch shows `brak
           // sesji` on the stage and has no figure for the rail, so the rail goes with them.
           syncRail();
@@ -1888,10 +2454,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * recursion that blanked an expired question, and persisting a device's own pick so a
        * reload does not lose it.
        *
-       * The bubble is deliberately **persistent** — it stays until the next thing is said
-       * (decided with the user; plan §7 open question 2). Nothing here expires, so a host who
-       * looked away still finds the last outcome on screen, and `pending` is always overwritten
-       * by the outcome that follows it.
+       * **The bubble used to be persistent and is now a toast** — it stays until its own clock
+       * runs out or the next thing is said, whichever comes first. That reverses step 5's
+       * decision (plan §7 open question 2), and the reversal was taken with the user for a
+       * reason the plan could not see from a mockup: on a projector, "start: OK" is not an
+       * outcome the host reads once, it is a line the whole room stares at until the next
+       * action, whenever that is.
+       *
+       * **All four registers expire, `refused` included**, which is the part worth stating out
+       * loud because it is the one that loses something. A host who looked away no longer finds
+       * the refusal waiting; the recovery is to repeat the action, which is what a refusal asks
+       * for anyway. The two registers that are *about* an unfinished thing get roughly twice as
+       * long, and neither of them is the only sign that thing is unfinished: `pending` disables
+       * every button while it is true, and `attention`'s one arming use re-labels the closing
+       * button itself ("na pewno? kliknij ponownie") for as long as it stays armed. So the
+       * durations below are the toast's own patience, never the state's.
        */
       type Register = "ok" | "pending" | "attention" | "refused";
 
@@ -1899,17 +2476,51 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * The colours are whole class names, spelled out.
        *
        * Tailwind finds classes by scanning source text, so it sees these four literals and
-       * emits them — but it would see nothing in a `bg-quiz-${register}` built at runtime, and
-       * the marker would come out transparent in production while working in dev. Never
-       * assemble a class name from parts here.
+       * emits them — but it would see nothing in a `border-l-quiz-${register}` built at
+       * runtime, and the edge would come out in the default grey in production while working
+       * in dev. Never assemble a class name from parts here.
+       *
+       * **Swapped through `classList`, never by rewriting `className`.** The colour now lives
+       * on the bubble itself rather than on a marker element of its own, and the bubble carries
+       * its whole layout in the markup above — so a full rewrite would mean keeping a copy of
+       * that layout here, in step with the template, forever. Removing all four and adding one
+       * is the version with nothing to drift.
        */
-      const MARKER_BASE = "w-[10px] shrink-0 rounded-full";
-      const MARKER_COLOURS: Record<Register, string> = {
-        ok: "bg-quiz-mint",
-        pending: "bg-quiz-pill-border",
-        attention: "bg-quiz-chrome",
-        refused: "bg-quiz-signal",
+      const EDGE_COLOURS: Record<Register, string> = {
+        ok: "border-l-quiz-mint",
+        pending: "border-l-quiz-pill-border",
+        attention: "border-l-quiz-chrome",
+        refused: "border-l-quiz-signal",
       };
+
+      /**
+       * How long each register stays up. Read only by `say`.
+       *
+       * `pending` and `attention` are the two that are about something unfinished, so they get
+       * the longer window — see the note on `Register` for why outliving them is nonetheless
+       * safe. `refused` sits with `ok` at the short end rather than living forever, which is
+       * the behaviour change this table carries.
+       */
+      const MESSAGE_HIDE_MS: Record<Register, number> = {
+        ok: 4_000,
+        pending: 9_000,
+        attention: 9_000,
+        refused: 6_000,
+      };
+
+      /**
+       * The toast's clock. Its state machine is `src/lib/client/toast.ts`, unit-tested with
+       * fake timers — inline it would be a second timer handle and a second `clearTimeout` on
+       * a page whose guards pin both to the poll, and untestable besides.
+       *
+       * It is **not** a second poll loop and cannot become one: it fetches nothing, so it
+       * spends no commands and cannot appear in the runbook's tripwire. Same standing as the
+       * countdown, and `host.test.ts` classifies timers by what their callback can reach.
+       */
+      const messageHide = createAutoHide({
+        defaultMs: MESSAGE_HIDE_MS.ok,
+        onHide: () => setHidden(messageBubble, true),
+      });
 
       function say(text: string, register: Register): void {
         /**
@@ -1918,17 +2529,27 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * — so writing into the hidden bubble announced nothing, and revealing a bubble that
          * already held its sentence did not reliably announce either.
          *
-         * Then hidden again when there is nothing to say: an empty bubble would hold the
-         * stage's height open for a sentence that is not there.
+         * Then hidden again when there is nothing to say: an empty bubble would hold a lit
+         * rectangle over the stage for a sentence that is not there.
          */
         setHidden(messageBubble, false);
         setText("message", text);
         setHidden(messageBubble, text.length === 0);
 
-        // The marker carries the register; the copy stays `signwhite` in every one of them.
+        /**
+         * Armed after the paint, and re-armed on every call — so a burst (`pending` then its
+         * outcome) leaves one clock, belonging to the last thing said. An empty `say` has
+         * already hidden the bubble, so it cancels rather than arming a hide for something
+         * that is not on screen.
+         */
+        if (text.length === 0) messageHide.cancel();
+        else messageHide.show(MESSAGE_HIDE_MS[register]);
+
+        // The left edge carries the register; the copy stays `signwhite` in every one of them.
         // Four sentence colours would make the words themselves the signal, and a refusal set
         // in red reads as an error in the *page* rather than an answer from the route.
-        messageMarker.className = `${MARKER_BASE} ${MARKER_COLOURS[register]}`;
+        messageBubble.classList.remove(...Object.values(EDGE_COLOURS));
+        messageBubble.classList.add(EDGE_COLOURS[register]);
       }
 
       function stopPolling(): void {
@@ -1944,10 +2565,28 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         // while the command spend doubled, then quadrupled.
         if (pollTimer !== null || polling) return;
         if (document.visibilityState === "hidden") return;
+
+        /**
+         * **The lobby ticks on a floor, not on its own interval.**
+         *
+         * `pollDelay` stays the loop's single delay — `host.test.ts` pins that, and for the
+         * reason it states: a second delay variable is a second backoff, which is most of what
+         * a second loop is. So the target raises the floor instead of replacing the schedule,
+         * and `Math.max` keeps the backoff on top of it: a lobby whose ticks are failing still
+         * doubles away from 10 s toward the same 20 s ceiling rather than being pinned there.
+         *
+         * 10 s because the lobby's figure is a number the host glances at while the room fills,
+         * not one the room is watching change — the participation count during a question is
+         * the opposite, and keeps the 2.5 s. It also cuts a ten-minute lobby from ~480 commands
+         * to ~120.
+         */
+        const floor =
+          pollTargetFor(client.current())?.kind === "lobby" ? LOBBY_POLL_MS : POLL_BASE_MS;
+
         pollTimer = window.setTimeout(() => {
           pollTimer = null;
           void runPoll();
-        }, pollDelay);
+        }, Math.max(pollDelay, floor));
       }
 
       /**
@@ -2022,9 +2661,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        */
       function pollFailed(kind: PollTarget["kind"]): void {
         // Only the panel that asked is marked stale. Marking both would put "(nieaktualne)"
-        // beside a count nobody is polling.
+        // beside a count nobody is polling — and the lobby target has no panel at all, so
+        // `else` was the wrong shape the moment a third kind existed: a failed lobby tick
+        // would have written "(nieaktualne)" beside a participation count for a question
+        // that is not even open. The lobby's own figure keeps its last value and backs off;
+        // the host still has `odśwież`, and the connection line says when the page is unwell.
         if (kind === "words") cloudStale = true;
-        else answeredStale = true;
+        else if (kind === "participation") answeredStale = true;
 
         pollDelay = Math.min(pollDelay * 2, POLL_MAX_MS);
         render();
@@ -2072,11 +2715,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            * secret is finally typed. So: report it as what it is, leave the interval
            * alone, and let the `input` handler on the secret field retry immediately.
            */
+          // The lobby target cannot arrive here: `/api/quiz/state` is deliberately open, so
+          // it has no 401 to give. The two host endpoints are what this branch is about.
           if (response.status === 401) {
+            /**
+             * It names the QR because the field is behind it now — but this branch
+             * deliberately does **not** call `openHostMenu`, which the action path's 401
+             * does. This one fires from a loop: a modal reopening every ~2.5 s over the
+             * projector for the whole of a question is a worse failure than the one it
+             * would be fixing, and the host is told exactly where to go.
+             */
             say(
               target.kind === "words"
-                ? "Wpisz sekret hosta, żeby zobaczyć chmurę słów."
-                : "Wpisz sekret hosta, żeby zobaczyć liczbę odpowiedzi.",
+                ? "Kliknij kod QR i wpisz sekret hosta, żeby zobaczyć chmurę słów."
+                : "Kliknij kod QR i wpisz sekret hosta, żeby zobaczyć liczbę odpowiedzi.",
               "refused"
             );
 
@@ -2123,13 +2775,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            * words somebody wrote about another question — would look entirely plausible under
            * the new prompt, which is what makes it worth a guard.
            */
-          if (payload.questionId !== client.current()?.currentQuestionId) {
+          if (
+            target.kind !== "lobby" &&
+            payload.questionId !== client.current()?.currentQuestionId
+          ) {
             return;
           }
 
           if (typeof payload.playerCount === "number") liveCount = payload.playerCount;
 
-          if (target.kind === "words") {
+          if (target.kind === "lobby") {
+            // The count above is the whole of it. Deliberately no `answered`/`cloud` write
+            // and no staleness clear: this target feeds neither panel, and touching their
+            // state here is how a lobby tick would come to speak for a question.
+          } else if (target.kind === "words") {
             // Absent rather than empty is the "could not say" case, and it must not blank the
             // cloud — `readWordCloud` returns `null` for it and the route turns that into a
             // 503, which took the `!response.ok` path above. Reaching here with no array at
@@ -2233,8 +2892,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
           if (response.status === 401) {
             say(payload.error ?? "Brak uprawnień hosta.", "refused");
-            secretField.focus();
-            secretField.select();
+            // The field is behind the menu now, so focusing it means opening that first —
+            // `openHostMenu` does both, and this branch is the reason it does.
+            openHostMenu();
             return;
           }
 
@@ -2350,6 +3010,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       window.addEventListener("pagehide", () => {
         stopPolling();
         stopCountdown();
+        /**
+         * And the toast goes with them, through `say` like every other write to it. A
+         * back-forward-cache restore does not re-run this script, so without this the page
+         * comes back holding an outcome from before it went away — with its own clock either
+         * already spent or throttled, which is the "still on screen long after it meant
+         * anything" failure this toast exists to end.
+         */
+        say("", "ok");
       });
       /**
        * The other half of `pagehide`. A back-forward-cache restore does not re-run this
@@ -2373,6 +3041,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         void runPoll();
       });
       setText("secret-note", secretField.value.length > 0 ? "zapamiętany w tej karcie" : "");
+
+      el("host-menu-open").addEventListener("click", () => openHostMenu());
+      el("host-menu-close").addEventListener("click", () => hostMenu.close());
+      // A tab that has nothing stored cannot do anything until the secret is typed, and the
+      // only hint the room's screen carries is a QR that says nothing about being a button.
+      // So the first paint of an unauthorised tab opens the menu itself; a reload mid-segment
+      // has the secret in `sessionStorage` and is left alone.
+      if (secretField.value.length === 0) openHostMenu();
 
       render();
       void client.start();
