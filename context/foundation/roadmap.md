@@ -3,7 +3,7 @@ project: "LiveQuiz"
 version: 3
 status: draft
 created: 2026-08-05
-updated: 2026-08-14
+updated: 2026-08-15
 prd_version: 1
 main_goal: quality
 top_blocker: decisions
@@ -685,6 +685,11 @@ and do NOT re-scaffold them.
 
 (Empty on first generation. `/10x-archive` appends here — and flips that item's `Status` to `done` —
 when a change whose `Change ID` matches a roadmap item is archived.)
+
+- **S-11: Attendee sees how long is left and cannot answer after the time runs out** — Archived
+  2026-08-14 → `context/archive/2026-08-14-per-question-timer/`. Lesson: two structural guards
+  written in the slice certified the two defects they were meant to prevent; a source scan cannot
+  verify a state machine. Ten manual rows archived unchecked — the live pass was never run.
 
 - **S-08: Attendee can submit a single word to an unscored word-cloud question and watch the aggregate
   visibly fill on the large screen as the room answers.** — Archived 2026-08-14 →

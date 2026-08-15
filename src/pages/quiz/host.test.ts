@@ -132,30 +132,30 @@ describe("there is exactly one poll loop", () => {
    * someone declares `let cloudTimer` beside it. Verified by adding exactly that and watching
    * the test pass. Counting *any* timer-ish declaration is what the assertion always meant.
    *
-   * S-11 raised the handle count from one to two — the poll's and the countdown's — and the
-   * number is pinned rather than dropped: a *third* is a change nobody has reasoned about.
-   * Both are named, so "two" cannot be satisfied by any two timers. `polling` and the delay
-   * stay at one each, because they belong to the fetching loop alone.
+   * S-11 raised the handle count to two while the countdown was inline, then an
+   * implementation review sent that state machine to `countdown.ts` — so the number is back
+   * to one, and the name is pinned so "one" cannot be satisfied by some other timer.
+   * `polling` and the delay stay at one each, because they belong to the fetching loop alone.
    */
-  it("holds exactly two timer handles, one in-flight flag and one delay", () => {
-    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(2);
+  it("holds exactly one timer handle, one in-flight flag and one delay", () => {
+    // S-11 briefly made this two, when the countdown was inline. Extracting that state
+    // machine into `countdown.ts` — after a review found it outliving a purged session —
+    // returned this page to one timer, which is the number the property always wanted.
+    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(1);
     expect(CODE).toContain("let pollTimer");
-    expect(CODE).toContain("let countdownTimer");
 
     expect(CODE.match(/\blet\s+polling\b/g) ?? []).toHaveLength(1);
     expect(CODE.match(/\blet\s+\w*[Dd]elay\b/g) ?? []).toHaveLength(1);
   });
 
-  it("clears each timer inside its own stop function, once", () => {
-    // One `clearTimeout` per timer, each in the function that owns it — so neither can be
-    // cancelled from a branch with no business doing it.
-    expect(occurrences("clearTimeout")).toBe(2);
+  it("clears the polled timer from exactly one place", () => {
+    // One `clearTimeout` in the file, inside the function that owns the poll — so the loop
+    // cannot be cancelled from a branch with no business doing it. The countdown's own
+    // cancellation lives in `countdown.ts` and is tested there.
+    expect(occurrences("clearTimeout")).toBe(1);
 
     const stopPolling = /function stopPolling\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
-    const stopCountdown = /function stopCountdown\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
-
     expect(stopPolling.split("clearTimeout").length - 1).toBe(1);
-    expect(stopCountdown.split("clearTimeout").length - 1).toBe(1);
   });
 
   /**
@@ -195,19 +195,39 @@ describe("there is exactly one poll loop", () => {
  * own it would keep looking live while doing it.
  */
 describe("the countdown cannot outlive its question", () => {
-  it("clears before its renderer can return early", () => {
+  /**
+   * **This assertion used to scope itself to `renderCountdownPanel`'s body, and that is
+   * exactly how it missed a live bug.**
+   *
+   * The panel renderer cleared at its own top, which looked correct in isolation — but it
+   * is called near the *end* of `render`, and the `state === null` branch returns long
+   * before reaching it. A purge or a TTL expiry therefore left the clock ticking over the
+   * "brak sesji" screen, and the renderer's own null handling was dead code. The guard
+   * passed throughout, because it never looked at the call site.
+   *
+   * So it now asserts the property where the property lives: the clear happens at the top
+   * of `render`, ahead of every branch, so no early return can skip it.
+   */
+  it("clears at the top of render, ahead of every branch", () => {
+    const renderAt = CODE.indexOf("function render(): void");
+    expect(renderAt).toBeGreaterThan(-1);
+
+    const clearAt = CODE.indexOf("stopCountdown();", renderAt);
+    const firstBranch = CODE.indexOf("if (state === null)", renderAt);
+
+    expect(clearAt).toBeGreaterThan(renderAt);
+    expect(firstBranch).toBeGreaterThan(-1);
+    expect(clearAt).toBeLessThan(firstBranch);
+  });
+
+  it("arms from the panel renderer without clearing there, so the two cannot drift", () => {
     const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     // Non-vacuity: the body must have been found.
     expect(panel).toContain("state.phase");
-
-    const clearAt = panel.indexOf("stopCountdown();");
-    const firstReturn = panel.indexOf("return;");
-
-    expect(clearAt).toBeGreaterThan(-1);
-    expect(firstReturn).toBeGreaterThan(-1);
-    // Ahead of every early return, so no branch can leave the previous question's clock up.
-    expect(clearAt).toBeLessThan(firstReturn);
+    // Arm-only. A clear here would re-create the split that hid the bug above.
+    expect(panel).not.toContain("stopCountdown()");
+    expect(panel).toContain("countdown.start(");
   });
 
   it("stops wherever the poll stops", () => {
@@ -243,7 +263,7 @@ describe("the countdown cannot outlive its question", () => {
     // this page happened to paint would disagree with all 150 of them.
     const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
-    expect(panel).toContain("state.updatedAt + limitMs");
+    expect(panel).toContain("countdown.start(state.updatedAt");
   });
 });
 

@@ -921,11 +921,17 @@ describe("renderCountdown", () => {
     expect(width()).toBe("0%");
   });
 
-  it("clamps a remainder larger than the budget", () => {
-    // Reachable from a device whose clock is behind the server's.
+  /**
+   * A remainder larger than the whole budget is impossible on a correct clock, so it means
+   * the device is running behind the server. Before impl review F6 the bar clamped and the
+   * text did not, so this rendered "40 s" beside a full bar — two readings of one number,
+   * disagreeing, on the screen an attendee is using to decide whether to hurry.
+   */
+  it("clamps a remainder larger than the budget, in the text as well as the bar", () => {
     renderCountdown(node, 40_000, 25_000);
 
     expect(width()).toBe("100%");
+    expect(label()).toBe("25 s");
   });
 
   it.each([

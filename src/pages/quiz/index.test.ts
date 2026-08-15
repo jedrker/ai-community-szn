@@ -42,10 +42,10 @@ describe("the scan can see the code it is checking", () => {
    * assertion below green by vacuity — the failure `keys.test.ts` guards with its own
    * non-empty-registry check, and the one S-08 shipped four times in a single change.
    */
-  it("still has the countdown's code left after comments are stripped", () => {
+  it("still has the countdown's wiring left after comments are stripped", () => {
+    expect(CODE).toContain("createCountdown({");
     expect(CODE).toContain("function stopCountdown");
     expect(CODE).toContain("function startCountdown");
-    expect(CODE).toContain("function paintCountdown");
   });
 
   it("still has the state machine's code left after comments are stripped", () => {
@@ -55,39 +55,31 @@ describe("the scan can see the code it is checking", () => {
 });
 
 /**
- * THE ONE-TIMER PROPERTY, on the phone.
+ * THE PAGE OWNS NO TIMER.
  *
- * The host page's version of this exists because a tick armed from `render` while a fetch was
- * open held several requests at once. The phone's timer fetches nothing, so the stake is
- * different and narrower: a clock left running for a question that has left the screen keeps
- * repainting a stale remainder, and — because reaching zero calls `render()` — an orphaned one
- * can take the controls away from the *next* question.
- *
- * Matched by shape rather than by name, which is the correction `lessons.md` records against
- * the first version of the host page's guard: it asserted `let pollTimer` appeared once, and
- * that stayed true the moment someone declared `let cloudTimer` beside it.
+ * **This block used to count `setTimeout` and timer handles in this file. It counts zero of
+ * them now, and that is a stronger property than the one it replaced.** The countdown's
+ * state machine moved to `src/lib/client/countdown.ts` after an implementation review found
+ * a recursion in the inline version — a defect a source scan could not see, because a scan
+ * cannot execute a timer. `countdown.test.ts` drives arm / tick / crossing / stop with fake
+ * timers; what is left here is wiring, and the assertion worth making about wiring is that
+ * it stays wiring.
  */
-describe("there is exactly one countdown timer", () => {
-  it("arms a timer from exactly one place", () => {
-    expect(occurrences("setTimeout")).toBe(1);
+describe("the page owns no timer of its own", () => {
+  it("arms nothing directly", () => {
+    // A `setTimeout` reappearing here is the countdown crawling back into the page, where
+    // nothing can execute it.
+    expect(occurrences("setTimeout")).toBe(0);
+    expect(occurrences("clearTimeout")).toBe(0);
+    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(0);
   });
 
-  it("holds exactly one timer handle", () => {
-    // A second of these is the shape a second clock takes.
-    expect(CODE.match(/\blet\s+\w*[Tt]imer\b/g) ?? []).toHaveLength(1);
-  });
-
-  it("clears the timer from exactly one place", () => {
-    expect(occurrences("clearTimeout")).toBe(1);
-  });
-
-  /**
-   * **No `setInterval`.** Both of this project's other timers are self-re-arming `setTimeout`
-   * chains, and the countdown is a third — an interval cannot be re-aimed at the next whole
-   * second, and it keeps firing after the thing it was painting is gone.
-   */
-  it("uses no interval", () => {
+  it("uses no interval either", () => {
     expect(CODE).not.toContain("setInterval");
+  });
+
+  it("holds exactly one countdown, built once", () => {
+    expect(occurrences("createCountdown(")).toBe(1);
   });
 });
 
@@ -100,8 +92,18 @@ describe("there is exactly one countdown timer", () => {
  * new branch has to remember, which is precisely how a timer outlives its beat.
  */
 describe("the countdown cannot outlive its question", () => {
-  it("clears from exactly one call site", () => {
-    expect(occurrences("stopCountdown()")).toBe(2); // the definition plus its one call
+  it("stops wherever the page stops, as the host view does", () => {
+    // Counting call sites was the previous form of this test, and it failed the moment the
+    // lifecycle handlers arrived — measuring an occurrence count rather than the property.
+    // What matters is the two exits: a hidden tab and a page going away.
+    const visibility = CODE.slice(
+      CODE.indexOf('addEventListener("visibilitychange"'),
+      CODE.indexOf('addEventListener("pagehide"')
+    );
+    expect(visibility).toContain("stopCountdown()");
+
+    const pagehide = CODE.slice(CODE.indexOf('addEventListener("pagehide"'));
+    expect(pagehide.slice(0, 200)).toContain("stopCountdown");
   });
 
   it("clears before the state machine branches", () => {
@@ -150,9 +152,44 @@ describe("an expired answer is never recorded as submitted", () => {
     expect(occurrences("markSubmitted(config.seenStorageKey")).toBe(2);
   });
 
-  it("does not lock a timed-out device out of the next question", () => {
-    // `timeUp` is derived on every render and reset by `stopCountdown`. A version that
-    // persisted it would carry one question's expiry into the next.
-    expect(CODE).toContain("timeUp = false");
+  /**
+   * THE RECURSION GUARD, and it has now been rewritten twice for the same reason.
+   *
+   * Version one read `expect(CODE).toContain("timeUp = false")` — the exact statement that
+   * caused the defect — while claiming to protect against a device being locked out of the
+   * next question. It certified the crash. Version two asserted that the paint path never
+   * called `render`, which was true and useful, but still described code shape.
+   *
+   * The property is now enforced by construction and tested for real: `countdown.start`
+   * *returns* whether the window is closed and never invokes `onExpire`, so the caller —
+   * running inside a render — cannot be re-entered. `countdown.test.ts` proves it by
+   * executing it, including a callback that hostilely re-enters `start`. What remains worth
+   * asserting here is the page's half of that contract: `onExpire` is the single way back
+   * into `render`, and the closed state arrives as a value.
+   */
+  it("re-enters render from onExpire alone", () => {
+    const wiring = /createCountdown\(\{[\s\S]*?\n {6}\}\);/.exec(CODE)?.[0] ?? "";
+
+    // Non-vacuity: the wiring must have been found.
+    expect(wiring).toContain("onPaint");
+    expect(wiring).toContain("onExpire");
+    // The paint callback must not re-enter the state machine; only the expiry may.
+    const onPaintLine = wiring.slice(wiring.indexOf("onPaint"), wiring.indexOf("onExpire"));
+    expect(onPaintLine).not.toContain("render()");
+  });
+
+  it("keeps startCountdown free of any path back into render", () => {
+    const start = /function startCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(start).toContain("countdown.start(");
+    expect(start).not.toContain("render()");
+  });
+
+  it("answers the closed state by return value, not by a shared flag", () => {
+    // A module-level flag is what the first version used, and `stopCountdown` — the first
+    // statement of `render` — reset it out from under the caller about to read it. A
+    // returned value cannot be stale and cannot be cleared by anyone else.
+    expect(CODE).not.toMatch(/\blet\s+timeUp\b/);
+    expect(CODE).toContain("const timeUp = startCountdown(");
   });
 });

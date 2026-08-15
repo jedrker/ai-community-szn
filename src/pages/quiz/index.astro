@@ -230,7 +230,7 @@ import { publicQuiz } from "../../quiz/public";
              above wins — under the options the clock was the last thing read before the tap,
              which is the wrong end. It is context for the decision, not part of it.
 
-             `data-urgent` is written by `paintCountdown` and read by both the number and the
+             `data-urgent` is written by the countdown's `onPaint` and read by both the number and the
              bar, so the two cannot disagree about whether the last five seconds have started —
              `renderCountdown`'s contract, applied to colour.
 
@@ -483,6 +483,7 @@ import { publicQuiz } from "../../quiz/public";
         type AnswerPayload,
         type OwnResult,
       } from "../../lib/client/answer";
+      import { createCountdown } from "../../lib/client/countdown";
       import {
         el,
         renderCountdown,
@@ -1124,119 +1125,62 @@ import { publicQuiz } from "../../quiz/public";
       /**
        * The countdown (roadmap S-11, FR-020).
        *
-       * **One timer, cleared from exactly one place.** `stopCountdown` runs at the top of
-       * every `render()`, so no branch — reveal, standings, lobby, `ended`, a lost
-       * connection — can leave a clock ticking for a question that is no longer on screen.
-       * Only the `question-open` path arms it again. A timer that outlives its beat is the
-       * failure both of this project's other loops are built to avoid.
+       * **The state machine lives in `countdown.ts`, not here, and that is the fix for a
+       * defect rather than tidiness.** The first version was inline, and an inline
+       * `<script>` has no harness — so a recursion between the clock and this renderer
+       * shipped behind a green suite and a passing source scan. The module is unit-tested
+       * with fake timers; what stays here is only the wiring.
        *
-       * **Every tick recomputes from `Date.now()` rather than decrementing.** That is what
-       * makes a backgrounded tab correct on return: browsers throttle timers in a hidden
-       * tab, so a counter that subtracted a second per tick would come back minutes fast.
-       * It also means no visibility listener is needed here.
+       * **`stop()` runs at the top of every `render()`**, so no branch — reveal, standings,
+       * lobby, `ended`, a lost connection — can leave a clock ticking for a question that
+       * has left the screen. Only the `question-open` path starts one again.
        *
-       * **The tick repaints the countdown only.** It deliberately does not call `render()`
-       * every second: `renderQuestion` calls `replaceChildren()`, so a full re-render
-       * would rebuild the option buttons under an attendee's thumb once a second. The one
-       * full `render()` happens when the clock reaches zero, which is when the controls
-       * actually have to change.
+       * **`onExpire` is the only path back into `render`.** `start` reports an
+       * already-closed window by return value instead, because it runs *inside* a render
+       * and re-entering from there is precisely what crashed.
        */
-      let countdownTimer: number | null = null;
-      /**
-       * Whether the open question's window has closed, derived on every render and never
-       * stored. A stale `true` would lock a phone out of the *next* question.
-       */
-      let timeUp = false;
-      /** What the running timer is counting, so the tick needs no lookup. */
-      let countdownFor: { id: string; deadline: number; limitMs: number } | null = null;
+      const countdown = createCountdown({
+        onPaint: (remainingMs, limitMs) => {
+          renderCountdown(countdownBox, remainingMs, limitMs);
+          /**
+           * The last five seconds, in `signal`.
+           *
+           * On the container rather than on the two elements, so the number and the bar
+           * cannot disagree about whether the hurry has started — the same reason
+           * `renderCountdown` paints text and geometry in one call, and the reason this line
+           * lives beside it rather than anywhere else. Nothing else changes: no size, no
+           * motion, no sound. It is a colour, because an attendee is reading a phone in a
+           * dark room and a moving clock is already saying the rest.
+           */
+          countdownBox.dataset.urgent = String(remainingMs <= URGENT_MS);
+        },
+        // Reaching zero changes what is on screen — the controls come off — so it goes
+        // through the ordinary state machine rather than editing the DOM from here.
+        onExpire: () => render(),
+      });
 
       /** Where the clock turns `signal`. Five seconds, matching the plan's phone spec. */
       const URGENT_MS = 5_000;
 
       function stopCountdown(): void {
-        if (countdownTimer !== null) {
-          window.clearTimeout(countdownTimer);
-          countdownTimer = null;
-        }
-        countdownFor = null;
-        timeUp = false;
+        countdown.stop();
         setHidden(countdownBox, true);
       }
 
       /**
-       * Paints the clock for the open question and arms the next tick.
+       * Shows the clock for the open question and answers whether its window has already
+       * closed.
        *
        * `openedAt` is the snapshot's `updatedAt` — the moment the host opened this
-       * question, which is the same value the server measures the window from. That is
-       * what keeps this phone, every other phone and the projector on one clock: nothing
-       * here is derived from when *this* device happened to paint.
-       *
-       * A question with no limit (the two unscored ones) gets no clock at all.
+       * question, and the same value the server measures the window from. That is what
+       * keeps this phone, every other phone and the projector on one clock: nothing here is
+       * derived from when *this* device happened to paint.
        */
-      function startCountdown(question: PublicQuestion, openedAt: number): void {
-        if (question.timeLimitSeconds === undefined) return;
-
-        const limitMs = question.timeLimitSeconds * 1_000;
-        const deadline = openedAt + limitMs;
-        countdownFor = { id: question.id, deadline, limitMs };
+      function startCountdown(question: PublicQuestion, openedAt: number): boolean {
+        if (question.timeLimitSeconds === undefined) return false;
 
         setHidden(countdownBox, false);
-        // `false`: a render is already in progress and the branch that handles an expired
-        // window is three lines below the call that got here. See `paintCountdown`.
-        paintCountdown(false);
-      }
-
-      /**
-       * @param fromTick Whether this paint came from the timer rather than from `render`.
-       *
-       * **The parameter exists to stop an infinite recursion, and the bug it fixes is a crash
-       * on the one screen S-11 added** (found while restyling it). `render` clears the clock
-       * through `stopCountdown`, which sets `timeUp = false` — so the `!timeUp` guard below
-       * was reset by the very render that was about to re-arm the clock:
-       *
-       *   render → stopCountdown (timeUp = false) → startCountdown → paint → remaining ≤ 0
-       *          → timeUp = true → render → …
-       *
-       * until the stack blew. `RangeError` unwound `render` half-done, leaving a phone whose
-       * question had expired with an *empty screen* — no prompt, no options, no "Czas minął".
-       * Every device that let a question run out sat looking at nothing until the host moved.
-       *
-       * A paint from `render` therefore only records the fact: `renderOpen` calls
-       * `startCountdown` immediately before it branches on `timeUp`, so the expired screen is
-       * painted in that same pass and no re-entry is needed. Only a paint from the timer —
-       * the real zero-crossing, with no render running — asks for one.
-       */
-      function paintCountdown(fromTick = true): void {
-        if (countdownFor === null) return;
-
-        const remaining = countdownFor.deadline - Date.now();
-        renderCountdown(countdownBox, remaining, countdownFor.limitMs);
-
-        /**
-         * The last five seconds, in `signal`.
-         *
-         * On the container rather than on the two elements, so the number and the bar cannot
-         * disagree about whether the hurry has started — the same reason `renderCountdown`
-         * paints text and geometry in one call. Nothing else changes: no size, no motion, no
-         * sound. It is a colour, because an attendee is reading a phone in a dark room and a
-         * moving clock is already saying the rest.
-         */
-        countdownBox.dataset.urgent = String(remaining <= URGENT_MS);
-
-        if (remaining <= 0) {
-          // Reached zero: take the controls away, once, through the normal state machine.
-          timeUp = true;
-          if (fromTick) render();
-          return;
-        }
-
-        // Land on the next whole second rather than a fixed 1000ms, so the digits change
-        // when the number changes instead of drifting a few hundred ms per tick.
-        const untilNextSecond = remaining % 1_000 || 1_000;
-        countdownTimer = window.setTimeout(() => {
-          countdownTimer = null;
-          paintCountdown();
-        }, untilNextSecond);
+        return countdown.start(openedAt, question.timeLimitSeconds);
       }
 
       /** Every answering control off, in one call, so no branch can leave one behind. */
@@ -1293,7 +1237,7 @@ import { publicQuiz } from "../../quiz/public";
          * The clock starts before the kind dispatch, because the rule is the same for all
          * of them and because `timeUp` below has to be decided once.
          */
-        startCountdown(question, openedAt);
+        const timeUp = startCountdown(question, openedAt);
 
         /**
          * **Out of time, and this device never answered.**
@@ -2294,6 +2238,24 @@ import { publicQuiz } from "../../quiz/public";
         event.preventDefault();
         void claim();
       });
+
+      /**
+       * The clock stops when nobody can see it, and when the page goes away.
+       *
+       * It spends no commands, so this is hygiene rather than budget — the same handlers the
+       * host page carries, added here so the two views do not differ for no reason (impl
+       * review F10). `render` re-arms from the wall clock on the way back, and because every
+       * tick recomputes rather than decrementing, a tab that was hidden for a minute returns
+       * showing the truth rather than a minute of catching up.
+       *
+       * `session.ts` registers its own lifecycle listeners for the connection fallback; these
+       * are separate and neither knows about the other.
+       */
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") stopCountdown();
+        else render();
+      });
+      window.addEventListener("pagehide", stopCountdown);
 
       const stored = readPlayer(config.storageKey);
       if (stored) {

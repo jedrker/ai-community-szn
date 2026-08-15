@@ -753,8 +753,23 @@ describe("the time limit closes the submission window", () => {
   });
 
   it("reads each question's own limit rather than one shared number", async () => {
-    // 30s after opening: past the 25s tap budget, inside the 40s typing one.
-    const at = NOW - 30_000;
+    /**
+     * **Derived from the two fixtures, and midway between them on purpose.**
+     *
+     * This probed a hard-coded `NOW - 30_000` with a comment claiming "past the 25s tap
+     * budget, inside the 40s typing one" — but the typed budget is 30, so the typed
+     * question's zero sat *exactly* on the probe and the case passed on the grace window
+     * rather than on the limit difference it names. It demonstrated nothing, and a one-line
+     * change to either budget would have flipped it (impl review F8).
+     *
+     * Midway is the only point guaranteed to be past one limit and inside the other for any
+     * pair, so this stays honest when a budget is re-timed.
+     */
+    const shortLimitMs = single.timeLimitSeconds! * 1_000;
+    const longLimitMs = text.timeLimitSeconds! * 1_000;
+    expect(longLimitMs).toBeGreaterThan(shortLimitMs);
+
+    const at = NOW - (shortLimitMs + longLimitMs) / 2;
 
     readSessionMock.mockResolvedValue(openOn(single.id, at));
     expect((await submit(single.id, ["large-language-model"])).status).toBe(409);
