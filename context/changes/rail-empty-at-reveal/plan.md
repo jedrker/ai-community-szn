@@ -328,8 +328,8 @@ None — no persisted state, no schema, no key. A revert is a revert.
 
 #### Automated
 
-- [x] 2.1 Test suite still passes: `bun run test`
-- [x] 2.2 Type check reports 0 errors: `bun run type-check`
+- [x] 2.1 Test suite still passes: `bun run test` — bcea32b
+- [x] 2.2 Type check reports 0 errors: `bun run type-check` — bcea32b
 
 #### Manual
 
