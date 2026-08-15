@@ -502,6 +502,41 @@ describe("flow verbs are offered only where they apply", () => {
 });
 
 /**
+ * The rail's visibility.
+ *
+ * The rail is on screen exactly when one of its three blocks is, and the rule is derived from
+ * those blocks rather than written as a phase list — because the word-cloud reveal keeps its
+ * counters while every other reveal has nothing, so a phase would answer the wrong question.
+ *
+ * Same honesty as the header: neither assertion below proves the rail actually disappears.
+ * That is what the plan's manual rows are for. What these protect are the two structural
+ * properties the rule rests on, both of which are invisible in a passing session and silent
+ * when broken.
+ */
+describe("the rail follows its contents", () => {
+  /**
+   * **One writer.** `applyShell` used to hide the rail on `ended` while nothing hid it
+   * anywhere else — a region shown by one branch and hidden by another, which that function's
+   * own docstring warns against. A second `setHidden(railBox` is how it comes back.
+   */
+  it("writes the rail's visibility from exactly one place", () => {
+    expect(occurrences("setHidden(railBox")).toBe(1);
+    expect(CODE).toContain("function syncRail");
+  });
+
+  /**
+   * **Applied on both paths through `render`.** The ordinary tail and the sessionless early
+   * return, each after the panels they read have settled. Missing it in the early return
+   * leaves an empty rail beside "brak sesji" after a purge or a TTL expiry, which is one of
+   * the four states this rule exists to close.
+   */
+  it("re-applies the rule on every path that repaints the panels", () => {
+    // The trailing semicolon separates the calls from the declaration, as above.
+    expect(occurrences("syncRail();")).toBe(2);
+  });
+});
+
+/**
  * THE CLOSING BUTTON (roadmap S-10, FR-006).
  *
  * This page's docstring used to say `end` was deliberately not here, and this slice reversed

@@ -1539,9 +1539,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * writing `data-phase` from the same call — is what keeps a region from being shown by
        * one branch and hidden by another.
        *
-       * Note what this does *not* decide: whether the board is on screen. That keys on
-       * `standings !== null` in `render`, because the schema owns the rule about where a
-       * board may appear and a phase list here would be a copy able to fall behind it.
+       * Note what this does *not* decide, and there are two of them now. Whether the board is
+       * on screen keys on `standings !== null` in `render`, because the schema owns the rule
+       * about where a board may appear and a phase list here would be a copy able to fall
+       * behind it. Whether the *rail* is on screen keys on whether any of its three blocks
+       * is, in `syncRail` — same reason, and the close is covered by that rule rather than by
+       * a case here. See `syncRail` for why a phase list would be wrong.
        */
       function applyShell(phase: string): void {
         document.body.dataset.phase = phase;
@@ -1551,13 +1554,47 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
         setHidden(lobbyBox, !lobby);
         setHidden(bodySplit, lobby);
-        // The rail carries figures about a question in progress. There is none at the close,
-        // and the winner takes the width it leaves.
-        setHidden(railBox, ended);
         setHidden(topStrip, ended);
         // Every verb is refused in `ended`, so the row would say only "nothing works".
         setHidden(controlRow, ended);
         setHidden(endedNote, !ended);
+      }
+
+      /**
+       * THE RAIL IS ON SCREEN EXACTLY WHEN SOMETHING IS IN IT.
+       *
+       * Its three blocks each hide on their own rule — the answered count and the clock while
+       * a question is open, the cloud's counters while the cloud is the question — and
+       * `#rail` used to survive all of them, so an empty 440px column with a divider sat
+       * beside the stage in four states: every non-cloud reveal, the standings beat, the
+       * sessionless `brak sesji` fallback, and (handled, but as a special case) the close.
+       * The stage is `flex-1`, so removing the rail from layout is what hands the bars and
+       * the board the width they are read from the back of the room at.
+       *
+       * **Derived from the blocks, never from the phase.** The word-cloud reveal is the case
+       * that makes a phase list wrong: `pollTargetFor` still returns a words target in
+       * `question-revealed` so the host can talk over a frozen cloud, and a rule keyed on
+       * `phase === "question-revealed"` would take the rail away from the one reveal that
+       * still has something in it. Reading the sections' own `hidden` state is also what
+       * keeps this from becoming a second copy of predicates that already exist above.
+       *
+       * Takes no `state` for the same reason — a parameter is the door a phase condition
+       * walks back in through. It must run *after* the three panel renderers, which is why
+       * both call sites sit with `syncControls`/`syncEndButton` at the end of their path.
+       *
+       * The close needs no case of its own: at `ended` the poll predicate returns null and
+       * `stopCountdown` has already cleared the clock, so all three are hidden and the rail
+       * goes — which is what `applyShell`'s comment about the winner taking the width was
+       * describing all along.
+       */
+      function syncRail(): void {
+        // `Boolean` because the DOM lib types `hidden` as `boolean | "until-found"`, so the
+        // chain is `string | boolean` and `setHidden` takes neither. Every truthy value of it
+        // means the block is off screen, which is the only thing this asks.
+        const nothingToShow = Boolean(
+          participationBox.hidden && wordCloudBox.hidden && hostCountdownBox.hidden,
+        );
+        setHidden(railBox, nothingToShow);
       }
 
       function render(): void {
@@ -1611,6 +1648,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           cloudFinalReadFor = null;
           setHidden(multipleNote, true);
           renderQuestion(questionBox, undefined, { prompt: promptClass(undefined) });
+          // After the three hides above, which is what it reads: this branch shows `brak
+          // sesji` on the stage and has no figure for the rail, so the rail goes with them.
+          syncRail();
           // Before the early return, not after it: this branch is a purge, an expiry, or
           // the first paint, and in all three the closing button must be out of reach and
           // holding no arm from a session that is gone — while the flow verbs must fall
@@ -1811,6 +1851,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         renderCountdownPanel(state);
         renderParticipation(state);
         renderWordCloudPanel(state);
+        // Last of the four, because it reads what the three above just decided.
+        syncRail();
         syncControls();
         syncEndButton();
 
