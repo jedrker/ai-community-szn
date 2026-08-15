@@ -366,18 +366,21 @@ import { publicQuiz } from "../../quiz/public";
         <p
           id="answer-accepted"
           hidden
-          class="rounded-xl border border-green-400 bg-green-500/20 px-4 py-3 text-2xl font-semibold"
+          class="rounded-[18px] border-2 border-quiz-mint bg-quiz-mint-tint px-4 py-3
+                 text-[30px] font-semibold leading-[36px] text-quiz-mint"
         >
         </p>
 
         <!-- The reveal panel. The verdict line is per device and arrives from
              /api/quiz/result; the correct answer above it came with the snapshot and
              is on screen whether or not that fetch succeeds. -->
-        <section id="result" hidden class="flex flex-col gap-1">
-          <p id="result-verdict" class="text-2xl font-bold"></p>
-          <p id="result-award" class="text-xl"></p>
-          <p id="result-answer" class="text-text-secondary text-lg"></p>
-          <p id="result-total" class="text-text-secondary text-lg"></p>
+        <section id="result" hidden class="flex flex-col gap-2">
+          <!-- The verdict's colour is written by `verdict()`, which is also what writes the
+               words — the two are one statement and must not be set apart. -->
+          <p id="result-verdict"></p>
+          <p id="result-award" class="text-[72px] font-extrabold leading-[76px] tracking-[-0.04em]"></p>
+          <p id="result-answer" class="text-[30px] font-semibold leading-[38px] text-quiz-echo"></p>
+          <p id="result-total" class="text-[28px] font-semibold leading-[36px] text-quiz-zinc"></p>
         </section>
 
         <!--
@@ -392,9 +395,8 @@ import { publicQuiz } from "../../quiz/public";
           and must be able to say nothing without taking the board down with it.
         -->
         <section id="standings" hidden class="flex flex-col gap-3">
-          <p class="text-xl font-semibold">Ranking</p>
           <div id="standings-board"></div>
-          <p id="standings-you" class="text-text-secondary text-lg"></p>
+          <p id="standings-you" class="text-[22px] leading-[28px] text-quiz-echo"></p>
         </section>
       </section>
     </main>
@@ -532,10 +534,15 @@ import { publicQuiz } from "../../quiz/public";
        * prompt has to be read before anything under it is tapped. Set from the one place the
        * question box is shown or hidden, so the two can never disagree about which kind of
        * screen this is.
+       *
+       * `waiting` defaults to "no question means nothing to read", which is true of every
+       * screen but one: the board has no question and is not a waiting screen either, so
+       * `renderBoard` passes it explicitly rather than writing the attribute itself. Two
+       * writers is exactly what this function exists to prevent.
        */
-      function showQuestion(visible: boolean): void {
+      function showQuestion(visible: boolean, waiting = !visible): void {
         setHidden(questionBox, !visible);
-        followSection.dataset.waiting = String(!visible);
+        followSection.dataset.waiting = String(waiting);
       }
 
       /**
@@ -639,10 +646,22 @@ import { publicQuiz } from "../../quiz/public";
         // Live pick.
         "aria-pressed:bg-quiz-chrome-tint aria-pressed:before:bg-quiz-chrome " +
         "aria-pressed:before:text-quiz-ink " +
-        // Locked pick, and the reveal's own marking of it.
-        "data-[selected=true]:bg-quiz-locked-tint " +
-        "data-[selected=true]:before:bg-quiz-locked-slab " +
-        "data-[selected=true]:before:text-quiz-locked-letter";
+        /*
+         * Locked pick — and at the reveal, this device's own answer.
+         *
+         * `:not([data-correct=true])` is load-bearing rather than tidy. At a reveal an option
+         * can be both this device's pick and the right answer, and the two treatments below
+         * set the same properties; without the exclusion, which one won would be decided by
+         * stylesheet order. With it the two selectors are mutually exclusive, and the
+         * compound is more specific, so a correct pick reads as *correct* — which is the
+         * thing the attendee is looking for.
+         */
+        "[&[data-selected=true]:not([data-correct=true])]:bg-quiz-locked-tint " +
+        "[&[data-selected=true]:not([data-correct=true])]:before:bg-quiz-locked-slab " +
+        "[&[data-selected=true]:not([data-correct=true])]:before:text-quiz-locked-letter " +
+        // The answer, at the reveal. Marked whether or not this device picked it.
+        "data-[correct=true]:bg-quiz-mint-tint data-[correct=true]:text-quiz-mint " +
+        "data-[correct=true]:before:bg-quiz-mint data-[correct=true]:before:text-quiz-ink";
 
       /** The prompt above them. Smaller than the projector's for the obvious reason. */
       const PROMPT_CLASS = "text-[36px] font-extrabold leading-[38px] tracking-[-0.035em]";
@@ -889,7 +908,9 @@ import { publicQuiz } from "../../quiz/public";
             : "Ranking",
           "headline"
         );
-        showQuestion(false);
+        // Not a waiting screen: the board is the thing to read, and it belongs under the
+        // heading rather than pushed to the foot of the phone with a gap above it.
+        showQuestion(false, false);
         hideAnswerControls();
         setHidden(resultPanel, true);
         setHidden(answerAccepted, true);
@@ -903,14 +924,22 @@ import { publicQuiz } from "../../quiz/public";
           // `renderStandings` option: it is presentation, and the renderer's job is the
           // published order. `[&>li:first-child>span]` reaches the spans a row is built from.
           list: closing
-            ? "flex flex-col gap-2 [&>li:first-child>span]:text-2xl"
+            ? "flex flex-col gap-2 [&>li:first-child>span]:text-[40px] " +
+              "[&>li:first-child>span]:font-extrabold [&>li:first-child]:bg-quiz-chrome " +
+              "[&>li:first-child]:text-quiz-ink"
             : "flex flex-col gap-2",
-          row: "grid grid-cols-[auto_1fr_auto] items-baseline gap-4 rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl",
-          rowOwn: "border-brand-purple-light bg-brand-purple/20 font-semibold",
-          rank: "tabular-nums text-text-secondary",
+          row:
+            "grid grid-cols-[auto_1fr_auto] items-baseline gap-4 rounded-[18px] " +
+            "bg-quiz-asphalt px-4 py-3 text-[26px] font-semibold leading-[32px] " +
+            // Own row in the chrome tint — the same fill a picked option takes, because it
+            // answers the same question: which of these is mine.
+            "data-[own=true]:bg-quiz-chrome-tint",
+          // No `rowOwn`: the highlight rides `data-own`, which the renderer already sets, for
+          // the reason the option rows carry theirs as variants.
+          rank: "tabular-nums text-quiz-zinc [li:first-child>&]:text-quiz-ink-on-chrome",
           name: "truncate",
-          points: "tabular-nums font-semibold",
-          empty: "text-text-secondary text-lg",
+          points: "tabular-nums [li:first-child>&]:text-quiz-ink",
+          empty: "text-[26px] leading-[32px] text-quiz-echo",
         });
 
         /**
@@ -1587,9 +1616,10 @@ import { publicQuiz } from "../../quiz/public";
           prompt: PROMPT_CLASS,
           list: OPTION_LIST,
           option: OPTION_CLASS,
-          optionSelected: "border-brand-purple-light font-semibold",
-          optionCorrect: "border-green-400 bg-green-500/20 font-semibold",
-          optionWrong: "border-red-400 bg-red-500/20",
+          // No `optionSelected` / `optionCorrect` / `optionWrong`: both states are carried by
+          // the `data-` attributes the renderer already sets, read as variants in
+          // `OPTION_CLASS`. An appended class here would be the same kind of rule as the base
+          // it overrides, and stylesheet order would decide the reveal's colours.
           mode: "revealed",
           selectedOptionIds: selections.get(question?.id ?? "") ?? [],
           correctOptionIds: revealedOptionIds,
@@ -1642,7 +1672,7 @@ import { publicQuiz } from "../../quiz/public";
          */
         if (question.kind === "word-cloud") {
           setHidden(resultPanel, false);
-          setText("result-verdict", "Dzięki za słowo!");
+          verdict("Dzięki za słowo!", "landed");
           /**
            * **Says the screen shows it in lower case, rather than pretending it matches** (impl
            * review F10). The echo below is the word as *typed*; the projector renders the fold,
@@ -1664,7 +1694,7 @@ import { publicQuiz } from "../../quiz/public";
         // of 150 devices per reveal. The warm-up gets its own line instead.
         if (!question.scored) {
           setHidden(resultPanel, false);
-          setText("result-verdict", "Dzięki za odpowiedź!");
+          verdict("Dzięki za odpowiedź!", "landed");
           setText("result-award", "To była rozgrzewka — bez punktów.");
           setText("result-answer", "");
           setText("result-total", "");
@@ -1696,6 +1726,42 @@ import { publicQuiz } from "../../quiz/public";
       }
 
       /**
+       * THE VERDICT AND ITS COLOUR (signage redesign, step 9).
+       *
+       * Three readings the room's palette already has words for, and the middle one is why
+       * this is a function rather than a class on the element:
+       *
+       * - `mint` — it landed. An exact hit, and the two unscored kinds' thank-yous, which are
+       *   confirmations of the same sort.
+       * - `chrome` — partial. `Blisko!` is the number kind's `correct: false` with a positive
+       *   award, and painting it like a miss is precisely the conflation the exact-hit
+       *   definition of `correct` was chosen to avoid.
+       * - `zinc` — `Bez odpowiedzi`. Nothing happened, and nothing is being judged. Zinc is
+       *   the labels' colour everywhere else, and it is borrowed here deliberately: this is
+       *   the one verdict that is not a verdict.
+       *
+       * A plain miss keeps `signwhite`. `signal` is for a refusal or a failure — a wrong
+       * answer is neither, and colouring it red would tell an attendee the *page* broke.
+       *
+       * The words and the colour are written together because they are one statement; setting
+       * the text at one site and the tone at another is how they come apart.
+       */
+      type VerdictTone = "landed" | "partial" | "silent" | "miss";
+
+      const VERDICT_BASE = "text-[56px] font-extrabold leading-[58px] tracking-[-0.035em]";
+      const VERDICT_TONES: Record<VerdictTone, string> = {
+        landed: "text-quiz-mint",
+        partial: "text-quiz-chrome",
+        silent: "text-quiz-zinc",
+        miss: "text-quiz-signwhite",
+      };
+
+      function verdict(text: string, tone: VerdictTone): void {
+        setText("result-verdict", text);
+        el("result-verdict").className = `${VERDICT_BASE} ${VERDICT_TONES[tone]}`;
+      }
+
+      /**
        * Paints the running total, and retires the returning line in the same breath
        * (roadmap S-09).
        *
@@ -1724,7 +1790,7 @@ import { publicQuiz } from "../../quiz/public";
          * thing that keeps the panel worth showing.
          */
         if (!own.answered) {
-          setText("result-verdict", "Bez odpowiedzi");
+          verdict("Bez odpowiedzi", "silent");
           setText("result-award", "Tym razem nie zdążyliśmy zapisać Twojej odpowiedzi.");
           setText("result-answer", "");
           paintTotal(own.total);
@@ -1746,7 +1812,7 @@ import { publicQuiz } from "../../quiz/public";
           return;
         }
 
-        setText("result-verdict", own.correct ? "Dobrze!" : "Tym razem nie.");
+        verdict(own.correct ? "Dobrze!" : "Tym razem nie.", own.correct ? "landed" : "miss");
         setText("result-award", own.correct ? `+${own.awarded ?? 0} pkt` : "+0 pkt");
         /**
          * The echo, for a free-text answer only — `null` on every other kind.
@@ -1779,9 +1845,9 @@ import { publicQuiz } from "../../quiz/public";
       function showNumberResult(own: OwnResult): void {
         const awarded = own.awarded ?? 0;
 
-        setText(
-          "result-verdict",
-          own.correct ? "Dokładnie!" : awarded > 0 ? "Blisko!" : "Tym razem daleko."
+        verdict(
+          own.correct ? "Dokładnie!" : awarded > 0 ? "Blisko!" : "Tym razem daleko.",
+          own.correct ? "landed" : awarded > 0 ? "partial" : "miss"
         );
         setText("result-award", `+${awarded} pkt`);
         /**
