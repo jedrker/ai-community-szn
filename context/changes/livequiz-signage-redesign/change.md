@@ -1,11 +1,16 @@
 ---
 change_id: livequiz-signage-redesign
 title: Restyle the LiveQuiz host and attendee views to the signage design
-status: planned
+status: implemented
 created: 2026-08-15
 updated: 2026-08-15
 archived_at: null
 ---
+
+## Status
+
+All eleven plan steps are implemented and verified — see `verification.md` for what the
+final pass covered and, more usefully, what it could not.
 
 ## What this is
 
