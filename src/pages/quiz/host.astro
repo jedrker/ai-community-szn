@@ -115,9 +115,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
     is going to reach for one mid-session, so content that overflows must be *visibly*
     wrong here rather than quietly parked below the fold.
   -->
+  <!--
+    `data-phase` on the body is how the closing screen inverts (roadmap S-10, FR-006).
+
+    The ground goes chrome and the type goes ink for one phase and one phase only, and that
+    inversion is the room's signal that the session is over — it works *because* chrome was
+    rationed to a single accent everywhere else. A descendant reads it as
+    `[[data-phase=ended]_&]:…`, which is a variant and therefore always wins over the base
+    utility it overrides; the same ordering reasoning as `data-next` and `data-correct`.
+
+    Set from `render` alongside every other phase decision, so there is no second place that
+    decides what phase the view is in.
+  -->
   <body
+    data-phase="none"
     class="flex h-dvh flex-col overflow-hidden bg-quiz-ink font-archivo text-quiz-signwhite
-           antialiased"
+           antialiased data-[phase=ended]:bg-quiz-chrome data-[phase=ended]:text-quiz-ink"
   >
     <!--
       THE TOP STRIP: where the room is, and how to get in.
@@ -127,11 +140,18 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       for the person who arrives at question four — the previous layout put the QR in a
       header that scrolled with everything else.
     -->
+    <!-- Hidden on the closing screen, both halves being wrong there: there is no current
+         question to count and nothing left to join. That is what gives the winner the
+         height the artboard sets them at. -->
     <header
+      id="top-strip"
       class="flex shrink-0 items-center justify-between border-b-2 border-quiz-divider
              pt-[40px] pr-[72px] pb-[28px] pl-[72px]"
     >
-      <p class="flex items-baseline gap-4 leading-none">
+      <!-- Hidden when no question is current — the lobby, and the gap between a purge and
+           the next `start`. A counter reading "— / 14" is not a fact about the session; it is
+           a slot waiting to be filled, and it reads from the back of the room as debris. -->
+      <p id="question-counter" hidden class="flex items-baseline gap-4 leading-none">
         <span
           id="question-index"
           class="text-[96px] font-extrabold tracking-[-0.035em] tabular-nums text-quiz-chrome"
@@ -184,7 +204,63 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       </div>
     </header>
 
-    <div class="flex min-h-0 flex-1">
+    <!--
+      THE LOBBY: two plates, and nothing else on the screen.
+
+      This is the only beat where the whole room is doing one thing, and it is the thing PRD
+      FR-002 gives thirty seconds. So the body is replaced rather than decorated: a white
+      plate carrying a QR big enough to scan from the back row, and the ink plate carrying
+      the two facts a person who cannot scan needs — where to type, and that people are
+      already arriving.
+
+      The QR is the same server-rendered SVG the strip carries, inlined a second time. Dark
+      modules on white rather than the page's palette: an inverted QR is readable by many
+      scanners and reliably readable by fewer, and a venue is not the place to find out which
+      kind someone brought.
+
+      It sizes off the available height rather than the artboard's flat 700px — the plate has
+      to share 1080 with the strip and the control bar, and a QR that overflows is a QR that
+      is cropped.
+    -->
+    <div id="lobby" hidden class="flex min-h-0 flex-1">
+      <div
+        class="flex w-[860px] shrink-0 items-center justify-center bg-quiz-signwhite p-[48px]"
+      >
+        <div class="aspect-square h-full [&>svg]:h-full [&>svg]:w-full">
+          <Fragment set:html={joinQrSvg} />
+        </div>
+      </div>
+
+      <div class="flex min-w-0 flex-1 flex-col justify-center gap-[48px] px-[72px]">
+        <div class="flex flex-col gap-3">
+          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+            Wejdź na
+          </p>
+          <p
+            class="text-[56px] font-extrabold leading-none tracking-[-0.02em] text-quiz-chrome"
+          >
+            {joinDisplayUrl}
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+            W sali
+          </p>
+          <!-- The join count is the lobby's whole feedback loop: nobody's join publishes
+               anything (that would be the O(N^2) fan-out the spine contract forbids), so this
+               number moving is how the room learns the thing works. -->
+          <p
+            id="lobby-count"
+            class="text-[264px] font-extrabold leading-[244px] tracking-[-0.05em] tabular-nums"
+          >
+            —
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div id="body-split" class="flex min-h-0 flex-1">
       <!--
         THE STAGE: what the room is reading. One question's worth of content, nothing else.
 
@@ -193,7 +269,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         end.
       -->
       <main
-        class="flex min-w-0 flex-1 flex-col justify-between overflow-hidden pt-[32px]
+        id="stage"
+        class="flex min-w-0 flex-1 flex-col justify-between overflow-hidden
+               [[data-phase=ended]_&]:justify-center pt-[32px]
                pr-[72px] pb-[24px] pl-[72px]"
       >
         <div class="flex min-h-0 flex-col gap-[24px]">
@@ -288,6 +366,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         which is the only reason it is a separate column at all.
       -->
       <aside
+        id="rail"
         class="flex w-[440px] shrink-0 flex-col justify-between border-l-2 border-quiz-divider
                pt-[48px] pr-[72px] pb-[40px] pl-[56px]"
       >
@@ -482,7 +561,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         </button>
       </div>
 
-      <div class="flex flex-wrap items-center gap-4">
+      <!--
+        On `ended` the verbs are replaced by a sentence (plan §3).
+
+        Every one of them is refused in that phase, so a row of four dark pills says only
+        "nothing works" — where the row is the host's own reading of what to do next. The
+        sentence says the same thing in the register the room is in.
+      -->
+      <p
+        id="ended-note"
+        hidden
+        class="text-[40px] font-semibold leading-[52px] tracking-[-0.015em] text-quiz-zinc"
+      >
+        Sesja zakończona. Dziękujemy za grę!
+      </p>
+
+      <div id="control-row" class="flex flex-wrap items-center gap-4">
         <!--
           The flow verbs. Which one is offered — and which one is ringed as the next step —
           is decided by `CONTROL_RULES` and applied by `syncControls`, which is the table's
@@ -643,6 +737,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const wordCloudBox = el("word-cloud");
       const wordCloudPanel = el("word-cloud-panel");
       const multipleNote = el("multiple-note");
+      /**
+       * The three regions the lobby and the closing screen swap between them.
+       *
+       * `hidden` rather than a class, for the reason `setHidden` exists at all: it needs no
+       * CSS to work, so a stylesheet that failed to load on a venue network leaves the page
+       * ugly rather than showing the lobby underneath a question.
+       */
+      const topStrip = el("top-strip");
+      const questionCounter = el("question-counter");
+      const lobbyBox = el("lobby");
+      const bodySplit = el("body-split");
+      const railBox = el("rail");
+      const controlRow = el("control-row");
+      const endedNote = el("ended-note");
       const wordCloudWords = el("word-cloud-words");
       const wordCloudStale = el("word-cloud-stale");
       const hostCountdownBox = el("host-countdown");
@@ -1360,14 +1468,48 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         endButton.textContent = endArmed ? "na pewno? kliknij ponownie" : "zakończ sesję";
       }
 
+      /**
+       * WHICH SHELL THE PHASE GETS, IN ONE PLACE.
+       *
+       * Three of the six states this view can be in replace the layout rather than fill it:
+       * the lobby is two plates, the closing screen is an inverted ground with no rail and no
+       * strip, and everything else is the stage-and-rail split. Deciding that here — and
+       * writing `data-phase` from the same call — is what keeps a region from being shown by
+       * one branch and hidden by another.
+       *
+       * Note what this does *not* decide: whether the board is on screen. That keys on
+       * `standings !== null` in `render`, because the schema owns the rule about where a
+       * board may appear and a phase list here would be a copy able to fall behind it.
+       */
+      function applyShell(phase: string): void {
+        document.body.dataset.phase = phase;
+
+        const lobby = phase === "lobby";
+        const ended = phase === "ended";
+
+        setHidden(lobbyBox, !lobby);
+        setHidden(bodySplit, lobby);
+        // The rail carries figures about a question in progress. There is none at the close,
+        // and the winner takes the width it leaves.
+        setHidden(railBox, ended);
+        setHidden(topStrip, ended);
+        // Every verb is refused in `ended`, so the row would say only "nothing works".
+        setHidden(controlRow, ended);
+        setHidden(endedNote, !ended);
+      }
+
       function render(): void {
         const state = client.current();
 
         if (state === null) {
           setText("phase", "brak sesji");
-          setText("question-index", "—");
+          setHidden(questionCounter, true);
           setText("player-count", "—");
+          setText("lobby-count", "—");
           setText("version", "—");
+          // A purge, an expiry, or the first paint. None of them is the lobby and none is the
+          // close, so the ordinary split is what a sessionless view shows.
+          applyShell(NO_SESSION);
           liveCount = null;
           setHidden(participationBox, true);
           setHidden(distributionPanel, true);
@@ -1399,7 +1541,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
         setText("phase", PHASE_LABELS[state.phase] ?? state.phase);
         setText("player-count", liveCount ?? state.playerCount);
+        setText("lobby-count", liveCount ?? state.playerCount);
         setText("version", state.version);
+
+        applyShell(state.phase);
 
         /**
          * The top strip's counter.
@@ -1415,7 +1560,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const questionPosition = config.questions.findIndex(
           (candidate) => candidate.id === state.currentQuestionId
         );
-        setText("question-index", questionPosition < 0 ? "—" : questionPosition + 1);
+        setHidden(questionCounter, questionPosition < 0);
+        if (questionPosition >= 0) setText("question-index", questionPosition + 1);
 
         // Before any panel renders, so neither can paint the previous question's numbers
         // under a new prompt. Both polled panels read the state this clears.
@@ -1457,23 +1603,72 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          */
         const closing = state.phase === "ended";
         setText("standings-title", closing ? "Zwycięzca" : "Ranking");
+        // The ground is chrome on the closing screen, so the label that reads `zinc`
+        // everywhere else needs the ink-on-chrome step instead. Nothing else about the
+        // heading changes, including where it lives.
+        el("standings-title").className = closing
+          ? "text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-ink-on-chrome"
+          : "text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc";
         // The board replaces the question rather than sitting under it. The phase keeps a
         // `currentQuestionId` — that is what stops `advance` reopening question 1 — so
         // without this the finished question stays on the projector above the standings.
         setHidden(questionBox, standings !== null);
+        /**
+         * THE BOARD, IN ITS TWO REGISTERS (signage redesign, step 4).
+         *
+         * **The same board, told apart by phase and by nothing else** — the visibility rule
+         * above still keys on `standings !== null`, because the schema is what decides where
+         * a board may appear and a phase list here would be a second copy of that rule.
+         * What the phase decides is only how it reads.
+         *
+         * Between questions: the leader takes a full chrome bar and the four under them sit
+         * on hairlines, so the room reads the top of the board first and the rest as context.
+         *
+         * At the close: the ground is already chrome, so the winner cannot be marked with it
+         * — they are marked with size instead, at 224px across the full width, and places two
+         * through five become four equal lanes underneath. `first:` and `[li:first-child>&]:`
+         * do the splitting, because `renderStandings` applies one row class to every row and
+         * a variant is the only way to say "except the first" without a second renderer
+         * option.
+         */
         renderStandings(standingsBoard, standings?.rows, {
           ownDisplayName: null,
           list: closing
-            ? "flex flex-col gap-3 [&>li:first-child]:border-brand-purple-light " +
-              "[&>li:first-child]:bg-brand-purple/20 [&>li:first-child>span]:text-7xl"
-            : "flex flex-col gap-3",
-          row: "grid grid-cols-[auto_1fr_auto] items-baseline gap-6 rounded-xl border border-surface-border bg-surface-secondary px-6 py-4",
-          rank: "text-5xl font-bold tabular-nums text-brand-purple-light",
+            ? "flex flex-wrap items-stretch gap-x-8 gap-y-6 [&>li:first-child]:w-full " +
+              "[&>li:nth-child(n+2)]:min-w-0 [&>li:nth-child(n+2)]:flex-1 " +
+              "[&>li:nth-child(n+2)]:basis-0"
+            // No gap: the hairline under each row is the separation, and a gap on top of it
+            // costs five rows more height than the stage has.
+            : "flex flex-col",
+          row: closing
+            ? "flex min-w-0 flex-col gap-1"
+            : "grid grid-cols-[auto_1fr_auto] items-center gap-8 border-b-2 " +
+              "border-quiz-divider px-6 py-0.5 first:mb-3 first:rounded-[20px] " +
+              "first:border-transparent first:bg-quiz-chrome first:py-2 first:text-quiz-ink",
+          rank: closing
+            ? "text-[26px] font-semibold tabular-nums text-quiz-ink-on-chrome " +
+              "[li:first-child>&]:hidden"
+            : "text-[72px] font-semibold leading-[80px] tabular-nums text-quiz-zinc " +
+              "[li:first-child>&]:text-[104px] [li:first-child>&]:font-extrabold " +
+              "[li:first-child>&]:leading-[104px] [li:first-child>&]:text-quiz-ink",
           // `truncate` rather than a wrap: five rows that became seven would push the
           // board off the screen this type size was measured for.
-          name: "text-5xl font-bold truncate",
-          points: "text-5xl font-bold tabular-nums",
-          empty: "text-text-secondary text-3xl",
+          name: closing
+            ? "truncate text-[56px] font-extrabold leading-[60px] tracking-[-0.035em] " +
+              "[li:first-child>&]:text-[224px] [li:first-child>&]:leading-[212px] " +
+              "[li:first-child>&]:tracking-[-0.055em]"
+            : "truncate text-[72px] font-semibold leading-[80px] tracking-[-0.035em] " +
+              "[li:first-child>&]:text-[104px] [li:first-child>&]:font-extrabold " +
+              "[li:first-child>&]:leading-[104px]",
+          points: closing
+            ? "text-[40px] font-semibold tabular-nums text-quiz-ink-on-chrome " +
+              "[li:first-child>&]:text-[72px] [li:first-child>&]:font-extrabold"
+            : "text-[72px] font-semibold leading-[80px] tabular-nums " +
+              "[li:first-child>&]:text-[104px] [li:first-child>&]:font-extrabold " +
+              "[li:first-child>&]:leading-[104px]",
+          empty: closing
+            ? "text-[40px] leading-[52px] text-quiz-ink-on-chrome"
+            : "text-[40px] leading-[52px] text-quiz-echo",
         });
 
         /**
