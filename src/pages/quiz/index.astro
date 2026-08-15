@@ -41,39 +41,58 @@ import { publicQuiz } from "../../quiz/public";
  */
 ---
 
-<html lang="pl" class="bg-surface-primary">
+<html lang="pl" class="bg-quiz-ink">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>LiveQuiz — dołącz</title>
   </head>
+  <!--
+    THE PHONE SHELL (signage redesign, step 7).
+
+    One column, `dvh` tall, with the room's palette: this is the same signage system the
+    projector runs, at the sizes a phone held at arm's length in a dark room can carry.
+    Nothing here goes below 20px, which is the floor the whole scale is built on.
+
+    `min-h-dvh` with the main column growing, so the waiting screens can push their status
+    line into the thumb zone while the answering screens stack from the top — see
+    `setWaiting`.
+  -->
   <body
-    class="min-h-dvh bg-surface-primary text-text-primary font-archivo antialiased
-           flex flex-col items-center px-5 py-8"
+    class="flex min-h-dvh flex-col bg-quiz-ink font-archivo text-quiz-signwhite antialiased
+           px-7 pt-6 pb-8"
   >
-    <main class="w-full max-w-md flex flex-col gap-6">
-      <h1 class="text-brand-purple-light text-sm font-bold uppercase tracking-[0.2em]">
+    <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-6">
+      <h1 class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc">
         LiveQuiz
       </h1>
 
       <!-- Shown until the stored-player check resolves, so a returning device never
            flashes the name form it is about to skip. -->
-      <section id="boot" class="text-text-secondary text-lg">Ładowanie…</section>
+      <section id="boot" class="text-[30px] font-semibold leading-[36px] text-quiz-echo">
+        Ładowanie…
+      </section>
 
       <noscript>
-        <p class="text-lg">
+        <p class="text-[30px] font-semibold leading-[36px]">
           Ten quiz wymaga włączonego JavaScriptu. Włącz go i odśwież stronę.
         </p>
       </noscript>
 
-      <section id="join" hidden class="flex flex-col gap-5">
-        <p class="text-2xl font-semibold leading-tight">
+      <!-- The join screen is a waiting screen: the headline sits under the wordmark and the
+           form sits in the thumb zone, because typing a name one-handed is the whole of what
+           PRD FR-002 gives thirty seconds to. -->
+      <section id="join" hidden class="flex flex-1 flex-col justify-between gap-8">
+        <p class="text-[44px] font-extrabold leading-[46px] tracking-[-0.035em]">
           Wpisz swoją nazwę, żeby dołączyć do quizu.
         </p>
 
         <form id="join-form" class="flex flex-col gap-4" novalidate>
-          <label for="display-name" class="text-text-secondary text-base">
+          <label
+            for="display-name"
+            class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc"
+          >
             Twoja nazwa
           </label>
           <input
@@ -86,25 +105,66 @@ import { publicQuiz } from "../../quiz/public";
             autocorrect="off"
             spellcheck="false"
             maxlength="24"
-            class="w-full rounded-xl border border-surface-border bg-surface-secondary
-                   px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
-                   focus:border-brand-purple-light focus:outline-none"
+            class="w-full rounded-[18px] border-2 border-quiz-field-border bg-quiz-asphalt
+                   px-4 py-4 text-[30px] font-semibold leading-[36px] text-quiz-signwhite
+                   placeholder:text-quiz-zinc focus:border-quiz-chrome focus:outline-none"
             placeholder="np. Ania"
           />
           <button
             id="join-submit"
             type="submit"
-            class="w-full rounded-xl bg-brand-purple px-4 py-4 text-2xl font-semibold
-                   text-white disabled:opacity-50"
+            class="w-full rounded-[18px] bg-quiz-chrome px-4 py-4 text-[32px] font-bold
+                   text-quiz-ink disabled:bg-quiz-asphalt disabled:text-quiz-pill-disabled"
           >
             Dołącz
           </button>
-          <p id="join-error" role="alert" aria-live="polite" class="text-lg text-red-400"></p>
+
+          <!--
+            The refusal bubble (plan §3).
+
+            Every way a join can be turned away lands here — the name is taken, this device
+            has claimed its allowance, storage is off in private mode — and all three are
+            `refused`, so all three get the signal marker. The bubble is the phone's version
+            of the projector's: a marker bar carrying the register, then the sentence.
+
+            Hidden while empty, so a refusal that has been cleared takes its height with it
+            rather than leaving a gap above the button.
+          -->
+          <div
+            id="join-error-bubble"
+            hidden
+            class="flex items-stretch gap-3 rounded-[16px] border-2 border-quiz-field-border
+                   bg-quiz-float px-4 py-3"
+          >
+            <span class="w-[8px] shrink-0 rounded-full bg-quiz-signal"></span>
+            <p
+              id="join-error"
+              role="alert"
+              aria-live="polite"
+              class="text-[22px] font-semibold leading-[28px]"
+            >
+            </p>
+          </div>
         </form>
       </section>
 
-      <section id="follow" hidden class="flex flex-col gap-6">
-        <p id="player-name" class="text-text-secondary text-base"></p>
+      <!-- `data-waiting` decides whether this column stacks from the top or pushes its
+           status into the thumb zone. Written by `setWaiting` and by nothing else. -->
+      <section
+        id="follow"
+        hidden
+        data-waiting="false"
+        class="flex flex-1 flex-col gap-6 data-[waiting=true]:justify-between"
+      >
+        <!-- Who this device is, and what it came back with — one block, because the waiting
+             layout spreads its children and three loose lines would strand this one in the
+             middle of the screen with nothing to do there. -->
+        <div class="flex flex-col gap-2">
+          <p
+            id="player-name"
+            class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc"
+          >
+          </p>
         <!-- What this device came back with, on a resume only (roadmap S-09, FR-009).
 
              Deliberately NOT a live score line. It is refreshed by nothing, and it says
@@ -113,8 +173,13 @@ import { publicQuiz } from "../../quiz/public";
              a fresh total reaches the result panel. A permanently-visible total updated
              only at reveal is the affordance-vs-data-path defect `lessons.md` opens
              with, and it would put two different scores on one screen. -->
-        <p id="resume-total" class="text-text-secondary text-base"></p>
-        <p id="follow-status" class="text-xl font-semibold"></p>
+          <p id="resume-total" class="text-[22px] leading-[28px] text-quiz-echo"></p>
+        </div>
+
+        <!-- The class is written by `status()`, which picks the register the sentence is in:
+             a headline on the waiting screens, a label above a question, an alarm when the
+             connection is gone. Never styled here, or the two would disagree. -->
+        <p id="follow-status"></p>
 
         <!-- The backup-mode banner. Shown only while the channel is unavailable *and*
              polling is working, so it is never on screen at the same time as the red
@@ -404,6 +469,54 @@ import { publicQuiz } from "../../quiz/public";
       const degradedNote = el("degraded-note");
       const resultPanel = el("result");
       const countdownBox = el("countdown");
+      const joinErrorBubble = el("join-error-bubble");
+
+      /**
+       * THE STATUS LINE'S THREE REGISTERS (signage redesign, step 7).
+       *
+       * One element carries three different jobs, and sizing it once would get two of them
+       * wrong: on a waiting screen it *is* the screen — the only thing to read — while above
+       * a question it is a label on something more important, and when the channel is gone it
+       * is an alarm. So the caller says which, and the class lives in one place rather than
+       * being written at each branch.
+       */
+      type StatusStyle = "headline" | "label" | "alarm";
+
+      const STATUS_CLASSES: Record<StatusStyle, string> = {
+        headline: "text-[44px] font-extrabold leading-[46px] tracking-[-0.035em]",
+        label: "text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc",
+        alarm: "text-[30px] font-semibold leading-[36px] text-quiz-signal",
+      };
+
+      function status(text: string, style: StatusStyle): void {
+        setText("follow-status", text);
+        el("follow-status").className = STATUS_CLASSES[style];
+      }
+
+      /**
+       * Whether this is a screen with nothing to do on it.
+       *
+       * A waiting screen pushes its status into the thumb zone, because it is the only thing
+       * on it and a phone is held low; an answering screen stacks from the top, because the
+       * prompt has to be read before anything under it is tapped. Set from the one place the
+       * question box is shown or hidden, so the two can never disagree about which kind of
+       * screen this is.
+       */
+      function showQuestion(visible: boolean): void {
+        setHidden(questionBox, !visible);
+        followSection.dataset.waiting = String(!visible);
+      }
+
+      /**
+       * The join refusal, and the bubble that carries it.
+       *
+       * Empty means *no refusal*, and the bubble goes with it — a cleared message that left
+       * its frame behind would read as a refusal with the words missing.
+       */
+      function joinError(text: string): void {
+        setText("join-error", text);
+        setHidden(joinErrorBubble, text.length === 0);
+      }
 
       let connection: ConnectionStatus = "connecting";
       /**
@@ -520,13 +633,12 @@ import { publicQuiz } from "../../quiz/public";
            * is no room for you" invites them to put the phone away. The diagnosis belongs
            * on the host's screen, where someone can act on it.
            */
-          setText(
-            "follow-status",
+          status(
             connectionCause === "account-limit"
               ? "Nie możemy Cię teraz podłączyć na żywo. Spróbuj odświeżyć stronę za chwilę."
-              : "Utracono połączenie. Próbujemy połączyć ponownie…"
+              : "Utracono połączenie. Próbujemy połączyć ponownie…",
+            "alarm"
           );
-          el("follow-status").className = "text-xl font-semibold text-red-400";
           setHidden(degradedNote, true);
           hideAnswerControls();
           return;
@@ -546,8 +658,6 @@ import { publicQuiz } from "../../quiz/public";
           degradedNote,
           !(connection === "degraded" && state !== null && state.phase !== "ended")
         );
-
-        el("follow-status").className = "text-xl font-semibold";
 
         /**
          * Hidden here, once, rather than in each of the branches below (roadmap S-07).
@@ -622,8 +732,8 @@ import { publicQuiz } from "../../quiz/public";
            * every device in the room is still watching.
            */
           if (state === null) {
-            setText("follow-status", "To już koniec. Dzięki za grę!");
-            setHidden(questionBox, true);
+            status("To już koniec. Dzięki za grę!", "headline");
+            showQuestion(false);
             hideAnswerControls();
             rank = null;
             rankVersion = null;
@@ -636,8 +746,8 @@ import { publicQuiz } from "../../quiz/public";
         }
 
         if (state.phase === "lobby") {
-          setText("follow-status", "Jesteś w grze. Czekamy na prowadzącego…");
-          setHidden(questionBox, true);
+          status("Jesteś w grze. Czekamy na prowadzącego…", "headline");
+          showQuestion(false);
           hideAnswerControls();
           return;
         }
@@ -654,12 +764,12 @@ import { publicQuiz } from "../../quiz/public";
             ? "Pytanie"
             : `Pytanie ${position + 1} z ${config.questions.length}`;
 
-        setText(
-          "follow-status",
-          state.phase === "question-revealed" ? `${label} — odpowiedź ujawniona` : label
+        status(
+          state.phase === "question-revealed" ? `${label} — odpowiedź ujawniona` : label,
+          "label"
         );
 
-        setHidden(questionBox, false);
+        showQuestion(true);
 
         // An id absent from the projection means the definition changed under a live
         // session. `renderQuestion` shows a neutral placeholder rather than an error.
@@ -700,17 +810,17 @@ import { publicQuiz } from "../../quiz/public";
         const closing = state.phase === "ended";
         const board = state.standings;
 
-        setText(
-          "follow-status",
+        status(
           closing
             ? // A close whose board read failed lands here with nothing to show, and says
               // what it always said rather than promising a result that is not coming.
               board === null
               ? "To już koniec. Dzięki za grę!"
               : "Koniec! Oto wyniki."
-            : "Ranking"
+            : "Ranking",
+          "headline"
         );
-        setHidden(questionBox, true);
+        showQuestion(false);
         hideAnswerControls();
         setHidden(resultPanel, true);
         setHidden(answerAccepted, true);
@@ -1768,7 +1878,7 @@ import { publicQuiz } from "../../quiz/public";
         // holding — refused as taken, locked out for the rest of the segment. Only a
         // 404, which is the server saying it looked and found nothing, may clear.
         if (response.status >= 500) {
-          setText("join-error", payload.error ?? "Chwilowy problem. Odśwież stronę.");
+          joinError(payload.error ?? "Chwilowy problem. Odśwież stronę.");
           showJoinForm();
           return;
         }
@@ -1801,7 +1911,7 @@ import { publicQuiz } from "../../quiz/public";
         inFlight = true;
         submit.disabled = true;
         submit.textContent = "Dołączanie…";
-        setText("join-error", "");
+        joinError("");
 
         const body = new FormData();
         body.set("displayName", nameInput.value);
@@ -1841,8 +1951,7 @@ import { publicQuiz } from "../../quiz/public";
           const strandedByStorage =
             payload.refusal === "taken" && !deviceStoragePersists(config.deviceStorageKey);
 
-          setText(
-            "join-error",
+          joinError(
             strandedByStorage
               ? "Ta nazwa jest już zajęta. Jeśli to Twoja — to urządzenie jej nie pamięta " +
                   "(tryb prywatny lub wyczyszczone dane). Wybierz inną nazwę, żeby grać " +
@@ -1850,7 +1959,7 @@ import { publicQuiz } from "../../quiz/public";
               : (payload.error ?? "Nie udało się dołączyć.")
           );
         } catch {
-          setText("join-error", "Brak połączenia. Spróbuj ponownie.");
+          joinError("Brak połączenia. Spróbuj ponownie.");
         } finally {
           inFlight = false;
           submit.disabled = false;
