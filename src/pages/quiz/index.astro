@@ -201,35 +201,60 @@ import { publicQuiz } from "../../quiz/public";
           działają normalnie, ale punkty za czas mogą być niższe.
         </p>
 
-        <div id="question" class="flex flex-col gap-4"></div>
-
         <!-- The countdown (S-11, FR-020). A STATIC element shown and hidden, for the same
-             reason the input below is one: `renderQuestion` calls `replaceChildren()` on
-             the question container, so anything emitted there is destroyed and rebuilt on
-             every snapshot — and this one is animating.
+             reason the inputs below are: `renderQuestion` calls `replaceChildren()` on the
+             question container, so anything emitted there is destroyed and rebuilt on every
+             snapshot — and this one is animating.
 
-             Present only while a scored question is open. The two unscored questions
-             carry no limit, so no clock appears on them at all. -->
-        <div id="countdown" hidden class="flex flex-col gap-1" aria-hidden="true">
-          <div class="flex items-baseline justify-between">
-            <span class="text-sm text-content-secondary">Pozostały czas</span>
+             Present only while a scored question is open. The two unscored questions carry no
+             limit, so no clock appears on them at all.
+
+             **Moved above the question.** The plan's phone order is label → prompt →
+             countdown → options, and the middle two cannot be separated: `renderQuestion`
+             emits the prompt and the option list as one block, the same constraint that put
+             the projector's multiple-choice note in the top strip. Of the two placements left,
+             above wins — under the options the clock was the last thing read before the tap,
+             which is the wrong end. It is context for the decision, not part of it.
+
+             `data-urgent` is written by `paintCountdown` and read by both the number and the
+             bar, so the two cannot disagree about whether the last five seconds have started —
+             `renderCountdown`'s contract, applied to colour.
+
+             **The classes here previously named colours this project does not define**
+             (`text-content-secondary`, `bg-accent`), so the clock had been rendering in
+             whatever it inherited since S-11. -->
+        <div
+          id="countdown"
+          hidden
+          data-urgent="false"
+          class="flex flex-col gap-2"
+          aria-hidden="true"
+        >
+          <div class="flex items-baseline justify-between gap-4">
+            <span class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc">
+              Pozostały czas
+            </span>
             <span
               data-countdown-text
-              class="font-mono text-lg tabular-nums text-content-primary">0 s</span
+              class="text-[34px] font-extrabold leading-[34px] tabular-nums
+                     [[data-urgent=true]_&]:text-quiz-signal">0 s</span
             >
           </div>
           <!-- The bar is decoration for the number above it, hence aria-hidden on the
                container: a screen reader announcing a width every second is noise, and
                the note that appears at zero is what actually has to be announced. -->
-          <div class="h-1.5 overflow-hidden rounded-full bg-surface-secondary">
+          <div class="h-[8px] overflow-hidden rounded-full bg-quiz-divider">
             <div
               data-countdown-bar
-              class="h-full rounded-full bg-accent transition-[width] duration-1000 ease-linear"
+              class="h-full rounded-full bg-quiz-chrome transition-[width] duration-1000
+                     ease-linear [[data-urgent=true]_&]:bg-quiz-signal"
               style="width: 100%"
             >
             </div>
           </div>
         </div>
+
+        <div id="question" class="flex flex-col gap-4"></div>
 
         <!-- The answering controls. Hidden for every phase and kind that cannot be
              answered, so nothing tappable is ever on screen without a purpose. -->
@@ -250,10 +275,10 @@ import { publicQuiz } from "../../quiz/public";
           autocorrect="off"
           spellcheck="false"
           maxlength={MAX_TEXT_ANSWER_LENGTH}
-          class="w-full rounded-xl border border-surface-border bg-surface-secondary
-                 px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
-                 focus:border-brand-purple-light focus:outline-none
-                 disabled:opacity-60"
+          class="w-full rounded-[18px] border-2 border-quiz-field-border bg-quiz-asphalt
+                 px-4 py-4 text-[30px] font-semibold leading-[36px] text-quiz-signwhite
+                 placeholder:text-quiz-zinc focus:border-quiz-chrome focus:outline-none
+                 disabled:border-quiz-divider disabled:text-quiz-echo"
           placeholder="Wpisz odpowiedź"
         />
 
@@ -278,10 +303,10 @@ import { publicQuiz } from "../../quiz/public";
           autocorrect="off"
           spellcheck="false"
           maxlength={MAX_GUESS_INPUT_LENGTH}
-          class="w-full rounded-xl border border-surface-border bg-surface-secondary
-                 px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
-                 focus:border-brand-purple-light focus:outline-none
-                 disabled:opacity-60"
+          class="w-full rounded-[18px] border-2 border-quiz-field-border bg-quiz-asphalt
+                 px-4 py-4 text-[30px] font-semibold leading-[36px] text-quiz-signwhite
+                 placeholder:text-quiz-zinc focus:border-quiz-chrome focus:outline-none
+                 disabled:border-quiz-divider disabled:text-quiz-echo"
           placeholder="Wpisz liczbę"
         />
 
@@ -309,24 +334,30 @@ import { publicQuiz } from "../../quiz/public";
           autocorrect="off"
           spellcheck="false"
           maxlength={MAX_WORD_LENGTH}
-          class="w-full rounded-xl border border-surface-border bg-surface-secondary
-                 px-4 py-4 text-2xl text-text-primary placeholder:text-text-secondary
-                 focus:border-brand-purple-light focus:outline-none
-                 disabled:opacity-60"
+          class="w-full rounded-[18px] border-2 border-quiz-field-border bg-quiz-asphalt
+                 px-4 py-4 text-[30px] font-semibold leading-[36px] text-quiz-signwhite
+                 placeholder:text-quiz-zinc focus:border-quiz-chrome focus:outline-none
+                 disabled:border-quiz-divider disabled:text-quiz-echo"
           placeholder="Wpisz jedno słowo"
         />
 
+        <p id="answer-note" hidden class="text-[22px] leading-[28px] text-quiz-echo"></p>
         <button
           id="answer-submit"
           type="button"
           hidden
-          class="w-full rounded-xl bg-brand-purple px-4 py-4 text-2xl font-semibold
-                 text-white disabled:opacity-50"
+          class="w-full rounded-[18px] bg-quiz-chrome px-4 py-4 text-[30px] font-bold
+                 text-quiz-ink disabled:bg-quiz-asphalt disabled:text-quiz-pill-disabled"
         >
           Wyślij odpowiedź
         </button>
-        <p id="answer-note" hidden class="text-text-secondary text-lg"></p>
-        <p id="answer-error" role="alert" aria-live="polite" class="text-lg text-red-400"></p>
+        <p
+          id="answer-error"
+          role="alert"
+          aria-live="polite"
+          class="text-[22px] font-semibold leading-[28px] text-quiz-signal"
+        >
+        </p>
 
         <!-- The accepted answer for a free-text question, from the snapshot. Sits
              OUTSIDE the result panel on purpose: the panel is gated on having answered
@@ -575,8 +606,46 @@ import { publicQuiz } from "../../quiz/public";
        */
       let rankPending = false;
 
+      /**
+       * THE PHONE'S QUESTION TYPE AND OPTION ROWS (signage redesign, step 8).
+       *
+       * The projector's answer band at phone scale: a 56px slab carrying the option's letter,
+       * then the text. Same letters as the big screen, from the same mechanism — a CSS counter
+       * on the list, because `renderQuestion` writes an option's text with `textContent` and
+       * leaves no child to put a letter in. The letters follow the rendered order, which is
+       * what `publicQuiz` shuffles and what both screens show.
+       *
+       * **Selection travels by attribute, and by two different ones.** In `answerable` mode
+       * the renderer builds a button and marks it `aria-pressed`; in `static` mode it marks
+       * the item `data-selected`. Both are read here as variants — never as an appended
+       * `optionSelected` class — because an appended utility and the base it overrides are the
+       * same kind of rule, and stylesheet order decides which wins. The two modes never
+       * co-occur, so the two treatments cannot collide.
+       *
+       * They are deliberately *different* treatments: a live pick is chrome, the accent that
+       * means "this is yours to change", while a locked one steps down to the muted chrome
+       * pair — still legibly yours, no longer inviting a tap.
+       */
+      const OPTION_LIST = "flex flex-col gap-2 [counter-reset:option]";
+
       const OPTION_CLASS =
-        "rounded-xl border border-surface-border bg-surface-secondary px-4 py-3 text-xl";
+        "flex min-h-[64px] w-full items-center overflow-hidden rounded-[18px] " +
+        "bg-quiz-asphalt pr-4 text-left text-[26px] font-semibold leading-[32px] " +
+        "text-quiz-signwhite [counter-increment:option] before:mr-4 before:flex " +
+        "before:w-[56px] before:shrink-0 before:self-stretch before:items-center " +
+        "before:justify-center before:bg-quiz-slab-inactive before:text-[24px] " +
+        "before:font-extrabold before:text-quiz-signwhite " +
+        "before:[--tw-content:counter(option,_upper-alpha)] " +
+        // Live pick.
+        "aria-pressed:bg-quiz-chrome-tint aria-pressed:before:bg-quiz-chrome " +
+        "aria-pressed:before:text-quiz-ink " +
+        // Locked pick, and the reveal's own marking of it.
+        "data-[selected=true]:bg-quiz-locked-tint " +
+        "data-[selected=true]:before:bg-quiz-locked-slab " +
+        "data-[selected=true]:before:text-quiz-locked-letter";
+
+      /** The prompt above them. Smaller than the projector's for the obvious reason. */
+      const PROMPT_CLASS = "text-[36px] font-extrabold leading-[38px] tracking-[-0.035em]";
 
       const client = createSessionClient({
         channelName: config.channelName,
@@ -984,6 +1053,9 @@ import { publicQuiz } from "../../quiz/public";
       /** What the running timer is counting, so the tick needs no lookup. */
       let countdownFor: { id: string; deadline: number; limitMs: number } | null = null;
 
+      /** Where the clock turns `signal`. Five seconds, matching the plan's phone spec. */
+      const URGENT_MS = 5_000;
+
       function stopCountdown(): void {
         if (countdownTimer !== null) {
           window.clearTimeout(countdownTimer);
@@ -1012,21 +1084,52 @@ import { publicQuiz } from "../../quiz/public";
         countdownFor = { id: question.id, deadline, limitMs };
 
         setHidden(countdownBox, false);
-        paintCountdown();
+        // `false`: a render is already in progress and the branch that handles an expired
+        // window is three lines below the call that got here. See `paintCountdown`.
+        paintCountdown(false);
       }
 
-      function paintCountdown(): void {
+      /**
+       * @param fromTick Whether this paint came from the timer rather than from `render`.
+       *
+       * **The parameter exists to stop an infinite recursion, and the bug it fixes is a crash
+       * on the one screen S-11 added** (found while restyling it). `render` clears the clock
+       * through `stopCountdown`, which sets `timeUp = false` — so the `!timeUp` guard below
+       * was reset by the very render that was about to re-arm the clock:
+       *
+       *   render → stopCountdown (timeUp = false) → startCountdown → paint → remaining ≤ 0
+       *          → timeUp = true → render → …
+       *
+       * until the stack blew. `RangeError` unwound `render` half-done, leaving a phone whose
+       * question had expired with an *empty screen* — no prompt, no options, no "Czas minął".
+       * Every device that let a question run out sat looking at nothing until the host moved.
+       *
+       * A paint from `render` therefore only records the fact: `renderOpen` calls
+       * `startCountdown` immediately before it branches on `timeUp`, so the expired screen is
+       * painted in that same pass and no re-entry is needed. Only a paint from the timer —
+       * the real zero-crossing, with no render running — asks for one.
+       */
+      function paintCountdown(fromTick = true): void {
         if (countdownFor === null) return;
 
         const remaining = countdownFor.deadline - Date.now();
         renderCountdown(countdownBox, remaining, countdownFor.limitMs);
 
+        /**
+         * The last five seconds, in `signal`.
+         *
+         * On the container rather than on the two elements, so the number and the bar cannot
+         * disagree about whether the hurry has started — the same reason `renderCountdown`
+         * paints text and geometry in one call. Nothing else changes: no size, no motion, no
+         * sound. It is a colour, because an attendee is reading a phone in a dark room and a
+         * moving clock is already saying the rest.
+         */
+        countdownBox.dataset.urgent = String(remaining <= URGENT_MS);
+
         if (remaining <= 0) {
           // Reached zero: take the controls away, once, through the normal state machine.
-          if (!timeUp) {
-            timeUp = true;
-            render();
-          }
+          timeUp = true;
+          if (fromTick) render();
           return;
         }
 
@@ -1081,8 +1184,8 @@ import { publicQuiz } from "../../quiz/public";
           // Static text, and no control — something tappable that does nothing reads as a
           // broken quiz.
           renderQuestion(questionBox, question, {
-            prompt: "text-3xl font-bold leading-tight",
-            list: "flex flex-col gap-3",
+            prompt: PROMPT_CLASS,
+            list: OPTION_LIST,
             option: OPTION_CLASS,
           });
           hideAnswerControls();
@@ -1140,10 +1243,9 @@ import { publicQuiz } from "../../quiz/public";
         const locked = hasSubmitted(config.seenStorageKey, question.id);
 
         renderQuestion(questionBox, question, {
-          prompt: "text-3xl font-bold leading-tight",
-          list: "flex flex-col gap-3",
+          prompt: PROMPT_CLASS,
+          list: OPTION_LIST,
           option: OPTION_CLASS,
-          optionSelected: "border-brand-purple-light bg-brand-purple/30 font-semibold",
           mode: locked ? "static" : "answerable",
           selectedOptionIds: selected,
           onSelect: (next) => {
@@ -1188,8 +1290,8 @@ import { publicQuiz } from "../../quiz/public";
        */
       function renderTimedOut(question: PublicQuestion): void {
         renderQuestion(questionBox, question, {
-          prompt: "text-3xl font-bold leading-tight",
-          list: "flex flex-col gap-3",
+          prompt: PROMPT_CLASS,
+          list: OPTION_LIST,
           option: OPTION_CLASS,
         });
 
@@ -1208,7 +1310,7 @@ import { publicQuiz } from "../../quiz/public";
         // Prompt only. A text question has no options, so `renderQuestion` draws the
         // prompt and returns; the field lives outside this container on purpose.
         renderQuestion(questionBox, question, {
-          prompt: "text-3xl font-bold leading-tight",
+          prompt: PROMPT_CLASS,
         });
 
         markSeen(config.seenStorageKey, question.id);
@@ -1272,7 +1374,7 @@ import { publicQuiz } from "../../quiz/public";
       function renderOpenNumber(question: PublicQuestion): void {
         // Prompt only; the field lives outside the container that `render()` rebuilds.
         renderQuestion(questionBox, question, {
-          prompt: "text-3xl font-bold leading-tight",
+          prompt: PROMPT_CLASS,
         });
 
         markSeen(config.seenStorageKey, question.id);
@@ -1334,7 +1436,7 @@ import { publicQuiz } from "../../quiz/public";
         // Prompt only; the field is a static sibling outside the container `render()`
         // rebuilds.
         renderQuestion(questionBox, question, {
-          prompt: "text-3xl font-bold leading-tight",
+          prompt: PROMPT_CLASS,
         });
 
         markSeen(config.seenStorageKey, question.id);
@@ -1366,7 +1468,7 @@ import { publicQuiz } from "../../quiz/public";
 
         // No `scored` branch, unlike every other kind: the build gate refuses a scored
         // word-cloud question, so there is no second case to write copy for.
-        answerNote.textContent = "Napisz jedno słowo — pojawi się na dużym ekranie.";
+        answerNote.textContent = wordNoteText();
 
         setHidden(answerSubmit, false);
         answerSubmit.disabled = !hasTypedWord();
@@ -1375,6 +1477,26 @@ import { publicQuiz } from "../../quiz/public";
       /** Whether the field holds anything but whitespace. The server is the real judge. */
       function hasTypedAnswer(): boolean {
         return answerText.value.trim().length > 0;
+      }
+
+      /**
+       * What the note above the word field says, which is also **the only place the gate is
+       * visible** (signage redesign, step 8).
+       *
+       * The submit button greys out for two reasons an attendee can see they caused — nothing
+       * typed, or a space in the middle — and a disabled button that does not say why is the
+       * failure `lessons.md` opens with, in miniature. The empty case explains itself; the
+       * space case does not, so it gets a sentence.
+       *
+       * It says nothing about the character allowlist or the length bound. Those are the
+       * server's, they do not gate this button, and a note about a rule the button is not
+       * enforcing is worse than no note.
+       */
+      function wordNoteText(): string {
+        const value = answerWord.value.trim();
+        return value.length > 0 && /\s/.test(value)
+          ? "To musi być jedno słowo — bez spacji."
+          : "Napisz jedno słowo — pojawi się na dużym ekranie.";
       }
 
       /**
@@ -1436,6 +1558,9 @@ import { publicQuiz } from "../../quiz/public";
         if (questionId) typed.set(questionId, answerWord.value);
 
         answerSubmit.disabled = answerWord.disabled || !hasTypedWord();
+        // The note is part of the gate, so it has to move with the button rather than waiting
+        // for a render that deliberately never comes while a field is being typed into.
+        answerNote.textContent = wordNoteText();
       });
 
       /**
@@ -1459,8 +1584,8 @@ import { publicQuiz } from "../../quiz/public";
         setText("answer-error", "");
 
         renderQuestion(questionBox, question, {
-          prompt: "text-3xl font-bold leading-tight",
-          list: "flex flex-col gap-3",
+          prompt: PROMPT_CLASS,
+          list: OPTION_LIST,
           option: OPTION_CLASS,
           optionSelected: "border-brand-purple-light font-semibold",
           optionCorrect: "border-green-400 bg-green-500/20 font-semibold",
