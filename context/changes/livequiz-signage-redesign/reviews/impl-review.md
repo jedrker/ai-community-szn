@@ -4,7 +4,7 @@
 - **Plan**: `context/changes/livequiz-signage-redesign/plan.md`
 - **Scope**: all 11 steps (13 commits, `444e191..b4b49bf`)
 - **Date**: 2026-08-15
-- **Verdict**: REJECTED — two user-visible defects on paths every session hits. Both fixes are small.
+- **Verdict**: REJECTED at review; all ten findings triaged and fixed (see Decisions).
 - **Findings**: 2 critical, 5 warnings, 3 observations
 
 ## Verdicts
@@ -41,7 +41,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
 - **Fix**: Make `rank` and `points` ternaries on `closing` like their siblings — the
   non-closing arm drops the `[li:first-child>&]:` colour overrides and keeps `text-quiz-zinc` /
   inherited `signwhite`.
-- **Decision**: PENDING
+- **Decision**: FIXED — `rank`/`points` are ternaries on `closing` (0830076)
 
 ### F2 — The award line is sized as a figure but carries whole sentences
 
@@ -71,7 +71,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
     writes the echo there.
   - Confidence: MEDIUM — needs a check that no branch writes both.
   - Blind spot: The `answered: false` branch clears `result-answer`; it would need rewiring.
-- **Decision**: PENDING
+- **Decision**: FIXED via Fix A — `award(text, shape)` picks figure vs sentence (0830076)
 
 ### F3 — The branch is seven commits behind main, on the same two files
 
@@ -96,7 +96,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
   `dataset.urgent` is re-attached inside `createCountdown`'s `onPaint`. Then delete the
   now-duplicate `paintCountdown(fromTick)` fix — main's extraction already removes that bug —
   and keep its docstring's account of the crash somewhere, because it is the only record of it.
-- **Decision**: PENDING
+- **Decision**: FIXED — `main` merged, countdown module from main, `data-urgent` re-attached (843e38d)
 
 ### F4 — The live regions announce nothing, because the text is written while hidden
 
@@ -113,7 +113,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
   failure and every host message became silent to a screen reader.
 - **Fix**: Unhide before writing — `setHidden(bubble, false); setText(...)` — and hide again
   when the text is empty.
-- **Decision**: PENDING
+- **Decision**: FIXED — all three helpers unhide before writing (0830076)
 
 ### F5 — The phone's countdown is hidden from assistive tech entirely
 
@@ -127,7 +127,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
   review (its F9 moved `aria-hidden` onto the bar alone). Related to F3: resolving the merge in
   favour of this branch's markup re-introduces the bug main closed.
 - **Fix**: Move `aria-hidden="true"` from the panel to the bar `<div>`, matching main.
-- **Decision**: PENDING
+- **Decision**: FIXED — `aria-hidden` moved onto the bar (0830076)
 
 ### F6 — Connection-lost leaves the previous question's options on screen and tappable
 
@@ -145,7 +145,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
   shape is pre-existing; the restyle made it reachable-looking rather than plainly dead.
 - **Fix**: Call `showQuestion(false)` in this branch (and hide the board), making the alarm a
   screen of its own — which is what the plan's phone inventory shows.
-- **Decision**: PENDING
+- **Decision**: FIXED — the lost branch hides the question and the board
 
 ### F7 — A stale docstring now contradicts its own function, and the "only behavioural change" claim is false
 
@@ -160,7 +160,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
   true: the countdown recursion fix (`d4d14bd`) and the `optionIds` persistence (`76ea6f5`) are
   both behavioural, both unplanned, and both justified in their own commits.
 - **Fix**: Delete the stale block and soften the claim to name the two follow-up fixes.
-- **Decision**: PENDING
+- **Decision**: FIXED — stale docstring deleted, the claim now names the two follow-up fixes
 
 ### F8 — A purge leaves the projector's clock running under "brak sesji"
 
@@ -174,7 +174,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
   — which `applyShell(NO_SESSION)` leaves on screen. Pre-existing at the merge base; this change
   rewrote the branch, which makes it the natural place to close it.
 - **Fix**: Add `stopCountdown()` beside `stopPolling()` in that branch.
-- **Decision**: PENDING
+- **Decision**: FIXED — `stopCountdown()` added to the sessionless branch
 
 ### F9 — A stale send failure can survive into the next question
 
@@ -189,7 +189,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
   signal-marked bubble above the new question's submit, reading as a refusal of an answer that
   has not been given. Pre-existing; the bubble makes it louder.
 - **Fix**: Call `answerError("")` where the question id changes.
-- **Decision**: PENDING
+- **Decision**: FIXED — `dressControlsFor` clears a stale failure when the question changes
 
 ### F10 — The revealed slab's colour depends on token declaration order in `global.css`
 
@@ -206,7 +206,7 @@ all pass, and the one-loop / one-fetch-site / one-`CONTROL_RULES`-reader guarant
   `--color-quiz-*` block would silently flip the reveal's slabs back to chrome**.
 - **Fix**: Express the revealed slab as a `data-` variant like everything else, or pin the
   dependency with a comment in `global.css`.
-- **Decision**: PENDING
+- **Decision**: FIXED — the revealed band is a `data-revealed` variant, mutually exclusive with `data-correct`
 
 ## Not findings, recorded for completeness
 

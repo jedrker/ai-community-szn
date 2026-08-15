@@ -1075,18 +1075,41 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * with an inactive slab — a reveal in which the wrong answers look exactly as they did
        * a second earlier makes the room hunt for what changed.
        */
+      /**
+       * The reveal, as variants keyed on `#question`'s `data-revealed` (impl review F10).
+       *
+       * **This used to be a second plain class string joined onto the slab's**, and the two
+       * set the same properties on the same pseudo-element at the same specificity — the
+       * exact hazard this file's own note above says it avoids. It resolved correctly only
+       * because Tailwind sorts same-utility rules by theme-token declaration order and
+       * `slab-inactive` happens to be declared after `chrome`: **reordering the
+       * `--color-quiz-*` block would have silently flipped the revealed slabs back to
+       * chrome**, with nothing failing.
+       *
+       * Now the two are mutually exclusive by selector rather than by luck. The stepped-back
+       * band excludes `[data-correct=true]`, so the correct band's own `data-` variants own
+       * that row outright — the same construction the phone's own-pick-versus-correct rule
+       * uses, and for the same reason.
+       */
+      const REVEALED = "[[data-revealed=true]_&:not([data-correct=true])]:";
       const BAND_REVEALED =
-        "bg-quiz-asphalt text-quiz-echo before:bg-quiz-slab-inactive before:text-quiz-zinc " +
-        "before:border-quiz-slab-inactive data-[correct=true]:bg-quiz-mint-tint " +
-        "data-[correct=true]:text-quiz-mint data-[correct=true]:before:bg-quiz-mint " +
-        "data-[correct=true]:before:border-quiz-mint data-[correct=true]:before:text-quiz-ink";
-      const BAND_OPEN = "bg-quiz-asphalt text-quiz-signwhite";
+        `${REVEALED}text-quiz-echo ${REVEALED}before:bg-quiz-slab-inactive ` +
+        `${REVEALED}before:text-quiz-zinc ${REVEALED}before:border-quiz-slab-inactive ` +
+        "data-[correct=true]:bg-quiz-mint-tint data-[correct=true]:text-quiz-mint " +
+        "data-[correct=true]:before:bg-quiz-mint data-[correct=true]:before:border-quiz-mint " +
+        "data-[correct=true]:before:text-quiz-ink";
 
-      function bandClass(kind: string | undefined, revealed: boolean): string {
+      /**
+       * One string for both phases now: the ground and the open-question type are the base,
+       * and the reveal only ever *overrides* through the variants above. `revealed` is no
+       * longer a parameter here — the DOM carries it.
+       */
+      function bandClass(kind: string | undefined): string {
         return [
           BAND_BASE,
+          "bg-quiz-asphalt text-quiz-signwhite",
           kind === "multiple-choice" ? SLAB_MULTIPLE : SLAB_SINGLE,
-          revealed ? BAND_REVEALED : BAND_OPEN,
+          BAND_REVEALED,
         ].join(" ");
       }
 
@@ -1573,6 +1596,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           setHidden(wordCloudBox, true);
           setHidden(wordCloudPanel, true);
           stopPolling();
+          // And the clock (impl review F8). This branch returns before `renderCountdownPanel`,
+          // so without it a purge or an expiry mid-question leaves the rail counting down under
+          // "brak sesji" — a timer running for a session that no longer exists.
+          stopCountdown();
           /**
            * A purge or an expiry, so the next session starts from nothing. Without this the
            * cloud from the previous room would be re-shown the moment a new session reached
@@ -1741,10 +1768,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
               ? { ...question, options: undefined }
               : question;
 
+        // The flag the band variants key on. Set on the container rather than passed into the
+        // class string, so the reveal cannot be half-applied: one attribute, every band.
+        questionBox.dataset.revealed = String(revealed);
+
         renderQuestion(questionBox, shownQuestion, {
           prompt: promptClass(shownQuestion?.prompt),
           list: BAND_LIST,
-          option: bandClass(question?.kind, revealed),
+          option: bandClass(question?.kind),
           mode: revealed ? "revealed" : "static",
           correctOptionIds: state.revealedOptionIds,
         });
@@ -1788,13 +1819,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
-       * Still binary, and still wrong about two of its callers — `applied:false` and the
-       * closing button's arming line are neither a success nor a failure. Widening it to a
-       * register is step 6 of the redesign and is deliberately a separate commit: it is the
-       * one behavioural change in the whole thing, and it should be revertable without
-       * taking the styling with it. This step only re-sizes the line for the control bar.
-       */
-      /**
        * FOUR REGISTERS, BECAUSE TWO OF THEM WERE LYING (signage redesign, step 6).
        *
        * `say(text, bad)` was binary, and a boolean has no room for the two outcomes that are
@@ -1809,8 +1833,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * - `attention` — nothing broke; the host has to decide something.
        * - `refused` — refused or not delivered.
        *
-       * **This is the only behavioural change in the redesign**, which is why it is its own
-       * commit: it can be reverted without taking the styling with it.
+       * **The redesign's one planned behavioural change**, which is why it is its own commit:
+       * it can be reverted without taking the styling with it. Two more were added along the
+       * way, both unplanned and both fixing something older than this change — the countdown
+       * recursion that blanked an expired question, and persisting a device's own pick so a
+       * reload does not lose it.
        *
        * The bubble is deliberately **persistent** — it stays until the next thing is said
        * (decided with the user; plan §7 open question 2). Nothing here expires, so a host who

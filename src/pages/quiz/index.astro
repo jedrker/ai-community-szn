@@ -583,6 +583,24 @@ import { publicQuiz } from "../../quiz/public";
       }
 
       /**
+       * Which question the answering controls are currently dressed for.
+       *
+       * **Only so a send failure cannot outlive its question** (impl review F9). The ordinary
+       * open → reveal → advance flow clears the error through `hideAnswerControls`, but
+       * `CONTROL_RULES` deliberately keeps `dalej` live during `question-open`, so open → open
+       * is reachable — and a stale "Nie udało się wysłać…" would then sit in a signal-marked
+       * bubble above the new question's submit, reading as a refusal of an answer nobody has
+       * given yet.
+       */
+      let controlsQuestionId: string | null = null;
+
+      function dressControlsFor(questionId: string): void {
+        if (controlsQuestionId === questionId) return;
+        controlsQuestionId = questionId;
+        answerError("");
+      }
+
+      /**
        * The join refusal, and the bubble that carries it.
        *
        * Empty means *no refusal*, and the bubble goes with it — a cleared message that left
@@ -787,6 +805,21 @@ import { publicQuiz } from "../../quiz/public";
           );
           setHidden(degradedNote, true);
           hideAnswerControls();
+          /**
+           * **The question goes too, and this was the one `render()` path that never said so**
+           * (impl review F6). `hideAnswerControls` reaches the submit and the three fields,
+           * but the option buttons live inside `#question` — so the previous prompt stayed on
+           * screen under the alarm with its buttons still live. A tap ran `onSelect` →
+           * `render()`, which returns here without repainting: `aria-pressed` never moved and
+           * the tap did nothing, silently, on the one screen that is already telling the
+           * attendee something is wrong.
+           *
+           * It also settles `data-waiting`, which otherwise kept whatever the previous phase
+           * left — so the alarm sat at the top or at the foot depending on where the session
+           * happened to be when the channel went.
+           */
+          showQuestion(false);
+          setHidden(standingsBox, true);
           return;
         }
 
@@ -1277,6 +1310,7 @@ import { publicQuiz } from "../../quiz/public";
         setHidden(answerWord, true);
 
         markSeen(config.seenStorageKey, question.id);
+        dressControlsFor(question.id);
 
         const selected = pickedOptionIds(question.id);
         // Read from storage, not from memory: a reload mid-question must not re-offer
@@ -1355,6 +1389,7 @@ import { publicQuiz } from "../../quiz/public";
         });
 
         markSeen(config.seenStorageKey, question.id);
+        dressControlsFor(question.id);
 
         const locked = hasSubmitted(config.seenStorageKey, question.id);
 
@@ -1419,6 +1454,7 @@ import { publicQuiz } from "../../quiz/public";
         });
 
         markSeen(config.seenStorageKey, question.id);
+        dressControlsFor(question.id);
 
         const locked = hasSubmitted(config.seenStorageKey, question.id);
 
@@ -1481,6 +1517,7 @@ import { publicQuiz } from "../../quiz/public";
         });
 
         markSeen(config.seenStorageKey, question.id);
+        dressControlsFor(question.id);
 
         const locked = hasSubmitted(config.seenStorageKey, question.id);
 
