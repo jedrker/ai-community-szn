@@ -309,10 +309,10 @@ None — no persisted state, no schema, no key. A revert is a revert.
 
 #### Automated
 
-- [x] 1.1 Test suite passes: `bun run test`
-- [x] 1.2 Type check reports 0 errors: `bun run type-check`
-- [x] 1.3 Production build succeeds: `bun run build`
-- [x] 1.4 Both new guards verified in both directions
+- [x] 1.1 Test suite passes: `bun run test` — 0d24de0
+- [x] 1.2 Type check reports 0 errors: `bun run type-check` — 0d24de0
+- [x] 1.3 Production build succeeds: `bun run build` — 0d24de0
+- [x] 1.4 Both new guards verified in both directions — 0d24de0
 
 #### Manual
 
@@ -328,8 +328,8 @@ None — no persisted state, no schema, no key. A revert is a revert.
 
 #### Automated
 
-- [ ] 2.1 Test suite still passes: `bun run test`
-- [ ] 2.2 Type check reports 0 errors: `bun run type-check`
+- [x] 2.1 Test suite still passes: `bun run test`
+- [x] 2.2 Type check reports 0 errors: `bun run type-check`
 
 #### Manual
 

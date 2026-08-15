@@ -454,6 +454,23 @@ early return, and `fire`'s `finally`, which re-enables every button unconditiona
 is deliberately outside the table: it carries arming state and `syncEndButton` owns it, including the
 decision that it stays out of reach in `lobby` even though the route accepts it there.
 
+**The projector's rail obeys the same discipline from the other direction: it is present exactly
+when one of its three blocks is, and `syncRail` is its only writer.** The blocks — the answered
+count, the clock, the word cloud's counters — each hide on their own rule, and `#rail` used to
+outlive all of them, so an empty 440px column with a divider sat beside the stage in four states:
+every non-cloud reveal, the standings beat, the sessionless `brak sesji` fallback, and the close
+(which `applyShell` handled as a special case). `syncRail` reads those three sections' own `hidden`
+state, so it is one rule rather than a fourth copy of predicates that already exist, and the close
+falls out of it — which is why `applyShell` no longer touches `railBox` at all.
+
+**Never key the rail on the phase.** A `phase === "question-revealed"` condition looks equivalent
+and is wrong: `pollTargetFor` keeps returning a words target through the reveal so the host can talk
+over a frozen cloud, so a phase list takes the rail away from the one reveal that still has
+something in it. `host.test.ts` fails the suite on a second `setHidden(railBox` or a missing call
+site — the rule must reach both `render`'s ordinary path and its sessionless early return, each
+after the panel renderers it reads. The rail's *absence* is what hands the distribution bars and the
+leaderboard the full width; `#stage` is `flex-1` and widens on its own.
+
 ## Polling: two loops, three endpoints, and why every one has to be nameable
 
 The runbook's command tripwire is a polling detector, so **an unaccounted-for loop reads as an
