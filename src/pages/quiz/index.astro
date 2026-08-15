@@ -189,17 +189,31 @@ import { publicQuiz } from "../../quiz/public";
              `renderQuestion` emits, for the same reason the answer fields below are:
              `render()` runs on every applied snapshot and `replaceChildren()` would
              destroy anything living inside the question container. -->
-        <p
+        <div
           id="degraded-note"
           hidden
-          role="status"
-          aria-live="polite"
-          class="rounded-xl border border-amber-400 bg-amber-500/15 px-4 py-3 text-lg
-                 text-amber-200"
+          class="flex items-stretch gap-3 rounded-[16px] border-2 border-quiz-field-border
+                 bg-quiz-float px-4 py-3"
         >
-          Grasz w trybie zapasowym — odświeżamy pytania co kilka sekund. Odpowiedzi
-          działają normalnie, ale punkty za czas mogą być niższe.
-        </p>
+          <span class="w-[8px] shrink-0 rounded-full bg-quiz-chrome"></span>
+          <!--
+            `attention`, not `refused`: nothing is broken and nothing needs fixing by the
+            person holding the phone — they are being told why the screen may lag. That is the
+            register the projector's bubble gives chrome, and this is its phone counterpart.
+
+            **The copy is shortened, which the plan sanctions explicitly.** The full sentence
+            ran to three lines on a 390px screen, above a question the attendee is trying to
+            answer against a clock. What it must carry is that answers still work and that the
+            clock may cost them — the mechanism ("we refresh every few seconds") is a fact
+            about a transport nobody in the room can act on.
+          -->
+          <!-- 20px, the phone scale's floor, and the one place this view goes to it: the
+               banner is a notice *above* the question, so every line it takes is a line the
+               prompt loses. At 22px the shortened sentence still ran to four. -->
+          <p role="status" aria-live="polite" class="text-[20px] font-semibold leading-[26px]">
+            Tryb zapasowy — odpowiedzi działają, ale punkty za czas mogą być niższe.
+          </p>
+        </div>
 
         <!-- The countdown (S-11, FR-020). A STATIC element shown and hidden, for the same
              reason the inputs below are: `renderQuestion` calls `replaceChildren()` on the
@@ -342,6 +356,37 @@ import { publicQuiz } from "../../quiz/public";
         />
 
         <p id="answer-note" hidden class="text-[22px] leading-[28px] text-quiz-echo"></p>
+        <!--
+          The send failure, in the same bubble the join refusal uses (plan §3).
+
+          **Directly above the submit button**, which is where a failure has to appear: the
+          sentence says "try again" and the button is what the thumb is already on. Under the
+          button it sat below the fold on a long prompt — a refusal an attendee never saw,
+          beside a control that looked like it had worked.
+
+          `refused` register, so the marker is `signal`: the answer did not land. The submit
+          button beside it stays enabled on a network failure — the phone is being told to try
+          again, and a disabled button under "spróbuj ponownie" is an instruction it cannot
+          follow.
+
+          `role="alert"` on the copy rather than on the bubble, so the live region announces
+          the sentence and not the bar beside it.
+        -->
+        <div
+          id="answer-error-bubble"
+          hidden
+          class="flex items-stretch gap-3 rounded-[16px] border-2 border-quiz-field-border
+                 bg-quiz-float px-4 py-3"
+        >
+          <span class="w-[8px] shrink-0 rounded-full bg-quiz-signal"></span>
+          <p
+            id="answer-error"
+            role="alert"
+            aria-live="polite"
+            class="text-[22px] font-semibold leading-[28px]"
+          >
+          </p>
+        </div>
         <button
           id="answer-submit"
           type="button"
@@ -351,13 +396,6 @@ import { publicQuiz } from "../../quiz/public";
         >
           Wyślij odpowiedź
         </button>
-        <p
-          id="answer-error"
-          role="alert"
-          aria-live="polite"
-          class="text-[22px] font-semibold leading-[28px] text-quiz-signal"
-        >
-        </p>
 
         <!-- The accepted answer for a free-text question, from the snapshot. Sits
              OUTSIDE the result panel on purpose: the panel is gated on having answered
@@ -496,7 +534,6 @@ import { publicQuiz } from "../../quiz/public";
       const answerNumber = el("answer-number") as HTMLInputElement;
       const answerWord = el("answer-word") as HTMLInputElement;
       const answerNote = el("answer-note");
-      const answerError = el("answer-error");
       const standingsBox = el("standings");
       const standingsBoard = el("standings-board");
       const answerAccepted = el("answer-accepted");
@@ -504,6 +541,7 @@ import { publicQuiz } from "../../quiz/public";
       const resultPanel = el("result");
       const countdownBox = el("countdown");
       const joinErrorBubble = el("join-error-bubble");
+      const answerErrorBubble = el("answer-error-bubble");
 
       /**
        * THE STATUS LINE'S THREE REGISTERS (signage redesign, step 7).
@@ -555,6 +593,16 @@ import { publicQuiz } from "../../quiz/public";
       function joinError(text: string): void {
         setText("join-error", text);
         setHidden(joinErrorBubble, text.length === 0);
+      }
+
+      /**
+       * The answering side's equivalent, and the same rule: empty means *no failure*, so the
+       * frame goes with the words. A bubble left standing with nothing in it reads as a
+       * refusal whose sentence failed to load.
+       */
+      function answerError(text: string): void {
+        setText("answer-error", text);
+        setHidden(answerErrorBubble, text.length === 0);
       }
 
       let connection: ConnectionStatus = "connecting";
@@ -1181,7 +1229,7 @@ import { publicQuiz } from "../../quiz/public";
         setHidden(answerNote, true);
         setHidden(answerAccepted, true);
         setHidden(resultPanel, true);
-        setText("answer-error", "");
+        answerError("");
       }
 
       /**
@@ -1631,7 +1679,7 @@ import { publicQuiz } from "../../quiz/public";
         setHidden(answerNumber, true);
         setHidden(answerWord, true);
         setHidden(answerNote, true);
-        setText("answer-error", "");
+        answerError("");
 
         renderQuestion(questionBox, question, {
           prompt: PROMPT_CLASS,
@@ -1936,7 +1984,7 @@ import { publicQuiz } from "../../quiz/public";
 
         answerSubmit.disabled = true;
         answerSubmit.textContent = "Wysyłanie…";
-        setText("answer-error", "");
+        answerError("");
 
         // The device's own clock, from the paint this device recorded — not from the
         // host's advance, and not reset by a reload.
@@ -1985,7 +2033,7 @@ import { publicQuiz } from "../../quiz/public";
          * container and fight the field the attendee is about to correct.
          */
         if (outcome.outcome === "invalid") {
-          setText("answer-error", outcome.error);
+          answerError(outcome.error);
           answerSubmit.disabled = false;
           return;
         }
@@ -1994,7 +2042,7 @@ import { publicQuiz } from "../../quiz/public";
           // The server's own Polish message — "already answered", "no longer open".
           // Treated as final: the answer is not going to be accepted by retrying.
           markSubmitted(config.seenStorageKey, questionId, submission);
-          setText("answer-error", outcome.error);
+          answerError(outcome.error);
           render();
           return;
         }
@@ -2012,13 +2060,13 @@ import { publicQuiz } from "../../quiz/public";
          * lands on the timed-out screen — so this branch does not have to reproduce it.
          */
         if (outcome.outcome === "expired") {
-          setText("answer-error", outcome.error);
+          answerError(outcome.error);
           render();
           return;
         }
 
         // The network, not the session. Let them try again.
-        setText("answer-error", "Nie udało się wysłać. Spróbuj ponownie.");
+        answerError("Nie udało się wysłać. Spróbuj ponownie.");
         answerSubmit.disabled = false;
       }
 
