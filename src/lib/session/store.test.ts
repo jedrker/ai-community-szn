@@ -1768,8 +1768,8 @@ describe("readStandings", () => {
     // field would find nothing in the scores hash and every total would read zero.
     return expect(readStandings()).resolves.toEqual({
       rows: [
-        { rank: 1, displayName: "Bartek", points: 30 },
-        { rank: 2, displayName: "Ala", points: 10 },
+        { rank: 1, displayName: "Bartek", points: 30, delta: null },
+        { rank: 2, displayName: "Ala", points: 10, delta: null },
       ],
       playerCount: 2,
     });
@@ -1779,7 +1779,7 @@ describe("readStandings", () => {
     hashes({ ala: ala }, { "id-ala": 5 });
 
     return expect(readStandings()).resolves.toMatchObject({
-      rows: [{ rank: 1, displayName: "Ala", points: 5 }],
+      rows: [{ rank: 1, displayName: "Ala", points: 5, delta: null }],
     });
   });
 
@@ -1791,8 +1791,8 @@ describe("readStandings", () => {
 
     return expect(readStandings()).resolves.toMatchObject({
       rows: [
-        { rank: 1, displayName: "Ala", points: 10 },
-        { rank: 2, displayName: "Bartek", points: 0 },
+        { rank: 1, displayName: "Ala", points: 10, delta: null },
+        { rank: 2, displayName: "Bartek", points: 0, delta: null },
       ],
       playerCount: 2,
     });
@@ -1808,7 +1808,7 @@ describe("readStandings", () => {
     const standings = await readStandings();
 
     expect(standings?.rows).toEqual([
-      { rank: 1, displayName: "Ala", points: 10 },
+      { rank: 1, displayName: "Ala", points: 10, delta: null },
     ]);
     // The dropped row is dropped from the count too — a denominator that included a
     // player with no name would leave the attendee's "position N of M" unreachable at M.
@@ -1833,8 +1833,8 @@ describe("readStandings", () => {
     const standings = await readStandings();
 
     expect(standings?.rows).toEqual([
-      { rank: 1, displayName: "Ala", points: 10 },
-      { rank: 2, displayName: "Bartek", points: 0 },
+      { rank: 1, displayName: "Ala", points: 10, delta: null },
+      { rank: 2, displayName: "Bartek", points: 0, delta: null },
     ]);
   });
 

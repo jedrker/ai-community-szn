@@ -5,6 +5,7 @@ import {
   STANDINGS_SIZE,
   buildStandings,
   rankOf,
+  standingsRowSchema,
   standingsSchema,
 } from "./standings";
 
@@ -140,6 +141,7 @@ describe("buildStandings", () => {
       rank: 2,
       displayName: "Cichy",
       points: 0,
+      delta: null,
     });
   });
 
@@ -209,5 +211,174 @@ describe("buildStandings", () => {
     // Not cosmetic: a row carrying an id publishes the credential the five most
     // impersonation-worthy attendees answer with. See the module note.
     expect(JSON.stringify(standings)).not.toContain("secret-id");
+  });
+});
+
+/**
+ * THE RANK DELTA (this change).
+ *
+ * Every fixture here is built player by player and states both dates explicitly, for the
+ * reason the file's `player` helper carries: each of these tests turns on the *relationship*
+ * between a previous total and a current one, so a shared base object would decide the
+ * branch somewhere other than the test naming it.
+ */
+describe("buildStandings — the rank delta", () => {
+  /**
+   * THE SIGN, which is the one thing in this change that cannot be checked by reading the
+   * output. Rank numbers shrink as a player climbs, so the subtraction that produces a
+   * delta runs backwards from the intuition — inverted, this board would tell the room
+   * that the player who just took the lead had fallen two places.
+   *
+   * The magnitudes are asserted alongside the signs deliberately: an implementation that
+   * emitted ±1 for "moved" would satisfy a sign-only assertion and be wrong about Celina.
+   */
+  it("reports a climb as positive and a fall as negative", () => {
+    const standings = buildStandings(
+      [
+        player("a", "Ala", NOW),
+        player("b", "Bartek", NOW + 1),
+        player("c", "Celina", NOW + 2),
+      ],
+      { a: 30, b: 20, c: 40 },
+      { a: 30, b: 20, c: 10 },
+    );
+
+    // Celina came from last to first; the two she passed each slipped one place.
+    expect(standings.rows.map((row) => [row.displayName, row.delta])).toEqual([
+      ["Celina", 2],
+      ["Ala", -1],
+      ["Bartek", -1],
+    ]);
+  });
+
+  /**
+   * The previous rank is measured against **everyone**, not against the five rows that get
+   * published — and this fixture is built to tell the two apart. Celina climbs from last of
+   * six to first, which is five places; computed over the published board alone it would be
+   * four, because the player she used to sit behind is off the bottom of it.
+   */
+  it("measures the previous rank against the whole room, not the published five", () => {
+    const standings = buildStandings(
+      Array.from({ length: 6 }, (_, index) =>
+        player(`p${index}`, `Gracz ${index}`, NOW + index),
+      ),
+      { p0: 60, p1: 50, p2: 40, p3: 30, p4: 20, p5: 100 },
+      { p0: 60, p1: 50, p2: 40, p3: 30, p4: 20, p5: 10 },
+    );
+
+    expect(standings.rows[0]).toMatchObject({
+      displayName: "Gracz 5",
+      rank: 1,
+      delta: 5,
+    });
+  });
+
+  /**
+   * THE ZERO-BASELINE RULE, in the situation it exists for.
+   *
+   * Before question 1 the whole room holds nothing, and competition ranking puts every one
+   * of them in a single tie at position 1. Without the rule this board reads `0, -1, -2` —
+   * the first leaderboard of the session telling the room its top scorers had fallen.
+   *
+   * The baseline here is a real, *present* map that happens to be empty, not `null`: this
+   * test must reach the zero rule rather than the no-baseline branch below it, and those two
+   * produce identical output.
+   */
+  it("shows no movement on the first board of a session, where everyone came from zero", () => {
+    const standings = buildStandings(
+      [
+        player("a", "Ala", NOW),
+        player("b", "Bartek", NOW + 1),
+        player("c", "Celina", NOW + 2),
+      ],
+      { a: 30, b: 20 },
+      {},
+    );
+
+    expect(standings.rows.map((row) => row.delta)).toEqual([null, null, null]);
+    // Proof the fixture reached the zero rule and not an empty board: three rows, ordered.
+    expect(standings.rows.map((row) => row.displayName)).toEqual([
+      "Ala",
+      "Bartek",
+      "Celina",
+    ]);
+  });
+
+  /**
+   * The same rule per player rather than per board: a newcomer arriving from nothing is
+   * silent while the two she passed still have their falls reported. That asymmetry is the
+   * rule's point — an absent past is silent, a real one is not.
+   */
+  it("silences only the player who came from zero, not the board around them", () => {
+    const standings = buildStandings(
+      [
+        player("a", "Ala", NOW),
+        player("b", "Bartek", NOW + 1),
+        player("c", "Celina", NOW + 2),
+      ],
+      { a: 30, b: 20, c: 40 },
+      { a: 30, b: 20 },
+    );
+
+    expect(standings.rows.map((row) => [row.displayName, row.delta])).toEqual([
+      ["Celina", null],
+      ["Ala", -1],
+      ["Bartek", -1],
+    ]);
+  });
+
+  /**
+   * Tied players share a rank on both dates, so a tie cannot manufacture a move. The points
+   * all change here and the positions do not — which is what separates "nobody moved" from
+   * "nothing happened", and what an implementation using array positions instead of `rankOf`
+   * gets wrong: it would hand Bartek a phantom climb out of a tie he never left.
+   */
+  it("reports no movement when a tie holds across both dates", () => {
+    const standings = buildStandings(
+      [
+        player("a", "Ala", NOW),
+        player("b", "Bartek", NOW + 1),
+        player("c", "Celina", NOW + 2),
+      ],
+      { a: 20, b: 20, c: 30 },
+      { a: 10, b: 10, c: 30 },
+    );
+
+    expect(standings.rows.map((row) => [row.displayName, row.delta])).toEqual([
+      ["Celina", 0],
+      ["Ala", 0],
+      ["Bartek", 0],
+    ]);
+  });
+
+  /**
+   * No baseline is not zero movement — it is nothing to say. This is the shape `end.ts`
+   * calls the read with and the shape a failed awards read degrades to, so it is the one
+   * that has to stay quiet rather than confident.
+   */
+  it("leaves every delta null when no baseline is passed", () => {
+    const standings = buildStandings(
+      [player("a", "Ala", NOW), player("b", "Bartek", NOW + 1)],
+      { a: 30, b: 20 },
+    );
+
+    expect(standings.rows.map((row) => row.delta)).toEqual([null, null]);
+  });
+
+  /**
+   * The back-compat default, and it is load-bearing rather than tidy: a `SessionState`
+   * written before this field shipped is read back and parsed after it, and a required
+   * `delta` would fail that parse — which surfaces as the host's next action 409ing in the
+   * middle of a segment.
+   */
+  it("parses a row written before the field existed, defaulting to no movement", () => {
+    const parsed = standingsRowSchema.safeParse({
+      rank: 1,
+      displayName: "Ala",
+      points: 10,
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.delta).toBe(null);
   });
 });

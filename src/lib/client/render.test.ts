@@ -723,9 +723,9 @@ describe("renderStandings", () => {
     // `lessons.md` describes: the assertion was right and the fixture could not reach the
     // branch it named. Verified by adding a sort and watching this fail.
     renderStandings(container, [
-      { rank: 3, displayName: "Celina", points: 10 },
-      { rank: 1, displayName: "Ala", points: 30 },
-      { rank: 1, displayName: "Bartek", points: 30 },
+      { rank: 3, displayName: "Celina", points: 10, delta: null },
+      { rank: 1, displayName: "Ala", points: 30, delta: null },
+      { rank: 1, displayName: "Bartek", points: 30, delta: null },
     ]);
 
     // No separators between the spans: the visual spacing is CSS `gap`, so the
@@ -740,9 +740,9 @@ describe("renderStandings", () => {
    */
   it("takes the rank from the row, so a tie shows the same number twice", () => {
     renderStandings(container, [
-      { rank: 1, displayName: "Ala", points: 50 },
-      { rank: 1, displayName: "Bartek", points: 50 },
-      { rank: 3, displayName: "Celina", points: 10 },
+      { rank: 1, displayName: "Ala", points: 50, delta: null },
+      { rank: 1, displayName: "Bartek", points: 50, delta: null },
+      { rank: 3, displayName: "Celina", points: 10, delta: null },
     ]);
 
     expect(
@@ -756,8 +756,8 @@ describe("renderStandings", () => {
     renderStandings(
       container,
       [
-        { rank: 1, displayName: "Ala", points: 30 },
-        { rank: 2, displayName: "Bartek", points: 10 },
+        { rank: 1, displayName: "Ala", points: 30, delta: null },
+        { rank: 2, displayName: "Bartek", points: 10, delta: null },
       ],
       { ownDisplayName: "Bartek", rowOwn: "is-me" },
     );
@@ -775,23 +775,33 @@ describe("renderStandings", () => {
    * Safe in practice because the stored name is the one the server returned, byte for byte.
    */
   it("does not match a differently-cased name", () => {
-    renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }], {
-      ownDisplayName: "ALA",
-    });
+    renderStandings(
+      container,
+      [{ rank: 1, displayName: "Ala", points: 30, delta: null }],
+      {
+        ownDisplayName: "ALA",
+      },
+    );
 
     expect(container.querySelectorAll("li[data-own='true']")).toHaveLength(0);
   });
 
   it("marks nothing when the viewer is not a player", () => {
-    renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }], {
-      ownDisplayName: null,
-    });
+    renderStandings(
+      container,
+      [{ rank: 1, displayName: "Ala", points: 30, delta: null }],
+      {
+        ownDisplayName: null,
+      },
+    );
 
     expect(container.querySelectorAll("li[data-own='true']")).toHaveLength(0);
   });
 
   it("renders a short board without padding it", () => {
-    renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }]);
+    renderStandings(container, [
+      { rank: 1, displayName: "Ala", points: 30, delta: null },
+    ]);
 
     expect(rows()).toHaveLength(1);
   });
@@ -809,7 +819,12 @@ describe("renderStandings", () => {
    */
   it("writes a name as text, never as markup", () => {
     renderStandings(container, [
-      { rank: 1, displayName: "<img src=x onerror=alert(1)>", points: 30 },
+      {
+        rank: 1,
+        displayName: "<img src=x onerror=alert(1)>",
+        points: 30,
+        delta: null,
+      },
     ]);
 
     expect(container.querySelector("img")).toBeNull();
@@ -817,9 +832,11 @@ describe("renderStandings", () => {
   });
 
   it("replaces a previous board rather than appending to it", () => {
-    renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }]);
     renderStandings(container, [
-      { rank: 1, displayName: "Bartek", points: 40 },
+      { rank: 1, displayName: "Ala", points: 30, delta: null },
+    ]);
+    renderStandings(container, [
+      { rank: 1, displayName: "Bartek", points: 40, delta: null },
     ]);
 
     expect(rows()).toHaveLength(1);
@@ -1441,8 +1458,8 @@ describe("entrance motion", () => {
 
   describe("the standings board", () => {
     const rows = [
-      { rank: 1, displayName: "Ania", points: 30 },
-      { rank: 2, displayName: "Bartek", points: 20 },
+      { rank: 1, displayName: "Ania", points: 30, delta: null },
+      { rank: 2, displayName: "Bartek", points: 20, delta: null },
     ];
 
     it("lands the board as one block", () => {
@@ -1499,7 +1516,7 @@ describe("entrance motion", () => {
 
       renderStandings(
         container,
-        [rows[0]!, { rank: 2, displayName: "Bartek", points: 25 }],
+        [rows[0]!, { rank: 2, displayName: "Bartek", points: 25, delta: null }],
         { animate: true, motionKey: "standings" },
       );
 

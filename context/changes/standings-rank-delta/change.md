@@ -1,7 +1,7 @@
 ---
 change_id: standings-rank-delta
 title: Show each player's rank change since the previous standings beat
-status: new
+status: implementing
 created: 2026-08-16
 updated: 2026-08-16
 archived_at: null

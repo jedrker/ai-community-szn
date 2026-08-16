@@ -265,7 +265,7 @@ describe("the ended phase invariant", () => {
  */
 describe("the standings phase invariant", () => {
   const board = {
-    rows: [{ rank: 1, displayName: "Ala", points: 30 }],
+    rows: [{ rank: 1, displayName: "Ala", points: 30, delta: null }],
     playerCount: 4,
   };
 
@@ -619,8 +619,8 @@ describe("standings", () => {
 
   const board = {
     rows: [
-      { rank: 1, displayName: "Ala", points: 30 },
-      { rank: 2, displayName: "Bartek", points: 20 },
+      { rank: 1, displayName: "Ala", points: 30, delta: null },
+      { rank: 2, displayName: "Bartek", points: 20, delta: null },
     ],
     playerCount: 5,
   };
@@ -783,7 +783,7 @@ describe("standings", () => {
      */
     it("ignores the board the session was already showing", () => {
       const fresher = {
-        rows: [{ rank: 1, displayName: "Czarek", points: 99 }],
+        rows: [{ rank: 1, displayName: "Czarek", points: 99, delta: null }],
         playerCount: 5,
       };
 
