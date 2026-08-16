@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { getQuestionById, quiz } from "../../quiz/index";
+import {
+  getQuestionById,
+  getQuizByQuestionId,
+  quizzes,
+} from "../../quiz/index";
 import { standingsSchema, type Standings } from "./standings";
 
 /**
@@ -433,20 +437,32 @@ export function initialSessionState(now: number): SessionState {
  * Returns `null` past the last question, which callers treat as a no-op rather
  * than an error — a host who taps advance once more at the end has not done
  * anything wrong.
+ *
+ * **Advances within the quiz the current question belongs to** (multiple-quizzes),
+ * resolved through `getQuizByQuestionId` rather than through a single committed quiz.
+ * That is unambiguous because the build gate makes question ids globally unique.
+ *
+ * From the lobby it opens the *first registry quiz*, which is a placeholder: the session
+ * does not yet record which quiz it is running, so there is nothing better to ask. The
+ * session gains that identity in the next phase and this function takes it as an
+ * argument then.
  */
 export function nextQuestionId(
   currentQuestionId: string | null,
 ): string | null {
   if (currentQuestionId === null) {
-    return quiz.questions[0]?.id ?? null;
+    return quizzes[0]?.questions[0]?.id ?? null;
   }
 
-  const index = quiz.questions.findIndex(
+  const owner = getQuizByQuestionId(currentQuestionId);
+  if (owner === undefined) return null;
+
+  const index = owner.questions.findIndex(
     (question) => question.id === currentQuestionId,
   );
   if (index === -1) return null;
 
-  return quiz.questions[index + 1]?.id ?? null;
+  return owner.questions[index + 1]?.id ?? null;
 }
 
 /**

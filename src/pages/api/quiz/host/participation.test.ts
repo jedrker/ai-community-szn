@@ -23,7 +23,9 @@ vi.mock("../../../../lib/session/store", () => ({
 
 const { GET: participation } = await import("./participation");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
-const { quiz } = await import("../../../../quiz/index");
+const { quizzes } = await import("../../../../quiz/index");
+// One quiz to run a session against — which one is not what anything here asserts.
+const quiz = quizzes[0]!;
 
 const SECRET = "a-very-long-test-secret-value";
 const QUESTION_ID = quiz.questions[0]!.id;

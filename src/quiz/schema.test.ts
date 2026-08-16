@@ -71,7 +71,20 @@ const wordCloud = {
   points: null,
 };
 
-const quizOf = (...questions: unknown[]) => ({ questions });
+/**
+ * The identity a quiz carries beside its questions (multiple-quizzes).
+ *
+ * Spelled out here so every existing question-level fixture below stays about the
+ * question. The identity rules get their own fixtures, which override exactly the field
+ * under test — never the whole object — for the reason the docblock above states.
+ */
+const identity = {
+  id: "fixture-quiz",
+  title: "Quiz testowy",
+  code: "0001",
+};
+
+const quizOf = (...questions: unknown[]) => ({ ...identity, questions });
 
 /** Returns the joined issue messages of a failed parse. */
 function rejectionMessage(input: unknown): string {
@@ -120,7 +133,7 @@ describe("rejects a violation of every domain invariant", () => {
       quizOf(singleChoice, { ...text, id: singleChoice.id }),
     );
     expect(message).toContain("fixture-single-choice");
-    expect(message).toContain("Zduplikowane id pytań");
+    expect(message).toContain("zduplikowane id pytań");
   });
 
   it("rejects duplicate option ids within a question", () => {
@@ -331,11 +344,63 @@ describe("rejects a violation of every domain invariant", () => {
   });
 });
 
+/**
+ * A quiz's identity (multiple-quizzes).
+ *
+ * Each fixture overrides exactly one identity field on an otherwise valid quiz, so a
+ * failure here cannot be a question problem wearing an identity problem's name.
+ */
+describe("rejects a malformed quiz identity", () => {
+  const validQuiz = quizOf(singleChoice);
+
+  it("accepts the identity the other fixtures are built on", () => {
+    expect(quizSchema.safeParse(validQuiz).success).toBe(true);
+  });
+
+  it("rejects a quiz id that is not a slug", () => {
+    const message = rejectionMessage({ ...validQuiz, id: "Summer Tour" });
+    expect(message).toContain("id quizu musi być slugiem");
+  });
+
+  it("rejects an empty title, including one that is only whitespace", () => {
+    expect(rejectionMessage({ ...validQuiz, title: "" })).toContain(
+      "musi mieć tytuł",
+    );
+    expect(rejectionMessage({ ...validQuiz, title: "   " })).toContain(
+      "musi mieć tytuł",
+    );
+  });
+
+  it.each(["123", "12345", "12a4", "", "1 23"])(
+    "rejects the join code %o",
+    (code) => {
+      expect(rejectionMessage({ ...validQuiz, code })).toContain(
+        "dokładnie 4 cyfry",
+      );
+    },
+  );
+
+  /**
+   * The reason `code` is a string. `0042` and `42` are different codes, and a numeric
+   * field would fold them together long before the registry gate could complain.
+   */
+  it("accepts a join code with leading zeros", () => {
+    expect(quizSchema.safeParse({ ...validQuiz, code: "0042" }).success).toBe(
+      true,
+    );
+  });
+});
+
 describe("rejection messages are actionable", () => {
   it("names the offending question rather than only a Zod path", () => {
     const message = rejectionMessage(
       quizOf(singleChoice, { ...wordCloud, points: 500 }),
     );
     expect(message).toMatch(/Pytanie "fixture-word-cloud"/);
+  });
+
+  it("names the offending quiz on a quiz-level rule", () => {
+    const message = rejectionMessage({ ...quizOf(singleChoice), code: "12" });
+    expect(message).toMatch(/Quiz "fixture-quiz"/);
   });
 });

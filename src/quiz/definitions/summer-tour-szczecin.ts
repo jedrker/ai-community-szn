@@ -1,9 +1,18 @@
-import type { Quiz } from "./schema";
+import type { Quiz } from "../schema";
 
 /**
- * The quiz, authored as source (PRD FR-001) — there is no builder interface and
+ * One quiz, authored as source (PRD FR-001) — there is no builder interface and
  * no admin panel by design. Editing a question means editing this file and
  * deploying; the build gate rejects a malformed definition before it ships.
+ *
+ * **One file per quiz, all of them registered in `./index.ts`.** Nothing outside this
+ * directory may import this file: downstream slices go through `src/quiz/index.ts`,
+ * which is what guarantees the invariants held — including the cross-quiz ones a single
+ * definition cannot see.
+ *
+ * `id` is the URL slug (`/quiz/<id>`), `title` is what the host picks from and what an
+ * attendee on the wrong quiz is pointed at, and `code` is the four-digit short address
+ * (`/q/<code>`). All three are unique across the registry, enforced at the build gate.
  *
  * Transcribed from the draft in `idea-notes.md`. Question ids describe the
  * subject rather than the position, so reordering the quiz cannot silently
@@ -30,7 +39,10 @@ const TAP_SECONDS = 25;
 /** Long enough to type an answer, including a correction. */
 const TYPE_SECONDS = 30;
 
-export const quizDefinition = {
+export const summerTourSzczecin = {
+  id: "summer-tour-szczecin",
+  title: "Summer Tour Szczecin",
+  code: "1001",
   questions: [
     // Q1 — opens the segment. Unscored: watching your own word land on the big
     // screen is what proves the session is live (FR-012, FR-015).

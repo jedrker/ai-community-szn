@@ -10,7 +10,7 @@ import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
 import { MAX_GUESS_INPUT_LENGTH } from "../../lib/session/guess";
 import { MAX_TEXT_ANSWER_LENGTH } from "../../lib/session/scoring";
 import { MAX_WORD_LENGTH } from "../../lib/session/words";
-import { publicQuiz } from "../../quiz/public";
+import { publicQuizzes } from "../../quiz/public";
 
 /**
  * The attendee view (roadmap S-02, PRD FR-002/FR-007/FR-008).
@@ -39,6 +39,18 @@ import { publicQuiz } from "../../quiz/public";
  * document shell — `spine-check.astro`'s precedent — but styled with Tailwind utilities
  * rather than an inline `<style>` block.
  */
+
+/**
+ * The quiz this phone is joining.
+ *
+ * Selected explicitly from the registry rather than read from a singleton
+ * (multiple-quizzes). This page still has no slug in its address, so it takes the first
+ * registered quiz — the *URL* per quiz arrives in a later phase and this becomes
+ * `getPublicQuizById(Astro.params.slug)`. The registry cannot be empty (the build gate
+ * refuses that), so the guard is a type narrowing, not a runtime expectation.
+ */
+const quiz = publicQuizzes[0];
+if (quiz === undefined) throw new Error("Rejestr quizów jest pusty.");
 ---
 
 <html lang="pl" class="bg-quiz-ink">
@@ -449,7 +461,7 @@ import { publicQuiz } from "../../quiz/public";
         storageKey: PLAYER_STORAGE_KEY,
         seenStorageKey: QUESTION_SEEN_STORAGE_KEY,
         deviceStorageKey: DEVICE_STORAGE_KEY,
-        questions: publicQuiz.questions,
+        questions: quiz.questions,
       }}
     >
       window.__liveQuiz = {

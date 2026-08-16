@@ -22,6 +22,21 @@ import { normalizeAnswer } from "./normalize";
 const QUESTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
+ * A quiz's short join code — exactly four digits, typed into `/q/<code>` by an
+ * attendee who cannot scan the QR.
+ *
+ * **Authored content, not generated state.** It is committed beside the questions and
+ * shown on the projector, so it is not a secret and there is no per-session PIN. Four
+ * digits is the whole of the rule: short enough to read off a screen at the back of the
+ * room, long enough that two committed quizzes are unlikely to collide by accident — and
+ * where they do, the registry gate in `index.ts` refuses the build.
+ *
+ * Leading zeros are legal, which is why the field is a string. `0042` and `42` are
+ * different codes and a number would silently merge them.
+ */
+export const QUIZ_CODE = /^\d{4}$/;
+
+/**
  * The authorable range for a question's time budget, in seconds (S-11).
  *
  * Bounds live here rather than beside the scoring rules because they constrain
@@ -278,25 +293,70 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
 
 const questionSchema = questionShapeSchema.superRefine(checkQuestion);
 
+/**
+ * A quiz's identity (multiple-quizzes): what it is called, where it is routed and how
+ * it is typed.
+ *
+ * The three fields are declared as bare strings and their *formats* are checked in the
+ * `superRefine` below rather than with `.regex()` here, for the same reason
+ * `correctValue` defers its finiteness check to `checkQuestion`: a field-level failure
+ * reports against a path, and a path names neither the quiz nor the fix. The reader is
+ * an organizer looking at a failed build minutes before showtime.
+ */
 export const quizSchema = z
   .object({
+    id: z.string(),
+    title: z.string(),
+    code: z.string(),
     questions: z
       .array(questionSchema)
       .min(1, "Quiz musi mieć co najmniej 1 pytanie."),
   })
   .superRefine((quiz, ctx) => {
+    const where = `Quiz "${quiz.id}"`;
+
+    // The slug reaches a URL (`/quiz/<slug>`), so it takes the same shape as a question
+    // id rather than a second, nearly-identical rule.
+    if (!QUESTION_ID.test(quiz.id)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `${where}: id quizu musi być slugiem z małych liter, cyfr i myślników.`,
+      });
+    }
+
+    // The title is what the host picks from and what an attendee on the wrong quiz is
+    // pointed at, so an empty one leaves both surfaces with nothing to render.
+    if (quiz.title.trim().length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `${where}: quiz musi mieć tytuł (jest wyświetlany hostowi i uczestnikom).`,
+      });
+    }
+
+    if (!QUIZ_CODE.test(quiz.code)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `${where}: kod dołączenia musi mieć dokładnie 4 cyfry (jest "${quiz.code}").`,
+      });
+    }
+
     const duplicateIds = findDuplicates(
       quiz.questions.map((question) => question.id),
     );
     if (duplicateIds.length > 0) {
       ctx.addIssue({
         code: "custom",
-        message: `Zduplikowane id pytań: ${duplicateIds.join(", ")}.`,
+        message: `${where}: zduplikowane id pytań: ${duplicateIds.join(", ")}.`,
       });
     }
   });
 
-function findDuplicates(values: readonly string[]): string[] {
+/**
+ * Exported for the cross-quiz gate in `index.ts`, which needs exactly this over quiz
+ * ids, join codes and question ids pooled across the registry — one implementation, so
+ * "duplicate" cannot come to mean two different things in the same build.
+ */
+export function findDuplicates(values: readonly string[]): string[] {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const value of values) {

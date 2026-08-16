@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { quiz } from "../../quiz/index";
+import { quizzes } from "../../quiz/index";
 import {
   endedSessionState,
   initialSessionState,
@@ -8,6 +8,11 @@ import {
   parseSessionState,
   sessionStateSchema,
 } from "./state";
+
+// One quiz to run a session against — which one is not what anything here asserts, and
+// it is the same one `nextQuestionId` opens from the lobby while the session has no
+// quiz identity of its own.
+const quiz = quizzes[0]!;
 
 const NOW = 1_785_000_000_000;
 

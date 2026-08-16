@@ -53,7 +53,7 @@
  */
 
 import { MAX_WORD_LENGTH } from "../src/lib/session/words";
-import { quiz } from "../src/quiz";
+import { getQuestionById, getQuizByQuestionId } from "../src/quiz";
 import type { Question } from "../src/quiz/schema";
 
 type Config = {
@@ -752,14 +752,15 @@ async function main(): Promise<void> {
       state.currentQuestionId !== lastQuestionId
     ) {
       lastQuestionId = state.currentQuestionId;
-      const question = quiz.questions.find(
-        (candidate) => candidate.id === state.currentQuestionId,
-      );
+      const question = getQuestionById(state.currentQuestionId);
 
       if (question !== undefined) {
-        const index = quiz.questions.indexOf(question) + 1;
+        // The counter is "where in *this* quiz", so it comes from the quiz that owns the
+        // question rather than from a single committed one (multiple-quizzes).
+        const running = getQuizByQuestionId(question.id)?.questions ?? [];
+        const index = running.indexOf(question) + 1;
         console.log(
-          `  ▸ pytanie ${index}/${quiz.questions.length} (${question.kind}) — ` +
+          `  ▸ pytanie ${index}/${running.length} (${question.kind}) — ` +
             `okno ${Math.round(windowMsFor(question) / 1000)} s`,
         );
 
@@ -782,9 +783,7 @@ async function main(): Promise<void> {
      */
     if (state.phase === "question-revealed" && lastQuestionId !== null) {
       const tally = tallies.get(lastQuestionId);
-      const question = quiz.questions.find(
-        (candidate) => candidate.id === lastQuestionId,
-      );
+      const question = getQuestionById(lastQuestionId);
       if (tally !== undefined && question !== undefined) {
         // Give the last in-flight submissions a beat to land before counting them.
         await sleep(600);

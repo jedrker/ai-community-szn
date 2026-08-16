@@ -57,7 +57,9 @@ const {
 const { answeredField, optionField, wordField } = await import("./tallies");
 const { answerField } = await import("./answers");
 const { WORD_CLOUD_SIZE } = await import("./words");
-const { quiz } = await import("../../quiz/index");
+const { quizzes } = await import("../../quiz/index");
+// One quiz to run a session against — which one is not what anything here asserts.
+const quiz = quizzes[0]!;
 const { MAX_PLAYERS_PER_DEVICE } = await import("./players");
 
 const NOW = 1_785_000_000_000;

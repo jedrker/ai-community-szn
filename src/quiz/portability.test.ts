@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -37,8 +37,20 @@ export function findAstroImports(source: string): AstroImport[] {
     .filter(({ line }) => ASTRO_IMPORT.test(line));
 }
 
+/**
+ * Every `.ts` under `src/quiz/`, **including subdirectories** — the returned names are
+ * relative to `QUIZ_DIR`, so `definitions/summer-tour-szczecin.ts` joins back correctly.
+ *
+ * `recursive: true` is not decoration. The definitions moved into `definitions/` in the
+ * multiple-quizzes change, and a flat `readdirSync` would have kept returning a
+ * shrinking list of files that all pass — a scan whose pattern stops matching passes
+ * forever and reads as compliance, which is the hazard this whole file exists against.
+ * `boundary.test.ts:183` uses the same idiom for the same reason.
+ */
 function sourceFiles(): string[] {
-  return readdirSync(QUIZ_DIR).filter((name) => name.endsWith(".ts"));
+  return readdirSync(QUIZ_DIR, { recursive: true, encoding: "utf8" }).filter(
+    (name) => name.endsWith(".ts"),
+  );
 }
 
 /**
@@ -76,7 +88,7 @@ describe("the astro: detector fires", () => {
   it("reports nothing for a module that imports its packages directly", () => {
     const fixture = [
       'import { z } from "zod";',
-      'import { quiz } from "./definition";',
+      'import { quizDefinitions } from "./definitions";',
       "export const ok = true;",
     ].join("\n");
 
@@ -98,6 +110,27 @@ describe("the astro: detector fires", () => {
 describe("src/quiz stays importable outside the Astro build", () => {
   it("has files to check", () => {
     expect(sourceFiles().length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The scan reaches the definitions, which is where an `astro:content` import is most
+   * tempting — they are the closest thing this project has to a content collection, and
+   * the root CLAUDE.md says collections are the CMS.
+   *
+   * Asserted separately from "has files to check" because that one stays green on a
+   * scan that has quietly stopped descending: `src/quiz/` keeps its own `.ts` files
+   * either way. This is the assertion that fails if `recursive` is dropped.
+   */
+  it("descends into definitions/", () => {
+    const found = sourceFiles().filter((name) =>
+      name.startsWith(`definitions${sep}`),
+    );
+
+    expect(
+      found.length,
+      "the portability scan is not reaching src/quiz/definitions/ — a quiz " +
+        "definition could import an astro: specifier and this suite would stay green",
+    ).toBeGreaterThan(0);
   });
 
   it.each(sourceFiles())(

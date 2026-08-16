@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { quiz } from "../../quiz/index";
+import { quizzes } from "../../quiz/index";
 import {
   clampElapsed,
   CLOSENESS_BANDS,
@@ -499,7 +499,7 @@ describe("the committed quiz fits the scoring rules", () => {
    * question is free and re-timing the speed window is not silent.
    */
   it("gives every scored question long enough for the whole speed curve", () => {
-    for (const question of quiz.questions) {
+    for (const question of quizzes.flatMap((quiz) => quiz.questions)) {
       if (question.points === null) continue;
 
       expect(

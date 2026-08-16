@@ -51,7 +51,9 @@ const { POST: end } = await import("./end");
 const { POST: purge } = await import("./purge");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
 const { initialSessionState } = await import("../../../../lib/session/state");
-const { quiz } = await import("../../../../quiz/index");
+const { quizzes } = await import("../../../../quiz/index");
+// One quiz to run a session against — which one is not what anything here asserts.
+const quiz = quizzes[0]!;
 const { questionOfKind, questionsOfKind } =
   await import("../../../../quiz/test-support");
 

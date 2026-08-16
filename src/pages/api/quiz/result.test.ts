@@ -16,7 +16,9 @@ vi.mock("../../../lib/session/store", () => ({
 }));
 
 const { POST: result } = await import("./result");
-const { quiz } = await import("../../../quiz/index");
+const { quizzes } = await import("../../../quiz/index");
+// One quiz to run a session against — which one is not what anything here asserts.
+const quiz = quizzes[0]!;
 
 const NOW = 1_785_000_000_000;
 /**

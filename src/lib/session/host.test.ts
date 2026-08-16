@@ -17,7 +17,9 @@ vi.mock("./realtime", () => ({
 
 const { applyHostAction, authorizeHost, extractSecret, HOST_SECRET_HEADER } =
   await import("./host");
-const { quiz } = await import("../../quiz/index");
+const { quizzes } = await import("../../quiz/index");
+// One quiz to run a session against — which one is not what anything here asserts.
+const quiz = quizzes[0]!;
 type SessionState = import("./state").SessionState;
 
 const NOW = 1_785_000_000_000;

@@ -15,7 +15,9 @@ vi.mock("ably", () => ({
 
 const { createTokenRequest, publishSnapshot, SESSION_CHANNEL, SNAPSHOT_EVENT } =
   await import("./realtime");
-const { quiz } = await import("../../quiz/index");
+const { quizzes } = await import("../../quiz/index");
+// One quiz to run a session against — which one is not what anything here asserts.
+const quiz = quizzes[0]!;
 
 const state = {
   version: 3,

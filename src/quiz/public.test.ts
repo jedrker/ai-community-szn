@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { quiz } from "./index";
+import { quizzes } from "./index";
 import type { Quiz } from "./schema";
 import {
   FORBIDDEN_KEYS,
   forbiddenAnswerValues,
   getPublicQuestionById,
+  getPublicQuizById,
   projectQuiz,
-  publicQuiz,
+  publicQuizzes,
 } from "./public";
 
 /**
@@ -18,7 +19,17 @@ import {
  * land in a browser someone can open devtools on.
  */
 
-const serialized = JSON.stringify(publicQuiz);
+/**
+ * **Serialized over the whole registry**, not one quiz: an accepted answer is an answer
+ * wherever it is authored, and a leak in the second quiz would be just as readable in
+ * devtools as one in the first.
+ */
+const serialized = JSON.stringify(publicQuizzes);
+
+// One quiz for the per-question assertions below, paired with its own projection. Which
+// one is not what any of them is about.
+const quiz = quizzes[0]!;
+const publicQuiz = publicQuizzes[0]!;
 
 describe("the public projection carries no answers", () => {
   it.each(FORBIDDEN_KEYS)("has no %s key anywhere", (key) => {
@@ -57,6 +68,53 @@ describe("the public projection carries no answers", () => {
     const projected = getPublicQuestionById(choice.id);
 
     expect(projected?.options?.map((option) => option.id)).toContain(correct);
+  });
+});
+
+/**
+ * The quiz's own identity in the projection (multiple-quizzes).
+ *
+ * `id` and `title` travel because the phone needs them: the id is what it compares
+ * against the session snapshot to notice it is on the wrong quiz, and the title is what
+ * the message then names. `code` is the one identity field that must not — it is how an
+ * attendee *arrives*, and nothing on a phone needs it once the phone is here.
+ */
+describe("the projection carries the quiz's identity, minus its join code", () => {
+  it("projects one quiz per registry entry, in registry order", () => {
+    expect(publicQuizzes.map((projection) => projection.id)).toEqual(
+      quizzes.map((source) => source.id),
+    );
+  });
+
+  it("carries each quiz's id and title", () => {
+    for (const source of quizzes) {
+      const projection = getPublicQuizById(source.id);
+      expect(projection?.id).toBe(source.id);
+      expect(projection?.title).toBe(source.title);
+    }
+  });
+
+  it("exposes only the quiz-level keys on the allowlist", () => {
+    for (const projection of publicQuizzes) {
+      expect(Object.keys(projection).sort()).toEqual([
+        "id",
+        "questions",
+        "title",
+      ]);
+    }
+  });
+
+  it("does not send any quiz's join code", () => {
+    // Guard the guard: an empty set of codes would make the loop below vacuous.
+    expect(quizzes.length).toBeGreaterThan(0);
+
+    for (const source of quizzes) {
+      expect(serialized).not.toContain(source.code);
+    }
+  });
+
+  it("returns undefined for a slug that is not in the registry", () => {
+    expect(getPublicQuizById("nie-ma-takiego-quizu")).toBeUndefined();
   });
 });
 
@@ -250,6 +308,9 @@ describe("the option shuffle, measured at scale", () => {
   const POPULATION = 60;
 
   const generated: Quiz = {
+    id: "generated",
+    title: "Quiz generowany",
+    code: "0000",
     questions: Array.from({ length: POPULATION }, (_unused, index) => ({
       kind: "single-choice" as const,
       id: `generated-${index}`,

@@ -1,4 +1,4 @@
-import { quiz } from "./index";
+import { quizzes } from "./index";
 import type { Question, Quiz } from "./schema";
 
 /**
@@ -72,6 +72,20 @@ export type PublicQuestion = {
 };
 
 export type PublicQuiz = {
+  /**
+   * The quiz's slug (multiple-quizzes).
+   *
+   * It travels because the phone needs something to compare against the session
+   * snapshot's `quizId` — a device left on the wrong quiz is otherwise indistinguishable
+   * from a device waiting in the lobby.
+   */
+  readonly id: string;
+  /** Shown in the lobby, and named in the message a phone on the wrong quiz sees. */
+  readonly title: string;
+  /**
+   * **`code` deliberately does not travel.** It is a routing concern — how an attendee
+   * *arrives* — and nothing on a phone needs it once the phone is here.
+   */
   readonly questions: readonly PublicQuestion[];
 };
 
@@ -127,7 +141,7 @@ function seedFrom(text: string): number {
  * question and different across questions. Deterministic means the order survives a
  * reload, agrees between the phone and the projector, and can be recomputed anywhere.
  *
- * **S-04 must render distributions from `publicQuiz`, not from `quiz`.** The raw
+ * **S-04 must render distributions from the projection, not from the definition.** The raw
  * definition's order is no longer what the room saw, and a distribution chart drawn in
  * definition order would mislabel every bar.
  */
@@ -206,19 +220,45 @@ function toPublicQuestion(question: Question): PublicQuestion {
  * one that is meant to change. Tests measure the distribution over generated questions
  * and keep the real quiz for conformance.
  *
- * Production has exactly one caller, `publicQuiz` below, which computes once at module
- * scope so a serverless function pays for it on cold start rather than per request —
- * the same reasoning as `quiz` itself in `index.ts`.
+ * Production has exactly one caller, `publicQuizzes` below, which computes once at
+ * module scope so a serverless function pays for it on cold start rather than per
+ * request — the same reasoning as `quizzes` itself in `index.ts`.
  */
-export function projectQuiz(source: Quiz = quiz): PublicQuiz {
-  return { questions: source.questions.map(toPublicQuestion) };
+export function projectQuiz(source: Quiz): PublicQuiz {
+  return {
+    id: source.id,
+    title: source.title,
+    questions: source.questions.map(toPublicQuestion),
+  };
 }
 
-export const publicQuiz: PublicQuiz = projectQuiz();
+/**
+ * Every quiz's projection, in registry order — projected once at module scope, not per
+ * request, for the reason `quizzes` itself is parsed once.
+ *
+ * The registry is small and every entry is committed source, so all of them are
+ * projected eagerly rather than memoized per slug: a lazy cache would buy nothing on a
+ * cold start and would add a second place where a projection could be stale.
+ */
+export const publicQuizzes: readonly PublicQuiz[] = quizzes.map(projectQuiz);
 
-/** The public shape of one question, or `undefined` if the id is unknown. */
+/** One quiz's projection by slug, or `undefined` for a slug not in the registry. */
+export function getPublicQuizById(id: string): PublicQuiz | undefined {
+  return publicQuizzes.find((quiz) => quiz.id === id);
+}
+
+/**
+ * The public shape of one question, or `undefined` if the id is unknown.
+ *
+ * Searches the whole registry, quiz-agnostic for exactly the reason `getQuestionById`
+ * is: the build gate makes question ids globally unique.
+ */
 export function getPublicQuestionById(id: string): PublicQuestion | undefined {
-  return publicQuiz.questions.find((question) => question.id === id);
+  for (const quiz of publicQuizzes) {
+    const question = quiz.questions.find((candidate) => candidate.id === id);
+    if (question !== undefined) return question;
+  }
+  return undefined;
 }
 
 /**
@@ -233,18 +273,24 @@ export function getPublicQuestionById(id: string): PublicQuestion | undefined {
  * *which* id is the right one: no answer-bearing key, and no positional tell. Those
  * are checked separately in `public.test.ts`.
  *
- * Reaching into the real definition rather than a fixture is the point — a fixture
- * keeps passing after someone adds a new answer-bearing field to the real quiz.
+ * Reaching into the real definitions rather than a fixture is the point — a fixture
+ * keeps passing after someone adds a new answer-bearing field to a real quiz. It
+ * defaults to the **whole registry** for the same reason: a value that is an answer in
+ * one quiz must not appear in any projection.
  */
-export function forbiddenAnswerValues(source: Quiz = quiz): string[] {
+export function forbiddenAnswerValues(
+  sources: readonly Quiz[] = quizzes,
+): string[] {
   const values: string[] = [];
 
-  for (const question of source.questions) {
-    if (question.kind === "text") {
-      values.push(...question.acceptedAnswers);
-    }
-    if (question.kind === "number") {
-      values.push(String(question.correctValue));
+  for (const source of sources) {
+    for (const question of source.questions) {
+      if (question.kind === "text") {
+        values.push(...question.acceptedAnswers);
+      }
+      if (question.kind === "number") {
+        values.push(String(question.correctValue));
+      }
     }
   }
 
