@@ -11,8 +11,8 @@ import { MAX_WORD_LENGTH } from "./words";
 
 const valid = {
   playerId: "3f1c0f1e-6a4f-4f3a-9c2b-9d8e7a6b5c4d",
-  questionId: "llm-skrot",
-  optionIds: ["large-language-model"],
+  questionId: "fixture-question",
+  optionIds: ["fixture-option"],
   elapsedMs: 4321,
   correct: true,
   awarded: 892,
@@ -21,7 +21,7 @@ const valid = {
 
 describe("the answer field name", () => {
   it("joins question id and player id with a colon", () => {
-    expect(answerField("llm-skrot", "abc")).toBe("llm-skrot:abc");
+    expect(answerField("fixture-question", "abc")).toBe("fixture-question:abc");
   });
 
   it("round-trips: the same inputs always produce the same field", () => {
@@ -43,7 +43,7 @@ describe("the answer field name", () => {
   it("cannot collide, because neither id can contain the separator", () => {
     // Question ids are lowercase slugs (`src/quiz/schema.ts`) and player ids are v4
     // UUIDs, so the colon count is always exactly one.
-    const field = answerField("summer-tour-zakonczenie", valid.playerId);
+    const field = answerField("fixture-other-question", valid.playerId);
     expect(field.split(":")).toHaveLength(2);
   });
 });

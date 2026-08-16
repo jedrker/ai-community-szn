@@ -147,8 +147,38 @@ Two reasons, both load-bearing:
   `astro:` specifier.
 
 Layout: `schema.ts` (discriminated union over five question kinds plus the domain invariants),
-`normalize.ts` (FR-011 answer folding), `definition.ts` (the 14 questions), `index.ts` (the accessors
-downstream slices import — never import `definition.ts` directly).
+`normalize.ts` (FR-011 answer folding), `definition.ts` (the questions), `index.ts` (the accessors
+downstream slices import — never import `definition.ts` directly), `test-support.ts` (test-only, see
+below).
+
+**No test may name a question id, an option id, an accepted answer or a true value.** The quiz is in
+source so it can be *edited* (FR-001), and a test that transcribes its content converts routine
+editing into breakage somewhere unrelated: swapping the quiz for the next event used to fail six
+assertions in `definition.test.ts` plus fixtures in four session and route files, every one of them
+reporting only "the quiz changed". Three rules, in order of preference:
+
+- **Need only a question-shaped value?** Build a literal. `deadline.test.ts` and `scoring.test.ts`
+  are the pattern, and their fixture ids all start with `fixture-` so nobody mistakes one for
+  content.
+- **Need a question the code will resolve through `getQuestionById`?** Take it from
+  `questionOfKind(kind, { scored })` / `questionsOfKind` in `src/quiz/test-support.ts` — by kind,
+  never by id, never by positional index. Derive what you submit against it too
+  (`question.correctOptionIds[0]`, `question.acceptedAnswers[0]`, `question.correctValue`), and
+  derive the *guesses* from `correctValue` rather than typing figures that only fit one question.
+- **Need to assert something about the committed quiz?** Say it as a rule over whatever the quiz
+  contains — `definition.test.ts` asserts that no id gives away its own answer and that the opener
+  scores nothing; it counts nothing and quotes nothing.
+
+Two consequences worth knowing. `definition.test.ts` still requires the quiz to **exercise every
+question kind**, because the route tests derive fixtures by kind and a dropped kind silently drops
+its coverage — that one constraint is deliberate and documented at the assertion. And an *unscored
+choice* question is treated as optional: the two tests needing one `skipIf` it away, so retiring the
+gather beat is an editorial decision rather than a red build.
+
+Properties that need a population — the option shuffle's lack of a positional tell is the one — are
+measured over generated questions via `projectQuiz(source)` in `public.ts`, with the real quiz kept
+only for conformance. Reading a distribution off fourteen committed questions made the strength of
+the test depend on how many the event happened to want.
 
 `normalize.ts` carries a trap worth knowing: **`ł` and `Ł` need an explicit mapping.** Every other
 Polish diacritic decomposes under NFD and is removed by `\p{Diacritic}`, but `ł` is an atomic

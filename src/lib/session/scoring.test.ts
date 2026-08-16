@@ -13,15 +13,17 @@ import {
   type ChoiceQuestion,
 } from "./scoring";
 import type { NumberQuestion, TextQuestion } from "../../quiz/index";
+import { questionsOfKind } from "../../quiz/test-support";
 
 /**
  * The first domain rule this project has (roadmap S-03, FR-010 and FR-019).
  *
- * Fixtures rather than the real quiz for the correctness cases, because the property
- * under test is the rule, not the drafted question set — but the two real questions
- * that anchor it (the scored multi-answer one and the unscored gather beat) are
- * pulled from the definition, so a change to either fails here rather than at the
- * event.
+ * **Fixtures for the rules, the live quiz only for conformance.** The property under test
+ * is the scoring rule, never the drafted question set, so every correctness case is built
+ * from a literal here. What the definition is still read for is the other direction: that
+ * the questions the room will actually be asked satisfy those rules. Those checks loop
+ * over whatever the quiz contains — by kind, never by id — so editing the quiz is not an
+ * edit to this file.
  */
 
 const scoredMulti: ChoiceQuestion = {
@@ -79,23 +81,21 @@ const scoredNumber: NumberQuestion = {
 };
 
 /**
- * The two live number questions, pulled from the definition rather than mirrored as
- * fixtures — magnitude-independence is only observable across the pair, and the pair
- * is the thing the FR's resolution rests on. `definition.ts` says as much at the first
- * of them: they were chosen two orders of magnitude apart for exactly this test.
+ * The magnitudes the band table is run against.
  *
- * Resolved through a kind check rather than a positional index, so a reordering of the
- * quiz fails here loudly instead of quietly pointing every band assertion at some other
- * kind of question.
+ * Magnitude-independence is the whole of FR-013's resolution — one rule, no per-question
+ * tolerance knob — and it is invisible against a single value. This used to be the two
+ * *live* number questions, chosen because their true values sit two orders of magnitude
+ * apart. That worked only for as long as nobody edited the quiz: retiring either question
+ * broke this file, and the failure said "the quiz changed" rather than "the rule is
+ * wrong". Fixtures span six orders instead, which is a stronger claim than the pair ever
+ * made, and the live questions are checked separately below for conformance.
  */
-function liveNumberQuestion(id: string): NumberQuestion {
-  const question = quiz.questions.find((candidate) => candidate.id === id);
-  if (question?.kind !== "number") throw new Error(`expected ${id} to be a number question`);
-  return question;
-}
+const MAGNITUDES = [0.5, 67, 10_000, 4_500_000] as const;
 
-const lyro = liveNumberQuestion("lyro-automatyzacja");
-const aiDevs = liveNumberQuestion("ai-devs-absolwenci");
+function numberFixture(correctValue: number): NumberQuestion {
+  return { ...scoredNumber, id: `fixture-number-${correctValue}`, correctValue };
+}
 
 describe("choice correctness is all-or-nothing (FR-010)", () => {
   it("scores an exact multi-answer match", () => {
@@ -145,12 +145,25 @@ describe("an unscored question awards nothing and claims nothing (FR-017)", () =
     expect(scoreChoiceAnswer(unscored, ["a", "b"], 0)).toEqual({ correct: false, awarded: 0 });
   });
 
-  it("holds for the real gather question, which is the one this protects", () => {
-    const gather = quiz.questions.find((question) => question.id === "czy-wszyscy-gotowi");
-    if (gather?.kind !== "multiple-choice") throw new Error("expected the gather question");
+  /**
+   * Conformance, not a transcript: every unscored choice question the quiz ships, not
+   * the one that happened to be the gather beat when this was written. Selecting the
+   * question by id meant renaming it broke a rule test that had no opinion about names.
+   */
+  it("holds for every unscored choice question the quiz actually ships", () => {
+    const unscoredChoices = [
+      ...questionsOfKind("multiple-choice", { scored: false }),
+      ...questionsOfKind("single-choice", { scored: false }),
+    ];
 
-    expect(gather.points).toBeNull();
-    expect(scoreChoiceAnswer(gather, ["gotowy"], 0).awarded).toBe(0);
+    for (const question of unscoredChoices) {
+      // Whatever the attendee tapped — including the option a scored question would
+      // have called correct.
+      const everyOption = question.options.map((option) => option.id);
+
+      expect(scoreChoiceAnswer(question, everyOption, 0).awarded).toBe(0);
+      expect(scoreChoiceAnswer(question, everyOption, 0).correct).toBe(false);
+    }
   });
 });
 
@@ -212,15 +225,18 @@ describe("free-text correctness folds case, spacing, diacritics and punctuation 
     });
   });
 
-  it("holds for the real text question, which is the one this ships", () => {
-    const real = quiz.questions.find((question) => question.id === "zmyslanie-faktow");
-    if (real?.kind !== "text") throw new Error("expected the text question");
+  it("holds for every text question the quiz actually ships", () => {
+    for (const question of questionsOfKind("text", { scored: true })) {
+      for (const variant of question.acceptedAnswers) {
+        expect(scoreTextAnswer(question, variant, 0).correct).toBe(true);
 
-    for (const variant of real.acceptedAnswers) {
-      expect(scoreTextAnswer(real, variant, 0).correct).toBe(true);
+        // The case the manual run types on a phone: shouted, and with a full stop the
+        // keyboard offered. Built from the variant rather than typed, so this covers
+        // whatever the quiz accepts today.
+        const asTyped = `  ${variant.toLocaleUpperCase("pl-PL")}.  `;
+        expect(scoreTextAnswer(question, asTyped, 0).correct).toBe(true);
+      }
     }
-    // The case the manual run types on a phone.
-    expect(scoreTextAnswer(real, "Halucynacje.", 0).correct).toBe(true);
   });
 });
 
@@ -246,12 +262,10 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
     { label: "wildly off", relativeError: 3, closeness: 0 },
   ];
 
-  const questions: ReadonlyArray<[string, NumberQuestion]> = [
-    ["lyro-automatyzacja (67)", lyro],
-    ["ai-devs-absolwenci (10 000)", aiDevs],
-  ];
+  for (const magnitude of MAGNITUDES) {
+    const question = numberFixture(magnitude);
+    const name = `a true value of ${magnitude}`;
 
-  for (const [name, question] of questions) {
     for (const side of [1, -1] as const) {
       const direction = side === 1 ? "above" : "below";
 
@@ -271,14 +285,37 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
     }
   }
 
-  it("holds that the two live questions really are two orders of magnitude apart", () => {
-    // The pair is the fixture for everything above. If a later edit brings them close
-    // together, the band table still passes while proving nothing.
-    expect(Math.abs(aiDevs.correctValue / lyro.correctValue)).toBeGreaterThan(100);
+  /**
+   * The same table, run once against whatever number questions the quiz actually ships.
+   *
+   * The fixtures above prove the rule; this proves the rule reaches the questions the
+   * room will be asked, at their real magnitudes, without naming any of them. A quiz
+   * with no number question makes this vacuous rather than red — `definition.test.ts`
+   * is where a missing kind is reported.
+   */
+  it("holds at the magnitudes the committed quiz uses", () => {
+    for (const question of questionsOfKind("number", { scored: true })) {
+      const points = question.points;
+      if (points === null) throw new Error("expected a scored question");
+
+      for (const { relativeError, closeness } of bands) {
+        for (const side of [1, -1] as const) {
+          const guess = question.correctValue * (1 + side * relativeError);
+
+          expect(
+            scoreNumberAnswer(question, guess, 0).awarded,
+            `${question.id}: ${relativeError} relative error`
+          ).toBe(Math.round(points * closeness));
+        }
+      }
+    }
   });
 
   it("reports an exact hit as correct with the full band", () => {
-    expect(scoreNumberAnswer(lyro, 67, 0)).toEqual({ correct: true, awarded: 1000 });
+    expect(scoreNumberAnswer(scoredNumber, scoredNumber.correctValue, 0)).toEqual({
+      correct: true,
+      awarded: 1000,
+    });
   });
 
   it("reports a scoring near-miss as correct: false with a positive award", () => {
@@ -286,18 +323,18 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
     // is inside 5%, so it earns 800 of 1000 — and `correct` is still false, because for
     // this kind the flag means "exact hit" and nothing else. Anything reading it as
     // "scored nothing" is wrong here.
-    const result = scoreNumberAnswer(lyro, 65, 0);
+    const result = scoreNumberAnswer(scoredNumber, 65, 0);
 
     expect(result.correct).toBe(false);
     expect(result.awarded).toBe(800);
   });
 
   it("scores a guess far outside every band as nothing", () => {
-    expect(scoreNumberAnswer(lyro, 50, 0)).toEqual({ correct: false, awarded: 0 });
+    expect(scoreNumberAnswer(scoredNumber, 50, 0)).toEqual({ correct: false, awarded: 0 });
   });
 
   it("scores a negative guess as wrong rather than treating the sign as distance", () => {
-    expect(scoreNumberAnswer(lyro, -67, 0).awarded).toBe(0);
+    expect(scoreNumberAnswer(scoredNumber, -scoredNumber.correctValue, 0).awarded).toBe(0);
   });
 
   it("returns correct: false and awarded: 0 for an unscored question", () => {
@@ -322,7 +359,7 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
   it("awards nothing for a non-finite guess", () => {
     // The route parses and refuses these first; this is the floor under that.
     for (const guess of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
-      expect(scoreNumberAnswer(lyro, guess, 0)).toEqual({ correct: false, awarded: 0 });
+      expect(scoreNumberAnswer(scoredNumber, guess, 0)).toEqual({ correct: false, awarded: 0 });
     }
   });
 
@@ -377,15 +414,38 @@ describe("the speed curve is shared, not reimplemented per kind (FR-019)", () =>
   });
 });
 
-describe("the text answer bound", () => {
-  it("is long enough for every accepted variant in the drafted quiz", () => {
+/**
+ * The two places the committed quiz has to fit the scoring rules, kept together because
+ * they are the same kind of check: a global constant asserted against whatever the quiz
+ * currently authors, naming nothing.
+ */
+describe("the committed quiz fits the scoring rules", () => {
+  it("keeps every accepted text variant inside the answer bound", () => {
     // The bound is enforced in three places (schema, route, input `maxlength`). This
     // asserts the value itself is not set below something the quiz already needs.
-    for (const question of quiz.questions) {
-      if (question.kind !== "text") continue;
+    for (const question of questionsOfKind("text")) {
       for (const variant of question.acceptedAnswers) {
         expect(variant.length).toBeLessThanOrEqual(MAX_TEXT_ANSWER_LENGTH);
       }
+    }
+  });
+
+  /**
+   * The authoring convention `definition.ts` states and the schema deliberately does not
+   * enforce: a limit shorter than the speed window is legal, but it compresses the reward
+   * curve, because nobody can answer slowly enough to reach the 0.5 floor. Asserted here
+   * rather than in the schema, since it is a fact about *scoring* — and asserted as a
+   * relation between two constants rather than as the numbers themselves, so re-timing a
+   * question is free and re-timing the speed window is not silent.
+   */
+  it("gives every scored question long enough for the whole speed curve", () => {
+    for (const question of quiz.questions) {
+      if (question.points === null) continue;
+
+      expect(
+        (question.timeLimitSeconds ?? 0) * 1_000,
+        `${question.id}: a limit below the speed window compresses the reward curve`
+      ).toBeGreaterThanOrEqual(SPEED_WINDOW_MS);
     }
   });
 });

@@ -511,7 +511,7 @@ describe("what joining must never do", () => {
    * hand a just-joined attendee a null state (impl review F5).
    */
   it("returns the state the claim itself was checked against", async () => {
-    const opened = { ...lobby, version: 9, phase: "question-open" as const, currentQuestionId: "llm-skrot" };
+    const opened = { ...lobby, version: 9, phase: "question-open" as const, currentQuestionId: "fixture-question" };
     claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 2, state: opened });
 
     const payload = await body(await join({ request: claiming({ displayName: "Anna" }) } as never));

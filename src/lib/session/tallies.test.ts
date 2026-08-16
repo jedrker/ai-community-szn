@@ -12,7 +12,7 @@ import { answeredField, optionField, wordField, wordFromField } from "./tallies"
 
 describe("the answered field name", () => {
   it("prefixes the question id", () => {
-    expect(answeredField("llm-skrot")).toBe("answered:llm-skrot");
+    expect(answeredField("fixture-question")).toBe("answered:fixture-question");
   });
 
   it("distinguishes two questions", () => {
@@ -20,14 +20,14 @@ describe("the answered field name", () => {
   });
 
   it("round-trips: the same input always produces the same field", () => {
-    expect(answeredField("llm-skrot")).toBe(answeredField("llm-skrot"));
+    expect(answeredField("fixture-question")).toBe(answeredField("fixture-question"));
   });
 });
 
 describe("the option field name", () => {
   it("prefixes the question id and the option id", () => {
-    expect(optionField("llm-skrot", "large-language-model")).toBe(
-      "opt:llm-skrot:large-language-model"
+    expect(optionField("fixture-question", "fixture-option")).toBe(
+      "opt:fixture-question:fixture-option"
     );
   });
 
@@ -42,8 +42,8 @@ describe("the option field name", () => {
 
 describe("the word field name", () => {
   it("prefixes the question id and carries the folded word", () => {
-    expect(wordField("smieszne-slowo-ai", "halucynacja")).toBe(
-      "word:smieszne-slowo-ai:halucynacja"
+    expect(wordField("fixture-word-cloud", "halucynacja")).toBe(
+      "word:fixture-word-cloud:halucynacja"
     );
   });
 

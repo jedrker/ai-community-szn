@@ -21,7 +21,7 @@ const OPENED_AT = 1_785_000_000_000;
 /** A scored question with a 25-second budget. */
 const scored = {
   kind: "single-choice",
-  id: "llm-skrot",
+  id: "fixture-scored-question",
   prompt: "Co oznacza skrót LLM?",
   points: 1000,
   timeLimitSeconds: 25,
@@ -35,7 +35,7 @@ const scored = {
 /** An unscored question, which the schema refuses to give a limit at all. */
 const unscored = {
   kind: "word-cloud",
-  id: "smieszne-slowo",
+  id: "fixture-unscored-question",
   prompt: "Napisz śmieszne słowo związane z AI",
   points: null,
 } as const satisfies Question;

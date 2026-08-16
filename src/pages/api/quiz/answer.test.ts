@@ -19,7 +19,7 @@ vi.mock("../../../lib/session/store", () => ({
 }));
 
 const { POST: answer } = await import("./answer");
-const { quiz } = await import("../../../quiz/index");
+const { questionOfKind, questionsOfKind } = await import("../../../quiz/test-support");
 const { SPEED_WINDOW_MS, MAX_TEXT_ANSWER_LENGTH } = await import("../../../lib/session/scoring");
 const { MAX_GUESS_MAGNITUDE } = await import("../../../lib/session/guess");
 const { MAX_WORD_LENGTH } = await import("../../../lib/session/words");
@@ -27,13 +27,49 @@ const { SUBMISSION_GRACE_MS } = await import("../../../lib/session/deadline");
 
 const NOW = 1_785_000_000_000;
 
-const single = quiz.questions.find((question) => question.id === "llm-skrot")!;
-const multi = quiz.questions.find((question) => question.id === "summer-tour-zakonczenie")!;
-const text = quiz.questions.find((question) => question.id === "zmyslanie-faktow")!;
-const unscored = quiz.questions.find((question) => question.id === "czy-wszyscy-gotowi")!;
-const number = quiz.questions.find((question) => question.id === "ai-devs-absolwenci")!;
+/**
+ * **Real questions, resolved by kind.** The route looks the question up through
+ * `getQuestionById`, so a hand-built fixture 404s here and these have to come from the
+ * definition — but which *question* of each kind is none of this file's business. It
+ * used to name six ids, which made every one of them un-editable: renaming the text
+ * question turned `!` into a `TypeError` in a file about form parsing.
+ *
+ * A kind the quiz no longer carries fails with a message saying so (`questionOfKind`),
+ * and `definition.test.ts` reports the same fact once, up front.
+ */
+const single = questionOfKind("single-choice", { scored: true });
+const multi = questionOfKind("multiple-choice", { scored: true });
+const text = questionOfKind("text", { scored: true });
+/**
+ * **Optional, unlike the five above.** A quiz whose choice questions are all scored has
+ * no unscored-choice path to exercise, and failing the suite over that would make
+ * dropping the warm-up beat a broken build rather than an editorial decision. The two
+ * tests that need it skip themselves, and say so in the reporter.
+ */
+const unscored = questionsOfKind("multiple-choice", { scored: false })[0];
+const number = questionOfKind("number", { scored: true });
 /** The last kind to take the seam (roadmap S-08). */
-const wordCloud = quiz.questions.find((question) => question.id === "smieszne-slowo-ai")!;
+const wordCloud = questionOfKind("word-cloud");
+
+/**
+ * What to submit against each of them, derived from the question rather than typed.
+ *
+ * Same reasoning as the fixtures themselves: one live question's correct option id was
+ * typed out at thirty-five call sites in this file. Renaming that option — an edit to a
+ * few characters of `definition.ts` — turned every scoring assertion here red at once,
+ * in a file about form parsing.
+ */
+const singleCorrect = single.correctOptionIds[0]!;
+const multiCorrect = [...multi.correctOptionIds];
+/** An option the multi-select fixture does *not* count, for the superset case. */
+const multiWrong = multi.options.find((option) => !multiCorrect.includes(option.id))!.id;
+const unscoredOption = unscored?.options[0]?.id ?? "";
+/** The canonical accepted spelling — the one `reveal.ts` puts on the projector. */
+const accepted = text.acceptedAnswers[0]!;
+/** Built from it, so "no fuzzy matching" stays asserted whatever the answer becomes. */
+const misspelt = `${accepted}xy`;
+/** The same answer as a phone with caps lock would send it — folded, so still correct. */
+const shouted = accepted.toLocaleUpperCase("pl-PL");
 
 function openOn(questionId: string, openedAt = NOW - 4_000) {
   return {
@@ -90,7 +126,7 @@ afterEach(() => {
 
 describe("scoring happens at submit, from the raw definition", () => {
   it("scores a correct single-choice answer", async () => {
-    const response = await submit(single.id, ["large-language-model"]);
+    const response = await submit(single.id, [singleCorrect]);
 
     expect(response.status).toBe(200);
     expect(submitted()).toMatchObject({ correct: true });
@@ -100,7 +136,7 @@ describe("scoring happens at submit, from the raw definition", () => {
   it("scores an exact multi-select match", async () => {
     readSessionMock.mockResolvedValue(openOn(multi.id));
 
-    await submit(multi.id, ["kino", "networking"]);
+    await submit(multi.id, multiCorrect);
 
     expect(submitted()).toMatchObject({ correct: true });
   });
@@ -108,7 +144,7 @@ describe("scoring happens at submit, from the raw definition", () => {
   it("refuses to award a partial multi-select — all-or-nothing (FR-010)", async () => {
     readSessionMock.mockResolvedValue(openOn(multi.id));
 
-    await submit(multi.id, ["kino"]);
+    await submit(multi.id, multiCorrect.slice(0, -1));
 
     expect(submitted()).toMatchObject({ correct: false, awarded: 0 });
   });
@@ -116,47 +152,50 @@ describe("scoring happens at submit, from the raw definition", () => {
   it("refuses to award a superset", async () => {
     readSessionMock.mockResolvedValue(openOn(multi.id));
 
-    await submit(multi.id, ["kino", "networking", "konkurs"]);
+    await submit(multi.id, [...multiCorrect, multiWrong]);
 
     expect(submitted()).toMatchObject({ correct: false, awarded: 0 });
   });
 
-  it("awards nothing on an unscored question and still records the answer", async () => {
-    readSessionMock.mockResolvedValue(openOn(unscored.id));
+  it.skipIf(unscored === undefined)(
+    "awards nothing on an unscored question and still records the answer",
+    async () => {
+      readSessionMock.mockResolvedValue(openOn(unscored!.id));
 
-    const response = await submit(unscored.id, ["gotowy"]);
+      const response = await submit(unscored!.id, [unscoredOption]);
 
-    // Recorded, so the reveal can say "you took part" rather than "you were silent".
-    expect(response.status).toBe(200);
-    expect(submitted()).toMatchObject({ correct: false, awarded: 0 });
-  });
+      // Recorded, so the reveal can say "you took part" rather than "you were silent".
+      expect(response.status).toBe(200);
+      expect(submitted()).toMatchObject({ correct: false, awarded: 0 });
+    }
+  );
 
   it("records the selection it scored, so the reveal cannot disagree with it", async () => {
-    await submit(single.id, ["large-language-model"]);
+    await submit(single.id, [singleCorrect]);
 
-    expect(submitted().optionIds).toEqual(["large-language-model"]);
+    expect(submitted().optionIds).toEqual([singleCorrect]);
   });
 });
 
 describe("only ids the question actually has reach the store", () => {
   it("drops an option id the question does not have", async () => {
-    await submit(single.id, ["large-language-model", "nie-ma-takiej-opcji"]);
+    await submit(single.id, [singleCorrect, "nie-ma-takiej-opcji"]);
 
     // An open endpoint would otherwise let any holder of a player id write a value of
     // their choosing, at a size of their choosing, into the answers hash.
-    expect(submitted().optionIds).toEqual(["large-language-model"]);
+    expect(submitted().optionIds).toEqual([singleCorrect]);
   });
 
   it("de-duplicates a repeated id", async () => {
-    await submit(single.id, ["large-language-model", "large-language-model"]);
+    await submit(single.id, [singleCorrect, singleCorrect]);
 
-    expect(submitted().optionIds).toEqual(["large-language-model"]);
+    expect(submitted().optionIds).toEqual([singleCorrect]);
   });
 
   it("still scores correctly when unknown ids were sent alongside the right one", async () => {
     // Filtering must not turn a correct answer into a wrong one: an unknown id fails
     // the all-or-nothing match anyway, so dropping it changes nothing about the score.
-    await submit(single.id, ["large-language-model", "x".repeat(5_000)]);
+    await submit(single.id, [singleCorrect, "x".repeat(5_000)]);
 
     expect(submitted()).toMatchObject({ correct: true });
   });
@@ -174,7 +213,7 @@ describe("the elapsed time is the device's, but it is bounded", () => {
     // The question opened 4s ago; the device says 3.2s.
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - 4_000));
 
-    await submit(single.id, ["large-language-model"], 3_200);
+    await submit(single.id, [singleCorrect], 3_200);
 
     expect(submitted().elapsedMs).toBe(3_200);
   });
@@ -182,13 +221,13 @@ describe("the elapsed time is the device's, but it is bounded", () => {
   it("caps a claim longer than the question has been open", async () => {
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - 4_000));
 
-    await submit(single.id, ["large-language-model"], 999_000);
+    await submit(single.id, [singleCorrect], 999_000);
 
     expect(submitted().elapsedMs).toBe(4_000);
   });
 
   it("floors a negative claim at zero", async () => {
-    await submit(single.id, ["large-language-model"], -50_000);
+    await submit(single.id, [singleCorrect], -50_000);
 
     expect(submitted().elapsedMs).toBe(0);
   });
@@ -209,7 +248,7 @@ describe("the elapsed time is the device's, but it is bounded", () => {
 
     await answer({
       request: request({ playerId: "player-abc", questionId: single.id }, [
-        "large-language-model",
+        singleCorrect,
       ]),
     } as Parameters<typeof answer>[0]);
 
@@ -219,11 +258,11 @@ describe("the elapsed time is the device's, but it is bounded", () => {
   });
 
   it("gives a faster answer a strictly larger award", async () => {
-    await submit(single.id, ["large-language-model"], 1_000);
+    await submit(single.id, [singleCorrect], 1_000);
     const fast = submitted().awarded as number;
 
     submitAnswerMock.mockClear();
-    await submit(single.id, ["large-language-model"], 15_000);
+    await submit(single.id, [singleCorrect], 15_000);
     const slow = submitAnswerMock.mock.calls[0]![0].awarded as number;
 
     expect(fast).toBeGreaterThan(slow);
@@ -239,7 +278,7 @@ describe("the response carries no verdict", () => {
    * revealed would defeat the beat the whole segment is built around.
    */
   it("replies with accepted and nothing else", async () => {
-    const response = await submit(single.id, ["large-language-model"]);
+    const response = await submit(single.id, [singleCorrect]);
 
     expect(await body(response)).toEqual({ accepted: true });
   });
@@ -247,7 +286,7 @@ describe("the response carries no verdict", () => {
   it("leaks nothing even when the answer was correct and scored high", async () => {
     submitAnswerMock.mockResolvedValue({ outcome: "accepted", total: 4_820 });
 
-    const serialized = JSON.stringify(await body(await submit(single.id, ["large-language-model"])));
+    const serialized = JSON.stringify(await body(await submit(single.id, [singleCorrect])));
 
     expect(serialized).not.toContain("correct");
     expect(serialized).not.toContain("awarded");
@@ -286,28 +325,28 @@ describe("text answers", () => {
   });
 
   it("accepts a correct answer and stores the raw trimmed text", async () => {
-    const response = await submitText("  Halucynacje.  ");
+    const response = await submitText(`  ${shouted}.  `);
 
     expect(response.status).toBe(200);
     // Trimmed, but NOT folded — the fold is a comparison artefact, and the reveal shows
     // the attendee what they actually typed.
-    expect(submitted().text).toBe("Halucynacje.");
+    expect(submitted().text).toBe(`${shouted}.`);
     expect(submitted().optionIds).toEqual([]);
     expect(submitted().correct).toBe(true);
     expect(submitted().awarded).toBeGreaterThan(0);
   });
 
   it("accepts a wrong answer as a recorded answer worth nothing", async () => {
-    const response = await submitText("halucynajce");
+    const response = await submitText(misspelt);
 
     expect(response.status).toBe(200);
     expect(submitted().correct).toBe(false);
     expect(submitted().awarded).toBe(0);
-    expect(submitted().text).toBe("halucynajce");
+    expect(submitted().text).toBe(misspelt);
   });
 
   it("carries no verdict in the response, exactly as the choice path does not", async () => {
-    const serialized = JSON.stringify(await body(await submitText("halucynacje")));
+    const serialized = JSON.stringify(await body(await submitText(accepted)));
 
     expect(serialized).not.toContain("correct");
     expect(serialized).not.toContain("awarded");
@@ -364,11 +403,11 @@ describe("text answers", () => {
   });
 
   it("weights a text answer by speed on the same curve as a choice answer", async () => {
-    await submitText("halucynacje", 0);
+    await submitText(accepted, 0);
     const fast = submitted().awarded as number;
 
     submitAnswerMock.mockClear();
-    await submitText("halucynacje", SPEED_WINDOW_MS);
+    await submitText(accepted, SPEED_WINDOW_MS);
     const slow = submitted().awarded as number;
 
     expect(fast).toBeGreaterThan(slow);
@@ -377,17 +416,32 @@ describe("text answers", () => {
   it("never lets the typed answer reach a log line", async () => {
     const log = vi.spyOn(console, "log");
 
-    await submitText("halucynacje");
+    await submitText(accepted);
 
     // `LogFields` is closed and has no field this fits in — that closure is the
     // enforcement. This asserts the enforcement held.
     for (const call of log.mock.calls) {
-      expect(JSON.stringify(call)).not.toContain("halucynacje");
+      expect(JSON.stringify(call)).not.toContain(accepted);
     }
   });
 });
 
 describe("numeric guesses", () => {
+  /**
+   * Every guess below is derived from the question's own true value rather than typed.
+   *
+   * The figures used to be literals matching one named question (`10000`, `9800`,
+   * `7000`), guarded by a test asserting that question still held 10 000 — which is a
+   * transcript of the quiz sitting in a test about form parsing. Rounded to whole
+   * numbers so the strings stay free of separators: a decimal point is not a Polish
+   * decimal comma, and `guess.test.ts` owns that rule.
+   */
+  const trueValue = number.correctValue;
+  /** Inside the 5% band, so it earns a positive award while `correct` stays false. */
+  const nearMiss = Math.round(trueValue * 0.98);
+  /** Outside the 25% band, so it earns nothing. */
+  const wayOff = Math.round(trueValue * 0.5);
+
   /**
    * Sends a numeric submission. **`value` is omitted entirely when `raw` is
    * undefined** — same discipline as `submitText`: the absent-field case is what
@@ -409,18 +463,11 @@ describe("numeric guesses", () => {
     readSessionMock.mockResolvedValue(openOn(number.id));
   });
 
-  it("covers a real number question whose true value is 10 000", () => {
-    // The fixture, proved rather than assumed — every expectation below is relative
-    // to this value, and a retyped or renamed question would otherwise pass silently.
-    if (number.kind !== "number") throw new Error("expected a number question");
-    expect(number.correctValue).toBe(10_000);
-  });
-
   it("accepts an exact guess and stores the parsed number", async () => {
-    const response = await submitGuess("10000");
+    const response = await submitGuess(String(trueValue));
 
     expect(response.status).toBe(200);
-    expect(submitted().value).toBe(10_000);
+    expect(submitted().value).toBe(trueValue);
     expect(submitted().optionIds).toEqual([]);
     expect(submitted().text).toBeNull();
     expect(submitted().correct).toBe(true);
@@ -428,18 +475,18 @@ describe("numeric guesses", () => {
   });
 
   it("accepts a near-miss with a positive award and correct: false", async () => {
-    // **The partial-credit case.** 9 800 is inside 5%, so it scores well — and
-    // `correct` stays false, because for this kind that flag means "exact hit".
-    const response = await submitGuess("9800");
+    // **The partial-credit case.** A guess inside 5% scores well — and `correct` stays
+    // false, because for this kind that flag means "exact hit".
+    const response = await submitGuess(String(nearMiss));
 
     expect(response.status).toBe(200);
     expect(submitted().correct).toBe(false);
     expect(submitted().awarded as number).toBeGreaterThan(0);
-    expect(submitted().value).toBe(9_800);
+    expect(submitted().value).toBe(nearMiss);
   });
 
   it("accepts a wildly wrong guess as a recorded answer worth nothing", async () => {
-    const response = await submitGuess("7000");
+    const response = await submitGuess(String(wayOff));
 
     expect(response.status).toBe(200);
     expect(submitted().correct).toBe(false);
@@ -447,18 +494,18 @@ describe("numeric guesses", () => {
   });
 
   it("accepts a negative guess — wrong is not malformed — and scores it zero", async () => {
-    const response = await submitGuess("-10000");
+    const response = await submitGuess(String(-trueValue));
 
     expect(response.status).toBe(200);
-    expect(submitted().value).toBe(-10_000);
+    expect(submitted().value).toBe(-trueValue);
     expect(submitted().awarded).toBe(0);
   });
 
   it("parses a Polish decimal comma", async () => {
-    const response = await submitGuess("9800,5");
+    const response = await submitGuess(`${nearMiss},5`);
 
     expect(response.status).toBe(200);
-    expect(submitted().value).toBe(9_800.5);
+    expect(submitted().value).toBe(nearMiss + 0.5);
   });
 
   /**
@@ -501,11 +548,11 @@ describe("numeric guesses", () => {
   });
 
   it("weights the guess by the same speed curve", async () => {
-    await submitGuess("10000", 0);
+    await submitGuess(String(trueValue), 0);
     const fast = submitted().awarded as number;
 
     submitAnswerMock.mockClear();
-    await submitGuess("10000", SPEED_WINDOW_MS);
+    await submitGuess(String(trueValue), SPEED_WINDOW_MS);
     const slow = submitted().awarded as number;
 
     expect(fast).toBeGreaterThan(slow);
@@ -700,27 +747,27 @@ describe("the time limit closes the submission window", () => {
   it("accepts a submission well inside the window", async () => {
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - 1_000));
 
-    expect((await submit(single.id, ["large-language-model"])).status).toBe(200);
+    expect((await submit(single.id, [singleCorrect])).status).toBe(200);
   });
 
   it("accepts one arriving exactly at the visible zero", async () => {
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS));
 
-    expect((await submit(single.id, ["large-language-model"])).status).toBe(200);
+    expect((await submit(single.id, [singleCorrect])).status).toBe(200);
   });
 
   it("accepts one inside the grace, which is what the grace is for", async () => {
     // The attendee tapped as the bar emptied and the request crossed a venue network.
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - SUBMISSION_GRACE_MS));
 
-    expect((await submit(single.id, ["large-language-model"])).status).toBe(200);
+    expect((await submit(single.id, [singleCorrect])).status).toBe(200);
     expect(submitAnswerMock).toHaveBeenCalled();
   });
 
   it("refuses one a millisecond past the grace, with its own discriminator", async () => {
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - SUBMISSION_GRACE_MS - 1));
 
-    const response = await submit(single.id, ["large-language-model"]);
+    const response = await submit(single.id, [singleCorrect]);
 
     expect(response.status).toBe(409);
     expect(await body(response)).toEqual({
@@ -732,7 +779,7 @@ describe("the time limit closes the submission window", () => {
   it("spends no write on a refusal", async () => {
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
 
-    await submit(single.id, ["large-language-model"]);
+    await submit(single.id, [singleCorrect]);
 
     // The read had already happened; the 10-command EVAL must not.
     expect(submitAnswerMock).not.toHaveBeenCalled();
@@ -743,10 +790,10 @@ describe("the time limit closes the submission window", () => {
     // would tell the room the projector is lying to them.
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
 
-    const expired = await body(await submit(single.id, ["large-language-model"]));
+    const expired = await body(await submit(single.id, [singleCorrect]));
 
     readSessionMock.mockResolvedValue(openOn(multi.id));
-    const notOpen = await body(await submit(single.id, ["large-language-model"]));
+    const notOpen = await body(await submit(single.id, [singleCorrect]));
 
     expect(expired.error).not.toBe(notOpen.error);
     expect(notOpen.refusal).toBeUndefined();
@@ -772,19 +819,19 @@ describe("the time limit closes the submission window", () => {
     const at = NOW - (shortLimitMs + longLimitMs) / 2;
 
     readSessionMock.mockResolvedValue(openOn(single.id, at));
-    expect((await submit(single.id, ["large-language-model"])).status).toBe(409);
+    expect((await submit(single.id, [singleCorrect])).status).toBe(409);
 
     readSessionMock.mockResolvedValue(openOn(text.id, at));
     const typed = await answer({
-      request: request({ playerId: "player-abc", questionId: text.id, text: "halucynacje" }),
+      request: request({ playerId: "player-abc", questionId: text.id, text: accepted }),
     } as Parameters<typeof answer>[0]);
     expect(typed.status).toBe(200);
   });
 
-  it.each([
-    ["the word cloud", () => wordCloud.id],
-    ["the gather question", () => unscored.id],
-  ])("never expires %s, whose pacing is the host's", async (_label, id) => {
+  const hostPaced: Array<[string, () => string]> = [["the word cloud", () => wordCloud.id]];
+  if (unscored !== undefined) hostPaced.push(["the gather question", () => unscored.id]);
+
+  it.each(hostPaced)("never expires %s, whose pacing is the host's", async (_label, id) => {
     // An hour in, an unscored question is still open — the schema refuses to give it a
     // limit at all, so there is nothing for the window to close.
     readSessionMock.mockResolvedValue(openOn(id(), NOW - 3_600_000));
@@ -794,7 +841,7 @@ describe("the time limit closes the submission window", () => {
         id() === wordCloud.id
           ? { playerId: "player-abc", questionId: id(), word: "robot" }
           : { playerId: "player-abc", questionId: id() },
-        id() === wordCloud.id ? [] : ["gotowy"]
+        id() === wordCloud.id ? [] : [unscoredOption]
       ),
     } as Parameters<typeof answer>[0]);
 
@@ -813,7 +860,7 @@ describe("the time limit closes the submission window", () => {
 
     const response = await answer({
       request: request({ playerId: "player-abc", questionId: single.id }, [
-        "large-language-model",
+        singleCorrect,
       ]),
     } as Parameters<typeof answer>[0]);
 
@@ -824,7 +871,7 @@ describe("the time limit closes the submission window", () => {
   it("refuses an expired submission claiming elapsedMs of zero", async () => {
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
 
-    const response = await submit(single.id, ["large-language-model"], 0);
+    const response = await submit(single.id, [singleCorrect], 0);
 
     expect(response.status).toBe(409);
     expect((await body(response)).refusal).toBe("expired");
@@ -833,7 +880,7 @@ describe("the time limit closes the submission window", () => {
   it("logs the class, and nothing about the timing", async () => {
     readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
 
-    await submit(single.id, ["large-language-model"]);
+    await submit(single.id, [singleCorrect]);
 
     const line = (console.log as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map((call) => String(call[0]))
@@ -849,7 +896,7 @@ describe("refusals", () => {
   it("refuses an answer to a question that is not the open one", async () => {
     readSessionMock.mockResolvedValue(openOn(multi.id));
 
-    const response = await submit(single.id, ["large-language-model"]);
+    const response = await submit(single.id, [singleCorrect]);
 
     // A phone that submitted as the host advanced. Refused before a write is spent.
     expect(response.status).toBe(409);
@@ -862,19 +909,19 @@ describe("refusals", () => {
       state: { ...openOn(single.id).state, phase: "question-revealed", revealedOptionIds: [] },
     });
 
-    expect((await submit(single.id, ["large-language-model"])).status).toBe(409);
+    expect((await submit(single.id, [singleCorrect])).status).toBe(409);
     expect(submitAnswerMock).not.toHaveBeenCalled();
   });
 
   it("reports no session as 409, not as a failure", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: null });
 
-    expect((await submit(single.id, ["large-language-model"])).status).toBe(409);
+    expect((await submit(single.id, [singleCorrect])).status).toBe(409);
   });
 
   it("reports a missing player id without touching the store", async () => {
     const response = (await answer({
-      request: request({ questionId: single.id, elapsedMs: "1000" }, ["large-language-model"]),
+      request: request({ questionId: single.id, elapsedMs: "1000" }, [singleCorrect]),
     } as Parameters<typeof answer>[0])) as Response;
 
     expect(response.status).toBe(400);
@@ -891,13 +938,13 @@ describe("refusals", () => {
   ])("maps a store outcome of %s to %i", async (outcome, status) => {
     submitAnswerMock.mockResolvedValue({ outcome, total: 0, reason: "x" });
 
-    expect((await submit(single.id, ["large-language-model"])).status).toBe(status);
+    expect((await submit(single.id, [singleCorrect])).status).toBe(status);
   });
 
   it("reports an unreadable session as 503 rather than recording an unscored answer", async () => {
     readSessionMock.mockResolvedValue({ outcome: "failed", reason: "unreachable" });
 
-    expect((await submit(single.id, ["large-language-model"])).status).toBe(503);
+    expect((await submit(single.id, [singleCorrect])).status).toBe(503);
     expect(submitAnswerMock).not.toHaveBeenCalled();
   });
 });
@@ -907,11 +954,11 @@ describe("what reaches the log", () => {
     const logged: string[] = [];
     vi.spyOn(console, "log").mockImplementation((line) => void logged.push(String(line)));
 
-    await submit(single.id, ["large-language-model"]);
+    await submit(single.id, [singleCorrect]);
 
     // An answer is attendee data, and logs are covered by no TTL and no purge.
     // `LogFields` has no field an option id fits in — this pins the call site too.
-    expect(logged.join("\n")).not.toContain("large-language-model");
+    expect(logged.join("\n")).not.toContain(singleCorrect);
     expect(logged.join("\n")).toContain("session.answer.accepted");
   });
 
@@ -920,7 +967,7 @@ describe("what reaches the log", () => {
     vi.spyOn(console, "log").mockImplementation((line) => void logged.push(String(line)));
     submitAnswerMock.mockResolvedValue({ outcome: "already-answered" });
 
-    await submit(single.id, ["large-language-model"]);
+    await submit(single.id, [singleCorrect]);
 
     expect(logged.join("\n")).toContain("already-answered");
   });

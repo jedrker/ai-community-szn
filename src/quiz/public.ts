@@ -189,13 +189,23 @@ function toPublicQuestion(question: Question): PublicQuestion {
 }
 
 /**
- * Computed once at module scope from the already-parsed `quiz`, so a serverless
- * function pays for it on cold start rather than per request — the same reasoning as
- * `quiz` itself in `index.ts`.
+ * The projection, over any quiz.
+ *
+ * Parameterised for the reason `forbiddenAnswerValues` is: the shuffle's *properties* —
+ * no positional tell, a different permutation per question, the same one every time —
+ * are only observable across a large set of questions, and the committed quiz is a small
+ * one that is meant to change. Tests measure the distribution over generated questions
+ * and keep the real quiz for conformance.
+ *
+ * Production has exactly one caller, `publicQuiz` below, which computes once at module
+ * scope so a serverless function pays for it on cold start rather than per request —
+ * the same reasoning as `quiz` itself in `index.ts`.
  */
-export const publicQuiz: PublicQuiz = {
-  questions: quiz.questions.map(toPublicQuestion),
-};
+export function projectQuiz(source: Quiz = quiz): PublicQuiz {
+  return { questions: source.questions.map(toPublicQuestion) };
+}
+
+export const publicQuiz: PublicQuiz = projectQuiz();
 
 /** The public shape of one question, or `undefined` if the id is unknown. */
 export function getPublicQuestionById(id: string): PublicQuestion | undefined {

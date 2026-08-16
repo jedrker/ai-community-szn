@@ -77,6 +77,12 @@ const lobby = {
 const firstQuestionOpen = {
   version: 2,
   phase: "question-open" as const,
+  /**
+   * **The one id here that has to be real**, and taken by position rather than named:
+   * `parseSessionState` refuses a `currentQuestionId` that resolves to no question, so a
+   * synthetic one would come back as an unreadable session. Everything else in this file
+   * is a synthetic fixture, because the store itself never resolves an id.
+   */
   currentQuestionId: quiz.questions[0]!.id,
   startedAt: NOW,
   updatedAt: NOW + 500,
@@ -826,16 +832,20 @@ describe("submitAnswer", () => {
   beforeEach(configure);
 
   /**
-   * **A real choice question, looked up by id rather than by position.**
+   * **A synthetic id, because the store never resolves one.**
    *
-   * This used to be `quiz.questions[0]`, which is the *word-cloud* opener — so a fixture
-   * commented "a choice answer" was carrying a word-cloud question's id with invented
-   * option ids. Harmless here, because `submitAnswer` is kind-agnostic by design, and
-   * exactly the shape `lessons.md` warns about ("never build a fixture from a positional
-   * index into real data without checking what that datum actually is"). Corrected during
-   * S-08 so the word-cloud fixture below can be told apart from this one at a glance.
+   * `submitAnswer` is kind-agnostic by design: it writes a field name and increments
+   * counters, and nothing in this module reads `src/quiz/`. The id therefore only has to
+   * be *distinguishable* — from the word-cloud fixture below, and from a real question.
+   *
+   * It went through both wrong answers first. It was `quiz.questions[0]`, which is
+   * whatever happens to open the quiz (a word cloud, as it turned out) — a fixture
+   * commented "a choice answer" carrying a word-cloud id with invented option ids, the
+   * shape `lessons.md` warns about. S-08 corrected that to a live id looked up by hand,
+   * which fixed the lie and created a new one: a store test that fails when somebody
+   * edits a question it does not use. Naming the fixture what it is settles both.
    */
-  const choiceQuestionId = "llm-skrot";
+  const choiceQuestionId = "fixture-choice-question";
 
   const answer = {
     playerId: "player-abc",
@@ -968,13 +978,10 @@ describe("submitAnswer", () => {
    * joining them, and that a record without a word sends none.
    */
   describe("the word counter", () => {
-    const wordCloudId = "smieszne-slowo-ai";
-
-    it("covers a question that really is a word cloud", () => {
-      // The fixture proved rather than assumed — the mistake corrected above.
-      const question = quiz.questions.find((candidate) => candidate.id === wordCloudId);
-      expect(question?.kind).toBe("word-cloud");
-    });
+    // Synthetic, for the reason `choiceQuestionId` is: what makes this a word-cloud
+    // submission here is the record carrying a `word` and no options, which is all the
+    // store can see. The kind lives in the definition and is the route's business.
+    const wordCloudId = "fixture-word-cloud-question";
 
     const wordAnswer = {
       ...answer,
@@ -1151,7 +1158,8 @@ describe("submitAnswer", () => {
 describe("readAnsweredCount", () => {
   beforeEach(configure);
 
-  const questionId = quiz.questions[0]!.id;
+  // A field name, not a lookup — see `choiceQuestionId`.
+  const questionId = "fixture-question";
 
   it("reads the answered field in one command", async () => {
     redisMock.hget.mockResolvedValue(37);
@@ -1217,7 +1225,7 @@ describe("readAnsweredCount", () => {
 describe("readQuestionTallies", () => {
   beforeEach(configure);
 
-  const questionId = quiz.questions[0]!.id;
+  const questionId = "fixture-question";
   const optionIds = ["a", "b", "c"];
 
   it("reads the answered field and every option field in one command", async () => {
@@ -1298,7 +1306,7 @@ describe("readQuestionTallies", () => {
 describe("readWordCloud", () => {
   beforeEach(configure);
 
-  const questionId = "smieszne-slowo-ai";
+  const questionId = "fixture-word-cloud-question";
 
   /** Builds a tallies-hash reply, with the word family spelled through `wordField`. */
   function hash(
@@ -1332,8 +1340,8 @@ describe("readWordCloud", () => {
         { robot: 2 },
         {
           [answeredField(questionId)]: 5,
-          [optionField("llm-skrot", "large-language-model")]: 40,
-          [answeredField("llm-skrot")]: 60,
+          [optionField("fixture-choice-question", "fixture-option")]: 40,
+          [answeredField("fixture-choice-question")]: 60,
         }
       )
     );

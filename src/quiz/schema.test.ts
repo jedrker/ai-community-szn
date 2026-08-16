@@ -17,7 +17,7 @@ import { MAX_TIME_LIMIT_SECONDS, MIN_TIME_LIMIT_SECONDS, quizSchema } from "./sc
 
 const singleChoice = {
   kind: "single-choice",
-  id: "llm-skrot",
+  id: "fixture-single-choice",
   prompt: "Co oznacza skrót LLM?",
   points: 1000,
   timeLimitSeconds: 25,
@@ -30,7 +30,7 @@ const singleChoice = {
 
 const multipleChoice = {
   kind: "multiple-choice",
-  id: "summer-tour-final",
+  id: "fixture-multi-choice",
   prompt: "Czym kończy się dzisiejszy Summer Tour?",
   points: 1000,
   timeLimitSeconds: 40,
@@ -53,7 +53,7 @@ const text = {
 
 const number = {
   kind: "number",
-  id: "lyro-procent",
+  id: "fixture-number",
   prompt: "Ile procent rozmów automatyzuje Lyro AI?",
   points: 1000,
   timeLimitSeconds: 40,
@@ -62,7 +62,7 @@ const number = {
 
 const wordCloud = {
   kind: "word-cloud",
-  id: "smieszne-slowo",
+  id: "fixture-word-cloud",
   prompt: "Napisz śmieszne słowo związane z AI",
   points: null,
 };
@@ -113,7 +113,7 @@ describe("accepts a valid question of every kind", () => {
 describe("rejects a violation of every domain invariant", () => {
   it("rejects duplicate question ids", () => {
     const message = rejectionMessage(quizOf(singleChoice, { ...text, id: singleChoice.id }));
-    expect(message).toContain("llm-skrot");
+    expect(message).toContain("fixture-single-choice");
     expect(message).toContain("Zduplikowane id pytań");
   });
 
@@ -127,7 +127,7 @@ describe("rejects a violation of every domain invariant", () => {
         ],
       })
     );
-    expect(message).toContain("llm-skrot");
+    expect(message).toContain("fixture-single-choice");
     expect(message).toContain("zduplikowane id odpowiedzi");
   });
 
@@ -135,19 +135,19 @@ describe("rejects a violation of every domain invariant", () => {
     const message = rejectionMessage(
       quizOf({ ...singleChoice, options: [{ id: "a", text: "Large Language Model" }] })
     );
-    expect(message).toContain("llm-skrot");
+    expect(message).toContain("fixture-single-choice");
     expect(message).toContain("co najmniej 2 odpowiedzi");
   });
 
   it("rejects correctOptionIds pointing at an option that does not exist", () => {
     const message = rejectionMessage(quizOf({ ...singleChoice, correctOptionIds: ["nope"] }));
-    expect(message).toContain("llm-skrot");
+    expect(message).toContain("fixture-single-choice");
     expect(message).toContain("nieistniejące odpowiedzi");
   });
 
   it("rejects a scored single-choice question with two correct options", () => {
     const message = rejectionMessage(quizOf({ ...singleChoice, correctOptionIds: ["a", "b"] }));
-    expect(message).toContain("llm-skrot");
+    expect(message).toContain("fixture-single-choice");
     expect(message).toContain("dokładnie 1 poprawną odpowiedź");
   });
 
@@ -158,7 +158,7 @@ describe("rejects a violation of every domain invariant", () => {
 
   it("rejects a scored multiple-choice question with no correct option", () => {
     const message = rejectionMessage(quizOf({ ...multipleChoice, correctOptionIds: [] }));
-    expect(message).toContain("summer-tour-final");
+    expect(message).toContain("fixture-multi-choice");
     expect(message).toContain("co najmniej 1 poprawną odpowiedź");
   });
 
@@ -181,7 +181,7 @@ describe("rejects a violation of every domain invariant", () => {
     ["NaN", Number.NaN],
   ])("rejects a non-finite correctValue (%s), naming the question", (_label, value) => {
     const message = rejectionMessage(quizOf({ ...number, correctValue: value }));
-    expect(message).toContain("lyro-procent");
+    expect(message).toContain("fixture-number");
     expect(message).toContain("skończoną liczbą");
   });
 
@@ -190,7 +190,7 @@ describe("rejects a violation of every domain invariant", () => {
     // relative-error rule divides by it. This is the gate that stops such a question
     // from deploying at all.
     const message = rejectionMessage(quizOf({ ...number, correctValue: 0 }));
-    expect(message).toContain("lyro-procent");
+    expect(message).toContain("fixture-number");
     expect(message).toContain("nie może wynosić 0");
   });
 
@@ -200,14 +200,14 @@ describe("rejects a violation of every domain invariant", () => {
 
   it("rejects a scored word-cloud question", () => {
     const message = rejectionMessage(quizOf({ ...wordCloud, points: 1000 }));
-    expect(message).toContain("smieszne-slowo");
+    expect(message).toContain("fixture-word-cloud");
     expect(message).toContain("niepunktowane");
   });
 
   it("rejects a scored question with no time limit, naming the question", () => {
     const { timeLimitSeconds: _unused, ...noLimit } = singleChoice;
     const message = rejectionMessage(quizOf(noLimit));
-    expect(message).toContain("llm-skrot");
+    expect(message).toContain("fixture-single-choice");
     expect(message).toContain("musi mieć timeLimitSeconds");
   });
 
@@ -229,7 +229,7 @@ describe("rejects a violation of every domain invariant", () => {
     // Built from the exported bounds, so widening them cannot leave this test asserting
     // a range the schema no longer enforces.
     const message = rejectionMessage(quizOf({ ...singleChoice, timeLimitSeconds: value }));
-    expect(message).toContain("llm-skrot");
+    expect(message).toContain("fixture-single-choice");
     expect(message).toContain(`${MIN_TIME_LIMIT_SECONDS}–${MAX_TIME_LIMIT_SECONDS}`);
     expect(message).toContain(String(value));
   });
@@ -283,6 +283,6 @@ describe("rejects a violation of every domain invariant", () => {
 describe("rejection messages are actionable", () => {
   it("names the offending question rather than only a Zod path", () => {
     const message = rejectionMessage(quizOf(singleChoice, { ...wordCloud, points: 500 }));
-    expect(message).toMatch(/Pytanie "smieszne-slowo"/);
+    expect(message).toMatch(/Pytanie "fixture-word-cloud"/);
   });
 });

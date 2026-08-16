@@ -52,8 +52,34 @@ const { POST: purge } = await import("./purge");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
 const { initialSessionState } = await import("../../../../lib/session/state");
 const { quiz } = await import("../../../../quiz/index");
+const { questionOfKind, questionsOfKind } = await import("../../../../quiz/test-support");
 
 const NOW = 1_785_000_000_000;
+
+/**
+ * **The questions these transitions are built from, resolved by kind.**
+ *
+ * `reveal` reads the open question out of the definition through `getQuestionById`, so
+ * these have to be real — but naming them made a file about transition-building fail
+ * whenever the quiz was edited, which is the one thing `definition.ts` is meant to allow.
+ * Which question of each kind is irrelevant to every assertion below; that it is of that
+ * kind is the whole point.
+ */
+const singleQuestion = questionOfKind("single-choice", { scored: true });
+const multiQuestion = questionOfKind("multiple-choice", { scored: true });
+/** Optional — see the same fixture in `answer.test.ts`; its one test skips without it. */
+const unscoredChoice = questionsOfKind("multiple-choice", { scored: false })[0];
+const textQuestion = questionOfKind("text", { scored: true });
+const wordCloudQuestion = questionOfKind("word-cloud");
+const numberQuestions = questionsOfKind("number", { scored: true });
+
+/**
+ * Any question that is not the last one — position, not kind, and it matters exactly
+ * once: `advance` past the final question returns no state at all, so an
+ * advance-clears-it assertion built on the last question would never reach the
+ * transition it is testing.
+ */
+const notLastQuestion = quiz.questions[0]!;
 
 const lobby = {
   version: 1,
@@ -932,26 +958,31 @@ describe("the reveal payload (roadmap S-03)", () => {
   it("puts the correct option ids on the revealed state", async () => {
     await call(reveal);
 
-    const next = await transitionFrom()(open("llm-skrot"), NOW + 5_000);
+    const next = await transitionFrom()(open(singleQuestion.id), NOW + 5_000);
 
-    expect(next.revealedOptionIds).toEqual(["large-language-model"]);
+    expect(next.revealedOptionIds).toEqual(singleQuestion.correctOptionIds);
   });
 
   it("carries every correct id for a multi-answer question", async () => {
     await call(reveal);
 
-    const next = await transitionFrom()(open("summer-tour-zakonczenie"), NOW + 5_000);
+    const next = await transitionFrom()(open(multiQuestion.id), NOW + 5_000);
 
-    expect(next.revealedOptionIds).toEqual(["kino", "networking"]);
+    expect(next.revealedOptionIds).toEqual(multiQuestion.correctOptionIds);
   });
 
-  it("reveals an empty array for an unscored choice question", async () => {
-    await call(reveal);
+  it.skipIf(unscoredChoice === undefined)(
+    "reveals an empty array for an unscored choice question",
+    async () => {
+      await call(reveal);
 
-    // Nothing to highlight, and the client must read that as a warm-up rather than
-    // as an error — this is the gather beat that welcomes latecomers.
-    expect((await transitionFrom()(open("czy-wszyscy-gotowi"), NOW)).revealedOptionIds).toEqual([]);
-  });
+      // Nothing to highlight, and the client must read that as a warm-up rather than
+      // as an error — this is the gather beat that welcomes latecomers.
+      expect((await transitionFrom()(open(unscoredChoice!.id), NOW)).revealedOptionIds).toEqual(
+        []
+      );
+    }
+  );
 
   it("reveals an empty array for a kind with no options", async () => {
     // A text question has no options to highlight — its answer travels on
@@ -959,14 +990,14 @@ describe("the reveal payload (roadmap S-03)", () => {
     // are still S-06/S-08.
     await call(reveal);
 
-    expect((await transitionFrom()(open("zmyslanie-faktow"), NOW)).revealedOptionIds).toEqual([]);
+    expect((await transitionFrom()(open(textQuestion.id), NOW)).revealedOptionIds).toEqual([]);
   });
 
   it("advance clears it, so an answer key cannot outlive its question", async () => {
     await call(advance);
 
     const next = transitionFrom()(
-      { ...open("llm-skrot"), phase: "question-revealed", revealedOptionIds: ["large-language-model"] },
+      { ...open(singleQuestion.id), phase: "question-revealed", revealedOptionIds: singleQuestion.correctOptionIds },
       NOW + 9_000
     );
 
@@ -986,10 +1017,10 @@ describe("the reveal payload (roadmap S-03)", () => {
 
     const next = transitionFrom()(
       {
-        ...open("llm-skrot"),
+        ...open(singleQuestion.id),
         phase: "question-revealed",
-        revealedOptionIds: ["large-language-model"],
-        revealedDistribution: { answered: 12, options: { "large-language-model": 12 } },
+        revealedOptionIds: singleQuestion.correctOptionIds,
+        revealedDistribution: { answered: 12, options: { [singleQuestion.correctOptionIds[0]!]: 12 } },
       },
       NOW + 9_000
     );
@@ -1019,18 +1050,10 @@ describe("the reveal payload (roadmap S-03)", () => {
    * own result fetch fails still sees the right answer.
    */
   describe("revealedAnswerText", () => {
-    /**
-     * Read from the definition rather than hardcoded, so an edit to the question's
-     * accepted variants fails here instead of silently passing against a stale
-     * literal. Guarded by kind, so this cannot quietly become a non-text question.
-     */
-    const textQuestion = quiz.questions.find((question) => question.id === "zmyslanie-faktow");
-    if (textQuestion?.kind !== "text") throw new Error("expected a text question");
-
     it("publishes the first accepted variant for a text question", async () => {
       await call(reveal);
 
-      const next = await transitionFrom()(open("zmyslanie-faktow"), NOW + 5_000);
+      const next = await transitionFrom()(open(textQuestion.id), NOW + 5_000);
 
       // The first variant specifically — a list of all four would read as though
       // several different answers were expected.
@@ -1041,7 +1064,7 @@ describe("the reveal payload (roadmap S-03)", () => {
     it("is null for a choice question, whose answer travels as option ids", async () => {
       await call(reveal);
 
-      const next = await transitionFrom()(open("llm-skrot"), NOW + 5_000);
+      const next = await transitionFrom()(open(singleQuestion.id), NOW + 5_000);
 
       expect(next.revealedAnswerText).toBeNull();
     });
@@ -1051,33 +1074,21 @@ describe("the reveal payload (roadmap S-03)", () => {
 
       // The one remaining kind (S-08). FR-015 lets its aggregate display live
       // precisely because there is nothing correct to leak.
-      const wordCloud = quiz.questions.find((question) => question.kind === "word-cloud");
-      if (wordCloud === undefined) throw new Error("expected a word-cloud question");
-
-      expect((await transitionFrom()(open(wordCloud.id), NOW)).revealedAnswerText).toBeNull();
+      expect(
+        (await transitionFrom()(open(wordCloudQuestion.id), NOW)).revealedAnswerText
+      ).toBeNull();
     });
 
     /**
      * The numeric half of the same job (roadmap S-06, FR-013).
      *
-     * Both live number questions, because their true values are two orders of
-     * magnitude apart and only the larger one exercises thousands grouping at all.
+     * Every number question the quiz ships, whatever their magnitudes: the formatting
+     * rule is the same for all of them, and the grouping trap the next test pins is
+     * asserted against the formatter directly rather than hoping a question is large
+     * enough to reach it.
      */
     describe("a number question's true value", () => {
-      const numberQuestions = quiz.questions.filter((question) => question.kind === "number");
-
-      it("covers both drafted number questions", () => {
-        // The table below is only worth what its fixtures are. If a question is
-        // removed or retyped, fail here rather than passing on a shrunken set.
-        expect(numberQuestions.map((question) => question.id)).toEqual([
-          "lyro-automatyzacja",
-          "ai-devs-absolwenci",
-        ]);
-      });
-
       it.each(numberQuestions)("publishes $id formatted for pl-PL", async (question) => {
-        if (question.kind !== "number") throw new Error("expected a number question");
-
         await call(reveal);
 
         const next = await transitionFrom()(open(question.id), NOW + 5_000);
@@ -1097,7 +1108,7 @@ describe("the reveal payload (roadmap S-03)", () => {
       it("leaves revealedOptionIds empty — a number question has none to highlight", async () => {
         await call(reveal);
 
-        const next = await transitionFrom()(open("ai-devs-absolwenci"), NOW + 5_000);
+        const next = await transitionFrom()(open(numberQuestions[0]!.id), NOW + 5_000);
 
         expect(next.revealedOptionIds).toEqual([]);
       });
@@ -1105,12 +1116,13 @@ describe("the reveal payload (roadmap S-03)", () => {
       it("advance clears it, so a true value cannot outlive its question", async () => {
         await call(advance);
 
-        // `lyro-automatyzacja`, not `ai-devs-absolwenci`: the latter is the last
-        // question in the definition, so `advance` past it is a no-op that returns
-        // no state at all and the assertion would never reach the transition.
+        // Deliberately not the last question: `advance` past it is a no-op that returns
+        // no state at all, and the assertion would never reach the transition. The
+        // incoming document is hand-built, so its question need not be a number one —
+        // what is under test is that the field is cleared, whatever put it there.
         const next = transitionFrom()(
           {
-            ...open("lyro-automatyzacja"),
+            ...open(notLastQuestion.id),
             phase: "question-revealed",
             revealedAnswerText: formatCorrectValue(67),
           },
@@ -1124,9 +1136,10 @@ describe("the reveal payload (roadmap S-03)", () => {
     it("advance clears it, so an accepted answer cannot outlive its question", async () => {
       await call(advance);
 
+      // Not the last question, for the reason the numeric sibling above gives.
       const next = transitionFrom()(
         {
-          ...open("zmyslanie-faktow"),
+          ...open(notLastQuestion.id),
           phase: "question-revealed",
           revealedAnswerText: textQuestion.acceptedAnswers[0],
         },
@@ -1245,6 +1258,43 @@ describe("standings", () => {
     await call(showStandings);
 
     expect(publishSnapshotMock).toHaveBeenCalledWith(standings);
+  });
+
+  /**
+   * **And it says so.** The generic `no-op` note reaches the host panel as "nic do zrobienia
+   * (koniec pytań?). Stan bez zmian." — which is false about the branch above, and false at
+   * the worst moment: the retry the 502 asked for has just put the board on 150 devices.
+   * `applied` stays `false` because nothing in the store moved; the note is what carries the
+   * difference.
+   */
+  it("reports the re-broadcast as its own outcome, not as a generic no-op", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: false, note: "no-op" },
+    });
+
+    const response = await call(showStandings);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      applied: false,
+      note: "republished",
+    });
+  });
+
+  /** The note belongs to the branch that republished, not to every standings no-op. */
+  it("does not claim a re-broadcast from a phase it never published in", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: lobby, applied: false, note: "no-op" },
+    });
+
+    const body = await (await call(showStandings)).json();
+
+    expect(body.note).not.toBe("republished");
   });
 
   it("reports a re-broadcast that also fails as 502, not as a silent success", async () => {

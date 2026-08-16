@@ -19,8 +19,15 @@ const { POST: result } = await import("./result");
 const { quiz } = await import("../../../quiz/index");
 
 const NOW = 1_785_000_000_000;
-const QUESTION = quiz.questions[2]!.id;
-const OTHER = quiz.questions[4]!.id;
+/**
+ * Two real, distinct question ids — real because `parseSessionState` refuses a
+ * `currentQuestionId` that resolves to nothing, distinct because the phase gate's job is
+ * to tell "your answer to this question" from "your answer to another one". Taken by
+ * position rather than named: which two is irrelevant, and naming them made an edit to
+ * the quiz fail a test about phases.
+ */
+const QUESTION = quiz.questions[0]!.id;
+const OTHER = quiz.questions[1]!.id;
 
 function state(
   phase: "lobby" | "question-open" | "question-revealed" | "ended" | "standings",
@@ -34,7 +41,7 @@ function state(
     startedAt: NOW - 60_000,
     updatedAt: NOW,
     playerCount: 12,
-    revealedOptionIds: phase === "question-revealed" ? ["large-language-model"] : null,
+    revealedOptionIds: phase === "question-revealed" ? ["fixture-option"] : null,
   };
 }
 
@@ -48,7 +55,7 @@ function state(
 const answered = {
   playerId: "player-abc",
   questionId: QUESTION,
-  optionIds: ["large-language-model"],
+  optionIds: ["fixture-option"],
   text: null,
   value: null,
   elapsedMs: 3_200,
