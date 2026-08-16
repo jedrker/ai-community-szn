@@ -22,6 +22,7 @@
     "quiz:reset": "bun scripts/reset-quiz.ts",
     "quiz:check-purge": "bun scripts/check-purge-residue.ts",
     "quiz:rehearse": "bun scripts/rehearse-room.ts",
+    "quiz:simulate": "bun scripts/simulate-room.ts --i-know-this-is-not-local",
     "quiz:probe-config": "bun scripts/probe-spine-config.ts"
   },
   "dependencies": {
