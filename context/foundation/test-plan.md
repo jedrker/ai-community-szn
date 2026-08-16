@@ -128,9 +128,15 @@ disk.
 | # | Phase name | Goal (one line) | Risks covered | Test types | Status | Change folder |
 |---|---|---|---|---|---|---|
 | 1 | Host control rules, executable | Prove the panel offers no verb the phase refuses by running the decision, not by reading its source | #1, #2 | unit | complete | `context/changes/testing-host-control-rules/` |
-| 2 | Sync under a degraded link | Prove a device converges on the host's phase after the transport drops, and that no answer is lost at the reveal boundary | #3, #4 | unit, integration | complete — on its deliverables; see §6.6 for the one proof clause it does *not* meet | `context/changes/testing-sync-degraded-link/` |
+| 2 | Sync under a degraded link | Prove a device converges on the host's phase after the transport drops, and that no answer is lost at the reveal boundary — **on its deliverables; one proof clause is deliberately not met, see the note below and §6.6** | #3, #4 | unit, integration | complete | `context/changes/testing-sync-degraded-link/` |
 | 3 | Submission edges and the retention floor | Prove absent and hostile fields fail toward refusal, the per-device cap holds, and no registered key outlives the session | #5, #6, #7 | integration, contract, existing scripts | not started | — |
 | 4 | Gates wired | Make the checks that already run locally run between a commit and production | cross-cutting | gates | not started | — |
+
+**Phase 2 reads `complete` on what it built, and that is narrower than "Risk #3 is covered".** Its
+third proof clause — "a cancel is not undone by a request already in flight" — holds for `dispose`
+and for neither `stop` nor `pause`; phase 2 pinned that failure rather than repairing it, under the
+decision at the end of §2. The two pinned tests carry inversion notes, and §6.6 names them. A row
+saying `complete` is not a claim that every clause beside it is met.
 
 Order rationale. Phase 1 is the highest risk at the lowest cost, and it is the area the team named
 as least confident. Phase 2 depends on the timing discipline Phase 1 establishes, because its risks

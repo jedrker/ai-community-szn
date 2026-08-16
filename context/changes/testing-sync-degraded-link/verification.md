@@ -10,20 +10,25 @@ confirmed byte-identical with `git diff --stat` before moving on.
 
 ## Phase 1 — the adoption seam
 
-The reconciler's tests were not broken individually; the whole block is new code exercising a
-function that had no caller in any test before it, so its failure mode is absence rather than
-silence. What is recorded instead is the **integration** check the suite cannot make: `bun run e2e`
-drives the host panel through a real transition in Chromium against a real store, and
-`createSessionClient` is the only path from that page to the reconciler.
-
 | # | Break | Expected | Observed |
 |---|---|---|---|
-| 1.a | — (see note above) | — | `bun run e2e` 2/2 pass after the extraction; 1562 unit tests pass |
+| 1.a | Accept an equal version: `state.version <= current.version` → `<` (`session.ts:526`) | the same-version test fails | ✅ 1 failed — "drops a snapshot at the same version" |
+| 1.b | Refuse `null`: guard becomes `if (current && (!state \|\| state.version <= current.version))` | the purge tests fail | ✅ 3 failed — both purge tests and the absent-session latch |
+| 1.c | Advance the latch above the guard, not below it | the dropped-snapshot latch test fails | ✅ 1 failed — "does not advance the latch on a snapshot the guard dropped" |
+| 1.d | — (the extraction itself; see below) | — | `bun run e2e` 2/2 pass after the extraction |
 
-**Worth stating plainly:** a botched extraction — wiring the client to a reconciler it then ignores
-— would pass every test in `session.test.ts`, because those tests construct the reconciler directly.
-The e2e run is the only automated thing standing between that mistake and production, which is why
-it moved into this phase.
+**Rows 1.a–1.c were run late, during the implementation review, and that is the finding.** This
+file first recorded a placeholder here, arguing that the reconciler's tests were new code whose
+"failure mode is absence rather than silence". That does not hold up: the version guard is one
+comparison operator, and a `<` where `<=` belongs is exactly the silent defect §1's fourth rule
+exists for. *The phase whose subject is a rule nobody ever watched fail nearly shipped its own tests
+without watching them fail.* The rationale is deleted rather than softened, so it cannot be quoted
+as precedent.
+
+**Row 1.d is a different kind of gap, and it stays open by nature.** A botched extraction — wiring
+the client to a reconciler it then ignores — passes every test in `session.test.ts`, because those
+tests construct the reconciler directly. No unit break can reach that; `bun run e2e` is the only
+automated thing between that mistake and production, which is why it moved into this phase.
 
 ## Phase 2 — the loop's cancel semantics
 
