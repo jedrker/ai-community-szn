@@ -39,7 +39,13 @@ export async function addSubscriber(email: string): Promise<SubscribeResult> {
     );
   }
 
+  // Resend resolves with `{ error }` instead of throwing, so an unchecked read
+  // degrades a 500/429/auth failure into "not a duplicate" — the answer that
+  // happens to look like success. A lookup that could not run is a failure.
   const existing = await resend.contacts.get({ email, audienceId });
+  if (existing.error && existing.error.name !== "not_found") {
+    throw new Error(`Resend contacts.get failed: ${existing.error.message}`);
+  }
   if (existing.data) {
     return "already-subscribed";
   }

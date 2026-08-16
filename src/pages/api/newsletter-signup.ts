@@ -30,10 +30,15 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
+  // Tracks whether the success copy may promise an inbox. The signup itself is
+  // already recorded, so a failed welcome mail must not undo it — but it must
+  // not be reported as a mail that was sent either.
+  let welcomeSent = false;
+
   if (result === "subscribed") {
     // Send welcome email. A failure here must not undo the signup.
     try {
-      await resend.emails.send({
+      const { error } = await resend.emails.send({
         from: "Brave AI Community <noreply@ai-community.szczecin.pl>",
         to: email,
         subject: "Witamy w Brave AI Community Szczecin!",
@@ -65,8 +70,14 @@ export const POST: APIRoute = async ({ request }) => {
           </div>
         `,
       });
+      // Resend reports API failures on the result, not by throwing.
+      if (error) {
+        console.error("Failed to send welcome email:", error);
+      } else {
+        welcomeSent = true;
+      }
     } catch (err) {
-      console.error("Failed to send welcome email:", err);
+      console.error("Welcome email threw:", err);
     }
   }
 
@@ -74,7 +85,9 @@ export const POST: APIRoute = async ({ request }) => {
     JSON.stringify({
       message:
         result === "subscribed"
-          ? "Zapisano! Sprawdź swoją skrzynkę."
+          ? welcomeSent
+            ? "Zapisano! Sprawdź swoją skrzynkę."
+            : "Zapisano! Wiadomość powitalna dotrze z opóźnieniem."
           : "Ten email jest już zapisany.",
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },

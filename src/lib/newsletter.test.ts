@@ -55,7 +55,7 @@ describe("addSubscriber", () => {
   it("creates the contact and reports a new subscription", async () => {
     contacts.get.mockResolvedValue({
       data: null,
-      error: { message: "not found" },
+      error: { name: "not_found", message: "Contact not found" },
     });
     contacts.create.mockResolvedValue({ data: { id: "c1" }, error: null });
 
@@ -75,10 +75,25 @@ describe("addSubscriber", () => {
     expect(contacts.create).not.toHaveBeenCalled();
   });
 
+  it("throws when the duplicate lookup itself fails, rather than reading it as a new subscriber", async () => {
+    // Resend resolves with `{ error }` instead of throwing, so an unchecked
+    // read turns a 429 into "not a duplicate" — the branch that looks like
+    // success. Only `not_found` means the contact is genuinely absent.
+    contacts.get.mockResolvedValue({
+      data: null,
+      error: { name: "rate_limit_exceeded", message: "rate limited" },
+    });
+
+    await expect(addSubscriber("ola@example.com")).rejects.toThrow(
+      "rate limited",
+    );
+    expect(contacts.create).not.toHaveBeenCalled();
+  });
+
   it("throws when Resend rejects the create, so the route cannot report success", async () => {
     contacts.get.mockResolvedValue({
       data: null,
-      error: { message: "not found" },
+      error: { name: "not_found", message: "Contact not found" },
     });
     contacts.create.mockResolvedValue({
       data: null,
