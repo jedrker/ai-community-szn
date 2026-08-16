@@ -107,6 +107,11 @@ function paintEntrance(node: HTMLElement, progress: number): void {
  *
  * Opt-in via `enabled`, because the surfaces that must stay still simply pass `false` — the
  * rail's counters are the case, and `host.astro` states why.
+ *
+ * "Still" here means **the element does not arrive**; it says nothing about the figure inside
+ * it. The rail's counters take no entrance — the box is on screen for the whole question and
+ * re-landing it on every poll tick would be a fault — and they still count up through
+ * `renderFigureCountUp` below, which moves digits rather than the element.
  */
 export function renderEntrance(
   node: HTMLElement,
@@ -132,19 +137,29 @@ export function renderEntrance(
  * The true value is always written exactly at the end, and a device without the animation
  * gets it immediately: an award is data the room may be about to discuss, and the count is
  * decoration over it.
+ *
+ * **`from` is where the count starts, and it defaults to 0 rather than to whatever was on
+ * screen.** An award is a fresh figure each question, so starting from zero is right there.
+ * A figure that keeps climbing across renders is the opposite case — the lobby's join
+ * count, which the room watches fill — and re-running 0→N on every tick would make each
+ * arrival look like the room emptying and refilling. That caller passes the figure it last
+ * painted; see `host.astro`'s `renderLobbyCount`.
  */
 export function renderFigureCountUp(
   node: HTMLElement,
   value: number,
   signature: string,
   format: (value: number) => string,
+  options: { readonly from?: number } = {},
 ): void {
+  const from = options.from ?? 0;
+
   runMotion(node, {
     signature,
     durationMs: COUNT_UP_MS,
     paint: (progress) => {
       node.textContent = format(
-        progress >= 1 ? value : Math.round(value * progress),
+        progress >= 1 ? value : Math.round(from + (value - from) * progress),
       );
     },
   });

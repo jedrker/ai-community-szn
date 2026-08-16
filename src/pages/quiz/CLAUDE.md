@@ -126,7 +126,7 @@ incident.** There are exactly two loops that *fetch*:
 
 | Loop | Where | Bounded by |
 | --- | --- | --- |
-| The host panel poll | `host.astro` | one device; the lobby or a question kind; ~2.5 s (~10 s in the lobby) with exponential backoff; tab visibility |
+| The host panel poll | `host.astro` | one device; the lobby or a question kind; ~2.5 s (~3 s in the lobby) with exponential backoff; tab visibility |
 | The connection fallback | `src/lib/client/session.ts` | the channel outage; tab visibility; the session ending |
 
 **There are also timers that fetch nothing** — the countdowns in both pages and the host toast's
@@ -141,20 +141,52 @@ exactly one timer whose callback can reach a `fetch` — not a `setTimeout` occu
 would have to be weakened every time a countdown lands and would then protect nothing. `motion.ts`
 holds no timer at all (rAF only), which is what lets it exist without weakening either guard.
 
-The host loop serves **three** endpoints — `/api/quiz/host/participation` for a choice question's
-answered count, `/api/quiz/host/words` for the word cloud, and `/api/quiz/state` for the lobby's join
-count — chosen in `pollTargetFor` by phase, then by question kind. **That predicate lives in
+The host loop serves **three** endpoints — `/api/quiz/host/participation` for the answered count,
+`/api/quiz/host/words` for the word cloud, and `/api/quiz/state` for the lobby's join count — chosen
+in `pollTargetFor` by phase, then by question kind. **That predicate lives in
 `src/lib/client/controls.ts`, not here**, and it is the module that spells all three URLs. The page
 passes `config.questions` and fetches `target.url`; a URL literal on the page would be a second
 request path. `controls.test.ts` runs the predicate over every question kind, so a sixth kind is a
 type error rather than a question that silently polls nothing.
 
+**The answered count is not choice-only, and used to be.** Every kind that takes an answer feeds it —
+text and number included — because `SUBMIT_ANSWER` bumps `answered:<questionId>` before it touches an
+option field, so the figure was being withheld rather than being unavailable. The clause that
+excluded them came from the free-text slice and was written about the *distribution*, which a typed
+answer really has no shape for; the bars stay away on their own (`reveal.ts` builds
+`revealedDistribution` only for the choice kinds, and the panel hides on `distribution === null`).
+Do not re-introduce a kind test here to keep bars off a text question. What the predicate still
+refuses is a question with **no kind at all** — one this build does not have — and that guard is now
+explicit rather than implied by the kind list: without it a host tab that outlived a deploy polls a
+400 every 2.5 s.
+
 The lobby target exists because **a join publishes nothing**, so the snapshot's `playerCount` moves
 only on a host action: in the one phase where the host acts least and the number changes most, the
 figure sat frozen until somebody pressed `odśwież`. It is the only target with no panel of its own,
 so it writes nothing but `liveCount` and `pollFailed` marks nothing stale for it. It also ticks
-slower — a 10-second **floor** on the loop's single `pollDelay`, applied in `schedulePoll`, never a
+slower — a 3-second **floor** on the loop's single `pollDelay`, applied in `schedulePoll`, never a
 second interval variable: a second delay is a second backoff, which is most of what a second loop is.
+The floor was 10 s and is not any more: this is the one beat the *room* watches the figure on, and at
+ten seconds somebody who had just joined stood through two host sentences before the projector agreed
+they were there.
+
+**Every polled figure counts up rather than swapping** — `createCountUp` on this page, over
+`renderFigureCountUp`'s `from` argument, which is why that argument exists. Three instances: the
+lobby's join count, and the answered counter in each of the two panels. A polled number is the only
+evidence the room's own actions are landing, so `0` becoming `25` in one frame reads as a figure
+being set rather than a room filling.
+
+It counts **from what is on screen**, never from zero — the default is an award, which is a fresh
+figure each question. Each instance's `shown` is written by the format callback, so it stays true
+even when a tick cancels a count that was still climbing. Hence one factory rather than three
+closures, and hence `reset()`, which must **cancel and forget** the motion as well as clear `shown`:
+it is both the sessionless dash and the between-questions dash, and a counter that remembered the
+previous question's figure would count the first reply up from it. `host.test.ts` fails on a
+`setText` to any of the three ids. `#word-cloud-count` is not one of them — it is a sentence, not a
+figure.
+
+None of this is an entrance: the counters' *boxes* stay still, which is a separate rule and still
+holds (`renderEntrance`'s `enabled`).
 
 **One loop, not three**, and that is load-bearing: the `polling` flag exists because a tick armed
 from `render` while a fetch was open held several requests at once, worst exactly when the venue

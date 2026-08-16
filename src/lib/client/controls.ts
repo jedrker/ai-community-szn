@@ -351,10 +351,37 @@ export function pollTargetFor(
     return { kind: "words", questionId, url: `/api/quiz/host/words${query}` };
   }
 
-  // Unchanged from S-04: the count is shown only while the question is open, and only for
-  // the two kinds whose answers it can count.
+  /**
+   * The count runs while the question is open, for **every kind that takes an answer**.
+   *
+   * The phase half is S-04's and unchanged: FR-005 keeps the distribution off the screen until
+   * the reveal, and the count's panel goes with the question.
+   *
+   * **The kind half used to be `single-choice` or `multiple-choice`, and that was a scope seam
+   * mistaken for a rule.** The free-text slice excluded "S-04's participation count or answer
+   * distribution" in one clause, and the reasoning it gave was about the *distribution* — a
+   * text answer has no bars, which is still true. The count travelled with it by accident. It
+   * was never a limit on what could be counted: `SUBMIT_ANSWER` bumps `answered:<questionId>`
+   * for every accepted answer, before it touches an option field at all, and
+   * `/api/quiz/host/participation` reads only that. So this line was withholding a figure the
+   * store had already been keeping — on the questions where the host most needs it, since a
+   * typed answer takes longer than a tap and there is nothing else to judge the moment by.
+   *
+   * The bars stay away on their own: `reveal.ts` builds `revealedDistribution` only for the
+   * choice kinds, and `host.astro` hides that panel on `distribution === null` rather than on a
+   * kind of its own. **Do not answer a future "text questions must not show bars" with a kind
+   * test here** — that would be the second condition this predicate exists to prevent.
+   *
+   * `word-cloud` never reaches this line (it returned above), so the only exclusion left is
+   * the one that has to stay: a question with **no kind at all**, which is a question this
+   * build does not have. That is not a kind test — it is the "fail toward nothing" the
+   * predicate gives an unknown phase, and it stopped being implied the moment the kind list
+   * went away. A host tab that outlived a deploy must poll no endpoint rather than the wrong
+   * one; without this it would poll `participation` for an id the route answers with a 400,
+   * every 2.5 s, for as long as the tab is open. `controls.test.ts` caught exactly this.
+   */
   if (state.phase !== "question-open") return null;
-  if (kind !== "single-choice" && kind !== "multiple-choice") return null;
+  if (kind === undefined) return null;
 
   return {
     kind: "participation",

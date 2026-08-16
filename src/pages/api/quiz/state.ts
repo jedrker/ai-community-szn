@@ -86,9 +86,10 @@ export const GET: APIRoute = async () => {
    * endpoint that is down rather than slow — is the case that spends least.
    *
    * **The host panel now polls here too, in the lobby only.** Same two commands a tick, one
-   * device, ~10 s — a floor over the loop's own 2.5 s, because a room fills over minutes —
-   * ending at `start`. A ten-minute lobby is ~120 commands, which is noise beside the figures
-   * above. It exists because `state.playerCount` cannot move on a join, so
+   * device, ~3 s — a floor over the loop's own 2.5 s — ending at `start`. A ten-minute lobby is
+   * ~400 commands, which is still noise beside the figures above. (The floor was 10 s and the
+   * lobby ~120 commands; the room watches this figure while it fills, and ten seconds was long
+   * enough that a join looked unrecorded.) It exists because `state.playerCount` cannot move on a join, so
    * the lobby's figure was frozen between host actions; the same reasoning that put the live
    * `HLEN` here in the first place, applied to a timer instead of a button.
    *

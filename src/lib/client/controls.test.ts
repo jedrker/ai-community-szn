@@ -527,8 +527,16 @@ describe("pollTargetFor", () => {
   > = {
     "single-choice": "participation",
     "multiple-choice": "participation",
-    text: null,
-    number: null,
+    /**
+     * **The typed kinds count too, and used to not.** The exclusion was the free-text slice's
+     * scope clause — written about the *distribution*, which a typed answer genuinely has no
+     * shape for — and the count rode along with it. `SUBMIT_ANSWER` has always bumped
+     * `answered:<questionId>` for every accepted answer regardless of kind, so this was a
+     * figure withheld rather than a figure unavailable, on the two kinds where the host has
+     * least else to judge the moment by: typing takes longer than tapping.
+     */
+    text: "participation",
+    number: "participation",
     "word-cloud": "words",
   };
 

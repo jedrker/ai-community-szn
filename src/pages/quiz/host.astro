@@ -603,8 +603,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       <!--
         THE RAIL: at most two blocks, and never three.
 
-        The room's participation on top — the count for a choice question, the cloud's two
-        figures for a word one, only ever one of them visible — and the clock at the bottom.
+        The room's participation on top — the answered count for any question that takes an
+        answer, the cloud's two figures for a word one, only ever one of them visible — and the
+        clock at the bottom.
         Everything here is a figure *about the room*; anything about the question belongs on
         the stage. That division is what keeps the rail readable at a glance from the stage,
         which is the only reason it is a separate column at all.
@@ -623,8 +624,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       >
         <div class="flex flex-col gap-[40px]">
           <!--
-            `answered / joined` while a question is open, and nothing at all for a question
-            kind whose answers cannot be counted.
+            `answered / joined` while a question is open — for every kind that takes an answer,
+            the typed ones included. The word cloud has its own pair of counters below; nothing
+            else has answers to count.
 
             Hidden with the `hidden` attribute, which needs no CSS to work — the same reason
             `setHidden` exists.
@@ -1020,6 +1022,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         type ConnectionStatus,
       } from "../../lib/client/session";
       import { createCountdown } from "../../lib/client/countdown";
+      import { cancelMotion, forgetMotion } from "../../lib/client/motion";
       import { createAutoHide } from "../../lib/client/toast";
       import {
         atLastQuestion,
@@ -1034,6 +1037,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         renderCountdown,
         renderDistribution,
         renderEntrance,
+        renderFigureCountUp,
         renderQuestion,
         renderStandings,
         renderWordCloud,
@@ -1100,6 +1104,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const topStrip = el("top-strip");
       const questionCounter = el("question-counter");
       const lobbyBox = el("lobby");
+      const lobbyCountBox = el("lobby-count");
       const bodySplit = el("body-split");
       const railBox = el("rail");
       const controlRow = el("control-row");
@@ -1187,9 +1192,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        *
        * The runbook's command tripwire is described there as a polling detector, so every
        * loop that exists has to be nameable. This one is bounded on purpose: **one
-       * device**, only in the phases `pollTargetFor` names — the lobby's join count, a
-       * choice question's answered count, a word cloud — ~2.5s, so an unexpected pattern
-       * in the command counter is still detectable as one.
+       * device**, only in the phases `pollTargetFor` names — the lobby's join count, an open
+       * question's answered count, a word cloud — ~2.5s, so an unexpected pattern in the
+       * command counter is still detectable as one.
        *
        * The second is the connection fallback in `src/lib/client/session.ts`, which polls
        * `/api/quiz/state` on any device whose Ably channel is unavailable. It is bounded
@@ -1208,11 +1213,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       /**
        * The lobby target's floor, applied in `schedulePoll` rather than as a second delay.
        *
-       * A room fills over minutes and the host reads the figure between other things, so the
-       * 2.5 s the participation count needs buys nothing here — see `schedulePoll` for why
-       * this raises a floor instead of replacing the interval.
+       * Slower than the 2.5 s a question's participation count needs, and much faster than
+       * the 10 s this started at: the lobby is the one beat the *room* is watching the figure
+       * on, and at ten seconds a person who had just joined could stand there through two
+       * host sentences before the projector agreed they were in the room. See `schedulePoll`
+       * for why this raises a floor instead of replacing the interval.
        */
-      const LOBBY_POLL_MS = 10_000;
+      const LOBBY_POLL_MS = 3_000;
       /**
        * How long a tick is given before it is abandoned (impl review F1).
        *
@@ -1573,7 +1580,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
       /**
        * The lobby target is bounded exactly like the other two: one device, one phase,
-       * ~2.5 s (floored at 10 s) with the same backoff and the same visibility rule, and it
+       * ~2.5 s (floored at 3 s) with the same backoff and the same visibility rule, and it
        * ends the moment the host starts the first question. Two commands a tick, which is the
        * figure `src/pages/api/quiz/state.ts` records. The rule that picks it is in
        * `controls.ts`; what bounds it is this file's single loop, below.
@@ -1631,7 +1638,19 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           // The denominator is the join count the page already maintains, which the
           // poll's own `playerCount` keeps fresh — so the join figure stops needing a
           // manual refresh while a question is open.
-          setText("participation-count", answered ?? "—");
+          /**
+           * `—` until the first reply lands, and it goes through `reset` rather than through a
+           * `textContent` write: the dash is also where a new question starts, so the counter
+           * has to forget the previous one's figure here or the first reply would count up from
+           * it. `resetPanels` nulls `answered` on exactly that transition, which is what makes
+           * this branch the reset.
+           *
+           * Keyed by the question as well as the figure, so `3` on question 4 is not mistaken
+           * for `3` on question 3 — the reset already covers that, and the key means the two
+           * would have to fail together.
+           */
+          if (answered === null) answeredCount.reset();
+          else answeredCount.to(answered, `${state.currentQuestionId}|${answered}`);
           setText("participation-total", `z ${liveCount ?? state.playerCount}`);
         }
 
@@ -1728,9 +1747,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * people or fifty, and the host reads this figure to decide when to reveal.
          *
          * Same shape and same fallbacks as the participation count: `—` until the first reply,
-         * and the denominator prefers the freshest join count the page holds.
+         * the same count-up on its own instance, and the denominator prefers the freshest join
+         * count the page holds.
          */
-        setText("word-cloud-answered", answered ?? "—");
+        if (answered === null) cloudAnsweredCount.reset();
+        else cloudAnsweredCount.to(answered, `${state.currentQuestionId}|${answered}`);
         setText("word-cloud-total", `z ${liveCount ?? state.playerCount}`);
 
         renderWordCloud(wordCloudWords, cloudWords ?? undefined, {
@@ -2173,7 +2194,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           setText("phase", "brak sesji");
           setHidden(questionCounter, true);
           setText("player-count", "—");
-          setText("lobby-count", "—");
+          lobbyCount.reset();
           setText("version", "—");
           // A purge, an expiry, or the first paint. None of them is the lobby and none is the
           // close, so the ordinary split is what a sessionless view shows.
@@ -2228,7 +2249,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         }
 
         setText("player-count", liveCount ?? state.playerCount);
-        setText("lobby-count", liveCount ?? state.playerCount);
+        const joined = liveCount ?? state.playerCount;
+        lobbyCount.to(joined, `lobby|${joined}`);
         setText("version", state.version);
 
         applyShell(state.phase);
@@ -2599,6 +2621,95 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         pollTimer = null;
       }
 
+      /**
+       * A POLLED FIGURE THAT CLIMBS TO ITS NEW VALUE INSTEAD OF SWAPPING TO IT.
+       *
+       * The three figures on this page that a *poll* moves — the lobby's join count and the
+       * two "how much of the room has answered" counters — share one problem a swap makes
+       * worse the longer the interval is: the number is the only evidence the room's own
+       * actions are landing, and replacing `0` with `25` in a single frame reads as a figure
+       * being set rather than a room filling.
+       *
+       * **One factory rather than three copies**, for the reason this page states about its
+       * poll: three copies would be three `shown` variables and three chances for one of them
+       * to stop agreeing with the element it speaks for. The state each instance holds is
+       * exactly what `renderFigureCountUp` cannot know — what is painted *right now*, mid-count
+       * — and that is why it lives here rather than in `render.ts`.
+       *
+       * `shown` is written by the format callback, so it stays true mid-count as well: a tick
+       * landing while the previous one is still climbing cancels that frame (`motion.ts` rule
+       * 1), and the next count has to start from the digit the room is looking at rather than
+       * from the number the cancelled run was heading for.
+       *
+       * Counting **from what is on screen** is the whole point, and it is not what
+       * `renderFigureCountUp` does by default: an award is a fresh figure each question, so it
+       * starts at zero. Here 24 → 25 must be one step, or every tick would look like the room
+       * emptying and refilling.
+       */
+      function createCountUp(node: HTMLElement): {
+        to: (value: number, signature: string) => void;
+        reset: () => void;
+      } {
+        let shown = 0;
+
+        return {
+          /**
+           * Keyed by the caller's signature, so the ordinary case — a tick that finds the same
+           * figure — is a no-op rather than a replayed animation, on a page that re-renders on
+           * every snapshot.
+           */
+          to(value, signature) {
+            renderFigureCountUp(
+              node,
+              value,
+              signature,
+              (painted) => {
+                shown = painted;
+                return String(painted);
+              },
+              { from: shown }
+            );
+          },
+          /**
+           * Back to `—`, with nothing left running or remembered.
+           *
+           * All three parts are needed and none is a formality: an in-flight count would keep
+           * writing digits over the dash (`cancelMotion`), a remembered signature would leave a
+           * later beat that happens to land on the same figure showing the dash forever
+           * (`forgetMotion`), and a stale `shown` would make the next count start from a number
+           * belonging to the previous question — or the previous room.
+           */
+          reset() {
+            cancelMotion(node);
+            forgetMotion(node);
+            shown = 0;
+            node.textContent = "—";
+          },
+        };
+      }
+
+      /**
+       * The lobby's join count. Nobody's join publishes anything, so this number moving is how
+       * the room learns the thing works — the one figure here the room is actually watching.
+       */
+      const lobbyCount = createCountUp(lobbyCountBox);
+      /**
+       * The two answered counters, one per panel kind.
+       *
+       * Separate instances rather than one shared by both: they are two elements, and a single
+       * `shown` would have the cloud's counter starting from whatever the choice question's
+       * counter last painted. They never run at once — `pollTargetFor` picks one panel — but
+       * "never at once" is a property of a predicate elsewhere, and this does not have to rely
+       * on it.
+       *
+       * These climb over a smaller distance than the lobby's does: the poll is 2.5 s, so the
+       * step is usually one or two. The animation is there for the beat where it is not — the
+       * first reply after a question opens, and the burst when the room realises the clock is
+       * running.
+       */
+      const answeredCount = createCountUp(el("participation-count"));
+      const cloudAnsweredCount = createCountUp(el("word-cloud-answered"));
+
       function schedulePoll(): void {
         // Never two timers, and never a timer stacked behind a request that has not come
         // back. `render` runs on every snapshot, and a snapshot arriving mid-question
@@ -2616,10 +2727,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * and `Math.max` keeps the backoff on top of it: a lobby whose ticks are failing still
          * doubles away from 10 s toward the same 20 s ceiling rather than being pinned there.
          *
-         * 10 s because the lobby's figure is a number the host glances at while the room fills,
-         * not one the room is watching change — the participation count during a question is
-         * the opposite, and keeps the 2.5 s. It also cuts a ten-minute lobby from ~480 commands
-         * to ~120.
+         * 3 s because the lobby's figure *is* the beat: the room is looking at it, and the join
+         * it is reporting was somebody's own. It still costs less than the participation count's
+         * 2.5 s, and a ten-minute lobby comes to ~400 commands — the spend a floor exists to
+         * bound, kept well inside the budget while the number stays responsive.
          */
         const floor =
           pollTargetFor(config.questions, client.current())?.kind === "lobby" ? LOBBY_POLL_MS : POLL_BASE_MS;

@@ -1630,5 +1630,30 @@ describe("entrance motion", () => {
 
       expect(frames).toHaveLength(1);
     });
+
+    /**
+     * The lobby's case: a figure that keeps climbing, where a run from zero on every tick
+     * would read as the room emptying and refilling every few seconds.
+     */
+    it("counts from where the caller says it already is", () => {
+      const node = document.createElement("span");
+
+      renderFigureCountUp(node, 25, "lobby|25", String, { from: 24 });
+
+      // The first painted frame is the figure the room is already looking at, not 0.
+      expect(node.textContent).toBe("24");
+
+      frames.pop()!(0);
+      frames.pop()!(9_999);
+      expect(node.textContent).toBe("25");
+    });
+
+    it("still starts at zero when no origin is given", () => {
+      const node = document.createElement("span");
+
+      renderFigureCountUp(node, 25, "lobby|25", String);
+
+      expect(node.textContent).toBe("0");
+    });
   });
 });

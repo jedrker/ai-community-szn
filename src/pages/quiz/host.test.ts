@@ -439,6 +439,35 @@ describe("the lobby's join count refreshes on the one loop", () => {
   });
 
   /**
+   * **Every polled figure is written only through its counter, never through `setText`.**
+   *
+   * The counters count *from what is on screen*, and the only thing that knows what that is
+   * is the `shown` each instance holds. So a write that goes around one does not merely skip
+   * an animation: it leaves `shown` claiming a figure the element no longer shows, and the
+   * next tick counts from a number nobody ever saw.
+   *
+   * `word-cloud-count` is deliberately absent — it is a sentence (`wordCloudCountText`), not a
+   * figure, and has nothing to count.
+   */
+  it("writes every polled figure only through a count-up", () => {
+    for (const id of [
+      "lobby-count",
+      "participation-count",
+      "word-cloud-answered",
+    ]) {
+      expect(CODE).not.toContain(`setText("${id}"`);
+    }
+
+    // One factory, three instances. Three copies of the closure would be three `shown`
+    // variables and three chances for one to stop agreeing with its element.
+    expect(CODE).toContain("function createCountUp(");
+    expect([...CODE.matchAll(/createCountUp\(/g)]).toHaveLength(4);
+    // Counting from zero on every tick is the defect the `from` argument exists to prevent:
+    // 24 → 25 must be one step, not a re-run from nothing.
+    expect(CODE).toContain("{ from: shown }");
+  });
+
+  /**
    * The lobby target feeds no panel, so a failed tick has no "(nieaktualne)" to set. The
    * `else` this replaced would have marked the *participation* count stale for a question
    * that is not open — a marker beside a number nobody is polling, which is the one thing

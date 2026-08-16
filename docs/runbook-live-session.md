@@ -104,17 +104,26 @@ reached via **Open in Upstash** from the Vercel dashboard's Storage tab, note `c
   roughly **7×** above one. Still ample for a polling detector — a loop overshoots by orders of
   magnitude, not by sevenfold — but the sentence that justified it has moved, and a reader quoting
   "125×" from an older copy of this file would be quoting a number that no longer exists.
-- **There is now one sanctioned polling loop, and this is its shape.** S-04's host view polls
-  `/api/quiz/host/participation` for the answered count. Until S-04 "nothing in this project polls"
-  was true and the detector above could treat *any* periodic pattern as a fault; that is no longer
-  the case, so the expected pattern is written down here to keep expected cost distinguishable from a
-  leak:
-  **one device** (the host page, never an attendee's) · **only while a choice question is open** ·
-  **~2.5 s**, backing off by doubling to a ~20 s ceiling on failure · **2 commands per tick**
-  (`HGET` + `HLEN`). Over a whole event that is **~750 commands**, about 2% of the total — so if
-  polling appears to account for materially more than that, the loop is running when it should not
-  be. Anything periodic that does not match this shape — attendee-side, running during
-  `question-revealed` or the lobby, or on a question kind with no panel — is a fault, not this loop.
+- **There is one sanctioned polling loop on the host page, and this is its shape.** Until S-04
+  "nothing in this project polls" was true and the detector above could treat *any* periodic pattern
+  as a fault; that is no longer the case, so the expected pattern is written down here to keep
+  expected cost distinguishable from a leak. **One timer on one device** (the host page, never an
+  attendee's), doubling its interval to a ~20 s ceiling on failure, **2 commands per tick** whichever
+  endpoint it is on, and it serves three:
+  - `/api/quiz/state` — **the lobby's join count**, ~3 s. Ends at `start`.
+  - `/api/quiz/host/participation` — **the answered count, every kind that takes an answer**
+    (choice, text and number alike), ~2.5 s, only while the question is open.
+  - `/api/quiz/host/words` — **the word cloud**, ~2.5 s, through the reveal as well so you can talk
+    over a complete cloud. It stops after one final read.
+
+  Over a whole event that is roughly **1400 commands** — the participation count ~950 of it, the
+  lobby ~400 — against a ~27k total, so still a couple of percent. If polling appears to account for
+  materially more, the loop is running when it should not be. Anything periodic that does *not* match
+  this shape — attendee-side, or a participation tick during `question-revealed` — is a fault, not
+  this loop. **Two of those exclusions have been retired and the old wording is worth knowing about:**
+  the lobby and the typed question kinds both used to be listed as faults here, and both are now
+  sanctioned targets. The **attendee** side has its own separate loop, the connection fallback, which
+  runs only while a device's channel is down.
 - **Cost is now explained.** The settled S-02 delta matches the eight-commands-per-join model to
   within 0.1% (writes predicted 2320 against 2323 observed), so nothing is issuing commands
   unprompted. See `context/archive/2026-08-07-join-and-follow-host/command-counter-diagnostic.md`. The older
