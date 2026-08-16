@@ -542,24 +542,24 @@ Not applicable — no data, schema, key or wire-format change. `SessionState` is
 
 #### Automated
 
-- [x] 2.1 Suite passes: `bun run test`
-- [x] 2.2 Linting passes: `bun run lint`
+- [x] 2.1 Suite passes: `bun run test` — ba3d4be
+- [x] 2.2 Linting passes: `bun run lint` — ba3d4be
 
 #### Manual
 
-- [x] 2.3 The repaired `:567` test distinguishes the two hypotheses
+- [x] 2.3 The repaired `:567` test distinguishes the two hypotheses — ba3d4be
 
 ### Phase 3: The Reveal-Race Refusal
 
 #### Automated
 
-- [ ] 3.1 Suite passes: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 `scripts/scoped-tests.sh src/pages/api/quiz/answer.ts` runs the new file
+- [x] 3.1 Suite passes: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 `scripts/scoped-tests.sh src/pages/api/quiz/answer.ts` runs the new file
 
 #### Manual
 
-- [ ] 3.4 The new file's stated scope does not contradict `answer.test.ts`'s docstring
+- [x] 3.4 The new file's stated scope does not contradict `answer.test.ts`'s docstring
 
 ### Phase 4: The Distribution Drift
 
