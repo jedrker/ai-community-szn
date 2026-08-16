@@ -468,16 +468,16 @@ reversible by a single revert.
 
 #### Automated
 
-- [ ] 2.1 Full suite passes: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 Verified both ways: removing `end` from `standings` fails the independence test
-- [ ] 2.4 Verified both ways: adding `reveal` to `ended` fails the no-refused-verb test
-- [ ] 2.5 Verified both ways: deleting a `MATERIAL_WITHHOLDINGS` entry fails the exception test
-- [ ] 2.6 Verified: a synthetic phase in the union fails `type-check` on the route table
+- [x] 2.1 Full suite passes: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 Verified both ways: removing `end` from `standings` fails the independence test
+- [x] 2.4 Verified both ways: adding `reveal` to `ended` fails the no-refused-verb test
+- [x] 2.5 Verified both ways: deleting a `MATERIAL_WITHHOLDINGS` entry fails the exception test
+- [x] 2.6 Verified: a synthetic phase in the union fails `type-check` on the route table
 
 #### Manual
 
-- [ ] 2.7 A deliberately broken run names the phase and action in its failure output
+- [x] 2.7 A deliberately broken run names the phase and action in its failure output
 
 ### Phase 3: Repair the `-1` inversion class and the dead gates
 
