@@ -1045,7 +1045,7 @@ import { publicQuiz } from "../../quiz/public";
               "[&>li:first-child]:text-quiz-ink"
             : "flex flex-col gap-2",
           row:
-            "grid grid-cols-[auto_1fr_auto] items-baseline gap-4 rounded-[18px] " +
+            "grid grid-cols-[auto_1fr_auto_auto] items-baseline gap-4 rounded-[18px] " +
             "bg-quiz-asphalt px-4 py-3 text-[26px] font-semibold leading-[32px] " +
             // Own row in the chrome tint — the same fill a picked option takes, because it
             // answers the same question: which of these is mine.
@@ -1066,6 +1066,25 @@ import { publicQuiz } from "../../quiz/public";
           points: closing
             ? "tabular-nums [li:first-child>&]:text-quiz-ink"
             : "tabular-nums",
+          /**
+           * THE MOVEMENT CELL (this change), at phone scale.
+           *
+           * Smaller than the points beside it — the row is already `text-[26px]` and a
+           * fourth figure at the same size makes four columns of equal weight out of a line
+           * that should read name-first.
+           *
+           * `min-w-[3ch]` holds the column so names truncate at a fixed width rather than at
+           * one that depends on who moved this beat. `shrink-0` because `truncate` on the
+           * name is what should absorb a narrow screen, not this cell.
+           *
+           * No first-child override is needed here: the own row is `chrome-tint`, which is
+           * near-black, and the closing screen's chrome bar carries no deltas to colour.
+           */
+          delta:
+            "min-w-[3ch] shrink-0 text-[20px] leading-[26px] tabular-nums " +
+            "font-semibold",
+          deltaUp: "text-quiz-mint",
+          deltaDown: "text-quiz-signal",
           empty: "text-[26px] leading-[32px] text-quiz-echo",
         });
 

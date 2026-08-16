@@ -2370,7 +2370,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             : "flex flex-col",
           row: closing
             ? "flex min-w-0 flex-col gap-1"
-            : "grid grid-cols-[auto_1fr_auto] items-center gap-8 border-b-2 " +
+            : "grid grid-cols-[auto_1fr_auto_auto] items-center gap-8 border-b-2 " +
               "border-quiz-divider px-6 py-0.5 first:mb-3 first:rounded-[20px] " +
               "first:border-transparent first:bg-quiz-chrome first:py-2 first:text-quiz-ink",
           rank: closing
@@ -2394,6 +2394,34 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             : "text-[72px] font-semibold leading-[80px] tabular-nums " +
               "[li:first-child>&]:text-[104px] [li:first-child>&]:font-extrabold " +
               "[li:first-child>&]:leading-[104px]",
+          /**
+           * THE MOVEMENT CELL (this change).
+           *
+           * **Sized as secondary to the rank on purpose.** At 40px against the rank's 72px
+           * it reads from the back of the room without competing with the position itself —
+           * the arrow is context for the number, not a second number.
+           *
+           * `min-w-[3ch]` reserves the column so it takes the same width empty as it does
+           * holding `▼12`. The renderer always emits the span, but an empty one is zero
+           * wide, and a board where three of five rows moved would otherwise pull those
+           * three names left while the other two stayed put.
+           *
+           * **The `[li:first-child>&]` override is the whole reason the colours are not
+           * unconditional** (the defect impl review F1 already caught once on this board,
+           * in the other direction). The leader's row is a chrome bar — `#ffd400` — and
+           * mint on that is roughly invisible from anywhere in the room. Ink is near-black
+           * on yellow and the triangle still carries the direction, so nothing is lost by
+           * dropping the hue exactly where it cannot be read.
+           *
+           * Nothing here applies at the close: the row is a flex column there, the span is
+           * empty, and `end.ts` publishes no deltas.
+           */
+          delta: closing
+            ? ""
+            : "min-w-[3ch] text-[40px] font-semibold leading-[48px] tabular-nums " +
+              "[li:first-child>&]:text-quiz-ink",
+          deltaUp: closing ? "" : "text-quiz-mint",
+          deltaDown: closing ? "" : "text-quiz-signal",
           empty: closing
             ? "text-[40px] leading-[52px] text-quiz-ink-on-chrome"
             : "text-[40px] leading-[52px] text-quiz-echo",

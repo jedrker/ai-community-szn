@@ -422,6 +422,13 @@ raise it before the event rather than after.
   - If it answers **"Nie udało się odczytać rankingu"**, the store did not respond and the room stayed
     on the reveal rather than getting a blank board. Tap it again; if it fails twice, carry on with
     `dalej` — the segment does not depend on the beat.
+  - **A board with no green or red arrows is normal, not broken.** Each row shows how many places that
+    player moved since before the last question, and there are two ordinary reasons a whole board has
+    none. The **first leaderboard of a session** never has any: before question 1 everybody held zero
+    points, so nobody has a position to have moved from. And a **question that awards nothing** — the
+    word cloud — moves nobody, so the board after it is arrow-free too. A row that simply held its
+    place shows nothing either. Do not announce the feature as broken; if you want to check it, show
+    the board after two scored questions.
 
 - **Q1 is the word cloud, and it is the one beat that fills by itself** (S-08, FR-012/FR-015). Attendees
   type one word; the projector shows them as a cloud whose type size grows with how many people wrote
@@ -463,6 +470,7 @@ raise it before the event rather than after.
   | `session.action.stale` | two actions raced; the second was a no-op | nothing, unless you did not double-tap — then something else is driving the session |
   | `session.standings.shown` | the leaderboard reached the room; `rowCount` is how many rows it carried | nothing. A `rowCount` below 5 means the room is smaller than the board |
   | `session.standings.failed` | the board could not be read. Its `reason` says which beat: the leaderboard beat, or the close | for the beat, tap **pokaż ranking** again and move on with **dalej** if it fails twice. **For the close, nothing** — the session still ended, just without the winner screen |
+  | `session.standings.degraded` | the board reached the room, but its rank arrows could not be computed. The beat itself was fine | **nothing.** The room saw a correct leaderboard; only the movement column is missing, and nothing on screen distinguishes that from a board where nobody moved |
   | `session.auth.rejected` | someone tried a host action with a wrong or missing secret | **if it was not you mis-clicking, someone else has the control URL.** One line is noise; a stream of them during a session means stop and rotate `LIVEQUIZ_HOST_SECRET` |
   | `session.publish.failed` | state is committed but did **not** reach devices | repeat the action; it re-broadcasts and is safe to retry |
   | `session.unconfigured` | an environment variable is missing | the session cannot run; check `vercel env ls` |

@@ -452,31 +452,27 @@ the one after — no host action 409s.
 
 #### Manual
 
-- [ ] 2.10 Arrows match what the scores actually did, locally, across two devices
+- [x] 2.10 Arrows match what the scores actually did, locally, across two devices
 
-- [x] 3.1 Unit tests pass: `bun run test`
-- [x] 3.2 Linting passes: `bun run lint`
-- [x] 3.3 Positive renders `▲N`, negative renders `▼N`
-- [x] 3.4 `null` and `0` render an empty but present span
-- [x] 3.5 `data-delta` is set for a move and absent otherwise
-- [x] 3.6 Motion signature distinguishes boards that differ only by delta
-- [x] 3.7 The renderer still never sorts
+- [x] 3.1 Unit tests pass: `bun run test` — 43c2c5a
+- [x] 3.2 Linting passes: `bun run lint` — 43c2c5a
+- [x] 3.3 Positive renders `▲N`, negative renders `▼N` — 43c2c5a
+- [x] 3.4 `null` and `0` render an empty but present span — 43c2c5a
+- [x] 3.5 `data-delta` is set for a move and absent otherwise — 43c2c5a
+- [x] 3.6 Motion signature distinguishes boards that differ only by delta — 43c2c5a
+- [x] 3.7 The renderer still never sorts — 43c2c5a
 
-### Phase 4: The two views
-
-#### Automated
-
-- [ ] 4.1 Unit tests pass: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 Linting passes: `bun run lint`
-- [ ] 4.4 Host page structural guards still pass
-- [ ] 4.5 Attendee page guards still pass
-- [ ] 4.6 The client boundary test still passes
+- [x] 4.1 Unit tests pass: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 Linting passes: `bun run lint`
+- [x] 4.4 Host page structural guards still pass
+- [x] 4.5 Attendee page guards still pass
+- [x] 4.6 The client boundary test still passes
 
 #### Manual
 
-- [ ] 4.7 Arrows readable from the back of the room, including on the leader's yellow bar
-- [ ] 4.8 Five rows still fit the stage
-- [ ] 4.9 A long display name on a phone truncates no earlier than before
-- [ ] 4.10 The first board of a session shows no arrows and does not look broken
-- [ ] 4.11 The closing screen is unchanged
+- [x] 4.7 Arrows readable from the back of the room, including on the leader's yellow bar
+- [x] 4.8 Five rows still fit the stage
+- [x] 4.9 A long display name on a phone truncates no earlier than before
+- [x] 4.10 The first board of a session shows no arrows and does not look broken
+- [x] 4.11 The closing screen is unchanged
