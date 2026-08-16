@@ -1,10 +1,10 @@
 ---
 change_id: testing-host-control-rules
 title: Make the host panel's phase-to-verb rules executable
-status: impl_reviewed
+status: archived
 created: 2026-08-16
 updated: 2026-08-16
-archived_at: null
+archived_at: 2026-08-16T17:37:50Z
 ---
 
 ## Notes
