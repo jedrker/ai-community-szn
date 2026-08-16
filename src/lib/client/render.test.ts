@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   countdownText,
@@ -41,6 +41,18 @@ const single: PublicQuestion = {
 };
 
 const multi: PublicQuestion = { ...single, id: "multi", kind: "multiple-choice" };
+
+/**
+ * The gather beat's shape: a choice question worth nothing, whose `correctOptionIds` is
+ * empty because *every* answer is right. `scored` is the only thing that distinguishes it
+ * from a scored question whose reveal marked nothing.
+ */
+const unscored: PublicQuestion = {
+  ...single,
+  id: "unscored",
+  kind: "multiple-choice",
+  scored: false,
+};
 
 let container: HTMLElement;
 
@@ -266,9 +278,10 @@ describe("revealed mode", () => {
     expect(options()[0]!.className).not.toContain("wrong");
   });
 
-  it("marks nothing when there is nothing to mark — the unscored case", () => {
-    // An empty array is what an unscored question and a non-choice kind both produce.
-    // It must render as "nothing to highlight", not as an error.
+  it("marks nothing on a scored question with no ids to mark", () => {
+    // An empty array on a *scored* question is a reveal with nothing resolvable in it. It
+    // must render as "nothing to highlight" rather than as an error — and, crucially, not
+    // as the unscored case below, which would award the whole room the right answer.
     renderQuestion(container, single, {
       mode: "revealed",
       correctOptionIds: [],
@@ -277,6 +290,26 @@ describe("revealed mode", () => {
 
     expect(container.innerHTML).not.toContain("right");
     expect(options()).toHaveLength(3);
+  });
+
+  /**
+   * The drafted Q2 — the gather beat, where every answer is a good one, so it is unscored
+   * rather than carrying four correct ids. `reveal.ts` publishes `[]` for it, and read
+   * literally that greys out a list the room just filled in correctly.
+   */
+  it("marks every option on an unscored question", () => {
+    renderQuestion(container, unscored, {
+      mode: "revealed",
+      correctOptionIds: [],
+      selectedOptionIds: ["c"],
+      optionCorrect: "right",
+      optionWrong: "wrong",
+    });
+
+    expect(options().map((item) => item.dataset.correct)).toEqual(["true", "true", "true"]);
+    expect(options().every((item) => item.className.includes("right"))).toBe(true);
+    // Nobody can be wrong on a question where everyone is right.
+    expect(container.innerHTML).not.toContain("wrong");
   });
 
   it("renders no controls — the answer is already locked", () => {
@@ -428,6 +461,180 @@ describe("renderDistribution", () => {
     renderDistribution(container, single, { distribution: { answered: 2, options: { a: 2 } } });
 
     expect(container.querySelectorAll("p")).toHaveLength(0);
+  });
+
+  /**
+   * The bars' half of the unscored rule. It has to agree with `renderQuestion`'s — they
+   * are two views of one reveal, and the projector shows the bars where the phone shows
+   * the bands, so a rule applied to only one of them puts the two surfaces in conflict.
+   */
+  it("marks every bar on an unscored question", () => {
+    renderDistribution(container, unscored, {
+      distribution: { answered: 4, options: { a: 2, b: 1, c: 1 } },
+      correctOptionIds: [],
+      rowCorrect: "right",
+    });
+
+    expect(rows().map((row) => row.dataset.correct)).toEqual(["true", "true", "true"]);
+    expect(rows().every((row) => row.className.includes("right"))).toBe(true);
+  });
+
+  it("marks no bar on a scored question with no ids to mark", () => {
+    renderDistribution(container, single, {
+      distribution: { answered: 4, options: { a: 2, b: 1, c: 1 } },
+      correctOptionIds: [],
+      rowCorrect: "right",
+    });
+
+    expect(rows().some((row) => row.dataset.correct === "true")).toBe(false);
+  });
+});
+
+/**
+ * The reveal's count-up (this change).
+ *
+ * Decoration, so what is under test is that it stays decoration: the final figures are
+ * always the true ones, an unchanged chart does not restart, and every device without the
+ * animation — reduced motion, no `requestAnimationFrame` — sees the numbers immediately.
+ *
+ * `requestAnimationFrame` is driven by hand rather than by a timer, so a frame is a step
+ * this test takes rather than a wall-clock race.
+ */
+describe("renderDistribution count-up", () => {
+  const rows = (): HTMLElement[] => Array.from(container.querySelectorAll("li"));
+  const figures = (): string[] =>
+    Array.from(container.querySelectorAll("li span:nth-child(2)")).map(
+      (node) => node.textContent ?? ""
+    );
+  const fillWidths = (): string[] =>
+    Array.from(container.querySelectorAll("li div div")).map(
+      (node) => (node as HTMLElement).style.width
+    );
+
+  let frames: ((now: number) => void)[];
+
+  beforeEach(() => {
+    frames = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: (now: number) => void) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Runs the frame queued last, at `now` milliseconds on the animation's own clock. */
+  function tick(now: number): void {
+    const next = frames.pop();
+    frames = [];
+    next?.(now);
+  }
+
+  const draw = (counts: Record<string, number>, answered: number): void => {
+    renderDistribution(container, single, {
+      distribution: { answered, options: counts },
+      correctOptionIds: ["a"],
+      animate: true,
+    });
+  };
+
+  it("starts at zero and lands on the true figures", () => {
+    draw({ a: 5, b: 3, c: 2 }, 10);
+
+    // The first paint is zero, before the list is attached — the room never sees a flash
+    // of the final numbers.
+    expect(figures()).toEqual(["0 · 0%", "0 · 0%", "0 · 0%"]);
+    expect(fillWidths()).toEqual(["0%", "0%", "0%"]);
+
+    tick(0);
+    tick(10_000);
+
+    expect(figures()).toEqual(["5 · 50%", "3 · 30%", "2 · 20%"]);
+    expect(fillWidths()).toEqual(["50%", "30%", "20%"]);
+  });
+
+  it("eases out — most of the distance is covered in the first half", () => {
+    draw({ a: 10 }, 10);
+
+    tick(0);
+    tick(450);
+
+    // Ease-out cubic at the halfway point is 87.5%, so a linear ramp fails this.
+    const half = Number(figures()[0]!.split(" · ")[1]!.replace("%", ""));
+    expect(half).toBeGreaterThan(70);
+    expect(half).toBeLessThan(100);
+  });
+
+  it("does not restart when the same chart is rendered again", () => {
+    draw({ a: 5, b: 3, c: 2 }, 10);
+    tick(0);
+    tick(10_000);
+
+    // A replayed snapshot, or a fallback poll during an outage. Resetting all three bars
+    // to zero in front of the room is the failure this guards.
+    draw({ a: 5, b: 3, c: 2 }, 10);
+
+    expect(figures()).toEqual(["5 · 50%", "3 · 30%", "2 · 20%"]);
+    expect(frames).toHaveLength(0);
+  });
+
+  it("counts up again when the numbers actually moved", () => {
+    draw({ a: 5, b: 3, c: 2 }, 10);
+    tick(0);
+    tick(10_000);
+
+    draw({ a: 6, b: 3, c: 2 }, 11);
+
+    expect(figures()[0]).toBe("0 · 0%");
+  });
+
+  it("paints the final figures at once without animate", () => {
+    renderDistribution(container, single, {
+      distribution: { answered: 10, options: { a: 5, b: 3, c: 2 } },
+      correctOptionIds: ["a"],
+    });
+
+    expect(figures()).toEqual(["5 · 50%", "3 · 30%", "2 · 20%"]);
+    expect(frames).toHaveLength(0);
+  });
+
+  it("paints the final figures at once under reduced motion", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+
+    draw({ a: 5, b: 3, c: 2 }, 10);
+
+    // The animation is the decoration, never the data.
+    expect(figures()).toEqual(["5 · 50%", "3 · 30%", "2 · 20%"]);
+    expect(frames).toHaveLength(0);
+  });
+
+  it("re-animates a chart that was cleared in between", () => {
+    draw({ a: 5, b: 3, c: 2 }, 10);
+    tick(0);
+    tick(10_000);
+
+    // The next question opens: no distribution, so the container empties. Coming back to
+    // the same numbers later is a new reveal, not a re-render of this one.
+    renderDistribution(container, single, { distribution: null, animate: true });
+    draw({ a: 5, b: 3, c: 2 }, 10);
+
+    expect(figures()[0]).toBe("0 · 0%");
+  });
+
+  it("keeps the row count and the marking while it counts", () => {
+    draw({ a: 5, b: 3, c: 2 }, 10);
+
+    // Only the figures move. Which bar is correct is decided at render, not per frame.
+    expect(rows()).toHaveLength(3);
+    expect(rows()[0]!.dataset.correct).toBe("true");
   });
 });
 

@@ -129,6 +129,36 @@ function optionClassName(parts: readonly (string | undefined)[]): string {
 }
 
 /**
+ * Which options a reveal marks as right — **and the one place that knows an unscored
+ * choice question means *every* option is right**, not *none of them*.
+ *
+ * `reveal.ts` publishes `revealedOptionIds` straight from the definition's
+ * `correctOptionIds`, and the drafted Q2 ("Czy wszyscy są gotowi?") carries `[]` there
+ * because every answer to it is a good one — it is the gather beat, unscored by FR-017
+ * rather than a question with four wrong answers. Read literally, that empty array
+ * greys out the whole list at the reveal, which tells a room that just answered "Jestem
+ * gotowy!" that nobody was. Expanding it here says the true thing on both surfaces at
+ * once: the attendee's option list and the projector's bars.
+ *
+ * **Keyed on `scored`, never on the id or the kind.** `scored` is exactly `points !== null`
+ * (see `public.ts`), so authoring a second unscored choice question needs no change here,
+ * and a scored question whose ids failed to resolve still greys out rather than quietly
+ * awarding everyone the right answer.
+ *
+ * Everything else passes through untouched: `null` (outside a reveal) stays `null`, a
+ * non-empty list is already the answer, and a non-choice kind has no options to expand
+ * into — text, number and word-cloud reveal with `[]` and come back out with `[]`.
+ */
+function revealedCorrectIds(
+  question: PublicQuestion,
+  correctOptionIds: readonly string[] | null
+): readonly string[] | null {
+  if (correctOptionIds === null || correctOptionIds.length > 0) return correctOptionIds;
+  if (question.scored) return correctOptionIds;
+  return question.options?.map((option) => option.id) ?? correctOptionIds;
+}
+
+/**
  * Renders one question into a container: the prompt, plus the option list for the two
  * choice kinds.
  *
@@ -156,7 +186,8 @@ export function renderQuestion(
 
   const mode = options.mode ?? "static";
   const selected = options.selectedOptionIds ?? [];
-  const correct = options.correctOptionIds ?? null;
+  // Expanded rather than read literally — see `revealedCorrectIds` for the unscored case.
+  const correct = question ? revealedCorrectIds(question, options.correctOptionIds ?? null) : null;
 
   const prompt = document.createElement("p");
   if (options.prompt) prompt.className = options.prompt;
@@ -253,8 +284,20 @@ export type RenderDistributionOptions = DistributionClassNames & {
    * it renders nothing at all — see the note on the function.
    */
   readonly distribution?: Distribution | null;
-  /** From `state.revealedOptionIds`. `null` or `[]` means nothing to mark. */
+  /**
+   * From `state.revealedOptionIds`. `null` means nothing to mark; `[]` on an **unscored**
+   * question marks every option — see `revealedCorrectIds`.
+   */
   readonly correctOptionIds?: readonly string[] | null;
+  /**
+   * Count the bars up from zero when the chart changes, instead of painting them final.
+   *
+   * Opt-in, and only the projector opts in: the reveal is a beat the host narrates, and
+   * bars that grow give the room a moment to read the shape before the numbers settle. A
+   * device that asks for reduced motion, or one with no `requestAnimationFrame`, gets the
+   * final figures immediately — the animation is the decoration, never the data.
+   */
+  readonly animate?: boolean;
 };
 
 export type DistributionClassNames = {
@@ -275,6 +318,70 @@ export type DistributionClassNames = {
 const NO_ANSWERS_TEXT = "Nikt jeszcze nie odpowiedział.";
 
 /**
+ * How long a bar takes to count up, in milliseconds.
+ *
+ * Long enough for the room to watch the shares separate, short enough that the host is
+ * not waiting on an animation before they can talk over the chart. It is spent once per
+ * reveal, not per render — see `countUpSignature`.
+ */
+const COUNT_UP_MS = 900;
+
+/** Ease-out cubic: fast off the mark, settling onto the true figure rather than snapping to it. */
+function easeOut(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+/**
+ * One bar's final figures plus the two nodes that carry them, so the count-up writes the
+ * number and the width from the same eased progress. They must never disagree — the same
+ * rule `renderCountdown` states for its text and its bar.
+ */
+type BarTarget = {
+  readonly figures: HTMLElement;
+  readonly fill: HTMLElement;
+  readonly count: number;
+  readonly share: number;
+};
+
+/**
+ * The animation in flight for a container, so a re-render cancels it rather than leaving
+ * two loops writing the same nodes.
+ */
+const countUpFrames = new WeakMap<HTMLElement, number>();
+
+/**
+ * What was last painted into a container, so **an unchanged chart is not re-animated**.
+ *
+ * The host re-renders on every snapshot and on every fallback poll, and a reveal sits on
+ * screen across several of them. Without this, a dropped Ably message replaying the same
+ * state would reset all eight bars to zero in front of the room. Keyed by the numbers
+ * actually drawn, so the one case that *should* re-animate — a fresh reveal on the next
+ * question — still does.
+ */
+const countUpSignatures = new WeakMap<HTMLElement, string>();
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+/**
+ * Writes every bar at `progress`, where 1 is the true figure.
+ *
+ * Both numbers are scaled by the same eased progress, so a frame mid-flight reads as a
+ * partly counted room rather than as a share that disagrees with its own count. Only the
+ * final frame is authoritative, and it is always written exactly — the loop ends by
+ * calling this with 1 rather than by trusting the clock to land there.
+ */
+function paintBars(targets: readonly BarTarget[], progress: number): void {
+  for (const target of targets) {
+    const count = Math.round(target.count * progress);
+    const share = Math.round(target.share * progress);
+    target.figures.textContent = `${count} · ${share}%`;
+    target.fill.style.width = `${share}%`;
+  }
+}
+
+/**
  * Renders one bar per option: its text, its absolute count, its share of the room, and
  * whether it was the right answer.
  *
@@ -293,7 +400,12 @@ const NO_ANSWERS_TEXT = "Nikt jeszcze nie odpowiedział.";
  * Built with `createElement` and `textContent`, never `innerHTML`, and a correct option
  * is marked with `data-correct` as well as by class, so both survive a stylesheet that
  * fails to load on a venue network. Both rules are `renderQuestion`'s and are followed
- * here for the same reasons.
+ * here for the same reasons. Which options count as correct is `revealedCorrectIds`'
+ * decision, shared with `renderQuestion` so the bars and the bands cannot disagree about
+ * an unscored question.
+ *
+ * With `animate`, the figures and the bars count up from zero on ease-out — decoration
+ * only, and it is the *change* that triggers it, not the render. See `countUpSignatures`.
  */
 export function renderDistribution(
   container: HTMLElement,
@@ -302,22 +414,36 @@ export function renderDistribution(
 ): void {
   container.replaceChildren();
 
+  // Whatever was counting up into the nodes just detached. Cancelled before the early
+  // returns below, so a chart that disappears takes its animation with it.
+  const inFlight = countUpFrames.get(container);
+  if (inFlight !== undefined) {
+    cancelAnimationFrame(inFlight);
+    countUpFrames.delete(container);
+  }
+
   // One options bag, matching `renderQuestion` — not four positional parameters. Two of
   // them were nullable and adjacent, so a call site could transpose the distribution and
   // the correct ids and still type-check.
   const distribution = options.distribution ?? null;
-  const correctOptionIds = options.correctOptionIds ?? null;
   const classNames = options;
 
   // No question, no options, or no distribution — the last being what a failed tally
   // read publishes. Rendering nothing is the point: zeroed bars would claim the room
   // did not answer, which is the specific wrong message `reveal.ts` sends `null` to
   // avoid.
-  if (!question?.options?.length || distribution === null) return;
+  if (!question?.options?.length || distribution === null) {
+    countUpSignatures.delete(container);
+    return;
+  }
+
+  // Expanded rather than read literally — see `revealedCorrectIds` for the unscored case.
+  const correctOptionIds = revealedCorrectIds(question, options.correctOptionIds ?? null);
 
   const { answered } = distribution;
 
   if (answered === 0) {
+    countUpSignatures.delete(container);
     const empty = document.createElement("p");
     if (classNames.empty) empty.className = classNames.empty;
     empty.textContent = NO_ANSWERS_TEXT;
@@ -328,11 +454,13 @@ export function renderDistribution(
   const list = document.createElement("ul");
   if (classNames.list) list.className = classNames.list;
 
+  const targets: BarTarget[] = [];
+
   for (const option of question.options) {
     // A missing key is zero: an option nobody picked is a fact about the room, and
     // dropping its row would leave the bars unreadable against the question on screen.
     const count = distribution.options[option.id] ?? 0;
-    const share = Math.round((count / answered) * 100);
+    const share = (count / answered) * 100;
     const isCorrect = correctOptionIds !== null && correctOptionIds.includes(option.id);
 
     const row = document.createElement("li");
@@ -349,25 +477,67 @@ export function renderDistribution(
     if (classNames.label) label.className = classNames.label;
     label.textContent = option.text;
 
+    // Both numbers, because neither answers the other's question: the share is what the
+    // room compares, and the count is what makes it trustworthy. Written by `paintBars`
+    // below rather than here, so the static and animated paths cannot format differently.
     const figures = document.createElement("span");
     if (classNames.count) figures.className = classNames.count;
-    // Both numbers, because neither answers the other's question: the share is what the
-    // room compares, and the count is what makes it trustworthy.
-    figures.textContent = `${count} · ${share}%`;
 
     const bar = document.createElement("div");
     if (classNames.bar) bar.className = classNames.bar;
 
     const fill = document.createElement("div");
     if (classNames.barFill) fill.className = classNames.barFill;
-    fill.style.width = `${share}%`;
+
+    targets.push({ figures, fill, count, share });
 
     bar.append(fill);
     row.append(label, figures, bar);
     list.append(row);
   }
 
+  /**
+   * Keyed by the drawn numbers rather than by the question id alone: a distribution that
+   * moves — a late answer landing between two renders — is a new chart and counts up
+   * again, while the same chart re-rendered stands still.
+   */
+  const signature = `${question.id}|${answered}|${targets.map((target) => target.count).join(",")}`;
+  const changed = countUpSignatures.get(container) !== signature;
+  countUpSignatures.set(container, signature);
+
+  const animate =
+    options.animate === true &&
+    changed &&
+    typeof requestAnimationFrame === "function" &&
+    !prefersReducedMotion();
+
+  // Painted before the list is attached, so the first frame the room sees is already the
+  // start of the animation rather than a flash of the final figures.
+  paintBars(targets, animate ? 0 : 1);
   container.append(list);
+
+  if (!animate) return;
+
+  // The rAF timestamp is the clock, so nothing here reads `Date.now`.
+  let started: number | null = null;
+
+  const step = (now: number): void => {
+    started ??= now;
+    const progress = Math.min((now - started) / COUNT_UP_MS, 1);
+
+    if (progress >= 1) {
+      // The true figures are written by the end of the loop, never by the last tick
+      // happening to land on 1 — a dropped frame must not leave a bar short.
+      countUpFrames.delete(container);
+      paintBars(targets, 1);
+      return;
+    }
+
+    paintBars(targets, easeOut(progress));
+    countUpFrames.set(container, requestAnimationFrame(step));
+  };
+
+  countUpFrames.set(container, requestAnimationFrame(step));
 }
 
 /**
