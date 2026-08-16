@@ -104,6 +104,19 @@ Three packages are installed, and the third is not obvious:
 | `@tsparticles/ribbons` | the ribbons; pulls `shape-ribbon` transitively, so do **not** install that separately |
 | `@tsparticles/plugin-interactivity` | **an optional peer dependency of `plugin-emitters`.** Without it `bun run build` fails with *"ExternalInteractorBase is not exported by __vite-optional-peer-dep…"*. Confetti alone did not need it; ribbons pulls in `EmittersInteractor`, which does. |
 
+**The trap, and it shipped once.** Both packages register their plugins against **one**
+`tsParticles` singleton, and the engine refuses registration after anything has called `load()`. So
+firing confetti first makes every later `ribbons()` throw *"Register plugins can only be done before
+calling tsParticles.load()"* — absorbed, as it must be, which on screen is **confetti with no ribbons
+and a clean console**. `celebrate.ts` therefore awaits `init()` on both *before* either half fires,
+and `CelebrationEffects.init` is part of the type rather than hidden in the loader so a test can hold
+the order.
+
+It does **not** reproduce against the published demo, and that is the part worth remembering: the
+demo loads UMD bundles that each carry their own copy of the engine. The conflict only appears once a
+bundler dedupes them — which is exactly what our build does. Copying a working snippet from that page
+is not evidence it works here.
+
 The costs, and which number to argue from:
 
 - **`canvas-confetti` (90 KB, zero dependencies) was offered and declined**, because it cannot do the

@@ -44,10 +44,15 @@ describe("createCelebration", () => {
       Promise.resolve(undefined),
     );
     const ribbons = vi.fn((_options: unknown) => Promise.resolve(undefined));
+    const init = vi.fn(() => Promise.resolve());
     const load = vi.fn(() =>
-      Promise.resolve({ confetti, ribbons } as unknown as CelebrationEffects),
+      Promise.resolve({
+        confetti,
+        ribbons,
+        init,
+      } as unknown as CelebrationEffects),
     );
-    return { confetti, ribbons, load };
+    return { confetti, ribbons, init, load };
   }
 
   /** Lets the injected loader's promise settle without advancing the fake clock. */
@@ -121,6 +126,76 @@ describe("createCelebration", () => {
       expect(new Set(origins.map((origin) => origin.x)).size).toBeGreaterThan(
         1,
       );
+    });
+  });
+
+  describe("the shared engine", () => {
+    it("registers both plugin sets before either half fires", async () => {
+      const order: string[] = [];
+      const confetti = vi.fn(
+        (_options: { origin: { x: number; y: number } }) => {
+          order.push("confetti");
+          return Promise.resolve(undefined);
+        },
+      );
+      const ribbons = vi.fn((_options: unknown) => {
+        order.push("ribbons");
+        return Promise.resolve(undefined);
+      });
+      const init = vi.fn(() => {
+        order.push("init");
+        return Promise.resolve();
+      });
+      const load = vi.fn(() =>
+        Promise.resolve({
+          confetti,
+          ribbons,
+          init,
+        } as unknown as CelebrationEffects),
+      );
+
+      const celebration = createCelebration({
+        load,
+        reducedMotion: () => false,
+      });
+      celebration.fire("ended|Ania");
+      await settle();
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      // THE BUG THIS FILE EXISTS FOR. The two packages register against one `tsParticles`
+      // singleton, and the engine refuses registration once anything has called `load()` —
+      // so a confetti burst fired before init makes every later `ribbons()` throw
+      // "Register plugins can only be done before calling tsParticles.load()". Absorbed, as
+      // it must be, that reads on screen as confetti with no ribbons and a clean console.
+      expect(init).toHaveBeenCalledTimes(1);
+      expect(order[0]).toBe("init");
+      expect(order).toContain("ribbons");
+    });
+
+    it("fires nothing at all if registration fails", async () => {
+      const { confetti, ribbons } = stub();
+      const init = vi.fn(() =>
+        Promise.reject(new Error("engine already loaded")),
+      );
+      const load = vi.fn(() =>
+        Promise.resolve({
+          confetti,
+          ribbons,
+          init,
+        } as unknown as CelebrationEffects),
+      );
+
+      const celebration = createCelebration({
+        load,
+        reducedMotion: () => false,
+      });
+      celebration.fire("ended|Ania");
+      await settle();
+      await vi.advanceTimersByTimeAsync(6_000);
+
+      // Half an effect is worse than none: confetti alone is what the bug looked like.
+      expect(confetti).not.toHaveBeenCalled();
+      expect(ribbons).not.toHaveBeenCalled();
     });
   });
 
@@ -316,8 +391,13 @@ describe("createCelebration", () => {
     it("absorbs a burst that throws", async () => {
       const confetti = vi.fn(() => Promise.reject(new Error("no canvas")));
       const ribbons = vi.fn(() => Promise.resolve(undefined));
+      const init = vi.fn(() => Promise.resolve());
       const load = vi.fn(() =>
-        Promise.resolve({ confetti, ribbons } as unknown as CelebrationEffects),
+        Promise.resolve({
+          confetti,
+          ribbons,
+          init,
+        } as unknown as CelebrationEffects),
       );
       const celebration = createCelebration({
         load,
@@ -327,6 +407,9 @@ describe("createCelebration", () => {
       const rejections = await unhandledDuring(() => {
         celebration.fire("ended|Ania");
       });
+      // Two hops now, not one: the loader resolves, then registration is awaited before any
+      // timer is armed. See `CelebrationEffects.init`.
+      await settle();
       await vi.advanceTimersByTimeAsync(200);
       await new Promise((resolve) => setImmediate(resolve));
 

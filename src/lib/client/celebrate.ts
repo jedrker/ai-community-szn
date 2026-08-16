@@ -49,6 +49,26 @@ type RibbonsFire = (options: RibbonsOptions) => Promise<unknown>;
 export type CelebrationEffects = {
   readonly confetti: ConfettiFire;
   readonly ribbons: RibbonsFire;
+  /**
+   * Registers **both** plugin sets on the shared engine, and must finish before either half
+   * fires.
+   *
+   * **This is the whole bug that shipped in the first version of this module, and it is
+   * invisible from the outside.** The two packages are separate but they register against
+   * one `tsParticles` singleton, and the engine refuses registration once anything has
+   * called `load()`: firing confetti first makes the later `ribbons()` throw *"Register
+   * plugins can only be done before calling tsParticles.load()"*. With the failure absorbed
+   * — which it must be — the screen simply showed confetti and no ribbons, with nothing in
+   * the console.
+   *
+   * It does not reproduce in the published demo, because those are UMD bundles that each
+   * carry their own copy of the engine. It only appears once a bundler dedupes them, which
+   * is exactly what our build does.
+   *
+   * Part of this type rather than hidden inside the default loader so the ordering is
+   * something a test can hold the module to.
+   */
+  readonly init: () => Promise<void>;
 };
 
 export type CelebrationDeps = {
@@ -132,6 +152,13 @@ export function createCelebration(deps: CelebrationDeps = {}): Celebration {
       return {
         confetti: confettiModule.confetti as ConfettiFire,
         ribbons: ribbonsModule.ribbons as RibbonsFire,
+        // Both, before either fires. See `CelebrationEffects.init`.
+        init: async () => {
+          await Promise.all([
+            confettiModule.confetti.init(),
+            ribbonsModule.ribbons.init(),
+          ]);
+        },
       };
     });
   const reducedMotion = deps.reducedMotion ?? prefersReducedMotion;
@@ -207,7 +234,13 @@ export function createCelebration(deps: CelebrationDeps = {}): Celebration {
       if (reducedMotion()) return;
 
       void load()
-        .then(run)
+        .then(async (effects) => {
+          // Registration before any firing, never interleaved: the first `confetti()` call
+          // calls `load()` on the shared engine, and after that the engine refuses to
+          // register the ribbons plugins at all.
+          await effects.init();
+          run(effects);
+        })
         .catch(() => {
           // Absorbed. The closing screen is already painted and owes this nothing.
         });
