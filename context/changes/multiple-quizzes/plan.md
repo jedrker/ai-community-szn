@@ -730,34 +730,34 @@ mid-session deploy cannot make an old document claim a current quiz — it fails
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 Linting passes: `bun run lint`
-- [x] 1.4 Build succeeds with the gate active: `bun run build`
-- [x] 1.5 The cross-quiz question-id gate fires on a colliding fixture
-- [x] 1.6 The recursive portability scan reaches `src/quiz/definitions/`
+- [x] 1.1 Unit tests pass: `bun run test` — dff8dde
+- [x] 1.2 Type checking passes: `bun run type-check` — dff8dde
+- [x] 1.3 Linting passes: `bun run lint` — dff8dde
+- [x] 1.4 Build succeeds with the gate active: `bun run build` — dff8dde
+- [x] 1.5 The cross-quiz question-id gate fires on a colliding fixture — dff8dde
+- [x] 1.6 The recursive portability scan reaches `src/quiz/definitions/` — dff8dde
 
 #### Manual
 
-- [x] 1.7 `/quiz` and `/quiz/host` behave exactly as before this phase
-- [x] 1.8 A malformed second quiz produces a Polish build error naming the quiz
+- [x] 1.7 `/quiz` and `/quiz/host` behave exactly as before this phase — dff8dde
+- [x] 1.8 A malformed second quiz produces a Polish build error naming the quiz — dff8dde
 
 ### Phase 2: Quiz identity on the session document
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 Linting passes: `bun run lint`
-- [ ] 2.4 A document written without `quizId` parses, with the resulting value asserted
-- [ ] 2.5 `start` returns 409 for a different quiz and 200 `already-started` for the same one
-- [ ] 2.6 `start` refuses an absent and an unknown quiz id, outcome asserted
-- [ ] 2.7 Break-the-guard: reverting the `quizId` `superRefine` fails the named test
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 Linting passes: `bun run lint`
+- [x] 2.4 A document written without `quizId` parses, with the resulting value asserted
+- [x] 2.5 `start` returns 409 for a different quiz and 200 `already-started` for the same one
+- [x] 2.6 `start` refuses an absent and an unknown quiz id, outcome asserted
+- [x] 2.7 Break-the-guard: reverting the `quizId` `superRefine` fails the named test
 
 #### Manual
 
-- [ ] 2.8 A full session runs end to end on two devices with no visible change
-- [ ] 2.9 The 409 copy appears on the host panel when a different quiz is requested
+- [x] 2.8 A full session runs end to end on two devices with no visible change
+- [x] 2.9 The 409 copy appears on the host panel when a different quiz is requested
 
 ### Phase 3: A URL per quiz
 

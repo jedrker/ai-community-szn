@@ -46,7 +46,25 @@ export type HostActionOutcome =
    * for any device that already has it.
    */
   | { status: 502; body: { state: SessionState; applied: true; error: string } }
-  | { status: 401 | 409 | 503; body: { error: string } };
+  /**
+   * Refused, **and the running session is worth showing anyway** (multiple-quizzes).
+   *
+   * `start` uses it for "you asked for quiz B while quiz A is running": nothing was
+   * written, so `applied` is false, but the host panel applying this state is how the
+   * host sees *which* session is in the way rather than only being told there is one.
+   * The 502 above is the other state-bearing refusal and it is the opposite case —
+   * committed but unbroadcast.
+   */
+  | {
+      status: 409;
+      body: { state: SessionState; applied: false; error: string };
+    }
+  /**
+   * `400` is the request's fault rather than the session's, and it is the one status
+   * here that says so: `start` uses it when nothing named which quiz to run. The 409s
+   * beside it all mean "the session is not in a state where this can happen".
+   */
+  | { status: 400 | 401 | 409 | 503; body: { error: string } };
 
 /**
  * Constant-time-ish comparison. Not a serious side-channel defence — the threat
@@ -122,6 +140,46 @@ export async function extractHostFields(
   const confirmVersion = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 
   return { secret, confirmVersion };
+}
+
+/**
+ * Reads the secret **and** the quiz being started, in a single body read
+ * (multiple-quizzes).
+ *
+ * Shaped like `extractHostFields` above and for exactly the same reason:
+ * `extractSecret` consumes `request.formData()` when no header is present, and a
+ * request body can only be read once — so calling it and then reading the form would
+ * find an empty body and start whatever the fallback happened to be.
+ *
+ * **There is no fallback.** An absent field returns `null` and `start.ts` refuses,
+ * rather than defaulting to "the first quiz" or "the one we usually run": deciding what
+ * "said nothing" means before deciding what "lied" means is the rule
+ * (`lessons.md`), and here the conservative end is refusing to start anything.
+ */
+export async function extractStartFields(
+  request: Request,
+): Promise<{ secret: string | null; quizId: string | null }> {
+  const header = request.headers.get(HOST_SECRET_HEADER);
+
+  let form: FormData | null = null;
+  try {
+    form = await request.formData();
+  } catch {
+    // No form body — a header-only caller. Not an error by itself; the missing quiz is
+    // reported by the route, not swallowed here.
+    form = null;
+  }
+
+  const field = form?.get("secret");
+  const secret = header ?? (typeof field === "string" ? field : null);
+
+  const rawQuizId = form?.get("quizId");
+  // Explicitly `typeof === "string"` and non-empty rather than a bare coercion: `null`,
+  // `""` and a `File` all have to mean "said nothing", and `String(null)` does not.
+  const quizId =
+    typeof rawQuizId === "string" && rawQuizId.length > 0 ? rawQuizId : null;
+
+  return { secret, quizId };
 }
 
 export function authorizeHost(secret: string | null): { ok: boolean } {

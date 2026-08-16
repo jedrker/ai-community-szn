@@ -2,12 +2,13 @@ import type { APIRoute } from "astro";
 
 import {
   authorizeHost,
-  extractSecret,
+  extractStartFields,
   toResponse,
   unauthorized,
 } from "../../../../lib/session/host";
 import { publishSnapshot } from "../../../../lib/session/realtime";
 import { createSession } from "../../../../lib/session/store";
+import { getQuizById } from "../../../../quiz/index";
 
 /**
  * Starts the session.
@@ -21,12 +22,36 @@ import { createSession } from "../../../../lib/session/store";
  * Idempotent, and not by a check-then-write here: `createSession` is a
  * create-if-absent Lua script, so two host devices racing — or one host
  * double-tapping — cannot reset a session that is already running.
+ *
+ * **It also names the quiz** (multiple-quizzes). Idempotence now has a condition: the
+ * same quiz twice is the harmless replay it always was, and a *different* quiz is a
+ * visible 409 rather than a 200 that looks like success. That distinction is the whole
+ * reason this route reads a body at all — see `extractStartFields`.
  */
 export const POST: APIRoute = async ({ request }) => {
-  const secret = await extractSecret(request);
+  const { secret, quizId } = await extractStartFields(request);
   if (!authorizeHost(secret).ok) return toResponse(unauthorized());
 
-  const result = await createSession(Date.now());
+  /**
+   * Refused, never defaulted — an absent field and an unknown slug get the same answer
+   * because they mean the same thing here: nothing said which quiz to run. Picking one
+   * would be this route deciding what the host meant, and the cost of guessing wrong is
+   * a room answering the wrong questions.
+   *
+   * 400 rather than 409: the session is not in a bad state, the request is.
+   */
+  const requested = quizId === null ? undefined : getQuizById(quizId);
+  if (requested === undefined) {
+    return toResponse({
+      status: 400,
+      body: {
+        error:
+          "Nie wiadomo, który quiz uruchomić — otwórz panel hosta wybranego quizu i spróbuj ponownie.",
+      },
+    });
+  }
+
+  const result = await createSession(Date.now(), requested.id);
 
   if (result.outcome === "unconfigured") {
     return toResponse({
@@ -55,6 +80,41 @@ export const POST: APIRoute = async ({ request }) => {
     return toResponse({
       status: 503,
       body: { error: "Nie udało się rozpocząć sesji. Spróbuj ponownie." },
+    });
+  }
+
+  /**
+   * "You asked for quiz B while quiz A is running" — refused, and visibly.
+   *
+   * Before the publish, deliberately: this is not a re-broadcast the host asked for, it
+   * is a request that is not going to happen, and echoing the running session to every
+   * device would be the wrong answer to it.
+   *
+   * The comparison costs nothing extra — `CREATE_IF_ABSENT`'s `exists` branch already
+   * returns the full running document, so there is no second read and no change to the
+   * Lua script.
+   *
+   * It names the running quiz's **title**, not its slug: the host is looking at a panel
+   * and needs to recognise which session is in the way. A session started before quiz
+   * identity existed has no title to name, so it says so rather than printing a
+   * sentinel — same refusal, honest reason.
+   */
+  if (result.outcome === "exists" && result.state.quizId !== requested.id) {
+    const running = getQuizById(result.state.quizId);
+    const runningName =
+      running === undefined
+        ? "sesja rozpoczęta przed wprowadzeniem identyfikatorów quizów"
+        : `„${running.title}”`;
+
+    return toResponse({
+      status: 409,
+      body: {
+        state: result.state,
+        applied: false,
+        error:
+          `Trwa już inna sesja (${runningName}) — zakończ ją i uruchom \`bun run quiz:reset\`, ` +
+          `zanim uruchomisz quiz „${requested.title}”.`,
+      },
     });
   }
 

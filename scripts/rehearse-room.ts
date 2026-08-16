@@ -65,6 +65,7 @@ import {
 } from "../src/lib/session/keys";
 import { answeredField, optionField } from "../src/lib/session/tallies";
 import { SNAPSHOT_EVENT } from "../src/lib/session/realtime";
+import { quizzes } from "../src/quiz/index";
 import { getPublicQuestionById } from "../src/quiz/public";
 
 /**
@@ -1458,11 +1459,11 @@ async function measureAction(
   config: Config,
   verb: HostVerb,
   devices: Device[],
-  options: { discarded?: boolean; label?: string } = {},
+  options: { discarded?: boolean; label?: string; form?: FormData } = {},
 ): Promise<Measurement> {
   const discarded = options.discarded ?? false;
   const label = options.label ?? verb;
-  const outcome = await hostAction(config, verb);
+  const outcome = await hostAction(config, verb, options.form);
 
   const applied = outcome.status === 200 && outcome.applied === true;
   record(applied, `host action: ${label}`, describeOutcome(outcome));
@@ -1551,9 +1552,19 @@ async function runRehearsal(
   devices: Device[],
   redis: Redis,
 ): Promise<boolean> {
+  /**
+   * `start` names the quiz it wants (multiple-quizzes) — the route refuses a request
+   * that names none, and a rehearsal that worked around that would be measuring an
+   * endpoint the room never hits. Which quiz is irrelevant to every figure here, so it
+   * is the first registry entry.
+   */
+  const startForm = new FormData();
+  startForm.set("quizId", quizzes[0]?.id ?? "");
+
   const warmUp = await measureAction(config, "start", devices, {
     discarded: true,
     label: "start",
+    form: startForm,
   });
 
   if (devices.length > 0) {

@@ -1,10 +1,6 @@
 import { z } from "zod";
 
-import {
-  getQuestionById,
-  getQuizByQuestionId,
-  quizzes,
-} from "../../quiz/index";
+import { getQuestionById, getQuizById } from "../../quiz/index";
 import { standingsSchema, type Standings } from "./standings";
 
 /**
@@ -88,6 +84,27 @@ const QUESTIONLESS_PHASES: readonly SessionPhase[] = ["lobby", "ended"];
  */
 const BOARD_PHASES: readonly SessionPhase[] = ["standings", "ended"];
 
+/**
+ * What `quizId` says when the document predates the field (multiple-quizzes).
+ *
+ * **The obvious default is the bug.** Defaulting to a real quiz id — "the one we run",
+ * "the first in the registry" — makes an in-flight document *assert* an identity it
+ * never had, which is exactly the silent mis-scoring this whole change exists to
+ * prevent. So the default is a sentinel that means "written before quizzes had
+ * identity" and nothing else.
+ *
+ * It carries an underscore, which `QUESTION_ID` in `src/quiz/schema.ts` refuses, so no
+ * committed quiz can ever collide with it — the sentinel is unforgeable rather than
+ * merely unlikely.
+ *
+ * The `superRefine` clause below exempts it from the must-resolve rule and only from
+ * that: a session running across the deploy still parses, so the host can advance,
+ * reveal and close normally. What it cannot do is *start* a quiz — `start.ts` refuses,
+ * and `bun run quiz:reset` is the documented way out (runbook step 4). That is failure
+ * toward the conservative end, which is the posture `lessons.md` asks for.
+ */
+export const PRE_IDENTITY_QUIZ_ID = "__pre_identity__";
+
 export const sessionStateSchema = z
   .object({
     /**
@@ -98,6 +115,31 @@ export const sessionStateSchema = z
      */
     version: z.number().int().positive(),
     phase: z.enum(SESSION_PHASES),
+    /**
+     * Which quiz this session is running (multiple-quizzes).
+     *
+     * **A third category of field, beside the decoration and transition fields the
+     * directory's `CLAUDE.md` describes.** `playerCount` is decoration —
+     * `applyHostAction` overwrites it on every action. The four reveal/board fields are
+     * *part of* a transition — one owner sets them, every other constructor nulls them.
+     * This is neither: it is **session identity**, written once by `createSession` and
+     * copied unchanged by every constructor thereafter. Nothing may overwrite it and
+     * nothing may null it; a session that changed quiz mid-flight would re-scope every
+     * question id the room has already answered.
+     *
+     * **Defaulted rather than required, for the reason `playerCount`'s note states** — a
+     * document written before this shipped must still parse, or the host's next action
+     * 409s mid-segment. But the default is a *sentinel*, never a real quiz id: see
+     * `PRE_IDENTITY_QUIZ_ID` above for why the obvious default is the bug. The output
+     * type is still `string`, so every constructor must set it.
+     *
+     * **It becomes publicly readable**, through the deliberately open
+     * `GET /api/quiz/state` and both `POST /api/quiz/join` success paths. That is within
+     * the retention contract and it is said here rather than inherited: a slug is quiz
+     * content, authored in source and printed on the projector, not attendee data. It
+     * says nothing about who played.
+     */
+    quizId: z.string().default(PRE_IDENTITY_QUIZ_ID),
     /** A question id from the quiz definition, or null in the lobby. */
     currentQuestionId: z.string().nullable(),
     /** Epoch milliseconds. */
@@ -292,6 +334,54 @@ export const sessionStateSchema = z
     standings: standingsSchema.nullable().default(null),
   })
   .superRefine((state, ctx) => {
+    /**
+     * The session's quiz must exist, and the open question must belong to *it*
+     * (multiple-quizzes).
+     *
+     * Its own clause, in the house pattern — one clause per field, `path: ["quizId"]`,
+     * a Polish message naming the field — so the failure says which fact is wrong
+     * rather than pointing at `currentQuestionId` for a problem that is not its.
+     *
+     * **The second half is what makes `getQuestionById`'s registry-wide search safe.**
+     * Question ids are globally unique, so a stored id always resolves *somewhere*; the
+     * clause below is what stops it resolving into a quiz this session is not running.
+     * Without it a mid-session quiz switch would score answers against another quiz's
+     * question and every screen would look correct.
+     *
+     * The sentinel is exempt and only from the first half: a document written before
+     * this field existed has no identity to check, and refusing it here would be the
+     * mid-segment 409 the default exists to prevent. Its `currentQuestionId` is still
+     * checked by the clause below, exactly as it was before this field existed.
+     */
+    const preIdentity = state.quizId === PRE_IDENTITY_QUIZ_ID;
+    const runningQuiz = preIdentity ? undefined : getQuizById(state.quizId);
+
+    if (!preIdentity && runningQuiz === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["quizId"],
+        message:
+          `Sesja wskazuje na quiz "${state.quizId}", którego nie ma w rejestrze. ` +
+          "Prawdopodobnie quiz został usunięty w trakcie trwającej sesji.",
+      });
+    }
+
+    if (
+      runningQuiz !== undefined &&
+      state.currentQuestionId !== null &&
+      !runningQuiz.questions.some(
+        (question) => question.id === state.currentQuestionId,
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["quizId"],
+        message:
+          `Sesja prowadzi quiz "${state.quizId}", ale otwarte pytanie ` +
+          `"${state.currentQuestionId}" należy do innego quizu.`,
+      });
+    }
+
     // A question id is only ever assigned server-side from the quiz definition,
     // so an unknown one means the definition changed under a live session —
     // a deploy mid-segment. Catch it at the boundary rather than broadcasting a
@@ -409,11 +499,19 @@ export const sessionStateSchema = z
 
 export type SessionState = z.infer<typeof sessionStateSchema>;
 
-/** The lobby document a session begins life as. */
-export function initialSessionState(now: number): SessionState {
+/**
+ * The lobby document a session begins life as.
+ *
+ * `quizId` is taken rather than derived, because this is the **only** moment a
+ * session's identity is decided (multiple-quizzes). Every constructor after this one
+ * copies it; nothing recomputes it. A default here — "the first registry quiz", say —
+ * would put the choice in two places and let the wrong one win silently.
+ */
+export function initialSessionState(now: number, quizId: string): SessionState {
   return {
     version: 1,
     phase: "lobby",
+    quizId,
     currentQuestionId: null,
     startedAt: now,
     updatedAt: now,
@@ -433,36 +531,61 @@ export function initialSessionState(now: number): SessionState {
 }
 
 /**
- * The next question after `currentQuestionId`, or the first one from the lobby.
- * Returns `null` past the last question, which callers treat as a no-op rather
- * than an error — a host who taps advance once more at the end has not done
- * anything wrong.
+ * Where advancing goes next, **within the session's own quiz** (multiple-quizzes).
  *
- * **Advances within the quiz the current question belongs to** (multiple-quizzes),
- * resolved through `getQuizByQuestionId` rather than through a single committed quiz.
- * That is unambiguous because the build gate makes question ids globally unique.
+ * Three outcomes rather than a nullable string, and the split is the point.
+ * `end-of-quiz` is the documented no-op — a host who taps advance once more at the end
+ * has not done anything wrong, and an error on stage would read as a fault. `unresolved`
+ * is a different fact entirely: the session names a quiz that is not in the registry, or
+ * an open question that belongs to some *other* quiz. Returning `null` for both, as this
+ * used to, let the second arrive at `advance.ts` as a silent 200 — the room stays put,
+ * the host taps again, and nothing anywhere says the document and the registry disagree.
  *
- * From the lobby it opens the *first registry quiz*, which is a placeholder: the session
- * does not yet record which quiz it is running, so there is nothing better to ask. The
- * session gains that identity in the next phase and this function takes it as an
- * argument then.
+ * The `quizId` clause in `sessionStateSchema` above is what makes `unresolved`
+ * unreachable through a parsed document. This function does not absorb it as well:
+ * a guard and the state it guards against should not both be invisible.
  */
+export type NextQuestion =
+  | { outcome: "next"; questionId: string }
+  | { outcome: "end-of-quiz" }
+  | { outcome: "unresolved"; reason: string };
+
 export function nextQuestionId(
+  quizId: string,
   currentQuestionId: string | null,
-): string | null {
-  if (currentQuestionId === null) {
-    return quizzes[0]?.questions[0]?.id ?? null;
+): NextQuestion {
+  const quiz = getQuizById(quizId);
+  if (quiz === undefined) {
+    return {
+      outcome: "unresolved",
+      reason: `quiz "${quizId}" is not in the registry`,
+    };
   }
 
-  const owner = getQuizByQuestionId(currentQuestionId);
-  if (owner === undefined) return null;
+  // From the lobby: the first question of *this* quiz. A quiz with no questions cannot
+  // be committed (`quizSchema` requires at least one), so this is end-of-quiz only in
+  // the sense that there is nowhere to go.
+  if (currentQuestionId === null) {
+    const first = quiz.questions[0];
+    return first === undefined
+      ? { outcome: "end-of-quiz" }
+      : { outcome: "next", questionId: first.id };
+  }
 
-  const index = owner.questions.findIndex(
+  const index = quiz.questions.findIndex(
     (question) => question.id === currentQuestionId,
   );
-  if (index === -1) return null;
+  if (index === -1) {
+    return {
+      outcome: "unresolved",
+      reason: `question "${currentQuestionId}" does not belong to quiz "${quizId}"`,
+    };
+  }
 
-  return owner.questions[index + 1]?.id ?? null;
+  const next = quiz.questions[index + 1];
+  return next === undefined
+    ? { outcome: "end-of-quiz" }
+    : { outcome: "next", questionId: next.id };
 }
 
 /**
@@ -490,6 +613,10 @@ export function endedSessionState(
   return {
     version: current.version + 1,
     phase: "ended",
+    // Copied, never recomputed — a session's identity is decided once, at creation. It
+    // survives the close because the terminal document is still *this* session's, and
+    // the reload window F-03 chose has to be able to say which quiz it was.
+    quizId: current.quizId,
     currentQuestionId: null,
     startedAt: current.startedAt,
     updatedAt: now,

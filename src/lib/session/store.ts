@@ -579,12 +579,21 @@ export async function readSession(): Promise<ReadResult> {
  * Creates the lobby document if no session exists, and returns the existing one
  * if it does. Never overwrites — resetting a live session is not something a
  * double-tapped start button should be able to do.
+ *
+ * **`quizId` is written here because this is the only moment a session comes into
+ * existence** (multiple-quizzes). The `exists` branch below returns the full parsed
+ * state, which already carries whichever quiz that session was started with — so a
+ * caller asking for a *different* quiz can compare the two with no extra read and no
+ * change to `CREATE_IF_ABSENT`. `start.ts` is that caller.
  */
-export async function createSession(now: number): Promise<CreateResult> {
+export async function createSession(
+  now: number,
+  quizId: string,
+): Promise<CreateResult> {
   const redis = client();
   if (!redis) return unconfigured();
 
-  const initial = initialSessionState(now);
+  const initial = initialSessionState(now, quizId);
 
   let result: [number, unknown] | null;
   try {
@@ -611,6 +620,10 @@ export async function createSession(now: number): Promise<CreateResult> {
     logSessionEvent("session.created", {
       version: parsed.state.version,
       phase: parsed.state.phase,
+      // A slug, authored in source and printed on the projector — quiz content, not
+      // attendee data. `LogFields` is closed by design, so this field was added there
+      // deliberately rather than riding in on free-text `reason`.
+      quizId: parsed.state.quizId,
     });
     return { outcome: "created", state: parsed.state };
   }

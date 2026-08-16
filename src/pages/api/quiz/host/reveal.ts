@@ -122,6 +122,9 @@ export const POST: APIRoute = async ({ request }) => {
     return {
       version: current.version + 1,
       phase: "question-revealed",
+      // Copied unchanged — session identity, not a transition payload. See the field's
+      // note in `state.ts`.
+      quizId: current.quizId,
       currentQuestionId: current.currentQuestionId,
       startedAt: current.startedAt,
       updatedAt: now,

@@ -2,6 +2,7 @@
 import { isHarnessEnabled } from "../../lib/session/harness";
 import { HOST_SECRET_HEADER } from "../../lib/session/host";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
+import { quizzes } from "../../quiz/index";
 
 /**
  * The dev-only spine harness (roadmap F-02, Phase 4).
@@ -36,6 +37,16 @@ if (!isHarnessEnabled()) {
 // The harness sends the host secret from the browser. Acceptable ONLY because
 // this page cannot exist in production — see `harness.ts`.
 const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
+
+/**
+ * Which quiz this harness starts (multiple-quizzes).
+ *
+ * The first registry entry, because the harness measures the *spine* — round trip,
+ * store `EVAL`, publish — and which quiz is on the other end of it changes none of
+ * those numbers. It still has to name one: `start` refuses a request that does not, and
+ * a harness pointed at a lenient variant of an endpoint measures the wrong endpoint.
+ */
+const harnessQuizId = quizzes[0]?.id ?? "";
 ---
 
 <html lang="pl">
@@ -209,6 +220,7 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         secretHeader: HOST_SECRET_HEADER,
         channelName: SESSION_CHANNEL,
         snapshotEvent: SNAPSHOT_EVENT,
+        quizId: harnessQuizId,
       }}
     >
       window.__spineCheck = {
@@ -216,6 +228,7 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         secretHeader,
         channelName,
         snapshotEvent,
+        quizId,
       };
     </script>
 
@@ -227,6 +240,8 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         secretHeader: string;
         channelName: string;
         snapshotEvent: string;
+        /** Which quiz `start` asks for (multiple-quizzes) — the route refuses a request without one. */
+        quizId: string;
       };
 
       type Snapshot = {
@@ -334,6 +349,14 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
          * "nothing to purge", which is how residue cleanup is reached.
          */
         let body: FormData | undefined;
+
+        // `start` names the quiz it wants; the route refuses a request that names none,
+        // and this harness measures the real endpoint rather than a lenient variant.
+        if (action === "start") {
+          body = new FormData();
+          body.set("quizId", config.quizId);
+        }
+
         if (needsConfirm) {
           if (current) {
             body = new FormData();

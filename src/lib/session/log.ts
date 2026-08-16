@@ -180,6 +180,16 @@ type LogFields = {
   version?: number;
   phase?: string;
   questionId?: string | null;
+  /**
+   * Which quiz a session is running (multiple-quizzes).
+   *
+   * Safe for the reason `questionId` is, and worth saying rather than assuming: a quiz
+   * slug is authored in source, printed on the projector and typed into a URL by the
+   * room. It is quiz content, not attendee data — it says nothing about a person. Added
+   * to this closed type deliberately, rather than smuggled into free-text `reason`,
+   * which is the arrangement this whole type exists to reject.
+   */
+  quizId?: string;
   /** Milliseconds the operation took, when measured. */
   ms?: number;
   /** Failure detail. Never a credential — see the redaction note below. */

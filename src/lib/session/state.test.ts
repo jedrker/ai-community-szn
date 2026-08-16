@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { quizzes } from "../../quiz/index";
+import { getQuizById, quizzes } from "../../quiz/index";
 import {
   endedSessionState,
   initialSessionState,
   nextQuestionId,
   parseSessionState,
+  PRE_IDENTITY_QUIZ_ID,
   sessionStateSchema,
 } from "./state";
 
@@ -18,11 +19,12 @@ const NOW = 1_785_000_000_000;
 
 describe("initialSessionState", () => {
   it("starts a session in the lobby at version 1", () => {
-    const state = initialSessionState(NOW);
+    const state = initialSessionState(NOW, quiz.id);
 
     expect(state).toEqual({
       version: 1,
       phase: "lobby",
+      quizId: quiz.id,
       currentQuestionId: null,
       startedAt: NOW,
       updatedAt: NOW,
@@ -35,9 +37,9 @@ describe("initialSessionState", () => {
   });
 
   it("produces a document that satisfies its own schema", () => {
-    expect(sessionStateSchema.safeParse(initialSessionState(NOW)).success).toBe(
-      true,
-    );
+    expect(
+      sessionStateSchema.safeParse(initialSessionState(NOW, quiz.id)).success,
+    ).toBe(true);
   });
 
   /**
@@ -65,7 +67,7 @@ describe("initialSessionState", () => {
   });
 
   it("refuses a negative or fractional count", () => {
-    const base = initialSessionState(NOW);
+    const base = initialSessionState(NOW, quiz.id);
     expect(
       sessionStateSchema.safeParse({ ...base, playerCount: -1 }).success,
     ).toBe(false);
@@ -75,26 +77,139 @@ describe("initialSessionState", () => {
   });
 
   it("does not open the first question — FR-002 keeps a gathering beat", () => {
-    expect(initialSessionState(NOW).currentQuestionId).toBeNull();
+    expect(initialSessionState(NOW, quiz.id).currentQuestionId).toBeNull();
+  });
+});
+
+/**
+ * The session's quiz identity (multiple-quizzes).
+ *
+ * Two halves that must not be confused: the field must *default* so a document written
+ * before it existed still parses, and it must *not* default to a real quiz, because a
+ * document that never chose a quiz asserting one is the silent mis-scoring this change
+ * exists to prevent.
+ */
+describe("quizId", () => {
+  const beforeQuizIdentity = {
+    version: 4,
+    phase: "question-open" as const,
+    currentQuestionId: quiz.questions[0]!.id,
+    startedAt: NOW,
+    updatedAt: NOW,
+  };
+
+  /**
+   * THE MID-DEPLOY TEST, and it asserts the resulting **value** rather than only that
+   * parsing succeeded — the two are different facts and only the first one is the
+   * decision (`lessons.md`).
+   */
+  it("parses a document written before quizId existed, defaulting it to the sentinel", () => {
+    const result = sessionStateSchema.safeParse(beforeQuizIdentity);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.quizId).toBe(PRE_IDENTITY_QUIZ_ID);
+  });
+
+  it("never defaults to a real quiz, so an old document cannot claim an identity", () => {
+    const result = sessionStateSchema.safeParse(beforeQuizIdentity);
+
+    expect(quizzes.map((registered) => registered.id)).not.toContain(
+      result.data?.quizId,
+    );
+    // Unforgeable rather than merely unlikely: no committed quiz id can carry an
+    // underscore, so nothing an author writes can ever collide with the sentinel.
+    expect(getQuizById(PRE_IDENTITY_QUIZ_ID)).toBeUndefined();
+  });
+
+  it("accepts a session naming a quiz that is in the registry", () => {
+    expect(
+      parseSessionState({ ...beforeQuizIdentity, quizId: quiz.id }).ok,
+    ).toBe(true);
+  });
+
+  it("rejects a session naming a quiz that is not in the registry", () => {
+    const result = parseSessionState({
+      ...beforeQuizIdentity,
+      quizId: "nie-ma-takiego-quizu",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.problems.join(" ")).toContain("nie-ma-takiego-quizu");
+    }
+  });
+
+  /**
+   * The clause that makes the registry-wide `getQuestionById` safe.
+   *
+   * A question id is globally unique, so a stored one always resolves *somewhere* —
+   * which means the `currentQuestionId` clause alone cannot catch a session pointing
+   * into a quiz it is not running. The fixture is built from a second quiz's question
+   * precisely so it reaches this clause and not that one.
+   */
+  it("rejects an open question belonging to a different quiz than the session runs", () => {
+    const otherQuiz = quizzes.find((candidate) => candidate.id !== quiz.id);
+    if (otherQuiz === undefined) {
+      // One quiz committed: there is no second quiz to borrow a question from, so the
+      // clause has nothing to be pointed at. Said out loud rather than skipped
+      // silently — a vacuous pass here would read as coverage.
+      expect(quizzes).toHaveLength(1);
+      return;
+    }
+
+    const result = parseSessionState({
+      ...beforeQuizIdentity,
+      quizId: quiz.id,
+      currentQuestionId: otherQuiz.questions[0]!.id,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.problems.join(" ")).toContain("innego quizu");
+    }
   });
 });
 
 describe("nextQuestionId", () => {
-  it("opens the first question from the lobby", () => {
-    expect(nextQuestionId(null)).toBe(quiz.questions[0]!.id);
+  it("opens the first question of the session's own quiz from the lobby", () => {
+    expect(nextQuestionId(quiz.id, null)).toEqual({
+      outcome: "next",
+      questionId: quiz.questions[0]!.id,
+    });
   });
 
   it("walks the definition's order", () => {
-    expect(nextQuestionId(quiz.questions[0]!.id)).toBe(quiz.questions[1]!.id);
+    expect(nextQuestionId(quiz.id, quiz.questions[0]!.id)).toEqual({
+      outcome: "next",
+      questionId: quiz.questions[1]!.id,
+    });
   });
 
-  it("returns null past the last question so advance is a no-op, not an error", () => {
+  it("reports end-of-quiz past the last question, so advance is a no-op not an error", () => {
     const last = quiz.questions[quiz.questions.length - 1]!.id;
-    expect(nextQuestionId(last)).toBeNull();
+    expect(nextQuestionId(quiz.id, last)).toEqual({ outcome: "end-of-quiz" });
   });
 
-  it("returns null for a question id that is not in the definition", () => {
-    expect(nextQuestionId("nie-ma-takiego-pytania")).toBeNull();
+  /**
+   * The split this function exists for (multiple-quizzes).
+   *
+   * Both of these used to return `null` — the same value "past the last question"
+   * returns — so `advance.ts` turned a session that disagrees with the registry into
+   * the identical silent 200 as a host tapping once too often. Asserting the *outcome*
+   * rather than falsiness is what makes the two distinguishable in the first place.
+   */
+  it("reports a question that belongs to another quiz as unresolved, not as the end", () => {
+    const result = nextQuestionId(quiz.id, "nie-ma-takiego-pytania");
+
+    expect(result.outcome).toBe("unresolved");
+    expect(result).not.toEqual({ outcome: "end-of-quiz" });
+  });
+
+  it("reports a quiz that is not in the registry as unresolved", () => {
+    const result = nextQuestionId("nie-ma-takiego-quizu", null);
+
+    expect(result.outcome).toBe("unresolved");
+    expect(result).not.toEqual({ outcome: "end-of-quiz" });
   });
 });
 
@@ -102,6 +217,7 @@ describe("parseSessionState", () => {
   const openState = {
     version: 2,
     phase: "question-open" as const,
+    quizId: quiz.id,
     currentQuestionId: quiz.questions[0]!.id,
     startedAt: NOW,
     updatedAt: NOW + 1000,
@@ -167,6 +283,7 @@ describe("endedSessionState", () => {
   const revealed = {
     version: 7,
     phase: "question-revealed" as const,
+    quizId: quiz.id,
     currentQuestionId: quiz.questions[0]!.id,
     startedAt: NOW,
     updatedAt: NOW + 5_000,
@@ -213,7 +330,7 @@ describe("endedSessionState", () => {
   });
 
   it("can end a session that never left the lobby", () => {
-    const lobby = initialSessionState(NOW);
+    const lobby = initialSessionState(NOW, quiz.id);
     const ended = endedSessionState(lobby, NOW + 100);
 
     expect(ended.phase).toBe("ended");
@@ -239,6 +356,7 @@ describe("the ended phase invariant", () => {
     // question", `ended` would have fallen through and demanded one.
     const result = parseSessionState({
       ...ended,
+      quizId: quiz.id,
       currentQuestionId: quiz.questions[0]!.id,
     });
 
@@ -277,6 +395,7 @@ describe("the standings phase invariant", () => {
   const standings = {
     version: 6,
     phase: "standings" as const,
+    quizId: quiz.id,
     currentQuestionId: quiz.questions[0]!.id,
     startedAt: NOW,
     updatedAt: NOW + 7_000,
@@ -309,6 +428,7 @@ describe("revealedOptionIds", () => {
   const open = {
     version: 3,
     phase: "question-open" as const,
+    quizId: quiz.id,
     currentQuestionId: quiz.questions[1]!.id,
     startedAt: NOW,
     updatedAt: NOW + 1_000,
@@ -382,7 +502,7 @@ describe("revealedOptionIds", () => {
   );
 
   it("is null on every constructor that is not a reveal (option ids)", () => {
-    expect(initialSessionState(NOW).revealedOptionIds).toBeNull();
+    expect(initialSessionState(NOW, quiz.id).revealedOptionIds).toBeNull();
 
     const revealed = {
       ...open,
@@ -409,6 +529,7 @@ describe("revealedDistribution", () => {
   const open = {
     version: 3,
     phase: "question-open" as const,
+    quizId: quiz.id,
     currentQuestionId: quiz.questions[1]!.id,
     startedAt: NOW,
     updatedAt: NOW + 1_000,
@@ -496,7 +617,7 @@ describe("revealedDistribution", () => {
   });
 
   it("is null on every constructor that is not a reveal", () => {
-    expect(initialSessionState(NOW).revealedDistribution).toBeNull();
+    expect(initialSessionState(NOW, quiz.id).revealedDistribution).toBeNull();
 
     const revealed = {
       ...open,
@@ -522,6 +643,7 @@ describe("revealedAnswerText", () => {
   const open = {
     version: 3,
     phase: "question-open" as const,
+    quizId: quiz.id,
     currentQuestionId: quiz.questions[1]!.id,
     startedAt: NOW,
     updatedAt: NOW + 1_000,
@@ -587,7 +709,7 @@ describe("revealedAnswerText", () => {
   });
 
   it("is null on every constructor that is not a reveal", () => {
-    expect(initialSessionState(NOW).revealedAnswerText).toBeNull();
+    expect(initialSessionState(NOW, quiz.id).revealedAnswerText).toBeNull();
 
     const revealed = {
       ...open,
@@ -612,6 +734,7 @@ describe("standings", () => {
   const open = {
     version: 3,
     phase: "question-open" as const,
+    quizId: quiz.id,
     currentQuestionId: quiz.questions[1]!.id,
     startedAt: NOW,
     updatedAt: NOW + 1_000,
@@ -763,7 +886,7 @@ describe("standings", () => {
   });
 
   it("is null in the lobby, which has nothing to rank", () => {
-    expect(initialSessionState(NOW).standings).toBeNull();
+    expect(initialSessionState(NOW, quiz.id).standings).toBeNull();
   });
 
   /**

@@ -29,13 +29,33 @@ export const POST: APIRoute = async ({ request }) => {
     // must not share the lobby's transition.
     if (current.phase === "ended") return null;
 
-    const next = nextQuestionId(current.currentQuestionId);
-    if (next === null) return null;
+    const next = nextQuestionId(current.quizId, current.currentQuestionId);
+
+    /**
+     * The session document and the quiz registry disagree — the session names a quiz
+     * that is gone, or an open question belonging to another quiz. The `quizId` clause
+     * in `sessionStateSchema` makes this unreachable through a parsed document, so
+     * reaching it means that guard has been weakened.
+     *
+     * Still a no-op on stage, because an error here would read as a fault in front of
+     * the room and the host's way out is the same either way (`bun run quiz:reset`).
+     * What changes is that it is no longer *silent*: the line below is the difference
+     * between a host who taps twice and moves on, and an operator who can see why.
+     */
+    if (next.outcome === "unresolved") {
+      console.error("Session advance unresolved:", next.reason);
+      return null;
+    }
+
+    if (next.outcome === "end-of-quiz") return null;
 
     return {
       version: current.version + 1,
       phase: "question-open",
-      currentQuestionId: next,
+      // Copied unchanged, like every other constructor — advancing moves within a quiz,
+      // never between quizzes. See the field's note in `state.ts`.
+      quizId: current.quizId,
+      currentQuestionId: next.questionId,
       startedAt: current.startedAt,
       updatedAt: now,
       // Carried, then overwritten with a freshly-read count by `applyHostAction` —

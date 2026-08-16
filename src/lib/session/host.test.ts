@@ -31,6 +31,7 @@ const COUNT = 3;
 const lobby = {
   version: 1,
   phase: "lobby" as const,
+  quizId: quiz.id,
   currentQuestionId: null,
   startedAt: NOW,
   updatedAt: NOW,
@@ -45,6 +46,7 @@ function opened(version: number, playerCount = COUNT) {
   return {
     version,
     phase: "question-open" as const,
+    quizId: quiz.id,
     currentQuestionId: quiz.questions[0]!.id,
     startedAt: NOW,
     updatedAt: NOW + 100,

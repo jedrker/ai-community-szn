@@ -1021,10 +1021,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         channelName: SESSION_CHANNEL,
         snapshotEvent: SNAPSHOT_EVENT,
         secretHeader: HOST_SECRET_HEADER,
+        quizId: quiz.id,
         questions: quiz.questions,
       }}
     >
-      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, questions };
+      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, questions };
     </script>
 
     <script>
@@ -1064,6 +1065,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         channelName: string;
         snapshotEvent: string;
         secretHeader: string;
+        /**
+         * The quiz this panel rendered (multiple-quizzes), handed down through
+         * `define:vars` — the sanctioned server-to-client hand-off. A `<script>` block
+         * may not value-import `src/quiz/` or read `import.meta.env`, and
+         * `boundary.test.ts` fails the suite if one does.
+         */
+        quizId: string;
         questions: PublicQuestion[];
       };
 
@@ -3064,6 +3072,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * 401, the committed-but-unbroadcast 502 and the `applied: false` note to be handled,
        * and the two would drift on the one action that cannot be undone.
        */
+      /** The `start` request's body: which quiz this panel is asking the store to run. */
+      function startBody(): FormData {
+        const body = new FormData();
+        body.set("quizId", config.quizId);
+        return body;
+      }
+
       async function fire(action: string, body?: FormData): Promise<void> {
         allButtons().forEach((button) => {
           button.disabled = true;
@@ -3220,7 +3235,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           // meant a second time — the arming was a statement about a state the failed
           // attempt has already outlived. `end`'s handler, for the same reason.
           disarmReveal();
-          void fire(action);
+
+          /**
+           * `start` names the quiz this panel rendered (multiple-quizzes).
+           *
+           * A body rather than a query string, because `extractStartFields` reads the
+           * form — and it is built here rather than inside `fire` so that function stays
+           * one send path with no per-action knowledge in it. `end` builds its
+           * confirmation body the same way, a few lines below.
+           */
+          const body = action === "start" ? startBody() : undefined;
+          void fire(action, body);
         });
       });
 

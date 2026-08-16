@@ -43,6 +43,46 @@ vi.mock("../../../../lib/session/realtime", () => ({
   SNAPSHOT_EVENT: "snapshot",
 }));
 
+/**
+ * A second quiz, injected into the registry lookup alone (multiple-quizzes).
+ *
+ * `start`'s "you asked for quiz B while quiz A is running" refusal names the running
+ * quiz's **title**, and that copy is unreachable while only one quiz is committed:
+ * requested and running would both have to resolve in the registry *and* differ. Rather
+ * than leave the string a host reads on stage untested, the lookup gets a double.
+ *
+ * Deliberately narrow — `getQuizById` only, with everything else the real module. It
+ * adds a resolvable id; it does not change `quizzes`, so nothing that enumerates the
+ * registry (the schema's clauses, `test-support`'s fixtures) sees a quiz that is not
+ * committed.
+ */
+const { OTHER_QUIZ } = vi.hoisted(() => ({
+  OTHER_QUIZ: {
+    id: "fixture-inny-quiz",
+    title: "Zupełnie inny quiz",
+    code: "0002",
+    questions: [
+      {
+        kind: "word-cloud" as const,
+        id: "fixture-inny-otwarcie",
+        prompt: "Napisz słowo",
+        points: null,
+      },
+    ],
+  },
+}));
+
+vi.mock("../../../../quiz/index", async () => {
+  const actual = await vi.importActual<typeof import("../../../../quiz/index")>(
+    "../../../../quiz/index",
+  );
+  return {
+    ...actual,
+    getQuizById: (id: string) =>
+      id === OTHER_QUIZ.id ? OTHER_QUIZ : actual.getQuizById(id),
+  };
+});
+
 const { POST: start } = await import("./start");
 const { POST: advance } = await import("./advance");
 const { POST: reveal, formatCorrectValue } = await import("./reveal");
@@ -50,7 +90,8 @@ const { POST: showStandings } = await import("./standings");
 const { POST: end } = await import("./end");
 const { POST: purge } = await import("./purge");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
-const { initialSessionState } = await import("../../../../lib/session/state");
+const { initialSessionState, PRE_IDENTITY_QUIZ_ID } =
+  await import("../../../../lib/session/state");
 const { quizzes } = await import("../../../../quiz/index");
 // One quiz to run a session against — which one is not what anything here asserts.
 const quiz = quizzes[0]!;
@@ -87,6 +128,7 @@ const notLastQuestion = quiz.questions[0]!;
 const lobby = {
   version: 1,
   phase: "lobby" as const,
+  quizId: quiz.id,
   currentQuestionId: null,
   startedAt: NOW,
   updatedAt: NOW,
@@ -95,6 +137,7 @@ const lobby = {
 const revealed = {
   version: 4,
   phase: "question-revealed" as const,
+  quizId: quiz.id,
   currentQuestionId: quiz.questions[0]!.id,
   startedAt: NOW,
   updatedAt: NOW + 900,
@@ -108,6 +151,7 @@ const revealed = {
 const standings = {
   version: 5,
   phase: "standings" as const,
+  quizId: quiz.id,
   currentQuestionId: quiz.questions[0]!.id,
   startedAt: NOW,
   updatedAt: NOW + 1_200,
@@ -127,7 +171,18 @@ function call(
   {
     secret = SECRET,
     version,
-  }: { secret?: string | null; version?: number | string } = {},
+    quizId,
+  }: {
+    secret?: string | null;
+    version?: number | string;
+    /**
+     * Which quiz `start` is being asked to run (multiple-quizzes). Only `start` reads
+     * it, and it is opt-in for the reason `version` is: omitting it entirely is how the
+     * "nothing said which quiz" case is expressed, and the other verbs keep sending the
+     * request shape they always did.
+     */
+    quizId?: string;
+  } = {},
 ): Promise<Response> | Response {
   const headers: Record<string, string> = { Origin: "https://example.test" };
   if (secret !== null) headers[HOST_SECRET_HEADER] = secret;
@@ -136,9 +191,10 @@ function call(
   // missing-confirmation case is expressed, and it also keeps the three flow verbs
   // exercising exactly the request shape they see today.
   let body: FormData | undefined;
-  if (version !== undefined) {
+  if (version !== undefined || quizId !== undefined) {
     body = new FormData();
-    body.set("version", String(version));
+    if (version !== undefined) body.set("version", String(version));
+    if (quizId !== undefined) body.set("quizId", quizId);
   }
 
   return handler({
@@ -199,11 +255,16 @@ describe("the host secret guards every route", () => {
 });
 
 describe("start", () => {
+  /** Every test below names the quiz, because the route refuses a request that does not. */
+  const startCall = (
+    options: { secret?: string | null; quizId?: string } = {},
+  ) => call(start, { quizId: quiz.id, ...options });
+
   it("reports a created session as applied", async () => {
     createSessionMock.mockResolvedValue({ outcome: "created", state: lobby });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
-    const response = await call(start);
+    const response = await startCall();
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -217,7 +278,7 @@ describe("start", () => {
     createSessionMock.mockResolvedValue({ outcome: "exists", state: revealed });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
-    const response = await call(start);
+    const response = await startCall();
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -231,7 +292,7 @@ describe("start", () => {
     createSessionMock.mockResolvedValue({ outcome: "exists", state: revealed });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
-    await call(start);
+    await startCall();
 
     expect(publishSnapshotMock).toHaveBeenCalledWith(revealed);
   });
@@ -243,7 +304,7 @@ describe("start", () => {
       reason: "down",
     });
 
-    const response = await call(start);
+    const response = await startCall();
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toMatchObject({ applied: true });
@@ -255,8 +316,119 @@ describe("start", () => {
       reason: "no url",
     });
 
-    const response = await call(start);
+    const response = await startCall();
     expect(response.status).toBe(503);
+  });
+
+  it("passes the requested quiz through to the store", async () => {
+    createSessionMock.mockResolvedValue({ outcome: "created", state: lobby });
+
+    await startCall();
+
+    // The identity is written at creation and never again, so this argument is the
+    // only moment the choice is made. See `createSession`'s note.
+    expect(createSessionMock).toHaveBeenCalledWith(expect.any(Number), quiz.id);
+  });
+
+  /**
+   * **Which quiz to run is refused, never guessed** (multiple-quizzes).
+   *
+   * The absent case gets its own test rather than riding on the unknown one, because
+   * they arrive through different code and only one of them is what a client that
+   * simply forgot the field would send. Both assert the *outcome* — a 400, and no store
+   * call at all — rather than only that the request was not a success
+   * (`lessons.md`, "absent untrusted input must fail toward the safe end").
+   */
+  it("refuses a request that names no quiz, without touching the store", async () => {
+    const response = await call(start);
+
+    expect(response.status).toBe(400);
+    expect(createSessionMock).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("który quiz"),
+    });
+  });
+
+  it("refuses an empty quiz id the same way, rather than reading it as a value", async () => {
+    const response = await startCall({ quizId: "" });
+
+    expect(response.status).toBe(400);
+    expect(createSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a quiz id that is not in the registry", async () => {
+    const response = await startCall({ quizId: "nie-ma-takiego-quizu" });
+
+    expect(response.status).toBe(400);
+    expect(createSessionMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * **The pair that is the whole point of this phase.** Idempotence keeps its meaning
+   * for the same quiz — a double-tapped start is still a harmless replay — and loses it
+   * for a different one, where a 200 would tell the host they had started quiz B while
+   * the room sat in quiz A.
+   */
+  it("keeps the idempotent 200 when the running session is the same quiz", async () => {
+    createSessionMock.mockResolvedValue({ outcome: "exists", state: revealed });
+    publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
+
+    const response = await startCall({ quizId: revealed.quizId });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      note: "already-started",
+    });
+  });
+
+  it("refuses a different quiz with 409, naming the running quiz's title", async () => {
+    createSessionMock.mockResolvedValue({
+      outcome: "exists",
+      state: { ...revealed, quizId: OTHER_QUIZ.id },
+    });
+
+    const response = await startCall({ quizId: quiz.id });
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.applied).toBe(false);
+    // The title, not the slug — the host is looking at a panel and has to recognise
+    // which session is in the way.
+    expect(body.error).toContain(OTHER_QUIZ.title);
+    // And the way out, which is the runbook's reset rather than "try again".
+    expect(body.error).toContain("quiz:reset");
+  });
+
+  it("does not broadcast the running session when it refuses a different quiz", async () => {
+    createSessionMock.mockResolvedValue({
+      outcome: "exists",
+      state: { ...revealed, quizId: OTHER_QUIZ.id },
+    });
+
+    await startCall({ quizId: quiz.id });
+
+    // Not a re-broadcast the host asked for — echoing the running state to 150 devices
+    // would be the wrong answer to a request that is not going to happen.
+    expect(publishSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A session started before quiz identity existed carries the sentinel, which resolves
+   * to no quiz and therefore has no title to name. It still refuses — that is the
+   * conservative end — and it says why rather than printing the sentinel at a host.
+   */
+  it("refuses a pre-identity session without printing the sentinel", async () => {
+    createSessionMock.mockResolvedValue({
+      outcome: "exists",
+      state: { ...revealed, quizId: PRE_IDENTITY_QUIZ_ID },
+    });
+
+    const response = await startCall({ quizId: quiz.id });
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).not.toContain(PRE_IDENTITY_QUIZ_ID);
+    expect(body.error).toContain("przed wprowadzeniem identyfikatorów");
   });
 });
 
@@ -1018,6 +1190,9 @@ describe("the reveal payload (roadmap S-03)", () => {
   const open = (questionId: string) => ({
     version: 3,
     phase: "question-open" as const,
+    // `advance` walks *this* quiz's running order, so a fixture without it resolves to
+    // no quiz and the transition correctly declines to move.
+    quizId: quiz.id,
     currentQuestionId: questionId,
     startedAt: NOW,
     updatedAt: NOW + 500,
@@ -1124,11 +1299,11 @@ describe("the reveal payload (roadmap S-03)", () => {
   it("start publishes a lobby with the distribution null", async () => {
     createSessionMock.mockResolvedValue({
       outcome: "created",
-      state: initialSessionState(NOW),
+      state: initialSessionState(NOW, quiz.id),
     });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
-    await call(start);
+    await call(start, { quizId: quiz.id });
 
     const [published] = publishSnapshotMock.mock.calls[0]!;
     expect(published.revealedDistribution).toBeNull();
@@ -1255,11 +1430,11 @@ describe("the reveal payload (roadmap S-03)", () => {
     it("start publishes a lobby with it null", async () => {
       createSessionMock.mockResolvedValue({
         outcome: "created",
-        state: initialSessionState(NOW),
+        state: initialSessionState(NOW, quiz.id),
       });
       publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
-      await call(start);
+      await call(start, { quizId: quiz.id });
 
       const [published] = publishSnapshotMock.mock.calls[0]!;
       expect(published.revealedAnswerText).toBeNull();

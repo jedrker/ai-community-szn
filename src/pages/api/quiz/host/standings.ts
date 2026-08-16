@@ -84,6 +84,9 @@ export const POST: APIRoute = async ({ request }) => {
     return {
       version: current.version + 1,
       phase: "standings",
+      // Copied unchanged — session identity, not a transition payload. See the field's
+      // note in `state.ts`.
+      quizId: current.quizId,
       // Carried, and load-bearing rather than incidental: it is what lets `advance` open
       // the *next* question from here instead of reopening question 1. See the phase's
       // note in `state.ts`.

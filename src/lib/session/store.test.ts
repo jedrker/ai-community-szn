@@ -67,6 +67,7 @@ const NOW = 1_785_000_000_000;
 const lobby = {
   version: 1,
   phase: "lobby" as const,
+  quizId: quiz.id,
   currentQuestionId: null,
   startedAt: NOW,
   updatedAt: NOW,
@@ -80,6 +81,7 @@ const lobby = {
 const firstQuestionOpen = {
   version: 2,
   phase: "question-open" as const,
+  quizId: quiz.id,
   /**
    * **The one id here that has to be real**, and taken by position rather than named:
    * `parseSessionState` refuses a `currentQuestionId` that resolves to no question, so a
@@ -135,7 +137,7 @@ describe("configuration", () => {
     await expect(readSession()).resolves.toMatchObject({
       outcome: "unconfigured",
     });
-    await expect(createSession(NOW)).resolves.toMatchObject({
+    await expect(createSession(NOW, quiz.id)).resolves.toMatchObject({
       outcome: "unconfigured",
     });
     await expect(writeSession(1, firstQuestionOpen)).resolves.toMatchObject({
@@ -226,21 +228,21 @@ describe("createSession", () => {
   it("creates a lobby session at version 1", async () => {
     redisMock.eval.mockResolvedValue([1, JSON.stringify(lobby)]);
 
-    const result = await createSession(NOW);
+    const result = await createSession(NOW, quiz.id);
     expect(result).toEqual({ outcome: "created", state: lobby });
   });
 
   it("returns the existing session rather than resetting it", async () => {
     redisMock.eval.mockResolvedValue([0, JSON.stringify(firstQuestionOpen)]);
 
-    const result = await createSession(NOW);
+    const result = await createSession(NOW, quiz.id);
     expect(result).toEqual({ outcome: "exists", state: firstQuestionOpen });
   });
 
   it("passes the TTL so a created session expires on its own", async () => {
     redisMock.eval.mockResolvedValue([1, JSON.stringify(lobby)]);
 
-    await createSession(NOW);
+    await createSession(NOW, quiz.id);
     const [, keys, args] = redisMock.eval.mock.calls[0]!;
     expect(keys).toEqual([SESSION_KEY]);
     expect(args[1]).toBe(String(SESSION_TTL_SECONDS));
@@ -249,7 +251,7 @@ describe("createSession", () => {
   it("reports a transport failure without throwing", async () => {
     redisMock.eval.mockRejectedValue(new Error("upstash unreachable"));
 
-    await expect(createSession(NOW)).resolves.toMatchObject({
+    await expect(createSession(NOW, quiz.id)).resolves.toMatchObject({
       outcome: "failed",
     });
   });
@@ -347,6 +349,7 @@ describe("endSession", () => {
   const ended = {
     version: 2,
     phase: "ended" as const,
+    quizId: quiz.id,
     currentQuestionId: null,
     startedAt: NOW,
     updatedAt: NOW + 5_000,

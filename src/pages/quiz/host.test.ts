@@ -895,7 +895,10 @@ describe("the reveal cannot cut the room off by accident", () => {
    * first tap closes the question, which is the state this guard exists to make deliberate.
    */
   it("returns after arming rather than firing on the first tap", () => {
-    expectOrder(handler, "revealArmed = true", "void fire(action)");
+    // `void fire(action` rather than the whole call: the send gained a body argument for
+    // `start`, and pinning the arity would make this assertion about the code's shape
+    // instead of about the ordering it exists to guarantee.
+    expectOrder(handler, "revealArmed = true", "void fire(action");
   });
 
   /**
@@ -962,7 +965,7 @@ describe("the reveal cannot cut the room off by accident", () => {
    * the state the host confirmed against, so it has to be meant a second time.
    */
   it("disarms ahead of the request", () => {
-    expectOrder(handler, "disarmReveal();", "void fire(action)");
+    expectOrder(handler, "disarmReveal();", "void fire(action");
   });
 
   /**
