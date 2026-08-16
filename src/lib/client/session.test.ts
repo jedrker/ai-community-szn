@@ -566,17 +566,94 @@ describe("createFallbackPoll", () => {
         expect(refresh).toHaveBeenCalledTimes(1);
       });
 
-      it("stop during an open request is resumable, unlike dispose", async () => {
-        // The other half of the distinction: `stop` is what a recovered channel and a
-        // bfcache suspension use, so a later `arm` must work.
+      it("stop during an open request is undone by the finally, not resumed by the arm", async () => {
+        /**
+         * **This test used to assert something it could not fail on** (rollout phase 2,
+         * test-plan §2 Risk #2). It read *"stop during an open request is resumable, unlike
+         * dispose"* and asserted only `refresh === 2` after a `stop`, a settle and an
+         * explicit `arm` — a count that holds identically whether `stop` is
+         * resumable-by-arm or simply undone by the in-flight tick's `finally`. The two
+         * hypotheses were indistinguishable, and the second is the true one.
+         *
+         * The assertion that separates them is `isArmed()` **between** the settle and the
+         * arm, so it is made first and the explicit `arm` below is kept only to show it is
+         * the no-op it actually is.
+         *
+         * **This records today's behaviour, not the intent.** `stop` is documented as
+         * clearing the timer; the loop being live again afterwards is the same defect class
+         * as the one `dispose`'s terminal flag exists for
+         * (`connection-limit-degradation/reviews/impl-review.md`, F3), surviving in the one
+         * sibling that was not given a flag. **If this test fails, the defect was fixed:
+         * invert the expectation and delete this note — do not restore the behaviour.**
+         */
         const { poll, refresh, settleInFlight } = harness({ deferred: true });
 
         poll.arm();
         await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        expect(poll.isArmed()).toBe(false); // in flight, so no timer is pending
+
         poll.stop();
         await settleInFlight();
 
+        // The finally re-armed past the cancel. `shouldPoll` is `() => true` and the
+        // document is visible, so `arm` had nothing to decline on.
+        expect(poll.isArmed()).toBe(true);
+
+        // A no-op — the loop is already armed. Kept so the resumability the name used to
+        // claim is visibly not what produces the second fetch.
         poll.arm();
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        expect(refresh).toHaveBeenCalledTimes(2);
+      });
+
+      it("stop is resumable once the request it raced has settled", async () => {
+        /**
+         * The distinction the test above used to claim, asserted where it actually holds:
+         * with nothing in flight, `stop` clears the timer and leaves the loop restartable —
+         * which is what a recovered channel and a `pageshow` need, and the whole reason
+         * `dispose` is a separate verb.
+         */
+        const { poll, refresh } = harness();
+
+        poll.arm();
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        expect(refresh).toHaveBeenCalledTimes(1);
+
+        poll.stop();
+        expect(poll.isArmed()).toBe(false);
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS * 5);
+        expect(refresh).toHaveBeenCalledTimes(1);
+
+        poll.arm();
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        expect(refresh).toHaveBeenCalledTimes(2);
+      });
+
+      it("pause during an open request is undone by the finally", async () => {
+        /**
+         * **A recorded gap, pinned rather than fixed** (rollout phase 2; test-plan's
+         * 2026-08-16 decision that this rollout measures rather than repairs).
+         *
+         * `pause` is `() => clearTimer()` and sets no flag, so a tick already in flight
+         * re-arms from its own `finally` — the same shape as `stop` above, in the one
+         * sibling of the three whose docstring promises the narrowest thing. `pagehide`
+         * is its caller, which is what bounds the damage in practice: a real teardown kills
+         * the page, and a bfcache freeze stops the timer anyway. It is still a cancel that
+         * does not cancel.
+         *
+         * **If this test fails, the defect was fixed: invert the expectation and delete
+         * this note — do not restore the behaviour.**
+         */
+        const { poll, refresh, settleInFlight } = harness({ deferred: true });
+
+        poll.arm();
+        await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
+        expect(refresh).toHaveBeenCalledTimes(1);
+
+        poll.pause();
+        await settleInFlight();
+
+        expect(poll.isArmed()).toBe(true);
         await vi.advanceTimersByTimeAsync(ONE_TICK_MS);
         expect(refresh).toHaveBeenCalledTimes(2);
       });

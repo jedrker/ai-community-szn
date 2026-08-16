@@ -527,27 +527,27 @@ Not applicable — no data, schema, key or wire-format change. `SessionState` is
 
 #### Automated
 
-- [x] 1.1 Unit and integration suite passes: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 Linting passes: `bun run lint`
-- [x] 1.4 `boundary.test.ts` still passes — the new export adds no forbidden import
-- [x] 1.5 `bun run e2e` passes, after confirming no live session exists (`e2e/E2E-RULES.md`)
+- [x] 1.1 Unit and integration suite passes: `bun run test` — b613981
+- [x] 1.2 Type checking passes: `bun run type-check` — b613981
+- [x] 1.3 Linting passes: `bun run lint` — b613981
+- [x] 1.4 `boundary.test.ts` still passes — the new export adds no forbidden import — b613981
+- [x] 1.5 `bun run e2e` passes, after confirming no live session exists (`e2e/E2E-RULES.md`) — b613981
 
 #### Manual
 
-- [x] 1.6 The extraction is a move, not a rewrite — read against `session.ts:525-534` at `354251f`
-- [x] 1.7 `/quiz` follows a host transition on two devices, one backgrounded and restored
+- [x] 1.6 The extraction is a move, not a rewrite — read against `session.ts:525-534` at `354251f` — b613981
+- [x] 1.7 `/quiz` follows a host transition on two devices, one backgrounded and restored — b613981
 
 ### Phase 2: Loop Lifecycle Pins
 
 #### Automated
 
-- [ ] 2.1 Suite passes: `bun run test`
-- [ ] 2.2 Linting passes: `bun run lint`
+- [x] 2.1 Suite passes: `bun run test`
+- [x] 2.2 Linting passes: `bun run lint`
 
 #### Manual
 
-- [ ] 2.3 The repaired `:567` test distinguishes the two hypotheses
+- [x] 2.3 The repaired `:567` test distinguishes the two hypotheses
 
 ### Phase 3: The Reveal-Race Refusal
 
