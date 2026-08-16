@@ -658,18 +658,18 @@ None. No stored data, no schema, no wire format. Reverting is deleting the modul
 
 #### Automated
 
-- [x] 5.1 Unit tests pass: `bun run test`
-- [x] 5.2 `celebrate.test.ts` covers fire-once, reduced-motion, and an absorbed import failure
-- [x] 5.3 `index.test.ts` passes with no assertion changed
-- [x] 5.4 Type checking passes: `bun run type-check`
-- [x] 5.5 Linting passes: `bun run lint`
-- [x] 5.6 Boundary gate sees no new violation
-- [x] 5.7 The confetti import is dynamic, not static
-- [x] 5.8 Production build succeeds: `bun run build`
+- [x] 5.1 Unit tests pass: `bun run test` — 6e5987c
+- [x] 5.2 `celebrate.test.ts` covers fire-once, reduced-motion, and an absorbed import failure — 6e5987c
+- [x] 5.3 `index.test.ts` passes with no assertion changed — 6e5987c
+- [x] 5.4 Type checking passes: `bun run type-check` — 6e5987c
+- [x] 5.5 Linting passes: `bun run lint` — 6e5987c
+- [x] 5.6 Boundary gate sees no new violation — 6e5987c
+- [x] 5.7 The confetti import is dynamic, not static — 6e5987c
+- [x] 5.8 Production build succeeds: `bun run build` — 6e5987c
 
 #### Manual
 
-- [ ] 5.9 Confetti fires once on the phone's closing screen
+- [x] 5.9 Confetti fires once on the phone's closing screen — 8fe21a3
 - [ ] 5.10 It does not re-fire while the closing screen stays up
 - [ ] 5.11 With reduced motion enabled, no confetti and no chunk fetched
 - [ ] 5.12 With the network offline at the close, the closing screen still renders
