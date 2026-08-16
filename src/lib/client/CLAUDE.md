@@ -41,6 +41,24 @@ defect a green suite could not see), `toast.ts` followed it, and `controls.ts` i
 host panel's phase-to-verb decision plus `atLastQuestion` and `pollTargetFor`. The shape is the same
 each time: **pure named exports here, DOM writes left on the page.** See test-plan §6.5.
 
+**`createSnapshotReconciler` in `session.ts` is the fourth, and it generalises the rule past inline
+scripts.** It came out of a *closure*, not a page: `apply` — the version guard that is this client's
+only convergence primitive, and the rule the whole spine rests on — lived inside
+`createSessionClient`, whose only entry point is an Ably callback. So the same bind applied for a
+different reason: reaching it meant faking the SDK, and a module mock freezes a third-party API and
+keeps passing after a real upgrade breaks production. It had **no executing test at all** until
+rollout phase 2, and the archive had recorded that as knowingly accepted a slice earlier.
+
+Read the shape off `createFallbackPoll` beside it: **a stateful factory when the rule holds state**
+(`current`, the lifecycle latch), a plain exported predicate when it does not (`shouldFallbackPoll`,
+`classifyConnection`). `createSessionClient` constructs exactly one reconciler and reads through it
+everywhere — a second copy of the version comparison anywhere in this directory is the bug the
+extraction exists to make unrepresentable.
+
+**Delivery and adoption are different steps.** The poll loop's tests prove a request goes out; the
+reconciler's prove the snapshot it brings back is the one the device renders. A test that covers the
+first and reports the second is the mistake test-plan §2 Risk #3 now names explicitly.
+
 ## Motion — `motion.ts` owns every rule that makes an animation safe here
 
 The reduced-motion gate, the cancel-in-flight, and the signature that stops an unchanged thing

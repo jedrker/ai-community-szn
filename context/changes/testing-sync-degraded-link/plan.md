@@ -565,25 +565,25 @@ Not applicable — no data, schema, key or wire-format change. `SessionState` is
 
 #### Automated
 
-- [x] 4.1 Suite passes: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 `routes.test.ts` still passes unchanged — no mock leakage
+- [x] 4.1 Suite passes: `bun run test` — 571a98b
+- [x] 4.2 Type checking passes: `bun run type-check` — 571a98b
+- [x] 4.3 `routes.test.ts` still passes unchanged — no mock leakage — 571a98b
 
 #### Manual
 
-- [x] 4.4 The increment really lands in the gap — moving it earlier makes the drift disappear
+- [x] 4.4 The increment really lands in the gap — moving it earlier makes the drift disappear — 571a98b
 
 ### Phase 5: Verification and Documents
 
 #### Automated
 
-- [ ] 5.1 Full suite passes: `bun run test`
-- [ ] 5.2 Type checking passes: `bun run type-check`
-- [ ] 5.3 Linting and formatting pass: `bun run lint`, `bun run format`
+- [x] 5.1 Full suite passes: `bun run test`
+- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.3 Linting and formatting pass: `bun run lint`, `bun run format`
 
 #### Manual
 
-- [ ] 5.4 Every row of `verification.md` was observed, not reasoned about
-- [ ] 5.5 §6.2 no longer reads "TBD" and a third seam test could be written from it
-- [ ] 5.6 §2's Risk #3 row and §6.6 both record that clause 3 holds for `dispose` only
-- [ ] 5.7 No other sentence in CLAUDE.md's client section became false
+- [x] 5.4 Every row of `verification.md` was observed, not reasoned about
+- [x] 5.5 §6.2 no longer reads "TBD" and a third seam test could be written from it
+- [x] 5.6 §2's Risk #3 row and §6.6 both record that clause 3 holds for `dispose` only
+- [x] 5.7 No other sentence in CLAUDE.md's client section became false

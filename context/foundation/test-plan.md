@@ -43,11 +43,40 @@ research's job, see §1 principle #3).
 |---|---|---|---|---|
 | 1 | The host panel offers a flow verb the current phase refuses, or withholds the one it accepts — the host presses a dead button in front of a live room | High | High | interview Q3; hot-spot dir `src/pages/quiz/` (73 commits/30d); PRD FR-002, FR-003, FR-004, FR-006, FR-014; PRD Success Criteria (host does not fight the tool) |
 | 2 | A regression reaches a live session because the suite was green: the guard covering that area asserts source shape rather than behaviour, and cannot fail when the behaviour breaks | High | High | interview Q2; `context/foundation/lessons.md` (three entries: source-scanning guards, break-the-guard, prove-the-fixture); `context/archive/2026-08-14-per-question-timer/`; **measured 2026-08-16 in `context/changes/testing-host-control-rules/research.md` — of ~150 assertions in the project's highest-churn view, none is a property assertion**; two structural guards elsewhere passed with a detector regex that could never match (rollout phase 1, §6.6). *That measurement also claimed six assertions pass against deleted code; phase 1 tested each and none does — see §6.6, which is the more useful finding* |
-| 3 | A host transition reaches some phones and not others; the room desynchronises and nothing on stage indicates which devices are stuck | High | Medium | interview Q1; PRD Success Criteria guardrails (1-second reflection; no divergence in standings between devices); hot-spot dir `src/lib/client/` (65 commits/30d); `context/archive/2026-08-09-connection-limit-degradation/` |
-| 4 | An answer submitted before the reveal is lost from the tally, or counted twice, under room-scale concurrency | High | Medium | PRD US-02 acceptance criterion ("no answer submitted before a reveal is lost from the tally"); PRD Success Criteria guardrail (150 concurrent, no lost answers); hot-spot dirs `src/lib/session/` (144 commits/30d), `src/pages/api/` (90 commits/30d) |
+| 3 | A device whose transport drops keeps rendering a phase the host has left — it receives the newer snapshot and fails to adopt it, so the room desynchronises | High | Medium | interview Q1; PRD Success Criteria guardrails (1-second reflection; no divergence in standings between devices); hot-spot dir `src/lib/client/` (65 commits/30d); `context/archive/2026-08-09-connection-limit-degradation/` (which recorded the client's snapshot-application decision as knowingly uncovered); **amended 2026-08-16 — see the note below the table** |
+| 4 | An answer submitted just before the reveal is refused in a way the phone reports back as answered, or is missing from the distribution the room sees | High | Medium | PRD US-02 acceptance criterion ("no answer submitted before a reveal is lost from the tally"); PRD Success Criteria guardrail (150 concurrent, no lost answers); hot-spot dirs `src/lib/session/` (144 commits/30d), `src/pages/api/` (90 commits/30d); **measured 2026-08-16 in `context/changes/testing-sync-degraded-link/research.md` — double-counting is structurally prevented, and both surviving loss mechanisms are exercised by nothing in the repo** |
 | 5 | A submission that omits or malforms a field is scored favourably rather than refused, producing a silently wrong award on a public leaderboard | Medium | Medium | `context/foundation/lessons.md` ("Absent untrusted input must fail toward the safe end", lived in S-03); PRD FR-019; hot-spot dir `src/pages/api/` (90 commits/30d) |
 | 6 | One device registers enough players to flood the room and wreck the final reveal | Medium | Medium | PRD FR-018 (recorded as an explicitly lightweight, defeatable guard); PRD FR-007 Socratic challenge; `context/archive/2026-08-14-resilient-join/` |
 | 7 | Attendee display names or submitted answers outlive the session that collected them | High | Low | PRD Success Criteria retention guardrail and its four recorded deviations; `context/archive/2026-08-06-session-end-and-data-purge/`; `context/archive/2026-08-12-word-cloud-question/` (the tally key stopped being counters-only) |
+
+**Rows #3 and #4 were amended on 2026-08-16, after rollout phase 2's research falsified part of each.
+The positions they replace are kept here rather than deleted.**
+
+- **#4 used to read "lost from the tally, or counted twice."** Counted twice is not reachable: the
+  answer record and every counter move inside one atomic script, with the uniqueness lock above every
+  increment, so two increments for one player and question is not expressible. The half that survives
+  is loss, and it turned out to be *two* failures with different audiences — a refusal the phone
+  reports to the attendee as a recorded answer, and an answer that reaches the stored tally but not
+  the distribution the projector draws. Leaving the old wording in place would have sent the phase
+  hunting a defect that cannot exist while both real ones stayed uncovered.
+- **#3 used to end "and nothing on stage indicates which devices are stuck."** That clause is true and
+  is *not a test target*: attendees report nothing upward, so a stuck device is invisible to the host
+  except as a shortfall in answered-over-joined, which has several ordinary explanations. It is a
+  product absence belonging to the PRD and the runbook, and a test written against it would assert a
+  decision rather than catch a defect. The row now names the failure a test can actually reach — a
+  device that *receives* the newer snapshot and does not adopt it, which is a different mechanism from
+  the transport loss the row used to imply and the one with no executing coverage.
+- **Both risks keep their impact and likelihood.** The corrections change what fails, not how much it
+  costs or how often it is likely.
+
+**Row #3's third proof clause is met for one cancel out of three, and phase 2 closed anyway.** The
+response guidance below asks for "a cancel is not undone by a request already in flight". `dispose`
+holds it — it carries a terminal flag for exactly this reason. `stop` and `pause` do not: an
+in-flight tick's `finally` re-arms past either, which phase 2 **pinned rather than fixed**, per the
+decision recorded at the end of this section. So the phase is complete on what it set out to build,
+and this clause is not something a green suite should be read as certifying. The two pinned tests are
+named in §6.6, and both carry an inversion note so the day somebody repairs `pause` reads as a fix
+rather than as a broken test.
 
 Risk #7 is the one High-impact × Low-likelihood row kept in the map rather than deferred to
 alerting, because it already has a mechanism and a named gap: the key registry is enforced by a
@@ -66,11 +95,29 @@ alerting, and there is no test that would change the outcome).
 |---|---|---|---|---|---|
 | #1 | For every phase and last-question position, the panel offers **no** verb the route would refuse; and every verb the route accepts but the panel withholds appears in an explicit, named exception list. **A one-way implication plus a closed exception set — not an equality** | (a) "The routes refuse illegal transitions anyway, so the panel is cosmetic." The PRD's primary success criterion is the host not fighting the tool; the panel is the interaction, the refusal is the backstop. (b) "The panel's phase rules are one mechanism." They were two — the flow-verb table, and a separate inline rule governing the closing verb — *until rollout phase 1 folded `end` into the same decision; they are one mechanism now, and that is a property to preserve rather than an assumption to rely on* | Where the phase-to-verb decision is actually made, whether that decision is reachable from a test process at all, what determines the last-question variant, and the full list of places the panel deliberately offers *less* than the route | unit, over a pure decision function | Asserting panel/route **equality**, which fails on correct code — the panel withholds verbs the routes accept — three of them materially, each now named in `MATERIAL_WITHHOLDINGS`; re-asserting the table's source text; testing the renderer instead of the decision |
 | #2 | Each guard fails when the code it covers is broken, and passes when restored — demonstrated, not assumed | "The test is green, therefore the behaviour holds." A scan for an expression that exists today certifies whatever is there, defects included | Which existing tests execute code and which scan source text; which of the scans assert a property versus a current shape; which properties have no harness and why | unit, plus **conversion of any scan that must remain to the detector-plus-fixture pattern this project already uses in two of its structural guards** — a discipline alone cannot fix a guard that passes on deleted code | Repairing a newly-failing guard back toward the bug it just caught; pinning a symbol name rather than a property; **auditing a guard by reading it rather than by breaking it** — phase 1's research condemned six ordering assertions of the form `indexOf(guard) < indexOf(action)` (vacuously true when the guard is absent, since the miss returns −1) and every one of them turned out to carry a presence check on the line above. Read the assertion's neighbours, then delete the guarded statement and watch |
-| #3 | A device whose primary transport drops converges on the host's current phase within the guardrail, and a stop actually stops | "The fallback loop is running, therefore it is delivering." `lessons.md` records a `stop()` silently undone by the `finally` of a request the test never knew about | Both lifecycle exits, what re-arms the loop, what the visibility rule is, and what the real settle points are | integration, with pinned interval randomness and manually-settled deferreds | Advancing fake time by the widest jittered interval and assuming one advance is one tick; a stub that resolves immediately in a test whose name claims an overlap |
-| #4 | An answer accepted at the deadline boundary appears in the tally exactly once, and concurrent submissions do not lose each other | "The write is atomic, therefore the count is right." The race is between the deadline, the reveal transition and the tally write — not inside any one atomic script | The ordering guarantee at the reveal boundary, what the grace window does, and the store's real semantics versus the fake the suite currently uses | integration at the store boundary; room-scale concurrency stays with the existing harness | Mocking the store so that the atomicity under test is the mock's; asserting the count without asserting which submissions produced it |
+| #3 | A device that is handed a newer snapshot **adopts** it, an older one cannot overwrite a newer one, and a cancel is not undone by a request already in flight | *The original challenge — "the fallback loop is running, therefore it is delivering" — was already met before this phase began: the loop's tests pin the interval randomness and hold a request open with a manually-settled deferred.* The live assumption is the next one along: **"the loop delivers, therefore the client converged."** Delivery and adoption are different steps, and only the first has executing tests | Where the decision to adopt or drop a snapshot is made and what it compares; whether that decision is reachable from a test process at all without mocking the realtime SDK (which this project forbids, because a module mock freezes the SDK's API and passes against a real breakage); which lifecycle cancels are terminal and which are resumable | unit, over the snapshot-application decision — **not** more coverage of the poll loop, whose layer is saturated | Adding assertions to the loop's own tests and reporting the risk as covered; advancing fake time by the widest jittered interval and assuming one advance is one tick; a stub that resolves immediately in a test whose name claims an overlap; **a cancellation test whose assertion holds whether or not the cancel worked, because the re-arm beat it to the timer** |
+| #4 | A submission refused because the host revealed mid-flight is reported to the attendee as refused rather than as recorded; and the distribution the room is shown accounts for every answer the store accepted | "The write is atomic, therefore the count is right" — **confirmed, and sharper than first written**: the atomic script is sound, so every surviving failure lives at a seam *above* it. Two reads that look like one: the route's phase read versus the script's own re-read, and the reveal's tally read versus its compare-and-set. Also challenge "a refusal is safe because nothing is written" — nothing being written is exactly what makes it invisible to the attendee | Which refusal classes the client treats as final versus retryable, and why one of them was deliberately given its own class; what the grace window bounds (the decision, not the write); which aggregate is read outside the version guard. **Also which store instance is available at all** — see the layer note below | **Split.** Above the script: unit and route-level, using the mocks that already exist but letting them *disagree*, which no test currently does. Below it: already at its practical ceiling in the by-hand room-scale script — do not rebuild it | Mocking the store so that the atomicity under test is the mock's; **adding mock-level assertions about a script the mock never executes, which reads as coverage and is not**; asserting the count without asserting which submissions produced it; computing a boundary expectation from a literal instead of from the grace constant and the question's own limit |
 | #5 | An absent field is refused rather than coerced, and the test asserts the resulting *award* rather than that the request was accepted | "The hostile value is guarded, therefore the absent value is too." These take different paths through the same code | Every untrusted field on every submission route, and what "said nothing" currently yields for each | integration, at the route | Spelling the absent case as `undefined` where a destructuring default silently replaces it; asserting a status code where the defect is in the number |
 | #6 | The cap holds across repeated claims from one device, and a claim refused for a different reason charges nobody | "Resume is exempt, therefore resume is free." The exemption is the entire substance of the slice that introduced it | The claim path's internal ordering, what the counter actually counts, and what an absent device identifier does | integration, at the route | Testing the cap with a fresh device on each attempt, which exercises no cap at all |
 | #7 | After a close, no registered key holds attendee data — including any key whose name is assembled at runtime rather than declared | "The key scan passes, therefore the namespace is clean." The scan catches declared literals only, by design | Which key names are assembled rather than declared, and what the existing residue check does and does not reach | the existing residue script, promoted to a gate | Writing a second literal scan instead of checking the real store; treating a green scan as coverage of the runtime-assembled case |
+
+**The layer note for #4, added 2026-08-16.** "Integration at the store boundary" was written as though
+a store to integrate against existed. None does: the suite's client is mocked, so the atomic script is
+passed to it as a *string* and never executed; the browser layer is deliberately single-threaded and
+cannot express a concurrent burst; and the one tool that does drive real concurrency runs by hand
+against production. There is no local or ephemeral instance in the repo, and introducing one is a
+stack change that belongs to phase 4 rather than here. This is not the obstacle it first appears,
+because the failures that remain uncovered sit above the script and need no store at all — but a plan
+that writes "integration test" without saying *against what* has not answered the question, and the
+row above is split so it cannot be inherited unexamined.
+
+**Decision, 2026-08-16: this phase pins behaviour, it does not fix it.** Research surfaced two live
+defects in reach — a refusal class the client treats as final when the answer was never recorded, and
+a pause that an in-flight request can undo. Both are product changes, and a testing rollout that
+quietly repairs what it was sent to measure loses the measurement: a test written against repaired
+code has never been observed failing, which §1's fourth rule counts as checked rather than verified.
+So the tests assert today's behaviour, name it as the finding it is, and leave the fix to a change of
+its own.
 
 ## 3. Phased Rollout
 
@@ -81,7 +128,7 @@ disk.
 | # | Phase name | Goal (one line) | Risks covered | Test types | Status | Change folder |
 |---|---|---|---|---|---|---|
 | 1 | Host control rules, executable | Prove the panel offers no verb the phase refuses by running the decision, not by reading its source | #1, #2 | unit | complete | `context/changes/testing-host-control-rules/` |
-| 2 | Sync under a degraded link | Prove a device converges on the host's phase after the transport drops, and that no answer is lost at the reveal boundary | #3, #4 | integration | not started | — |
+| 2 | Sync under a degraded link | Prove a device converges on the host's phase after the transport drops, and that no answer is lost at the reveal boundary | #3, #4 | unit, integration | complete — on its deliverables; see §6.6 for the one proof clause it does *not* meet | `context/changes/testing-sync-degraded-link/` |
 | 3 | Submission edges and the retention floor | Prove absent and hostile fields fail toward refusal, the per-device cap holds, and no registered key outlives the session | #5, #6, #7 | integration, contract, existing scripts | not started | — |
 | 4 | Gates wired | Make the checks that already run locally run between a commit and production | cross-cutting | gates | not started | — |
 
@@ -212,9 +259,41 @@ ships; before that, the sub-section reads "TBD — see §3 Phase N."
 
 ### 6.2 Adding an integration test
 
-- TBD — see §3 Phase 2.
-- Open question that phase must settle rather than inherit: whether the ad-hoc store fake is
-  sufficient for the ordering guarantees Risk #4 depends on.
+**The open question is settled: there is no store instance, and the tests worth writing do not need
+one.** No local Redis, no testcontainers, no emulator; the suite's client is mocked, so the atomic
+script is handed to it as a *string* and never executed. What that rules out is real-Lua coverage —
+which is already at its ceiling in `scripts/rehearse-room.ts` and must not be rebuilt here. What it
+does **not** rule out is everything above the script, which is where both of Risk #4's surviving
+failures actually live.
+
+The recipe, in one line: **run one real module against another, stub only the transport between
+them, and let the mocks that already exist disagree.**
+
+- **Location**: beside the route that owns the contract, as `<route>.seam.test.ts`.
+- **Reference tests**: `src/pages/api/quiz/answer.seam.test.ts` (route → client, across a real
+  `Response`) and `src/pages/api/quiz/host/reveal.drift.test.ts` (route → real `applyHostAction` →
+  store mocks, with an answer landing mid-request).
+- **Run locally**: `bun run test`. No hook or config change is needed — `scripts/scoped-tests.sh`
+  hands sources to `vitest related`, which reaches a seam file from either module it imports.
+
+Five things these two files learned the hard way:
+
+1. **Make the mocks disagree.** A seam test whose mocks all tell the same story is a slower unit
+   test. `readSession` says the question is open while `submitAnswer` says it is not — that
+   contradiction *is* the reveal landing mid-request, and no existing test creates it.
+2. **Stub the transport, never the peer.** `answer.seam.test.ts` stubs `globalThis.fetch` and hands
+   the route's own `Response` to the real client. A helper that built its own response would be
+   testing the helper.
+3. **A `Response` body is one-shot.** Clone it *inside* the stub, before the client reads it — a
+   clone taken at the assertion throws "Body has already been consumed".
+4. **Check which module the file under test mocks.** `routes.test.ts` mocks `applyHostAction`, so an
+   interleaving *inside* that function cannot be expressed there at all; the drift test needed a file
+   of its own with the real one. This is the first question to ask before adding to an existing suite.
+5. **Preconditions are not optional decoration.** Pin the clock (`vi.spyOn(Date, "now")`) and derive
+   `updatedAt` from the question's own `timeLimitSeconds`, or an open-question fixture drifts into the
+   expired branch; stub `LIVEQUIZ_HOST_SECRET` and send the header, or a host route 401s and the
+   assertions never run. Keep the default `node` environment unless the code under test truly touches
+   the DOM — a copied happy-dom docblock buys nothing and inherits the `localStorage` Proxy trap.
 
 ### 6.3 Adding a test that needs a DOM
 
@@ -302,6 +381,51 @@ placed on a projector. That is out of scope for the whole rollout; see §7.
   so nothing can reach it. The sweep runs over the nine reachable phase × position pairs, with the
   reachability claim tied to `atLastQuestion`'s own behaviour rather than restated.
 
+**Phase 2 — Sync under a degraded link** (`context/changes/testing-sync-degraded-link/`,
+`b613981`, `ba3d4be`, `f56a533`, `571a98b`). Break-and-restore evidence for every test below is in
+that folder's `verification.md` — eight runs, each observed rather than reasoned about.
+
+- **The extraction, again, and for the fourth time.** `apply` — the version guard that is the
+  client's *only* convergence primitive — was a closure inside `createSessionClient`, which no test
+  constructs, because constructing it means faking Ably and a module mock freezes the SDK's API.
+  `createSnapshotReconciler` is now beside `createFallbackPoll`, following `countdown.ts`,
+  `toast.ts` and `controls.ts`. **Delivery and adoption are different steps**: the loop's 19 tests
+  proved a request goes out; nothing proved the snapshot it brings back is what the device renders.
+- **Three defects pinned, not fixed** (the decision at the end of §2). Each pinned test carries an
+  inversion note, and **that note is the rule for this whole phase**: *if this fails, the defect was
+  fixed — invert the expectation and delete the note; do not restore the behaviour.* Without it a
+  pin is the most inviting possible instance of the anti-pattern §2 Risk #2 names.
+  1. **`pause()` is not terminal.** An in-flight tick's `finally` re-arms past it — the same class
+     as impl-review F3, in the one sibling of `stop`/`dispose` never given a flag.
+     (`session.test.ts`, "pause during an open request is undone by the finally".)
+  2. **A `not-open` 409 reaches the attendee as a recorded answer.** The reveal lands between the
+     route's read and the script's re-read, nothing is written, and the client treats the classless
+     409 as final. (`answer.seam.test.ts`.)
+  3. **The reveal's distribution can be one short.** The tally read sits outside the version guard,
+     and `applyHostAction`'s `readPlayerCount` round trip sits inside the gap.
+     (`reveal.drift.test.ts`.)
+- **A test that could not fail, inside the file the archive holds up as Risk #2's remedy.**
+  `session.test.ts`'s *"stop during an open request is resumable, unlike dispose"* asserted a fetch
+  count that holds whether `stop` is resumable-by-arm or simply undone by the `finally`. The
+  distinguishing assertion is `isArmed()` **between** the settle and the arm. Renamed to what it
+  observes, with the resumability its old name claimed asserted separately, where it does hold.
+- **Fixing a refusal class takes both halves, and one half alone looks like a fix.** Giving the
+  route's `not-open` its own class changed nothing an attendee experiences — the client maps every
+  non-`expired` class to `rejected`, which is final. Found by breaking, not by reading: a single
+  test would have gone green and reported the defect closed while the phone still locked. Whoever
+  takes that fix needs `answer.ts` *and* `client/answer.ts` in the same change.
+- **The drift is closable by moving one await.** Hoisting `readPlayerCount()` above the `nextFrom`
+  callback in `host.ts` removes the round trip from the window, and `playerCount` is documented as
+  stale-tolerant, so reading it early costs nothing. Not applied here.
+- **The named residual, stated so nobody reads this phase as complete coverage of #4.** A reveal
+  fired *during* a concurrent burst — the interleaving below the atomic script — is exercised by
+  nothing. `scripts/rehearse-room.ts` completes its burst, then audits, then reveals; it runs by
+  hand against production and gates nothing. Extending it was considered and declined: signal that
+  arrives only when someone remembers to run it, against the store phase 1's impl-review F1 showed a
+  misfiring hook can destroy. An ephemeral instance is a stack change belonging to §3 Phase 4.
+- **`client.close()` still has no caller anywhere in `src/`.** The terminal exit impl-review F3
+  built is dead code in production — the same finding that slice made about *its* predecessor.
+
 ## 7. What We Deliberately Don't Test
 
 Exclusions agreed during the rollout. Future contributors should respect these unless the underlying
@@ -353,7 +477,8 @@ assumption changes.
 
 ## 8. Freshness Ledger
 
-- Strategy (§1–§5) last reviewed: 2026-08-16 (§2 Risk #1 and #2 amended 2026-08-16 by rollout phase 1)
+- Strategy (§1–§5) last reviewed: 2026-08-16 (§2 Risk #1 and #2 amended 2026-08-16 by rollout phase 1;
+  §2 Risk #3 and #4 amended and §6.2 filled in 2026-08-16 by rollout phase 2)
 - Stack versions last verified: 2026-08-16
 - AI-native tool references last verified: 2026-08-16
 
