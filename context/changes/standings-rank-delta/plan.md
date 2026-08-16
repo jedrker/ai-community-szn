@@ -452,7 +452,7 @@ the one after — no host action 409s.
 
 #### Manual
 
-- [x] 2.10 Arrows match what the scores actually did, locally, across two devices
+- [x] 2.10 Arrows match what the scores actually did, locally, across two devices — 6d91045
 
 - [x] 3.1 Unit tests pass: `bun run test` — 43c2c5a
 - [x] 3.2 Linting passes: `bun run lint` — 43c2c5a
@@ -462,17 +462,17 @@ the one after — no host action 409s.
 - [x] 3.6 Motion signature distinguishes boards that differ only by delta — 43c2c5a
 - [x] 3.7 The renderer still never sorts — 43c2c5a
 
-- [x] 4.1 Unit tests pass: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 Linting passes: `bun run lint`
-- [x] 4.4 Host page structural guards still pass
-- [x] 4.5 Attendee page guards still pass
-- [x] 4.6 The client boundary test still passes
+- [x] 4.1 Unit tests pass: `bun run test` — 6d91045
+- [x] 4.2 Type checking passes: `bun run type-check` — 6d91045
+- [x] 4.3 Linting passes: `bun run lint` — 6d91045
+- [x] 4.4 Host page structural guards still pass — 6d91045
+- [x] 4.5 Attendee page guards still pass — 6d91045
+- [x] 4.6 The client boundary test still passes — 6d91045
 
 #### Manual
 
-- [x] 4.7 Arrows readable from the back of the room, including on the leader's yellow bar
-- [x] 4.8 Five rows still fit the stage
-- [x] 4.9 A long display name on a phone truncates no earlier than before
-- [x] 4.10 The first board of a session shows no arrows and does not look broken
-- [x] 4.11 The closing screen is unchanged
+- [x] 4.7 Arrows readable from the back of the room, including on the leader's yellow bar — 6d91045
+- [x] 4.8 Five rows still fit the stage — 6d91045
+- [x] 4.9 A long display name on a phone truncates no earlier than before — 6d91045
+- [x] 4.10 The first board of a session shows no arrows and does not look broken — 6d91045
+- [x] 4.11 The closing screen is unchanged — 6d91045
