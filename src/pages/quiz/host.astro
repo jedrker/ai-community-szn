@@ -89,7 +89,7 @@ const questionTotal = publicQuiz.questions.length;
 /**
  * THE FLOW VERBS' PILL, WRITTEN ONCE AND SIZED TO THE SCREEN IT IS ON.
  *
- * Stated here rather than four times in the markup for the reason `CONTROL_RULES` is stated
+ * Stated here rather than four times in the markup for the reason `verbsFor` states it
  * once: four copies of a geometry are four chances for one of them to drift, and the row is
  * read as a row — a pill a step out of scale reads as a different kind of control.
  *
@@ -872,7 +872,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       <div id="control-row" class="flex flex-wrap items-center gap-4">
         <!--
           The flow verbs. Which one is offered — and which one is ringed as the next step —
-          is decided by `CONTROL_RULES` and applied by `syncControls`, which is the table's
+          is decided by `verbsFor` and applied by `syncControls`, which is that decision's
           only reader. Nothing here states a phase condition of its own.
 
           `data-next` rather than a class toggle: the filled and outlined treatments set the
@@ -1013,6 +1013,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       } from "../../lib/client/session";
       import { createCountdown } from "../../lib/client/countdown";
       import { createAutoHide } from "../../lib/client/toast";
+      import {
+        atLastQuestion,
+        NO_SESSION,
+        pollTargetFor,
+        verbsFor,
+        type FlowAction,
+        type PollTarget,
+      } from "../../lib/client/controls";
       import {
         el,
         renderCountdown,
@@ -1546,104 +1554,25 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
-       * Whether the session has run out of questions — the client's reading of
-       * `nextQuestionId` (`src/lib/session/state.ts`), which is what decides whether
-       * `advance` does anything at all.
+       * Both predicates below now live in `src/lib/client/controls.ts`, which is where they
+       * can be executed by a test rather than read as text. They take the published question
+       * order explicitly, which is the only thing they ever closed over here.
        *
-       * **From the published order this page already holds**, the same list the top strip's
-       * `pytanie N z M` counter counts through, so the panel and the route cannot disagree
-       * about where the end is. A field on the snapshot would be a second copy of a fact the
-       * definition already states.
-       *
-       * `false` with no current question: that is the lobby, where question 1 is still
-       * ahead — and `ended`, whose row offers nothing either way.
+       * `atLastQuestion` and `pollTargetFor` keep their names and their rules exactly; what
+       * changed is that a guard about them can now fail.
        */
-      function atLastQuestion(state: State | null): boolean {
-        if (state === null || state.currentQuestionId === null) return false;
-
-        const at = config.questions.findIndex(
-          (candidate) => candidate.id === state.currentQuestionId
-        );
-        return at >= 0 && at === config.questions.length - 1;
-      }
 
       /**
-       * **ONE predicate governs both the panels and the poll**, and it is written once
-       * (extended by roadmap S-08 from a boolean to a target).
-       *
-       * Two conditions would mean the poll runs for a question whose panel is not rendered —
-       * feeding nothing, from an endpoint that can only ever return zero. A data path with no
-       * affordance is the mirror of `lessons.md`'s first rule, and it fails just as quietly:
-       * nothing is wrong on screen, and the command counter climbs.
-       *
-       * **One loop serves both endpoints**, chosen here by question kind. A second timer was
-       * the alternative and it is the failure this file guards hardest against — see the
-       * `polling` flag's note above: two loops mean two backoffs, two in-flight flags, and two
-       * chances to leave a timer running for a panel that is no longer on screen.
-       *
-       * Returns `null` when nothing should be polled, which is also what hides both panels.
+       * The lobby target is bounded exactly like the other two: one device, one phase,
+       * ~2.5 s (floored at 10 s) with the same backoff and the same visibility rule, and it
+       * ends the moment the host starts the first question. Two commands a tick, which is the
+       * figure `src/pages/api/quiz/state.ts` records. The rule that picks it is in
+       * `controls.ts`; what bounds it is this file's single loop, below.
        */
-      type PollTarget = {
-        kind: "participation" | "words" | "lobby";
-        questionId: string | null;
-        url: string;
-      };
-
-      function pollTargetFor(state: State | null): PollTarget | null {
-        if (state === null) return null;
-
-        /**
-         * THE LOBBY'S JOIN COUNT — the third target, and the one with no panel of its own.
-         *
-         * A join publishes nothing: 150 joins fanning out to 150 subscribers is the O(N²)
-         * shape the spine contract forbids, so `playerCount` on the snapshot only ever moves
-         * on a host action. In every other phase that is invisible, because the host acts
-         * often and the participation poll carries a live count of its own while a question
-         * is open — but the lobby is exactly the phase where the host acts *last* and the
-         * number changes *most*, so the figure beside `dołączyło` sat frozen at whatever it
-         * was when `start` landed until somebody pressed `odśwież`.
-         *
-         * So the lobby polls the same open endpoint the refresh button uses, through the
-         * same one loop. `/api/quiz/state` needs no secret — it returns exactly what is
-         * broadcast anyway — so this target cannot reach the 401 branch in `runPoll`.
-         *
-         * Bounded like the other two: one device, one phase, ~2.5 s with the same backoff and
-         * the same visibility rule, and it ends the moment the host starts the first question.
-         * Two commands a tick, which is the figure `src/pages/api/quiz/state.ts` records.
-         */
-        if (state.phase === "lobby") {
-          return { kind: "lobby", questionId: null, url: "/api/quiz/state" };
-        }
-
-        const questionId = state.currentQuestionId;
-        if (questionId === null) return null;
-
-        const kind = questionFor(state)?.kind;
-        const query = `?questionId=${encodeURIComponent(questionId)}`;
-
-        /**
-         * The word cloud runs in **both** `question-open` and `question-revealed`, unlike the
-         * participation count. FR-005 keeps the distribution off the screen until the reveal
-         * because it is a cheat sheet while answering is open; the cloud has no correct answer
-         * to leak (FR-005's own scope note says so), so the only reason to stop is that there
-         * is nothing left to read — which is what `cloudFinalReadFor` decides, not this.
-         */
-        if (kind === "word-cloud") {
-          if (state.phase !== "question-open" && state.phase !== "question-revealed") return null;
-          return { kind: "words", questionId, url: `/api/quiz/host/words${query}` };
-        }
-
-        // Unchanged from S-04: the count is shown only while the question is open, and only
-        // for the two kinds whose answers it can count.
-        if (state.phase !== "question-open") return null;
-        if (kind !== "single-choice" && kind !== "multiple-choice") return null;
-
-        return { kind: "participation", questionId, url: `/api/quiz/host/participation${query}` };
-      }
 
       /** Whether a tick is still worth firing for the current target. */
       function pollWanted(state: State | null): boolean {
-        const target = pollTargetFor(state);
+        const target = pollTargetFor(config.questions, state);
         if (target === null) return false;
 
         // The final-read gate. Only the word cloud has one; the participation loop stops
@@ -1679,7 +1608,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       function renderParticipation(state: State): void {
         const distribution =
           state.phase === "question-revealed" ? state.revealedDistribution : null;
-        const showCount = pollTargetFor(state)?.kind === "participation";
+        const showCount = pollTargetFor(config.questions, state)?.kind === "participation";
 
         // The rail's count and the stage's bars now hide independently, because they sit in
         // different regions — but both answers come from the one predicate, so a bar list
@@ -1767,7 +1696,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * the room wrote a word. `pollFailed` documents the same rule for the count.
        */
       function renderWordCloudPanel(state: State): void {
-        const isCloud = pollTargetFor(state)?.kind === "words";
+        const isCloud = pollTargetFor(config.questions, state)?.kind === "words";
         // The panel survives the final read: `pollTargetFor` still returns a words target in
         // `question-revealed`, and only `pollWanted` stops the ticks. That split is what lets
         // the host talk over a frozen cloud.
@@ -1813,14 +1742,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
-       * The key `CONTROL_RULES` is read under when there is no session yet — before the
-       * first `start`, and after a purge or an expiry. A real key rather than a null
-       * branch, so the table below answers every state the view can be in and no phase
-       * falls through to "whatever was on screen before".
-       */
-      const NO_SESSION = "none";
-
-      /**
        * What the stage says while `NO_SESSION` holds. Polish, because it renders directly.
        *
        * Names both halves of the fix in the order the host does them, because either alone
@@ -1835,152 +1756,19 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         "Kliknij kod QR u góry, wpisz sekret hosta, a potem kliknij „start”, żeby rozpocząć rozgrywkę.";
 
       /**
-       * WHICH FLOW VERB IS OFFERED IN WHICH PHASE, AND WHICH ONE IS THE NEXT STEP.
+       * The phase-to-verb decision — which verb is offered where, which one is the next
+       * step, and what a dark one says about itself — moved to `src/lib/client/controls.ts`
+       * as `verbsFor`. The table itself is private there, so a second reader of it is not
+       * expressible rather than merely forbidden.
        *
-       * S-07 wrote the principle on the standings button alone: *disabled everywhere else
-       * rather than relying on the route's 409 — the refusal is the backstop, not the
-       * interaction*. `start`, `advance` and `reveal` never got it, so the host could tap
-       * `pokaż odpowiedź` in the lobby and be answered by an error. This table extends the
-       * rule to all four verbs and adds `next`, the one button highlighted as the step the
-       * session is waiting for.
+       * It went for the reason `countdown.ts` did: an inline script has no harness, so the
+       * only guard available over it was a scan of its own literal — and the property that
+       * matters (the panel never offers a verb the route refuses) is a statement about the
+       * routes, which no reading of this file can check. `controls.test.ts` runs it instead.
        *
-       * **One table, not four conditions.** The phase rule for a flow verb lives here and
-       * nowhere else — the same discipline `pollTargetFor` is held to by `host.test.ts`,
-       * and for the same reason: a second place to state it is a second place for it to
-       * drift from what the routes actually accept.
-       *
-       * `allow` mirrors route legality (`src/pages/api/quiz/host/*`), with three entries
-       * that look inconsistent and are not:
-       *
-       * - **`advance` stays offered while a question is open.** It is the host's only lever
-       *   on stage: if something appears on the projector that should not be there, the way
-       *   out is to advance past it. It is simply not the *next* step there.
-       * - **`standings` is offered in the `standings` phase too**, where the route treats it
-       *   as a no-op that re-broadcasts. That is the recovery path its own 502 asks for —
-       *   "Ranking jest zapisany, ale nie dotarł do urządzeń. Kliknij ponownie…" — and the
-       *   state is already `standings` by the time the host reads it, so gating it out of
-       *   that phase took away the retry the message names.
-       * - **`start` is offered only with no session.** The route is create-if-absent and
-       *   idempotent, so tapping it mid-quiz does nothing; an enabled button that does
-       *   nothing is the thing this change exists to remove.
-       *
-       * `end` is deliberately absent: it is not a `data-action` button, it carries arming
-       * state, and `syncEndButton` owns it — including the decision that it stays out of
-       * reach in `lobby` even though the route would accept it.
+       * The closing verb's phase rule went with it, so all five verbs now answer to one
+       * mechanism. Its *arming* state stays here — see `syncEndButton`.
        */
-      type PhaseRule = {
-        allow: readonly string[];
-        next: string | null;
-        why: Record<string, string>;
-      };
-
-      type ControlRule = PhaseRule & {
-        /**
-         * The same row, read instead once the current question is the **last** one.
-         *
-         * **A second dimension of the table rather than a condition beside a button**, for
-         * the reason the table exists at all: `advance` is a no-op past the last question
-         * (`advance.ts` returns null when `nextQuestionId` does), so the panel was ringing
-         * `dalej` as the next step and answering the tap with "nic do zrobienia". The phase
-         * alone cannot see that — `question-revealed` on question 3 and on question 14 are
-         * the same phase and want opposite bars.
-         *
-         * The last question's `question-revealed` allows **nothing**: `dalej` does nothing,
-         * and the closing beat publishes the final board itself (S-10), so a separate
-         * `pokaż ranking` is a board the room is about to be shown again. The one way on is
-         * `zakończ sesję i pokaż wyniki`, which `syncEndButton` rings as the next step.
-         */
-        whenLast?: PhaseRule;
-      };
-
-      const ALREADY_RUNNING = "Sesja już trwa.";
-      const NOT_STARTED = "Sesja nie została jeszcze rozpoczęta.";
-      const ALREADY_ENDED = "Sesja została zakończona.";
-      const NEEDS_REVEAL = "Ranking można pokazać dopiero po ujawnieniu odpowiedzi.";
-      const NO_MORE_QUESTIONS = "To było ostatnie pytanie — zakończ sesję.";
-      const FINAL_BOARD_ON_END = "Końcowe wyniki pokaże zakończenie sesji.";
-      const REVEAL_ALREADY_SHOWN = "Odpowiedź jest już pokazana — przejdź do następnego pytania.";
-      const STANDINGS_ALREADY_SHOWN = "Ranking jest już pokazany — przejdź do następnego pytania.";
-
-      const CONTROL_RULES: Record<string, ControlRule> = {
-        [NO_SESSION]: {
-          allow: ["start"],
-          next: "start",
-          why: { advance: NOT_STARTED, reveal: NOT_STARTED, standings: NOT_STARTED },
-        },
-        lobby: {
-          allow: ["advance"],
-          next: "advance",
-          why: {
-            start: ALREADY_RUNNING,
-            reveal: "Żadne pytanie nie jest otwarte — nie ma czego pokazać.",
-            standings: NEEDS_REVEAL,
-          },
-        },
-        "question-open": {
-          allow: ["advance", "reveal"],
-          next: "reveal",
-          why: { start: ALREADY_RUNNING, standings: NEEDS_REVEAL },
-          // The lever is gone on the last question — there is nothing to advance *to* — but
-          // the reveal is still the step the room is waiting for.
-          whenLast: {
-            allow: ["reveal"],
-            next: "reveal",
-            why: {
-              start: ALREADY_RUNNING,
-              advance: NO_MORE_QUESTIONS,
-              standings: NEEDS_REVEAL,
-            },
-          },
-        },
-        "question-revealed": {
-          allow: ["advance", "standings"],
-          next: "advance",
-          why: { start: ALREADY_RUNNING, reveal: REVEAL_ALREADY_SHOWN },
-          whenLast: {
-            allow: [],
-            next: null,
-            why: {
-              start: ALREADY_RUNNING,
-              advance: NO_MORE_QUESTIONS,
-              reveal: REVEAL_ALREADY_SHOWN,
-              standings: FINAL_BOARD_ON_END,
-            },
-          },
-        },
-        standings: {
-          allow: ["advance", "standings"],
-          next: "advance",
-          why: { start: ALREADY_RUNNING, reveal: STANDINGS_ALREADY_SHOWN },
-          /**
-           * Unreachable going forward — the row above no longer offers `pokaż ranking` on
-           * the last question, so nothing can enter this phase there. Written anyway: a
-           * session that was already standing on the last question's board when this
-           * shipped still renders through this table, and the fallback row would offer it
-           * a `dalej` that does nothing.
-           */
-          whenLast: {
-            allow: [],
-            next: null,
-            why: {
-              start: ALREADY_RUNNING,
-              advance: NO_MORE_QUESTIONS,
-              reveal: STANDINGS_ALREADY_SHOWN,
-              standings: FINAL_BOARD_ON_END,
-            },
-          },
-        },
-        ended: {
-          allow: [],
-          next: null,
-          why: {
-            start: ALREADY_ENDED,
-            advance: ALREADY_ENDED,
-            reveal: ALREADY_ENDED,
-            standings: ALREADY_ENDED,
-          },
-        },
-      };
 
       /**
        * WHAT THE REVEAL VERB IS CALLED WHEN THE QUESTION HAS NO ANSWER TO SHOW.
@@ -2071,7 +1859,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
-       * The phase rules above, applied to the buttons.
+       * The phase rules, applied to the buttons.
+       *
+       * The decision comes from `verbsFor` and this function does the DOM writes — the split
+       * that lets a test run the rule. Nothing here re-decides legality; everything here is
+       * about labels, titles and the ring.
        *
        * Called from `render` AND from `fire`'s `finally`, because that block re-enables
        * every button unconditionally — without the second call, an action would hand back
@@ -2081,10 +1873,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       function syncControls(): void {
         const state = client.current();
         const phase = state === null ? NO_SESSION : state.phase;
-        const base = CONTROL_RULES[phase] ?? CONTROL_RULES[NO_SESSION];
-        const rule = (atLastQuestion(state) ? base.whenLast : undefined) ?? base;
+        const rule = verbsFor(
+          phase,
+          atLastQuestion(config.questions, state?.currentQuestionId ?? null)
+        );
         // The current question has no answer to reveal — only submissions to close.
-        const revealCloses = pollTargetFor(state)?.kind === "words";
+        const revealCloses = pollTargetFor(config.questions, state)?.kind === "words";
 
         // The board is already on the projector, so the standings verb is a re-broadcast
         // rather than a step the host has yet to take. Naming only — see the constants.
@@ -2095,7 +1889,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         if (revealArmed && state?.version !== revealArmedVersion) disarmReveal();
 
         for (const button of actionButtons()) {
-          const action = button.dataset.action ?? "";
+          // Cast rather than validated: the attribute is authored in this file's own markup,
+          // and a typo there is a button no row of the table answers — which `verbsFor`
+          // already handles by leaving it dark with no reason, exactly as it should.
+          const action = (button.dataset.action ?? "") as FlowAction;
           const allowed = rule.allow.includes(action);
           const reason =
             revealCloses && action === "reveal" && phase === "question-revealed"
@@ -2183,31 +1980,41 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * closed from the terminal, not by the one button on this page that cannot be undone;
        * not in `question-open`, which the route refuses anyway; not in `ended`.
        *
+       * **That rule is no longer written here.** It is `end`'s row in `verbsFor`, alongside
+       * the four flow verbs, so all five answer to one mechanism and one test — the closing
+       * verb's phase rule was the piece of the panel that had no table and therefore no
+       * executable guard. What stays is everything a table cannot hold: the arming, the
+       * placement, the label.
+       *
+       * **`end` is deliberately not collapsed by `whenLast`.** The flow verbs offer nothing
+       * on the last question; this one has to stay live there, because that is the beat where
+       * it becomes the only step left.
+       *
        * **Where it is, is a separate question from whether it works**, and this function owns
-       * both. Placement follows `atLastQuestion`; the phase rule above follows the phase; and
-       * the two are deliberately not folded together — the menu makes the verb reachable
-       * mid-quiz for the host who has to abandon a session, and it is the *route* that then
-       * refuses it in a phase `end` would not accept. A menu that bypassed the phase rule
-       * would be a second way to reach the one action with no undo.
+       * both. Placement follows `atLastQuestion`; the phase rule follows the phase; and the
+       * two are deliberately not folded together — the menu makes the verb reachable mid-quiz
+       * for the host who has to abandon a session, and it is the *route* that then refuses it
+       * in a phase `end` would not accept. A menu that bypassed the phase rule would be a
+       * second way to reach the one action with no undo.
        */
       function syncEndButton(): void {
         const state = client.current();
-        const phase = state?.phase;
+        const phase = state === null ? NO_SESSION : state.phase;
+        const last = atLastQuestion(config.questions, state?.currentQuestionId ?? null);
+        const rule = verbsFor(phase, last);
 
         if (endArmed && state?.version !== endArmedVersion) {
           endArmed = false;
           endArmedVersion = null;
         }
 
-        endButton.disabled = !(phase === "question-revealed" || phase === "standings");
+        endButton.disabled = !rule.allow.includes("end");
         // Disarmed by the disable too: a button that went out of reach must not come back
         // still holding a tap the host made before the room moved.
         if (endButton.disabled && endArmed) {
           endArmed = false;
           endArmedVersion = null;
         }
-
-        const last = atLastQuestion(state);
 
         /**
          * **WHERE THE BUTTON IS AT ALL**, which is the other half of the phase rule above and
@@ -2241,16 +2048,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         setHidden(endRow, home !== endSlotBar);
 
         /**
-         * **The ring moves here on the last question**, and it has to: the flow verbs' table
-         * offers nothing once the last answer is revealed, so without this the bar names no
-         * next step at the one beat where the host is being watched. Exactly one filled pill
-         * still, because `CONTROL_RULES`' `whenLast` row sets `next: null` in precisely the
-         * states this lights up.
+         * **The ring moves here on the last question**, and it has to: the flow verbs offer
+         * nothing once the last answer is revealed, so without this the bar names no next
+         * step at the one beat where the host is being watched.
          *
-         * The same reading that placed the button, so the ring can only ever be lit on the
-         * bar: `last` is what puts it there.
+         * **Read off the same decision rather than recomputed**, which is what keeps "exactly
+         * one filled pill" true by construction: `verbsFor` names `end` as `next` in exactly
+         * the rows where every flow verb has gone, so a row that lit two pills would have to
+         * be written to. `last` is still what places the button, so the ring can only ever be
+         * lit on the bar.
          */
-        endButton.dataset.next = String(!endButton.disabled && last);
+        endButton.dataset.next = String(rule.next === "end");
 
         // "…i pokaż wyniki" because that is what the tap does (S-10): the closing document
         // carries the final board, so this verb is the winner reveal, not just a shutdown.
@@ -2774,7 +2582,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * to ~120.
          */
         const floor =
-          pollTargetFor(client.current())?.kind === "lobby" ? LOBBY_POLL_MS : POLL_BASE_MS;
+          pollTargetFor(config.questions, client.current())?.kind === "lobby" ? LOBBY_POLL_MS : POLL_BASE_MS;
 
         pollTimer = window.setTimeout(() => {
           pollTimer = null;
@@ -2867,7 +2675,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       async function runPoll(): Promise<void> {
-        const target = pollTargetFor(client.current());
+        const target = pollTargetFor(config.questions, client.current());
         if (target === null) return;
         if (!pollWanted(client.current())) return;
 
@@ -3182,7 +2990,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        *   being read at. The clock running past the last answer is the case the host is *meant*
        *   to cut short.
        *
-       * The phase is deliberately not tested: `CONTROL_RULES` offers `reveal` in exactly one
+       * The phase is deliberately not tested: `verbsFor` offers `reveal` in exactly one
        * phase, and a condition here would be the second phase rule beside a button that the
        * table exists to prevent. The clock is armed in that phase and no other anyway.
        */

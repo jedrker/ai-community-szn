@@ -63,13 +63,13 @@ describe("the scan can see the code it is checking", () => {
    */
   it("still has the control table's code left after comments are stripped", () => {
     expect(CODE).toContain("function syncControls");
-    expect(CODE).toContain("CONTROL_RULES");
+    expect(CODE).toContain("verbsFor(");
   });
 
   it("still has the loop's code left after comments are stripped", () => {
     expect(CODE).toContain("function runPoll");
     expect(CODE).toContain("function schedulePoll");
-    expect(CODE).toContain("function pollTargetFor");
+    expect(CODE).toContain("pollTargetFor(config.questions");
   });
 });
 
@@ -284,29 +284,44 @@ describe("the countdown cannot outlive its question", () => {
  * two conditions would let the poll run for a question whose panel is not rendered — a data
  * path with no affordance, which is the mirror of `lessons.md`'s first rule and fails just as
  * quietly. The panels ask `pollTargetFor`; nothing re-derives the condition.
+ *
+ * **The predicate itself now lives in `src/lib/client/controls.ts`** and is covered by
+ * `controls.test.ts`, which *runs* it. What is left for a scan is the property this file is
+ * the only place able to see: that the page reaches for that one predicate and states no
+ * phase-and-kind condition of its own.
  */
 describe("one predicate decides both the panels and the poll", () => {
   it("routes both panels through pollTargetFor", () => {
-    expect(CODE).toContain('pollTargetFor(state)?.kind === "participation"');
-    expect(CODE).toContain('pollTargetFor(state)?.kind === "words"');
+    expect(CODE).toContain(
+      'pollTargetFor(config.questions, state)?.kind === "participation"',
+    );
+    expect(CODE).toContain(
+      'pollTargetFor(config.questions, state)?.kind === "words"',
+    );
   });
 
   /**
-   * **Scoped to the predicate's own body, not counted across the file**, and the first version
-   * of this test got that wrong: it asserted the condition appeared once in total and failed at
-   * 2, because `pollTargetFor` legitimately names the phase twice — once for the word cloud's
-   * two phases and once for the participation count's one. Counting occurrences globally
-   * measured the wrong thing entirely.
-   *
-   * What matters is that no *other* function re-derives the phase-and-kind condition, since
-   * that is how a panel and its poll drift apart.
+   * **The page imports the predicate rather than owning it.** The positive half of the rule:
+   * without it, the assertions below are satisfied by a page that dropped the condition
+   * altogether. The precedent is the toast extraction's own assertion further down this file.
    */
-  it("keeps the phase-and-kind condition inside the predicate and nowhere else", () => {
-    const predicate =
-      /function pollTargetFor[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
-    expect(predicate).toContain('state.phase !== "question-open"');
+  it("reaches the predicate through the extracted module", () => {
+    expect(CODE).toContain('} from "../../lib/client/controls";');
+    expect(CODE).toContain("pollTargetFor,");
+    // And it did not grow back here. A local copy would be free to disagree with the one the
+    // tests execute, which is the whole failure this extraction removes.
+    expect(CODE).not.toContain("function pollTargetFor");
+  });
 
-    const elsewhere = CODE.replace(predicate, "");
+  /**
+   * **No *other* site re-derives the phase-and-kind condition**, since that is how a panel and
+   * its poll drift apart. Before the extraction this had to carve the predicate's own body out
+   * of the file first — and the first version of that got it wrong, counting occurrences
+   * globally and failing at 2 because `pollTargetFor` legitimately names the phase twice. With
+   * the predicate gone from the file, the assertion is simply over the whole page.
+   */
+  it("keeps the phase-and-kind condition out of the page entirely", () => {
+    const elsewhere = CODE;
     /**
      * **Scoped to what the poll re-derives, which now needs saying out loud (S-11).**
      *
@@ -344,23 +359,22 @@ describe("one predicate decides both the panels and the poll", () => {
  */
 describe("the lobby's join count refreshes on the one loop", () => {
   it("gives the lobby a target rather than a loop of its own", () => {
-    const predicate =
-      /function pollTargetFor[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
-
-    // Non-vacuity: the body must have been found.
-    expect(predicate).toContain("PollTarget");
-    expect(predicate).toContain('state.phase === "lobby"');
-    expect(predicate).toContain('url: "/api/quiz/state"');
-
     /**
-     * The endpoint is named once, so the lobby cannot grow a fetch beside the loop's. The
-     * `odśwież` button reaches the same route through `client.refresh()` and does not spell
-     * it here — a second literal would be a second request path with its own error handling.
+     * *That* the lobby gets a target — and which one — is `controls.ts`'s rule, and
+     * `controls.test.ts` runs the predicate to prove it. What this page owns is that the
+     * third target arrived without a second request path: the loop fetches whatever the
+     * target named, and the endpoint is spelled nowhere here.
      *
-     * The *phase* is deliberately not counted: `applyShell` names the lobby too, and that is
-     * a layout rule with no poll to drift from — the same exclusion the countdown gets above.
+     * Stronger than the count it replaces, which allowed exactly one literal. The `odśwież`
+     * button reaches the same route through `client.refresh()`; a literal on this page would
+     * be a second request path with its own error handling.
      */
-    expect(occurrences('"/api/quiz/state"')).toBe(1);
+    const runner =
+      /async function runPoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(runner.length).toBeGreaterThan(0);
+    expect(runner).toContain("fetch(target.url");
+    expect(CODE).not.toContain('"/api/quiz/state"');
   });
 
   /**
@@ -498,9 +512,19 @@ describe("the word cloud's final read closes the loop", () => {
  * after it, silently.
  */
 describe("nothing on the polled path writes", () => {
-  it("polls only the two read endpoints", () => {
-    expect(CODE).toContain("/api/quiz/host/words");
-    expect(CODE).toContain("/api/quiz/host/participation");
+  it("fetches only the endpoint its target names", () => {
+    /**
+     * The three read endpoints are spelled in `controls.ts` and reach the loop as
+     * `target.url`; `controls.test.ts` runs the predicate that picks them, which is what
+     * proves they are the read ones. What this page must not do is build a URL of its own on
+     * a timer — the write path is `fire`, and `fire` is driven by a click.
+     */
+    const runner =
+      /async function runPoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(runner.length).toBeGreaterThan(0);
+    expect(runner).toContain("fetch(target.url");
+    expect(runner).not.toContain("/api/quiz/host/");
   });
 
   it("reaches a host action only through the button handler", () => {
@@ -515,51 +539,58 @@ describe("nothing on the polled path writes", () => {
  * S-07 wrote the principle on the standings button alone — *disabled everywhere else rather
  * than relying on the route's 409; the refusal is the backstop, not the interaction* — and
  * `start`, `advance` and `reveal` never got it, so the host could tap `pokaż odpowiedź` in
- * the lobby and be answered by an error. `CONTROL_RULES` extends it to all four verbs.
+ * the lobby and be answered by an error. `verbsFor` extends it to all five verbs.
  *
- * What this file can protect is the structure, not the behaviour: an Astro inline script has
- * no harness, so which button is dark in which phase is verified by hand. What is asserted
- * here is that the rule still exists **in one place** and is still applied at **every** site
- * that can undo it — the two properties whose loss is silent on screen.
+ * **Which verb is live in which phase is no longer asserted here.** It moved to
+ * `src/lib/client/controls.ts` and is checked by *running* the decision against route
+ * legality (`controls.test.ts`) — the property this file could never reach, because an Astro
+ * inline script has no harness and a scan of a table's own literal certifies whatever is in
+ * it, defects included (`lessons.md`).
  *
- * Every assertion below was verified in both directions.
+ * What is left here is what only this file can see: that the page reaches for that decision
+ * and applies it at **every** site that can undo it, and that the labels layered on top of it
+ * are labels rather than a second gate. Every assertion below was verified in both directions.
  */
 describe("flow verbs are offered only where they apply", () => {
   const sync = /function syncControls[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
-  const table = /const CONTROL_RULES[\s\S]*?\n {6}};/.exec(CODE)?.[0] ?? "";
 
-  it("finds the function and the table it is checking", () => {
+  /**
+   * The `verbsFor` call itself, so the assertions below can check *what the decision is asked
+   * with* — which is where a label or a kind could turn into a second gate.
+   */
+  const decision = /const rule = verbsFor\([\s\S]*?\);/.exec(sync)?.[0] ?? "";
+
+  it("finds the function and the call it is checking", () => {
     expect(sync.length).toBeGreaterThan(0);
-    expect(table.length).toBeGreaterThan(0);
+    expect(decision.length).toBeGreaterThan(0);
   });
 
   /**
-   * **Every state the view can be in has a row.** A missing phase falls back to the
-   * sessionless row, which on a projector looks like a panel that stopped responding to
-   * the session.
-   *
-   * **Scoped to the table, not to the file**, and the first version of this got that
-   * wrong: it asserted `ended:` appeared in `CODE`, which stayed true when the row was
-   * renamed, because `PHASE_LABELS` carries the same key. Verified by renaming the row and
-   * watching it pass — the assertion was measuring the wrong map entirely.
+   * **The decision is asked with the phase and the question's position, and nothing else.**
+   * Every other thing this function computes — the reveal's label, the standings re-broadcast
+   * name, the arming state — is a *rendering* of the decision. A label that reached the call
+   * would be a gate wearing a label's name, which is the one way the naming fixes documented
+   * below could quietly become phase rules.
    */
-  it("answers all five phases and the sessionless state", () => {
-    expect(table).toContain("[NO_SESSION]:");
-    expect(table).toContain("lobby:");
-    expect(table).toContain('"question-open":');
-    expect(table).toContain('"question-revealed":');
-    expect(table).toContain("standings:");
-    expect(table).toContain("ended:");
+  it("asks the decision with the phase and the position only", () => {
+    expect(decision).toContain("phase,");
+    expect(decision).toContain("atLastQuestion(config.questions");
+    expect(decision).not.toContain("revealCloses");
+    expect(decision).not.toContain("standingsAgain");
+    expect(decision).not.toContain("Armed");
   });
 
   /**
-   * **The table is read only by `syncControls`.** A second reader is a second place for the
-   * rule to drift from what the routes accept — the same discipline `pollTargetFor` is held
-   * to above, and for the same reason.
+   * **The decision is asked for, never restated.** The single-reader guard this replaces
+   * asserted that `CONTROL_RULES[` appeared in `syncControls` and nowhere else. Exporting a
+   * function with the table private makes a second reader unrepresentable rather than merely
+   * forbidden, so what is worth pinning is the positive half: the page asks, and has not
+   * grown a table back.
    */
-  it("reads the table from nowhere but the sync", () => {
-    expect(sync).toContain("CONTROL_RULES[");
-    expect(CODE.replace(sync, "")).not.toContain("CONTROL_RULES[");
+  it("takes its decision from the extracted module", () => {
+    expect(sync).toContain("verbsFor(");
+    expect(CODE).toContain("verbsFor,");
+    expect(CODE).not.toContain("CONTROL_RULES");
   });
 
   /**
@@ -611,7 +642,9 @@ describe("flow verbs are offered only where they apply", () => {
    * the `question-open` row, which leaves the cloud with no way to close.
    */
   it("renames the reveal verb from the single predicate, and gates nothing on it", () => {
-    expect(sync).toContain('pollTargetFor(state)?.kind === "words"');
+    expect(sync).toContain(
+      'pollTargetFor(config.questions, state)?.kind === "words"',
+    );
     // The name still comes from that predicate and from nothing else. What sits between it
     // and `textContent` now is the armed label, which is a state of the same button rather
     // than a second opinion about what it is called — see the confirmation block below.
@@ -622,11 +655,11 @@ describe("flow verbs are offered only where they apply", () => {
       "button.textContent = revealArmed ? REVEAL_CONFIRM_LABEL : name",
     );
 
-    // The rename must not have become a phase rule: `reveal` stays offered while the cloud
-    // is open, because closing it is the only way on to the standings beat.
-    expect(table).toContain('allow: ["advance", "reveal"]');
-    // …and the label lives outside the table, which states legality and nothing else.
-    expect(table).not.toContain("revealCloses");
+    // The rename must not have become a phase rule. That `reveal` stays offered while the
+    // cloud is open — the only way on to the standings beat — is now asserted by running the
+    // decision in `controls.test.ts`. What this file can still see is that the label was
+    // computed here and never reached the decision: see the call assertion above.
+    expect(sync).toContain("const revealCloses =");
   });
 
   /**
@@ -646,12 +679,10 @@ describe("flow verbs are offered only where they apply", () => {
       "button.textContent = standingsAgain ? STANDINGS_LABEL_AGAIN : STANDINGS_LABEL",
     );
 
-    // The gate is untouched: the phase still offers the verb, which is what makes the retry
-    // reachable at all.
-    expect(table).toContain('allow: ["advance", "standings"]');
-    // And the naming stays out of the table, exactly as the reveal's does.
-    expect(table).not.toContain("standingsAgain");
-    expect(table).not.toContain("STANDINGS_LABEL");
+    // That the gate is untouched — the phase still offers the verb, which is what makes the
+    // retry reachable at all — is asserted by running the decision in `controls.test.ts`, and
+    // named there as one of the three withholdings the panel is *not* allowed to add. What
+    // stays here is that the naming never reached the decision: see the call assertion above.
   });
 
   /**
@@ -696,30 +727,40 @@ describe("flow verbs are offered only where they apply", () => {
    * the property below — and the position it reads comes from the published question order
    * this page already holds, never from a new field on the wire.
    */
-  it("answers the last question from the table rather than beside a button", () => {
-    expect(table).toContain("whenLast:");
-    expect(sync).toContain("atLastQuestion(state)");
-    expect(sync).toContain("base.whenLast");
+  it("answers the last question from the decision rather than beside a button", () => {
+    // The position is a *parameter of the decision*, not a condition applied after it — which
+    // is what stops a `whenLast` rule being written beside one button and not another. The
+    // rows themselves are asserted by running them (`controls.test.ts`).
+    expect(decision).toContain("atLastQuestion(config.questions");
 
-    // Nothing else re-decides where the end of the quiz is. `atLastQuestion` is the one
-    // reading, and `syncEndButton` asks it rather than counting questions again.
-    expect(occurrences("config.questions.length - 1")).toBe(1);
+    // Nothing here re-decides where the end of the quiz is: the arithmetic left this file
+    // with the predicate, so a second reading of it would have to be written from scratch.
+    expect(CODE).not.toContain("questions.length - 1");
+    expect(CODE).not.toContain("function atLastQuestion");
   });
 
   /**
    * **The last `question-revealed` offers no flow verb at all**, so the ring has nowhere to
-   * sit on the lower line — which is why `syncEndButton` takes it. Exactly one filled pill
-   * still: the row that empties the bar is the row that sets `next: null`.
+   * sit on the lower line — which is why `syncEndButton` takes it.
+   *
+   * **Exactly one filled pill, now by construction rather than by two agreeing conditions.**
+   * The ring used to be `!endButton.disabled && last` here and `next: null` in the table —
+   * two statements that had to stay in step, with nothing able to notice when they did not.
+   * `verbsFor` names `end` as `next` in exactly the rows where every flow verb has gone, so
+   * the button reads the same `next` the bar does. That "`next` is always a member of
+   * `allow`" is asserted by running the decision (`controls.test.ts`), which is also what now
+   * covers "never on a button the phase has put out of reach".
    */
   it("hands the next-step ring to the closing button when the bar empties", () => {
     const endSync =
       /function syncEndButton[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(endSync.length).toBeGreaterThan(0);
 
-    expect(endSync).toContain("endButton.dataset.next");
-    expect(endSync).toContain("atLastQuestion(state)");
-    // Never on a button the phase has already put out of reach.
-    expect(endSync).toContain("!endButton.disabled");
+    expect(endSync).toContain(
+      'endButton.dataset.next = String(rule.next === "end")',
+    );
+    // Read off the decision, never recomputed from the disabled flag beside it.
+    expect(endSync).not.toContain("!endButton.disabled &&");
   });
 });
 
@@ -1032,7 +1073,7 @@ describe("the closing button cannot fire by accident", () => {
    * hidden button on the bar is a button in no place at all.
    */
   it("places the button on the last question only, and never by hiding it", () => {
-    expect(sync).toContain("const last = atLastQuestion(state)");
+    expect(sync).toContain("const last = atLastQuestion(config.questions");
     expect(sync).toContain(
       'const home = last && phase !== "ended" ? endSlotBar : endSlotMenu',
     );
