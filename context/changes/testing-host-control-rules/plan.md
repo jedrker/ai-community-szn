@@ -492,10 +492,10 @@ reversible by a single revert.
 
 #### Automated
 
-- [x] 4.1 Full suite passes: `bun run test`
-- [x] 4.2 No stale `CONTROL_RULES`-in-`host.astro` claim remains in `CLAUDE.md`
+- [x] 4.1 Full suite passes: `bun run test` — fcc88b5
+- [x] 4.2 No stale `CONTROL_RULES`-in-`host.astro` claim remains in `CLAUDE.md` — fcc88b5
 
 #### Manual
 
-- [x] 4.3 §6.5 answers the cookbook question standalone
-- [x] 4.4 CLAUDE.md amendments quote the overturned positions
+- [x] 4.3 §6.5 answers the cookbook question standalone — fcc88b5
+- [x] 4.4 CLAUDE.md amendments quote the overturned positions — fcc88b5
