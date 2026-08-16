@@ -272,9 +272,18 @@ export type PollTarget = {
   readonly url: string;
 };
 
-/** What `pollTargetFor` needs off the snapshot, and nothing more. */
+/**
+ * What `pollTargetFor` needs off the snapshot, and nothing more.
+ *
+ * **`phase` is the exhaustive union, not `string`**, so the two halves of this module fail the
+ * same way. A renamed or dropped `SessionPhase` member breaks `CONTROL_RULES` and the test's
+ * `ROUTE_OUTCOMES` at `astro check` — deliberately — while a stringly-typed `phase` would leave
+ * `pollTargetFor` comparing against a literal that no longer exists. The panels and the poll would
+ * both go quiet on a green build, which is precisely the "data path with no affordance" failure
+ * this function's own docblock says it exists to prevent.
+ */
 export type PollState = {
-  readonly phase: string;
+  readonly phase: ControlPhase;
   readonly currentQuestionId: string | null;
 };
 

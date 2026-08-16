@@ -33,6 +33,14 @@ related=()  # sources handed to the module-graph walk
 for file in "$@"; do
   [ -f "$file" ] || continue
 
+  # Normalized before matching, because the `case` globs below anchor at the start of the
+  # string: `e2e/x.spec.ts` was skipped while `./e2e/x.spec.ts` and an absolute path were
+  # not, and the bypassing forms fail with the very error the skip exists to prevent — a red
+  # gate on correct code. Both current callers happen to pass clean relative paths; that is
+  # one caller change away from being false.
+  file="${file#./}"
+  file="${file#"$ROOT"/}"
+
   # Playwright's specs are not vitest's to run, and vitest cannot decline them
   # politely: handed one, it collects the file, Playwright's `test` object throws
   # "did not expect test.beforeEach() to be called here", and the job exits 1. So
@@ -59,11 +67,11 @@ done
 status=0
 
 if [ ${#explicit[@]} -gt 0 ]; then
-  "$VITEST" run "${explicit[@]}" || status=1
+  "$VITEST" run --dir src "${explicit[@]}" || status=1
 fi
 
 if [ ${#related[@]} -gt 0 ]; then
-  "$VITEST" related "${related[@]}" --run || status=1
+  "$VITEST" related "${related[@]}" --run --dir src || status=1
 fi
 
 exit "$status"

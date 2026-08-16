@@ -42,8 +42,13 @@ test in this project. The seed is the exemplar; this file is the constraint set.
   per named risk, and say which risk in the file header.
 - **The store is real.** Specs drive the Upstash namespace from `.env`. Every spec that
   can create a session must (a) refuse to run when one is already live, and (b) purge in
-  `afterEach`. `purgeSession` is a no-op when there is nothing to purge, so calling it
-  unconditionally is correct.
+  `afterEach` **only what its own precondition cleared it to create**. This rule used to end
+  "`purgeSession` is a no-op when there is nothing to purge, so calling it unconditionally is
+  correct" — which is true in the case that never happens and false in the one that matters.
+  **Playwright runs `afterEach` even when `beforeEach` fails**, so an unconditional purge fires
+  *after* the precondition has refused to touch a live room, reads that room's version, and
+  deletes it with the real host secret. Gate the teardown on a flag set after the precondition
+  passes; `seed.spec.ts`'s `clearedToCreate` is the pattern.
 - **Real vs mocked.** Routing, the API routes, Redis and Ably stay real — that is where
   the integration risk this layer exists for actually lives. Mock only an expensive or
   non-deterministic *external* call, and mock it where the server makes it (Resend and

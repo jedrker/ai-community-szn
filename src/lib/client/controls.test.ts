@@ -10,6 +10,7 @@ import {
   verbsFor,
   type ControlPhase,
   type FlowAction,
+  type PollState,
 } from "./controls";
 
 /**
@@ -535,11 +536,11 @@ describe("pollTargetFor", () => {
     (kind) => question(kind, kind),
   );
 
-  const open = (id: string) => ({
+  const open = (id: string): PollState => ({
     phase: "question-open",
     currentQuestionId: id,
   });
-  const revealed = (id: string) => ({
+  const revealed = (id: string): PollState => ({
     phase: "question-revealed",
     currentQuestionId: id,
   });

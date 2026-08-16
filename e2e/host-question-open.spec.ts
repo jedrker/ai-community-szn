@@ -31,8 +31,24 @@ import {
  * and a faked phase would assert the renderer against a state the host never produced.
  *
  * Store hazard: this spec drives the real Upstash namespace from `.env`. The precondition
- * refuses to run against a live session and `afterEach` purges unconditionally.
+ * refuses to run against a live session, and `afterEach` purges only what the precondition
+ * cleared this spec to create — see `clearedToCreate` below.
  */
+
+/**
+ * **Whether the precondition cleared this spec to create a session**, and therefore whether
+ * the teardown owns anything to clean up.
+ *
+ * **Playwright runs `afterEach` even when `beforeEach` fails.** So a teardown guarded only on
+ * the secret's presence runs *after the precondition refused to touch a live room* — and
+ * `purgeSession` reads the live version and posts it with the real host secret, so the purge
+ * succeeds. The guard written to protect a running session was the thing that deleted it,
+ * along with its players, tallies and standings.
+ *
+ * Set after the precondition passes, so it means "there was no session and this spec was
+ * cleared to make one" — never "this spec ran".
+ */
+let clearedToCreate = false;
 
 test.beforeEach(async ({ request }) => {
   test.skip(
@@ -45,10 +61,15 @@ test.beforeEach(async ({ request }) => {
     state,
     "a session is already running — refusing to drive a live room",
   ).toBeNull();
+
+  clearedToCreate = true;
 });
 
 test.afterEach(async ({ request, baseURL }) => {
-  if (hostSecret === "") return;
+  // Purge only what this spec was cleared to create. See `clearedToCreate`.
+  if (!clearedToCreate) return;
+  clearedToCreate = false;
+
   await purgeSession(request, hostSecret, baseURL ?? "");
 });
 

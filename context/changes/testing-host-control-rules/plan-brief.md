@@ -17,7 +17,8 @@ accept.
 `CONTROL_RULES` sits at `host.astro:1905-1983`, inside a 2,330-line inline script in the repo's
 largest and highest-churn file. `host.test.ts` is 1,391 lines of substring assertions over that file's
 text; of its ~150 assertions, none is a property assertion, and six pass when the code they guard is
-deleted. The panel's phase rules are two mechanisms — the table for four verbs, and a separate inline
+deleted. *(Corrected after Phase 3: the six do not — each carried a presence guard on the line
+above. See `plan.md`'s Current State Analysis and test-plan §6.6.)* The panel's phase rules are two mechanisms — the table for four verbs, and a separate inline
 condition for the closing verb.
 
 ## Desired End State

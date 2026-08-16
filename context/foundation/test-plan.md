@@ -90,6 +90,13 @@ as least confident. Phase 2 depends on the timing discipline Phase 1 establishes
 are the ones the archive shows fake timers getting wrong. Phase 4 is last on purpose: a gate wrapped
 around a suite nobody trusts yet enforces the wrong thing.
 
+**Amended 2026-08-16:** a browser layer arrived outside this rollout, between phases 1 and 2 of
+the row above — `playwright.config.ts` and two specs under `e2e/`, installed with the toolkit's
+`/10x-e2e` skill rather than planned here. It is wired to no gate and belongs to no rollout phase.
+It is recorded in §7 rather than added as a phase, because the phase that was dropped was about
+*visual* regressions and this is not that. Phase 4 (gates) is where a decision about running it in
+CI belongs.
+
 This rollout is **classic-only, by decision rather than by omission.** A fifth phase — a selective
 visual review of the host and attendee screens at projector and laptop widths — was proposed and
 dropped at write time; the reasoning and its re-evaluation trigger are recorded in §7 rather than
@@ -322,6 +329,24 @@ assumption changes.
   will be proven; that it is legible and correctly placed on a projector will not. Re-evaluate if a
   geometry defect reaches a live session, if browser automation arrives for another reason, or if the
   host view stops being opened manually before a session. (Source: rollout decision, 2026-08-16.)
+
+  **Amended 2026-08-16 — the third trigger fired.** Browser automation arrived for another reason:
+  Playwright was installed with the toolkit's `/10x-e2e` skill, and `e2e/seed.spec.ts` and
+  `e2e/host-question-open.spec.ts` now drive the host panel in Chromium. This exclusion is therefore
+  no longer accurate as written, and the position it overturns is kept above rather than deleted —
+  the reasoning for dropping the phase was sound at the time and would apply again if the tooling
+  went away.
+
+  What exists now, stated precisely so nobody reads more into it than is there: **two DOM-level
+  specs asserting which verbs the panel offers, wired to no gate**, run only by a deliberate
+  `bun run e2e`. They cover Risk #1's rendered half in the sense that they assert against a real
+  browser after a real transition — they do **not** cover geometry, legibility or projector widths,
+  which is what the dropped phase was actually about. The accepted cost above therefore stands
+  unchanged: no test in this repository will catch a control bar wrapping at 1440.
+
+  Two consequences worth carrying: these specs drive the **real** Upstash namespace from `.env`
+  (see `e2e/E2E-RULES.md`, and the teardown defect the first implementation review caught), and the
+  vitest scripts now carry `--dir src` to keep the two runners' globs apart.
 - **Live realtime and store connections inside the suite** — latency and flake on every run buys
   nothing the two existing out-of-band scripts do not already cover. Re-evaluate if those scripts
   stop being run.

@@ -55,7 +55,19 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   use: {
     baseURL,
-    // A failing E2E test is a debugging job; give it something to debug.
+    /**
+     * A failing E2E test is a debugging job; give it something to debug.
+     *
+     * **A trace records request headers, and these specs send `x-livequiz-host-secret` on
+     * every host call.** Retries are on only in CI, so today the trace is written to a
+     * gitignored `test-results/` on one developer's machine and goes no further. The moment
+     * CI uploads it as a build artifact — the standard pattern, and what test-plan §3
+     * Phase 4 is about — that artifact carries the production host write credential.
+     *
+     * Whoever wires CI owns this decision: scrub the header, restrict artifact visibility,
+     * or turn tracing off there. It is recorded at the line rather than in a review file
+     * because this is where somebody will be looking when they set `retries`.
+     */
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },

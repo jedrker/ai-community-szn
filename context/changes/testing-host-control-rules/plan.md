@@ -19,6 +19,16 @@ Of roughly 150 assertions in that file, **none is a property assertion**. Six ac
 when the code they guard is deleted. The panel's phase rules are two mechanisms, not one:
 `CONTROL_RULES` governs four flow verbs, and `syncEndButton:2213` governs the closing verb.
 
+> **Correction, added after Phase 3 (2026-08-16).** The sentence above — "Six across two files pass
+> when the code they guard is deleted" — is **wrong**, and it came from `research.md` §5(a). Phase 3
+> deleted each guarded statement from the page and re-ran its named test: all six failed correctly.
+> Every one already carried a presence assertion on the line directly above, verified against
+> `c0afc1e` itself, so it was not a later repair. The audit read the `indexOf` line in isolation.
+>
+> The claim is left standing rather than edited, because the reasoning that produced it is the
+> finding: **an audit of a guard must execute it, not read it** — the rule the audit existed to
+> enforce. What Phase 3 shipped instead, and why, is in `context/foundation/test-plan.md` §6.6.
+
 Full grounding, including the route legality matrix and the per-assertion audit, is in
 `context/changes/testing-host-control-rules/research.md`.
 
