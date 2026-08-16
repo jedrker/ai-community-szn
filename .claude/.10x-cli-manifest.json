@@ -2,8 +2,8 @@
   "package": "@przeprogramowani/10x-cli",
   "version": "1.16.0",
   "manifestVersion": 3,
-  "lastApplied": "2026-08-16T15:05:04.674Z",
-  "lessonId": "m3l3",
+  "lastApplied": "2026-08-16T15:43:44.256Z",
+  "lessonId": "m3l4",
   "course": "10xdevs3",
   "tool": "claude-code",
   "files": {
@@ -175,6 +175,24 @@
         "files": ["SKILL.md"],
         "contentHashes": {
           "SKILL.md": "142707eba64cdb7a7bc9901e2de9a221c3a41a2cc0109f49820f684e2ec5a1ad"
+        }
+      },
+      "10x-e2e": {
+        "files": [
+          "references/browser-driven-generation.md",
+          "references/e2e-anti-patterns.md",
+          "references/e2e-prompt-template.md",
+          "references/e2e-quality-rules.md",
+          "references/seed-test-pattern.md",
+          "SKILL.md"
+        ],
+        "contentHashes": {
+          "references/browser-driven-generation.md": "08fb380685c299ce7cc40d9ab3191261198d0c40ec62a4d9ee5f7ebfc440e50c",
+          "references/e2e-anti-patterns.md": "38950a5c6fc67f65899365f99930178d589e87118d7a6dbd74728806ac36ab38",
+          "references/e2e-prompt-template.md": "7d934d3b6f0e3f36e7abdf0ab7ff4a23b645d12cb80603e3a962ce7d6babb95b",
+          "references/e2e-quality-rules.md": "d161cf3659ae5321b7f597987664e4017aecc7e15f5caa7a15a1eaf73bf4162b",
+          "references/seed-test-pattern.md": "90fa8778a557d0c88320e839c6a8879735b3390b68ed89b3487258f2562b2f80",
+          "SKILL.md": "85a9ab63aedcac669951aa90a98e7e3d4e4e5fa59b0340ee3f62505bbfed4ad1"
         }
       }
     },
@@ -760,6 +778,113 @@
         },
         "10x-tdd": {
           "files": ["SKILL.md"]
+        }
+      },
+      "prompts": [
+        "skill-explainer.md",
+        "m1l5-1-plan-integration.md",
+        "m1l5-2-constrain-approach.md",
+        "m1l5-3-extend-prerequisites.md",
+        "m1l5-4-store-plan.md",
+        "m3l2-ad-hoc-testing.md"
+      ],
+      "configs": []
+    },
+    "m3l4": {
+      "appliedAt": "2026-08-16T15:43:44.255Z",
+      "skills": {
+        "10x-init": {
+          "files": ["SKILL.md"]
+        },
+        "10x-shape": {
+          "files": ["references/prd-schema.md", "SKILL.md"]
+        },
+        "10x-prd": {
+          "files": ["SKILL.md"]
+        },
+        "10x-tech-stack-selector": {
+          "files": [
+            "references/agent-friendly-criteria.md",
+            "references/decision-flow.md",
+            "references/eval-cases.md",
+            "references/handoff-schema.md",
+            "references/residual-interview.md",
+            "references/starter-registry.yaml",
+            "SKILL.md"
+          ]
+        },
+        "10x-stack-assess": {
+          "files": ["references/agent-friendly-criteria.md", "SKILL.md"]
+        },
+        "10x-bootstrapper": {
+          "files": [
+            "references/bootstrapper-config.yaml",
+            "references/handoff-consumer.md",
+            "references/post-scaffold-verification.md",
+            "references/pre-scaffold-verification.md",
+            "references/refusal-protocol.md",
+            "references/scaffold-merge.md",
+            "references/verification-log-schema.md",
+            "SKILL.md"
+          ]
+        },
+        "10x-health-check": {
+          "files": ["references/health-check-schema.md", "SKILL.md"]
+        },
+        "10x-agents-md": {
+          "files": ["SKILL.md"]
+        },
+        "10x-rule-review": {
+          "files": ["SKILL.md"]
+        },
+        "10x-lesson": {
+          "files": ["SKILL.md"]
+        },
+        "10x-infra-research": {
+          "files": ["references/agent-friendly-criteria.md", "SKILL.md"]
+        },
+        "10x-roadmap": {
+          "files": ["SKILL.md"]
+        },
+        "10x-new": {
+          "files": ["references/change-md.md", "SKILL.md"]
+        },
+        "10x-plan": {
+          "files": ["references/progress-format.md", "SKILL.md"]
+        },
+        "10x-plan-review": {
+          "files": ["SKILL.md"]
+        },
+        "10x-implement": {
+          "files": ["SKILL.md"]
+        },
+        "10x-archive": {
+          "files": ["SKILL.md"]
+        },
+        "10x-impl-review": {
+          "files": ["SKILL.md"]
+        },
+        "10x-frame": {
+          "files": ["SKILL.md"]
+        },
+        "10x-research": {
+          "files": ["SKILL.md"]
+        },
+        "10x-test-plan": {
+          "files": ["references/test-plan-schema.md", "SKILL.md"]
+        },
+        "10x-tdd": {
+          "files": ["SKILL.md"]
+        },
+        "10x-e2e": {
+          "files": [
+            "references/browser-driven-generation.md",
+            "references/e2e-anti-patterns.md",
+            "references/e2e-prompt-template.md",
+            "references/e2e-quality-rules.md",
+            "references/seed-test-pattern.md",
+            "SKILL.md"
+          ]
         }
       },
       "prompts": [

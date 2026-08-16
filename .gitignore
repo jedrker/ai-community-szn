@@ -151,3 +151,9 @@ vite.config.ts.timestamp-*
 # Shared agent hook config. Un-ignores a file the user's global gitignore
 # excludes by name (`settings.json`), so the per-edit hook reaches teammates.
 !.claude/settings.json
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/

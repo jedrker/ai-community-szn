@@ -453,16 +453,16 @@ reversible by a single revert.
 
 #### Automated
 
-- [x] 1.1 Type checking passes: `bun run type-check`
-- [x] 1.2 Full suite passes: `bun run test`
-- [x] 1.3 Build passes: `bun run build`
-- [x] 1.4 `controls.ts` exists and `host.astro` contains no `CONTROL_RULES`
-- [x] 1.5 Boundary gate green: new module scanned and passing
+- [x] 1.1 Type checking passes: `bun run type-check` — c780a12
+- [x] 1.2 Full suite passes: `bun run test` — c780a12
+- [x] 1.3 Build passes: `bun run build` — c780a12
+- [x] 1.4 `controls.ts` exists and `host.astro` contains no `CONTROL_RULES` — c780a12
+- [x] 1.5 Boundary gate green: new module scanned and passing — c780a12
 
 #### Manual
 
-- [x] 1.6 Enabled verbs and tooltips identical across all four phases
-- [x] 1.7 On the last question, `dalej` disabled and closing button enabled and ringed
+- [x] 1.6 Enabled verbs and tooltips identical across all four phases — c780a12
+- [x] 1.7 On the last question, `dalej` disabled and closing button enabled and ringed — c780a12
 
 ### Phase 2: Executing decision tests
 

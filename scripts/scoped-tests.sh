@@ -32,6 +32,16 @@ related=()  # sources handed to the module-graph walk
 
 for file in "$@"; do
   [ -f "$file" ] || continue
+
+  # Playwright's specs are not vitest's to run, and vitest cannot decline them
+  # politely: handed one, it collects the file, Playwright's `test` object throws
+  # "did not expect test.beforeEach() to be called here", and the job exits 1. So
+  # staging or editing anything under e2e/ failed this gate on correct code. They
+  # have their own runner (`bun run e2e`) and their own config (`testDir: ./e2e`).
+  case "$file" in
+    e2e/*) continue ;;
+  esac
+
   case "$file" in
     *.test.ts | *.test.tsx)
       explicit+=("$file")
