@@ -49,6 +49,63 @@ export function setHidden(node: HTMLElement, hidden: boolean): void {
   node.hidden = hidden;
 }
 
+/**
+ * How long an arriving element takes to land, in milliseconds.
+ *
+ * Short on purpose. On the phone this shares a budget with FR-002's one-second rule for
+ * reflecting the host's action, and the countdown is already running while it plays; on
+ * the projector the host is mid-sentence. An arrival marks a beat change — it is not the
+ * beat.
+ */
+export const ENTER_MS = 240;
+
+/** How far an arriving element rises before it settles, in pixels. */
+const ENTER_RISE_PX = 12;
+
+/**
+ * Writes one arriving element at `progress`, where 1 is landed.
+ *
+ * **At 1 the inline properties are removed rather than set to their final values.** An
+ * element left carrying `opacity: 1; transform: translateY(0px)` is an element whose
+ * stylesheet no longer decides those properties — harmless today, and exactly the kind of
+ * residue that makes a later hover or variant silently stop working. Removing them also
+ * makes the non-animated path a genuine no-op rather than a write.
+ */
+function paintEntrance(node: HTMLElement, progress: number): void {
+  if (progress >= 1) {
+    node.style.opacity = "";
+    node.style.transform = "";
+    return;
+  }
+
+  node.style.opacity = String(progress);
+  node.style.transform = `translateY(${((1 - progress) * ENTER_RISE_PX).toFixed(2)}px)`;
+}
+
+/**
+ * Lands one element when what it shows changes (this change).
+ *
+ * For the beats that are a single block — the revealed answer, the question the projector
+ * swaps to. A caller passes what the element is *showing*, not when it rendered: both views
+ * re-render far more often than they change, and `signature` is what keeps an arrival from
+ * replaying on a repeated snapshot.
+ *
+ * Opt-in via `enabled`, because the surfaces that must stay still simply pass `false` — the
+ * rail's counters are the case, and `host.astro` states why.
+ */
+export function renderEntrance(
+  node: HTMLElement,
+  signature: string,
+  options: { readonly enabled?: boolean; readonly durationMs?: number } = {},
+): void {
+  runMotion(node, {
+    signature,
+    durationMs: options.durationMs ?? ENTER_MS,
+    enabled: options.enabled,
+    paint: (progress) => paintEntrance(node, progress),
+  });
+}
+
 export type QuestionClassNames = {
   readonly prompt?: string;
   readonly list?: string;
@@ -539,6 +596,25 @@ export type RenderStandingsOptions = StandingsClassNames & {
    * `normalizePolish` lives in `src/quiz/` and a value import from there is refused.
    */
   readonly ownDisplayName?: string | null;
+  /**
+   * Land the board when the beat arrives (this change).
+   *
+   * **The list arrives as one block, and rows never move relative to each other.** A
+   * per-row stagger would read as the board *sorting itself*, which is a claim about rank
+   * changes this renderer is in no position to make: it is handed a published order and
+   * paints it, and rank-change motion needs row identity across a `replaceChildren()` that
+   * this function does not have. Deferred deliberately — see `motion-contract.md`.
+   */
+  readonly animate?: boolean;
+  /**
+   * Tells two boards apart that hold the same rows.
+   *
+   * The standings beat and the closing screen publish the same five names, so without this
+   * the close would inherit the standings' signature and arrive silently — the one beat in
+   * the session that should not. The caller passes whatever distinguishes them; the two
+   * views pass the phase.
+   */
+  readonly motionKey?: string;
 };
 
 /** Polish, because it renders directly. */
@@ -569,6 +645,9 @@ export function renderStandings(
 ): void {
   container.replaceChildren();
 
+  // Ahead of the early return, so a board that empties takes its arrival with it.
+  cancelMotion(container);
+
   const classNames = options;
   const own = options.ownDisplayName ?? null;
 
@@ -576,6 +655,7 @@ export function renderStandings(
   // in a sentence rather than drawing an empty frame, the same choice `renderDistribution`
   // makes for a question nobody has answered.
   if (!rows || rows.length === 0) {
+    forgetMotion(container);
     const empty = document.createElement("p");
     if (classNames.empty) empty.className = classNames.empty;
     empty.textContent = NO_STANDINGS_TEXT;
@@ -614,6 +694,19 @@ export function renderStandings(
     row.append(rank, name, points);
     list.append(row);
   }
+
+  // Keyed by what the board says — the order, the names and the points — so a re-render of
+  // the same board stands still while a board whose figures moved arrives again.
+  const signature = `${options.motionKey ?? ""}|${rows
+    .map((entry) => `${entry.rank}:${entry.displayName}:${entry.points}`)
+    .join("|")}`;
+
+  runMotion(container, {
+    signature,
+    durationMs: ENTER_MS,
+    enabled: options.animate === true,
+    paint: (progress) => paintEntrance(list, progress),
+  });
 
   container.append(list);
 }
@@ -685,7 +778,29 @@ export type RenderWordCloudOptions = WordCloudClassNames & {
    */
   readonly minRem?: number;
   readonly maxRem?: number;
+  /**
+   * Land a word the first time it appears (this change, FR-015).
+   *
+   * **Only words this container has not drawn before move.** The cloud is repainted on
+   * every poll — roughly every 2.5 seconds, wiping and rebuilding every chip — so an
+   * entrance applied to the whole list would restart thirty words on the projector several
+   * times a minute, which reads as a fault rather than as an arrival. Everything already on
+   * screen is painted final.
+   *
+   * Opt-in, and the projector is the only caller that renders a cloud at all.
+   */
+  readonly animate?: boolean;
 };
+
+/**
+ * The words a container has already drawn, so a chip arrives once.
+ *
+ * Separate from the motion module's own signature bookkeeping because it answers a
+ * different question: the signature says *whether anything changed*, and this says *which
+ * of these chips are the change*. Cleared with the cloud, so a question's first word lands
+ * on the next question too.
+ */
+const cloudSeen = new WeakMap<HTMLElement, ReadonlySet<string>>();
 
 /** Polish, because it renders directly. */
 const NO_WORDS_TEXT = "Jeszcze nikt nie napisał słowa.";
@@ -725,6 +840,10 @@ export function renderWordCloud(
 ): void {
   container.replaceChildren();
 
+  // Whatever was landing into the chips just detached — cancelled ahead of the early return
+  // below, `renderDistribution`'s rule.
+  cancelMotion(container);
+
   const classNames = options;
   const minRem = options.minRem ?? DEFAULT_MIN_REM;
   const maxRem = options.maxRem ?? DEFAULT_MAX_REM;
@@ -733,6 +852,10 @@ export function renderWordCloud(
   // a sentence rather than drawing an empty frame, the choice `renderDistribution` and
   // `renderStandings` both make. `undefined` reaches here before the first poll answers.
   if (!words || words.length === 0) {
+    forgetMotion(container);
+    // The next question's first word is an arrival again, not a word this container has
+    // already seen.
+    cloudSeen.delete(container);
     const empty = document.createElement("p");
     if (classNames.empty) empty.className = classNames.empty;
     empty.textContent = NO_WORDS_TEXT;
@@ -749,9 +872,20 @@ export function renderWordCloud(
   const list = document.createElement("ul");
   if (classNames.list) list.className = classNames.list;
 
+  const seen = cloudSeen.get(container);
+  const arriving: HTMLElement[] = [];
+  const fresh: string[] = [];
+
   for (const entry of words) {
     const chip = document.createElement("li");
     if (classNames.chip) chip.className = classNames.chip;
+
+    // Unseen on the *first* cloud means every chip arrives, which is right: that paint is
+    // the cloud appearing, and it is the beat FR-015 is about.
+    if (seen === undefined || !seen.has(entry.word)) {
+      arriving.push(chip);
+      fresh.push(entry.word);
+    }
 
     // Marked in the DOM as well as rendered, so what was drawn survives a stylesheet that
     // failed to load on a venue network — `renderDistribution`'s `data-correct` rule.
@@ -766,6 +900,21 @@ export function renderWordCloud(
     chip.textContent = entry.word;
     list.append(chip);
   }
+
+  cloudSeen.set(container, new Set(words.map((entry) => entry.word)));
+
+  // Keyed by the words that are new rather than by the whole cloud: a poll that adds
+  // nothing produces the same empty signature and stands still, while a poll that brings
+  // two words lands exactly those two. Called before the list is attached, so an arriving
+  // chip is never painted final for a frame first.
+  runMotion(container, {
+    signature: fresh.join(" "),
+    durationMs: ENTER_MS,
+    enabled: options.animate === true && arriving.length > 0,
+    paint: (progress) => {
+      for (const chip of arriving) paintEntrance(chip, progress);
+    },
+  });
 
   container.append(list);
 }

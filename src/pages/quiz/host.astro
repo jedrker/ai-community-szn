@@ -1025,6 +1025,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         el,
         renderCountdown,
         renderDistribution,
+        renderEntrance,
         renderQuestion,
         renderStandings,
         renderWordCloud,
@@ -1738,6 +1739,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           // one-vote word is still readable from the back.
           minRem: 1.75,
           maxRem: 5,
+          /**
+           * The moment the PRD's FR-015 is about: a word somebody typed on their own phone
+           * showing up on the big screen is what proves the session is live. Only words the
+           * cloud has not drawn before move — the panel repaints on every poll, and
+           * restarting thirty chips every 2.5 seconds is a fault, not an arrival.
+           */
+          animate: true,
         });
       }
 
@@ -2319,6 +2327,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          */
         renderStandings(standingsBoard, standings?.rows, {
           ownDisplayName: null,
+          animate: true,
+          // The two registers publish the same five names, so without a key the closing
+          // screen would inherit the standings beat's signature and arrive silently.
+          motionKey: closing ? "ended" : "standings",
           list: closing
             ? "flex flex-wrap items-stretch gap-x-8 gap-y-6 [&>li:first-child]:w-full " +
               "[&>li:nth-child(n+2)]:min-w-0 [&>li:nth-child(n+2)]:flex-1 " +
@@ -2412,6 +2424,23 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         });
 
         /**
+         * The question arriving on the projector (this change).
+         *
+         * **Keyed by what is on the stage, including whether it has been revealed**, so the
+         * reveal's re-render — which repaints the same prompt with the bands marked — lands
+         * as its own beat rather than sitting still. A repeated snapshot carries the same
+         * two values and moves nothing.
+         *
+         * On the block rather than on the prompt: `renderQuestion` wipes this container, so
+         * anything inside it is a fresh node every render and has no arrival to speak of.
+         */
+        renderEntrance(
+          questionBox,
+          `${shownQuestion?.id ?? "none"}|${revealed ? "revealed" : "open"}`,
+          { enabled: true },
+        );
+
+        /**
          * The accepted answer, straight off the snapshot (roadmap S-05).
          *
          * The schema already refuses a non-null value outside `question-revealed`, so
@@ -2421,6 +2450,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const accepted = state.revealedAnswerText;
         setHidden(acceptedAnswerBox, accepted === null || accepted.length === 0);
         if (accepted) setText("accepted-answer-value", accepted);
+        // After the hide, never before: a box that is hidden this render simply never
+        // animates, which is what keeps the entrance out of the visibility rule's way.
+        renderEntrance(acceptedAnswerBox, accepted ?? "", { enabled: true });
 
         renderCountdownPanel(state);
         renderParticipation(state);

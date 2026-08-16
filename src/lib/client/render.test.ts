@@ -1336,3 +1336,173 @@ describe("the note between the prompt and the options", () => {
     expect(container.children[1]?.textContent).toBe("<b>uwaga</b>");
   });
 });
+
+/**
+ * The projector's arrivals (this change).
+ *
+ * Two rules carry the whole risk here, and both are invisible on screen when they break:
+ * a cloud that re-animates every word on every poll reads as a fault rather than as an
+ * arrival, and a board that re-animates on a replayed snapshot flickers in front of the
+ * room. Everything else about these renderers is covered above and unchanged.
+ *
+ * `requestAnimationFrame` is stubbed rather than driven, because what is under test is
+ * *whether* a frame was queued, not what the frames paint.
+ */
+describe("entrance motion", () => {
+  let container: HTMLElement;
+  let frames: ((now: number) => void)[];
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    frames = [];
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (callback: (now: number) => void) => {
+        frames.push(callback);
+        return frames.length;
+      },
+    );
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  describe("the word cloud", () => {
+    const draw = (words: string[]): void => {
+      renderWordCloud(
+        container,
+        words.map((word) => ({ word, count: 1 })),
+        { animate: true },
+      );
+    };
+
+    it("lands every chip on the first cloud", () => {
+      draw(["robot", "model"]);
+
+      // The cloud appearing at all is the beat FR-015 is about.
+      expect(frames).toHaveLength(1);
+      expect(
+        Array.from(container.querySelectorAll("li")).map(
+          (chip) => (chip as HTMLElement).style.opacity,
+        ),
+      ).toEqual(["0", "0"]);
+    });
+
+    it("lands only the word that is new", () => {
+      draw(["robot"]);
+      frames = [];
+
+      draw(["robot", "model"]);
+
+      const opacities = Array.from(container.querySelectorAll("li")).map(
+        (chip) => (chip as HTMLElement).style.opacity,
+      );
+      // The word already on the projector must not restart. This is the assertion that
+      // fails if the entrance is applied to the list instead of to the arrivals.
+      expect(opacities[0]).toBe("");
+      expect(opacities[1]).toBe("0");
+    });
+
+    it("stands completely still on a poll that brought nothing", () => {
+      draw(["robot", "model"]);
+      frames = [];
+
+      // Polled every ~2.5s across a whole question. Nothing changed, so nothing moves.
+      draw(["robot", "model"]);
+
+      expect(frames).toHaveLength(0);
+      expect(
+        Array.from(container.querySelectorAll("li")).map(
+          (chip) => (chip as HTMLElement).style.opacity,
+        ),
+      ).toEqual(["", ""]);
+    });
+
+    it("treats a word as new again after the cloud empties", () => {
+      draw(["robot"]);
+      renderWordCloud(container, [], { animate: true });
+      frames = [];
+
+      // The next question's first word is an arrival, not a word this container has seen.
+      draw(["robot"]);
+
+      expect(frames).toHaveLength(1);
+    });
+
+    it("queues nothing when the caller has not opted in", () => {
+      renderWordCloud(container, [{ word: "robot", count: 1 }]);
+
+      expect(frames).toHaveLength(0);
+    });
+  });
+
+  describe("the standings board", () => {
+    const rows = [
+      { rank: 1, displayName: "Ania", points: 30 },
+      { rank: 2, displayName: "Bartek", points: 20 },
+    ];
+
+    it("lands the board as one block", () => {
+      renderStandings(container, rows, {
+        animate: true,
+        motionKey: "standings",
+      });
+
+      expect(frames).toHaveLength(1);
+      // One node moves — the list — so no row can drift relative to another.
+      expect(container.querySelector("ol")?.style.opacity).toBe("0");
+      expect(
+        Array.from(container.querySelectorAll("li")).map(
+          (row) => (row as HTMLElement).style.opacity,
+        ),
+      ).toEqual(["", ""]);
+    });
+
+    it("stands still when the same board is published again", () => {
+      renderStandings(container, rows, {
+        animate: true,
+        motionKey: "standings",
+      });
+      frames = [];
+
+      renderStandings(container, rows, {
+        animate: true,
+        motionKey: "standings",
+      });
+
+      expect(frames).toHaveLength(0);
+    });
+
+    it("arrives again at the close, on the same five names", () => {
+      renderStandings(container, rows, {
+        animate: true,
+        motionKey: "standings",
+      });
+      frames = [];
+
+      // The closing screen publishes the same rows. Without the key it would inherit the
+      // standings beat's signature and arrive silently — the one beat that must not.
+      renderStandings(container, rows, { animate: true, motionKey: "ended" });
+
+      expect(frames).toHaveLength(1);
+    });
+
+    it("arrives again when the figures moved", () => {
+      renderStandings(container, rows, {
+        animate: true,
+        motionKey: "standings",
+      });
+      frames = [];
+
+      renderStandings(
+        container,
+        [rows[0]!, { rank: 2, displayName: "Bartek", points: 25 }],
+        { animate: true, motionKey: "standings" },
+      );
+
+      expect(frames).toHaveLength(1);
+    });
+  });
+});

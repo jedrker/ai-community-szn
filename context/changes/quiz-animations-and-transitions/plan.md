@@ -482,35 +482,35 @@ None. No stored data, no schema, no wire format. Reverting is deleting the modul
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 Linting passes: `bun run lint`
-- [x] 1.4 `render.test.ts`'s existing count-up suite passes unchanged
-- [x] 1.5 Boundary gate sees no new violation
-- [x] 1.6 The four private mechanisms no longer appear in `render.ts`
+- [x] 1.1 Unit tests pass: `bun run test` — f3c4baf
+- [x] 1.2 Type checking passes: `bun run type-check` — f3c4baf
+- [x] 1.3 Linting passes: `bun run lint` — f3c4baf
+- [x] 1.4 `render.test.ts`'s existing count-up suite passes unchanged — f3c4baf
+- [x] 1.5 Boundary gate sees no new violation — f3c4baf
+- [x] 1.6 The four private mechanisms no longer appear in `render.ts` — f3c4baf
 
 #### Manual
 
-- [x] 1.7 Distribution bars still count up exactly as before
-- [x] 1.8 With reduced motion enabled, bars appear at final figures
+- [x] 1.7 Distribution bars still count up exactly as before — f3c4baf
+- [x] 1.8 With reduced motion enabled, bars appear at final figures — f3c4baf
 
 ### Phase 2: Projector entrance beats
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 `host.test.ts` passes with no assertion changed
-- [ ] 2.3 Type checking passes: `bun run type-check`
-- [ ] 2.4 Linting passes: `bun run lint`
-- [ ] 2.5 New render options covered for the two rules that matter
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 `host.test.ts` passes with no assertion changed
+- [x] 2.3 Type checking passes: `bun run type-check`
+- [x] 2.4 Linting passes: `bun run lint`
+- [x] 2.5 New render options covered for the two rules that matter
 
 #### Manual
 
-- [ ] 2.6 Only new word-cloud chips move across polls
-- [ ] 2.7 Reveal: bars count up, accepted answer arrives once
-- [ ] 2.8 Standings and close: board arrives once per phase, no row reorder, no flow-row reflow
-- [ ] 2.9 Nothing replays on a repeated snapshot
-- [ ] 2.10 The rail appears and disappears exactly as today
+- [x] 2.6 Only new word-cloud chips move across polls
+- [x] 2.7 Reveal: bars count up, accepted answer arrives once
+- [x] 2.8 Standings and close: board arrives once per phase, no row reorder, no flow-row reflow
+- [x] 2.9 Nothing replays on a repeated snapshot
+- [x] 2.10 The rail appears and disappears exactly as today
 
 ### Phase 3: Attendee entrance beats
 
