@@ -516,31 +516,31 @@ None. No stored data, no schema, no wire format. Reverting is deleting the modul
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `bun run test`
-- [x] 3.2 `index.test.ts` passes with no assertion changed
-- [x] 3.3 Type checking passes: `bun run type-check`
-- [x] 3.4 Linting passes: `bun run lint`
-- [x] 3.5 Boundary gate passes for the page's `<script>`
+- [x] 3.1 Unit tests pass: `bun run test` — 85706c5
+- [x] 3.2 `index.test.ts` passes with no assertion changed — 85706c5
+- [x] 3.3 Type checking passes: `bun run type-check` — 85706c5
+- [x] 3.4 Linting passes: `bun run lint` — 85706c5
+- [x] 3.5 Boundary gate passes for the page's `<script>` — 85706c5
 
 #### Manual
 
-- [x] 3.6 Prompt readable immediately; options land within ~400ms
-- [x] 3.7 Acknowledgement lands on submit, and repeats on a later question
-- [x] 3.8 Result panel arrives once and the award counts up; no replay on tab refocus
-- [x] 3.9 A partial numeric award still reads as a positive result
-- [x] 3.10 With reduced motion enabled, every beat appears final immediately
-- [x] 3.11 The board arrives on the phone at the close
+- [x] 3.6 Prompt readable immediately; options land within ~400ms — 85706c5
+- [x] 3.7 Acknowledgement lands on submit, and repeats on a later question — 85706c5
+- [x] 3.8 Result panel arrives once and the award counts up; no replay on tab refocus — 85706c5
+- [x] 3.9 A partial numeric award still reads as a positive result — 85706c5
+- [x] 3.10 With reduced motion enabled, every beat appears final immediately — 85706c5
+- [x] 3.11 The board arrives on the phone at the close — 85706c5
 
 ### Phase 4: Docs and the reversal
 
 #### Automated
 
-- [ ] 4.1 Type checking passes: `bun run type-check`
-- [ ] 4.2 Linting passes: `bun run lint`
-- [ ] 4.3 Formatting passes: `bun run format`
-- [ ] 4.4 Full suite passes: `bun run test`
+- [x] 4.1 Type checking passes: `bun run type-check`
+- [x] 4.2 Linting passes: `bun run lint`
+- [x] 4.3 Formatting passes: `bun run format`
+- [x] 4.4 Full suite passes: `bun run test`
 
 #### Manual
 
-- [ ] 4.5 `motion-contract.md` names every deferred item
-- [ ] 4.6 No sentence in CLAUDE.md's rendering, client-interactivity or polling sections is left false
+- [x] 4.5 `motion-contract.md` names every deferred item
+- [x] 4.6 No sentence in CLAUDE.md's rendering, client-interactivity or polling sections is left false

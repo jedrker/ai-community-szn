@@ -1191,6 +1191,14 @@ import { publicQuiz } from "../../quiz/public";
            * lives beside it rather than anywhere else. Nothing else changes: no size, no
            * motion, no sound. It is a colour, because an attendee is reading a phone in a
            * dark room and a moving clock is already saying the rest.
+           *
+           * **That sentence is about the clock, and it still holds — but it is no longer
+           * the whole view's position.** It was the project's only statement about motion
+           * on the phone, and it was read as one: this view now lands its option rows, its
+           * acknowledgement, its result panel and its award through `motion.ts`. What
+           * stays refused is motion *here*, on a clock that is already the moving thing on
+           * screen, and anything that competes with the seconds an attendee is reading.
+           * See `motion-contract.md`.
            */
           countdownBox.dataset.urgent = String(remainingMs <= URGENT_MS);
         },

@@ -325,6 +325,24 @@ deliberately in S-02 (roadmap Open Question 2), not by omission: the pattern was
 because the venue network is the one link nobody controls. The accepted cost is that later views do
 hand-written DOM updates with no diffing.
 
+**That cost is what bounds the animation work, and the boundary is now written down.**
+`src/lib/client/motion.ts` owns every rule that makes an animation safe here — the reduced-motion
+gate, the cancel-in-flight, and the signature that stops an unchanged thing re-animating on a page
+that re-renders on every snapshot and every fallback poll. It is **rAF only**: `happy-dom` has no
+animation engine, no `Element.animate` and no `TransitionEvent`, so motion built on CSS transitions
+or the Web Animations API cannot be tested in this project and falls back to the source scan that
+`countdown.ts` records as having certified a defect instead. Markup-declared CSS transitions are
+still fine where nothing depends on them — the countdown bar is one.
+
+**Entrance only, and that is structural rather than taste.** `setHidden` writes the `hidden`
+property, which preflight makes `display: none !important`, so nothing toggled that way can be
+transitioned *out*; and `syncRail` derives the rail's visibility from its sections' **live `hidden`
+state**, so a hide deferred until an animation finished would put an empty column beside the stage —
+the defect `rail-empty-at-reveal` exists to prevent. The **standings reorder is deliberately not
+done**: it needs row identity across a `replaceChildren()`, which is exactly where no-diffing bites
+hardest. Read `context/changes/quiz-animations-and-transitions/motion-contract.md` before animating
+anything here.
+
 **The directory is also where logic goes to become testable**, and that is now a pattern rather than
 a one-off. An Astro inline `<script>` has no harness, so the only guard available over anything in
 one is a source-text scan — and a scan for an expression that exists today certifies whatever is
@@ -652,6 +670,13 @@ because `host.test.ts` pins that page to the poll's single timer handle and sing
 and because a scan cannot execute a timer. **Do not count timers and do not merge the rules** — `host.test.ts`'s guard used to assert `occurrences("setTimeout") === 1`, a *shape*, and the
 only way to fit a countdown under it was to weaken it to `=== 2`, which protects nothing. It now
 asserts the property it always meant: exactly one timer whose callback can reach a `fetch`.
+
+**The motion layer is a third kind, and it holds no timer at all.** `motion.ts` drives every
+animation off `requestAnimationFrame`, including the option stagger — which is a per-element offset
+*inside one loop* rather than one `setTimeout` per row, precisely so it stays out of this count.
+That is what lets it exist without weakening either guard: `host.test.ts`'s property is about timers
+that can reach a `fetch`, and `index.test.ts` requires the attendee page to hold **zero** timers,
+which a rAF loop in a module satisfies without argument.
 
 The host loop serves **three** endpoints — `/api/quiz/host/participation` for a choice question's
 answered count, `/api/quiz/host/words` for the word cloud, and `/api/quiz/state` for the lobby's

@@ -155,6 +155,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
     room has already learnt, so nothing on the projector moves between questions except the
     content that is supposed to.
 
+    **That last clause is now doing real work, and the two halves of it point in opposite
+    directions.** *Geometry* is still and stays still — a region that appears and folds is a
+    defect here, which is what `rail-empty-at-reveal` was about and why `FLOW_PILL` refuses
+    to change size when a verb becomes the next step. *Content* arrives on purpose: the
+    question, the revealed answer, the board and each new word-cloud chip land through
+    `motion.ts` rather than blinking into their slot. The slot itself does not move while
+    they do. See `motion-contract.md`.
+
     `h-dvh` with `overflow-hidden`, deliberately. A projector has no scrollbar and nobody
     is going to reach for one mid-session, so content that overflows must be *visibly*
     wrong here rather than quietly parked below the fold.

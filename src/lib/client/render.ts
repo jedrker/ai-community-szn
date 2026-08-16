@@ -448,10 +448,18 @@ export type RenderDistributionOptions = DistributionClassNames & {
   /**
    * Count the bars up from zero when the chart changes, instead of painting them final.
    *
-   * Opt-in, and only the projector opts in: the reveal is a beat the host narrates, and
-   * bars that grow give the room a moment to read the shape before the numbers settle. A
-   * device that asks for reduced motion, or one with no `requestAnimationFrame`, gets the
-   * final figures immediately — the animation is the decoration, never the data.
+   * Opt-in: the reveal is a beat the host narrates, and bars that grow give the room a
+   * moment to read the shape before the numbers settle. A device that asks for reduced
+   * motion, or one with no `requestAnimationFrame`, gets the final figures immediately —
+   * **the animation is the decoration, never the data**, which is the half of this note
+   * that has never changed.
+   *
+   * **This used to read "and only the projector opts in", and that is no longer the
+   * project's position.** It was written when this was the only animation in the codebase
+   * and the phone had none; the attendee view now lands its own beats — the option rows,
+   * the acknowledgement, the result — through the same driver and the same three rules.
+   * The opt-in survives because the *rail* must stay still, not because the phone must.
+   * See `motion-contract.md`.
    */
   readonly animate?: boolean;
 };
