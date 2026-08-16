@@ -813,6 +813,35 @@ describe("the closing button cannot fire by accident", () => {
   });
 
   /**
+   * **THE ROW GOES WITH THE BUTTON**, and from the same reading that placed it.
+   *
+   * `#end-row` held itself open with a `min-h` so the bar's height never moved, which bought a
+   * constant bar at the price of a band of empty asphalt above the flow verbs for thirteen
+   * questions out of fourteen — read, correctly, as the docked message row that is now a
+   * floating toast. Reserved emptiness is on screen all session; the bar growing once at the
+   * close is on screen for a moment.
+   *
+   * The property that matters is the same one the rail has: **one writer, derived from what the
+   * region contains** rather than from a phase list that can fall behind. A second
+   * `setHidden(endRow` — from `render`, from `applyShell` — is how the row and the button it
+   * exists for come apart.
+   */
+  it("shows the bar's row exactly when the button is in it", () => {
+    expect(occurrences("setHidden(endRow")).toBe(1);
+    expect(sync).toContain("setHidden(endRow, home !== endSlotBar)");
+
+    // Hidden in the markup too, not only by script: the row paints before the first snapshot
+    // arrives, and an empty band on first paint is the thing this removes.
+    expect(CODE).toContain('id="end-row"');
+    expect(/id="end-row"[\s\S]{0,40}hidden/.test(CODE)).toBe(true);
+
+    // …and never by holding a height open instead. `min-h` on this row is the state it was in.
+    const row = /id="end-row"[\s\S]*?>/.exec(CODE)?.[0] ?? "";
+    expect(row.length).toBeGreaterThan(0);
+    expect(row).not.toContain("min-h");
+  });
+
+  /**
    * **The menu is a route to the button, not a bypass of its phase rule.** A host who has to
    * abandon a session mid-quiz can reach the verb; what they meet in a phase `end` would refuse
    * is the same disabled pill they would have met on the bar. Opening the menu must not touch
@@ -1125,5 +1154,54 @@ describe("the connection status is a lamp, not a sentence", () => {
     expect(CODE).toContain('id="connection"');
     expect(CODE).toContain('aria-live="polite"');
     expect(CODE).not.toContain("setHidden(el(\"connection\")");
+  });
+});
+
+/**
+ * The chip on the control bar names the question's kind while a question is open.
+ *
+ * `pytanie otwarte` is the right phase word and reads as the wrong thing: on a multiple-choice
+ * question a host glancing at the bar takes it for "this is an open-ended question". So the one
+ * ambiguous phase names the kind instead. What a scan can hold is that the table stays a table —
+ * a lookup, not a sixth place deciding something about kinds — and that the four other phases
+ * keep their phase word.
+ */
+describe("the phase chip names the kind while a question is open", () => {
+  const kinds = /const KIND_LABELS[\s\S]*?\n {6}};/.exec(CODE)?.[0] ?? "";
+  const phases = /const PHASE_LABELS[\s\S]*?\n {6}};/.exec(CODE)?.[0] ?? "";
+
+  /**
+   * Every kind answered, typed off `PublicQuestion` so a sixth one is a build failure rather
+   * than a chip that silently falls back to the phase word.
+   */
+  it("answers every question kind", () => {
+    expect(kinds).toContain('Record<PublicQuestion["kind"], string>');
+    expect(kinds).toContain('"single-choice":');
+    expect(kinds).toContain('"multiple-choice":');
+    expect(kinds).toContain("text:");
+    expect(kinds).toContain("number:");
+    expect(kinds).toContain('"word-cloud":');
+  });
+
+  /**
+   * A table spells nouns; it decides nothing. That is what keeps it clear of the rule
+   * `pollTargetFor` owns — the guard above fails a second `kind === …` predicate, and this
+   * asserts the chip did not become one.
+   */
+  it("reads the label from the table rather than testing kinds", () => {
+    expect(CODE).toContain("KIND_LABELS[question.kind]");
+    expect(occurrences("KIND_LABELS[")).toBe(1);
+  });
+
+  /**
+   * Only `question-open` swaps. `question-revealed` is about the beat rather than the kind, and
+   * the other three have no question to name — a chip reading `wielokrotny wybór` over a
+   * leaderboard would be naming a question the room has stopped looking at.
+   */
+  it("swaps in exactly one phase, and writes the chip from one place", () => {
+    expect(CODE).toContain('state.phase === "question-open" && question');
+    expect(occurrences('setText(\n          "phase"')).toBe(1);
+    expect(occurrences('setText("phase"')).toBe(1); // the sessionless "brak sesji" branch
+    expect(phases).toContain('"question-revealed": "odpowiedź ujawniona"');
   });
 });

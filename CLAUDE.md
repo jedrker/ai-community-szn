@@ -462,6 +462,15 @@ answer to show but still needs closing (`answer.ts` accepts only in `question-op
 `pollTargetFor`, this file's single kind predicate — never on a fresh `kind === "word-cloud"` test, and
 never "fixed" by dropping `reveal` from the row, which would leave the cloud with no way to close.
 
+**The verbs' geometry is also stated once**, as `FLOW_PILL` in that file's frontmatter, and its sizes
+are `clamp` rather than fixed. The row was measured for a 1920 projector (`text-[40px] px-8`), which is
+not the window the host drives it from: at 1440 the four verbs need more width than the bar has and
+`flex-wrap` stacks them mid-session. Each figure keeps its projector value as the maximum — `2.08vw` is
+exactly 40px at 1920, so nothing changed on the screen it was measured for — and floors at 26px, the
+host's own copy size on the rest of that bar. Do not re-fix them, and do not let `data-[next=true]` set
+geometry: the filled and outlined states must stay the same size or the row reflows when a step becomes
+the next one.
+
 `syncControls` must be called from all three sites — `render`'s ordinary path, `render`'s sessionless
 early return, and `fire`'s `finally`, which re-enables every button unconditionally.
 `zakończ sesję i pokaż wyniki` is deliberately outside the table: it carries arming state and
@@ -475,6 +484,15 @@ when `atLastQuestion` holds and the phase is not `ended`; `home.append(endButton
 reparent in the file. **One element moved, never one per place**: two copies would be two arming
 labels, two `disabled` flags and two listeners, and the copy that fell behind is the one that fires
 unarmed. The bar's slot is an empty `display: contents` div, so it takes no `gap` while it is empty.
+
+**The row around that slot, `#end-row`, is `hidden` whenever the slot is — same function, same
+reading (`setHidden(endRow, home !== endSlotBar)`), so the region cannot outlive its only content.**
+It briefly held itself open with a `min-h` instead, to keep the bar's height constant; that reserved
+a band of empty asphalt above the flow verbs for thirteen questions out of fourteen, which reads as
+the docked message row the toast replaced. **Reserved emptiness is on screen all session; the bar
+growing once at the close is on screen for a moment** — the stage is `flex-1` and absorbs it. Do not
+restore the `min-h`, and note `hidden` beats a `flex` class here only because Tailwind's preflight
+carries `[hidden] { display: none !important }`.
 
 Two halves, both load-bearing. For thirteen questions the one control with no undo takes opening a
 menu on purpose; on the fourteenth it is exactly where the host has always found it, ringed as the

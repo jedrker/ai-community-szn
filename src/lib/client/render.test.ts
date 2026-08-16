@@ -981,3 +981,63 @@ describe("renderCountdown", () => {
     expect(bare.querySelector("[data-countdown-text]")!.textContent).toBe("5 s");
   });
 });
+
+/**
+ * The note between the prompt and the options.
+ *
+ * It carries the host stage's "you may pick more than one", and the reason it is rendered
+ * here rather than placed in the page is positional: the prompt and the list are emitted as
+ * one block, so a sibling in the page can only sit above the prompt or below the bands. Below
+ * the bands is inside the stage's `overflow-hidden`, where a screen shorter than the projector
+ * cuts it off — the sentence explaining the shapes was the first thing lost.
+ *
+ * These run in a DOM, so unlike the host page's structural scan they check the actual order.
+ */
+describe("the note between the prompt and the options", () => {
+  it("renders between the prompt and the list, in that order", () => {
+    renderQuestion(container, multi, { noteText: "Możesz wybrać więcej niż jedną" });
+
+    const children = [...container.children];
+    expect(children.map((node) => node.tagName)).toEqual(["P", "P", "UL"]);
+    expect(children[1]?.textContent).toBe("Możesz wybrać więcej niż jedną");
+  });
+
+  it("takes its class from the caller", () => {
+    renderQuestion(container, multi, { noteText: "uwaga", note: "text-chrome" });
+
+    expect(container.children[1]?.className).toBe("text-chrome");
+  });
+
+  /**
+   * Unset is the default, so the attendee view — which passes no note — is untouched by this
+   * option existing.
+   */
+  it("renders nothing when the caller passes no note", () => {
+    renderQuestion(container, multi);
+
+    expect([...container.children].map((node) => node.tagName)).toEqual(["P", "UL"]);
+  });
+
+  /**
+   * A note under the placeholder would be explaining a question that is not on screen — the
+   * between-questions gap, and the sessionless first paint.
+   */
+  it("renders nothing when there is no question to explain", () => {
+    renderQuestion(container, undefined, { noteText: "Możesz wybrać więcej niż jedną" });
+
+    expect([...container.children].map((node) => node.tagName)).toEqual(["P"]);
+    expect(container.textContent).not.toContain("Możesz");
+  });
+
+  /**
+   * `textContent`, like everything else this module writes: the note is a caller constant
+   * today, and a renderer that interpolates markup is one a later caller feeds a string from
+   * the room.
+   */
+  it("writes the note as text, never as markup", () => {
+    renderQuestion(container, multi, { noteText: "<b>uwaga</b>" });
+
+    expect(container.querySelector("b")).toBeNull();
+    expect(container.children[1]?.textContent).toBe("<b>uwaga</b>");
+  });
+});

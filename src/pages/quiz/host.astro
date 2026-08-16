@@ -87,6 +87,35 @@ const joinDisplayUrl = `${attendeeUrl.host.replace(/^www\./, "")}${attendeeUrl.p
 const questionTotal = publicQuiz.questions.length;
 
 /**
+ * THE FLOW VERBS' PILL, WRITTEN ONCE AND SIZED TO THE SCREEN IT IS ON.
+ *
+ * Stated here rather than four times in the markup for the reason `CONTROL_RULES` is stated
+ * once: four copies of a geometry are four chances for one of them to drift, and the row is
+ * read as a row — a pill a step out of scale reads as a different kind of control.
+ *
+ * **The sizes are `clamp`, not fixed.** They were `text-[40px] px-8 py-2`, measured for a
+ * 1920-wide projector, where the four verbs come to ~1120px and clear the `faza / w sali`
+ * block beside them. The host does not drive this page from a 1920 window: at 1440 the same
+ * row needs ~1570px, `flex-wrap` does what it is told, and the bar the room has learnt the
+ * shape of becomes two or three stacked lines mid-session.
+ *
+ * So each figure keeps its projector value as the **maximum** and scales below it with the
+ * viewport — `2.08vw` is exactly 40px at 1920, so nothing changes on the screen this was
+ * measured for. The floor is 26px because that is the host's own copy size everywhere else on
+ * this bar (the phase, the count, the toast, the closing button): the verbs may shrink to the
+ * scale of the host's own reading, and no further.
+ *
+ * `data-[next=true]` still sets no geometry — the filled and outlined states must stay the
+ * same size, or the row reflows when a step becomes the next one.
+ */
+const FLOW_PILL = `rounded-full border-2 border-quiz-pill-border
+  px-[clamp(20px,1.67vw,32px)] py-[clamp(6px,0.42vw,8px)] text-[clamp(26px,2.08vw,40px)]
+  font-semibold tracking-[-0.01em] text-quiz-signwhite
+  data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
+  data-[next=true]:font-bold data-[next=true]:text-quiz-ink
+  disabled:border-quiz-divider disabled:text-quiz-pill-disabled`;
+
+/**
  * The join QR (added 2026-08-08, from the first two-device run).
  *
  * The URL as text was the only way in, and typing it is the slowest step in a flow
@@ -176,30 +205,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         <span class="text-[48px] font-semibold tabular-nums text-quiz-zinc">
           / {questionTotal}
         </span>
-      </p>
-
-      <!--
-        **The one thing the band shapes cannot say on their own** (plan §3).
-
-        A multiple-choice question's slabs are outlined rather than filled, and the rule the
-        room is meant to read off that is "an empty square means more than one is allowed".
-        Nobody derives that from the first question they see, so the shape carries the
-        distinction *after* this sentence has taught it once.
-
-        **In the strip rather than under the prompt, which is where the artboard puts it.**
-        Two reasons, and the second is the load-bearing one: `renderQuestion` emits the prompt
-        and the option list as one block, so a line between them would have to come from the
-        renderer — and a line above the prompt costs the stage ~56px, which on the longest
-        multiple-choice prompt is exactly the height of the fourth band. The strip has the
-        room and the stage does not. It reads as a badge on the question it belongs to, and it
-        sits beside the counter that says which question that is.
-      -->
-      <p
-        id="multiple-note"
-        hidden
-        class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-chrome"
-      >
-        Możesz wybrać więcej niż jedną
       </p>
 
       <!-- Scan, or read the address off the same block. Both routes to the same place,
@@ -501,6 +506,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           <section id="question" class="flex flex-col gap-[24px]"></section>
 
           <!--
+            The multiple-choice sentence used to be a `<p>` here, and is now emitted by
+            `renderQuestion` between the prompt and the bands — see `MULTIPLE_NOTE_TEXT` in
+            the script. A sibling in this column could only ever sit above the prompt or
+            below the bands, and below the bands put it inside the stage's `overflow-hidden`,
+            where any screen shorter than the projector cut it off.
+          -->
+
+          <!--
             The distribution bars, at a reveal (roadmap S-04, FR-005).
 
             **On the stage, not in the rail**: `renderQuestion` drops the option list when a
@@ -798,14 +811,27 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         rather than the pump it used to be. **The closing button** lives in that same menu and
         comes back out here on the last question, which is the one beat it is the next step of.
 
-        **`min-h` because the row is now empty for thirteen questions out of fourteen.** The
-        bar's height is a thing the room learns in the first minute, and the shell exists so
-        nothing moves between questions except the content that is supposed to — an empty row
-        that collapses would take the whole control bar down with it and then push it back up
-        on the last question. The figure is the closing button's own height: 26px type,
-        `py-1`, and a 2px border on each side.
+        **It is `hidden` while it is empty, and it briefly was not.** A `min-h` held the row's
+        44px open so the bar's height never moved — the shell's own principle, that nothing
+        shifts between questions except the content that is supposed to. The trade it actually
+        made is worse than the one it avoided: the bar reserved a band of empty asphalt above
+        the verbs for thirteen questions out of fourteen, which reads as the docked message row
+        that used to be there and is now a floating toast. Reserved emptiness is a thing the
+        room looks at all session; the bar growing once, at the final beat, is a thing the room
+        sees for a moment.
+
+        So the row collapses entirely — `hidden`, so the footer's `gap-4` collapses with it
+        rather than leaving 16px of the same emptiness behind. **`syncEndButton` is its only
+        writer**, from the same reading that places the button: the row is on screen exactly
+        when it has the button in it, which is one rule rather than two that can disagree.
+        The stage above absorbs the ~60px at the last question; it is `flex-1` and its content
+        is centred.
       -->
-      <div class="flex min-h-[44px] flex-wrap items-center justify-end gap-x-6 gap-y-3">
+      <div
+        id="end-row"
+        hidden
+        class="flex flex-wrap items-center justify-end gap-x-6 gap-y-3"
+      >
         <!--
           WHERE THE CLOSING BUTTON LANDS ON THE LAST QUESTION — and nowhere else.
 
@@ -857,33 +883,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         <button
           data-action="start"
           data-next="false"
-          class="rounded-full border-2 border-quiz-pill-border px-8 py-2 text-[40px]
-                 font-semibold tracking-[-0.01em] text-quiz-signwhite
-                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
-                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
-                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+          class={FLOW_PILL}
         >
           start
         </button>
         <button
           data-action="advance"
           data-next="false"
-          class="rounded-full border-2 border-quiz-pill-border px-8 py-2 text-[40px]
-                 font-semibold tracking-[-0.01em] text-quiz-signwhite
-                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
-                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
-                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+          class={FLOW_PILL}
         >
           dalej
         </button>
         <button
           data-action="reveal"
           data-next="false"
-          class="rounded-full border-2 border-quiz-pill-border px-8 py-2 text-[40px]
-                 font-semibold tracking-[-0.01em] text-quiz-signwhite
-                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
-                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
-                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+          class={FLOW_PILL}
         >
           pokaż odpowiedź
         </button>
@@ -893,11 +907,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         <button
           data-action="standings"
           data-next="false"
-          class="rounded-full border-2 border-quiz-pill-border px-8 py-2 text-[40px]
-                 font-semibold tracking-[-0.01em] text-quiz-signwhite
-                 data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
-                 data-[next=true]:font-bold data-[next=true]:text-quiz-ink
-                 disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
+          class={FLOW_PILL}
         >
           pokaż ranking
         </button>
@@ -1063,7 +1073,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const standingsBoard = el("standings-board");
       const wordCloudBox = el("word-cloud");
       const wordCloudPanel = el("word-cloud-panel");
-      const multipleNote = el("multiple-note");
       /**
        * The three regions the lobby and the closing screen swap between them.
        *
@@ -1095,6 +1104,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const endSlotBar = el("end-slot-bar");
       const endSlotMenu = el("end-slot-menu");
       const endNote = el("end-note");
+      /** The bar's row around the slot, on screen exactly when the slot has the button. */
+      const endRow = el("end-row");
 
       const actionButtons = (): HTMLButtonElement[] =>
         Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-action]"));
@@ -1405,6 +1416,23 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         return `${PROMPT_BASE} text-[92px] leading-[92px]`;
       }
 
+      /**
+       * **The one thing the band shapes cannot say on their own** (plan §3).
+       *
+       * A multiple-choice question's slabs are outlined rather than filled, and the rule the
+       * room is meant to read off that is "an empty square means more than one is allowed".
+       * Nobody derives that from the first question they see, so the shape carries the
+       * distinction *after* this sentence has taught it once.
+       *
+       * It travels into `renderQuestion` as a note, which is the only thing that can place a
+       * line *between* the prompt and the list it explains. Sized at the strip's 26px rather
+       * than the stage's own scale: it is an aside about the shapes, and a line the size of
+       * the question competes with it.
+       */
+      const MULTIPLE_NOTE_TEXT = "Możesz wybrać więcej niż jedną";
+      const MULTIPLE_NOTE_CLASS =
+        "text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-chrome";
+
       /** The band itself: geometry and type, with no colour and no slab fill. */
       const BAND_BASE =
         "flex min-h-[92px] items-center overflow-hidden rounded-[20px] pr-8 text-[50px] " +
@@ -1480,6 +1508,35 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         "question-revealed": "odpowiedź ujawniona",
         standings: "ranking",
         ended: "zakończona",
+      };
+
+      /**
+       * WHAT THE CHIP SAYS WHILE A QUESTION IS OPEN.
+       *
+       * The phase word is right and reads wrong. `pytanie otwarte` means *the question is
+       * accepting answers*, and on a multiple-choice question a host glancing at the bar reads
+       * it as *this is an open-ended question* — the one phase where the label is ambiguous is
+       * the one it is looked at in. So `question-open` names the kind instead, which is the
+       * fact the host actually wants there: what the room is being asked to do right now.
+       *
+       * The other four phases keep their phase word. They have no question to name, and
+       * `question-revealed` is about the beat rather than the kind.
+       *
+       * A table rather than a chain of `kind === …` tests, deliberately: `pollTargetFor` is
+       * this file's single *predicate* over kinds and `host.test.ts` fails a second one. A
+       * lookup decides nothing — it only spells five nouns — so it cannot drift from the rule
+       * that decides which panel is on screen.
+       *
+       * `Record<PublicQuestion["kind"], string>` makes a sixth kind a type error here rather
+       * than a chip that quietly falls back to the phase.
+       */
+      const KIND_LABELS: Record<PublicQuestion["kind"], string> = {
+        "single-choice": "jednokrotny wybór",
+        "multiple-choice": "wielokrotny wybór",
+        // The kind the phase word was being mistaken for, now naming itself.
+        text: "pytanie otwarte",
+        number: "pytanie liczbowe",
+        "word-cloud": "chmura słów",
       };
 
       type State = NonNullable<ReturnType<typeof client.current>>;
@@ -2069,6 +2126,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         // the sentence explains a button, so it may not outlive the button's absence, and a
         // second place deciding that is a second reading of `home`.
         setHidden(endNote, home !== endSlotMenu);
+        // And the bar's row goes with it for the same reason, from the same reading. Held open
+        // by a `min-h` at first, which bought a bar of constant height at the price of a band
+        // of empty asphalt above the verbs for thirteen questions out of fourteen — reserved
+        // emptiness the room looks at all session, against a bar that grows once at the close.
+        // `hidden` rather than a zero height, so the footer's `gap-4` collapses with the row.
+        setHidden(endRow, home !== endSlotBar);
 
         /**
          * **The ring moves here on the last question**, and it has to: the flow verbs' table
@@ -2205,7 +2268,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            */
           resetPanels(null);
           cloudFinalReadFor = null;
-          setHidden(multipleNote, true);
           /**
            * The stage says what to do, not what is about to happen.
            *
@@ -2234,7 +2296,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           return;
         }
 
-        setText("phase", PHASE_LABELS[state.phase] ?? state.phase);
         setText("player-count", liveCount ?? state.playerCount);
         setText("lobby-count", liveCount ?? state.playerCount);
         setText("version", state.version);
@@ -2263,6 +2324,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         if (state.currentQuestionId !== panelQuestionId) resetPanels(state.currentQuestionId);
 
         const question = questionFor(state);
+
+        /**
+         * The chip, written here rather than with the other three figures above because it is
+         * the one that needs the question — `KIND_LABELS` while it is open, the phase word
+         * otherwise. Falls back to the phase if the question cannot be resolved, which is a
+         * definition and a snapshot that disagree: the chip should then say what the session
+         * thinks it is doing rather than go blank.
+         */
+        setText(
+          "phase",
+          (state.phase === "question-open" && question
+            ? KIND_LABELS[question.kind]
+            : PHASE_LABELS[state.phase]) ?? state.phase
+        );
+
         const distribution =
           state.phase === "question-revealed" ? state.revealedDistribution : null;
 
@@ -2385,30 +2461,40 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         // class string, so the reveal cannot be half-applied: one attribute, every band.
         questionBox.dataset.revealed = String(revealed);
 
-        renderQuestion(questionBox, shownQuestion, {
-          prompt: promptClass(shownQuestion?.prompt),
-          list: BAND_LIST,
-          option: bandClass(question?.kind),
-          mode: revealed ? "revealed" : "static",
-          correctOptionIds: state.revealedOptionIds,
-        });
-
         /**
          * The multiple-choice sentence, shown exactly when its bands are on screen — so it
          * never explains an outline the room cannot see. `shownQuestion` rather than
          * `question`, because the reveal replaces the option list with the bars and the rule
          * about empty squares has nothing to say about a bar chart.
+         *
+         * **It is rendered *by* `renderQuestion` now, not hidden beside it**, and the change
+         * is about where it can physically be. As a sibling in the page it could only sit
+         * above the prompt or below the bands; below the bands it was inside the stage's
+         * `overflow-hidden` and vanished on any screen shorter than the projector — which is
+         * every screen this gets set up on. Passing it in puts it between the prompt and the
+         * list, where the room reads it before the shapes it explains.
+         *
+         * The condition is unchanged; what was a `hidden` toggle is now a value or
+         * `undefined`, which is the same rule with one fewer element to keep in step.
          */
-        setHidden(
-          multipleNote,
-          !(
-            question?.kind === "multiple-choice" &&
-            Boolean(shownQuestion?.options?.length) &&
-            // The board replaces the question, and the sentence goes with it. Keyed on the
-            // same `standings === null` the question box is, so the two cannot disagree.
-            standings === null
-          )
-        );
+        const multipleNote =
+          question?.kind === "multiple-choice" &&
+          Boolean(shownQuestion?.options?.length) &&
+          // The board replaces the question, and the sentence goes with it. Keyed on the
+          // same `standings === null` the question box is, so the two cannot disagree.
+          standings === null
+            ? MULTIPLE_NOTE_TEXT
+            : undefined;
+
+        renderQuestion(questionBox, shownQuestion, {
+          prompt: promptClass(shownQuestion?.prompt),
+          list: BAND_LIST,
+          option: bandClass(question?.kind),
+          note: MULTIPLE_NOTE_CLASS,
+          noteText: multipleNote,
+          mode: revealed ? "revealed" : "static",
+          correctOptionIds: state.revealedOptionIds,
+        });
 
         /**
          * The accepted answer, straight off the snapshot (roadmap S-05).

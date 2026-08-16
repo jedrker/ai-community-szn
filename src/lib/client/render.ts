@@ -58,6 +58,8 @@ export type QuestionClassNames = {
   readonly optionCorrect?: string;
   /** Appended to an option this device selected that turned out to be wrong. */
   readonly optionWrong?: string;
+  /** The line between the prompt and the options; see `noteText`. */
+  readonly note?: string;
 };
 
 /**
@@ -78,6 +80,20 @@ export type RenderQuestionOptions = QuestionClassNames & {
    * wording; see the note on `MISSING_QUESTION_TEXT` for when a caller should override it.
    */
   readonly missingText?: string;
+  /**
+   * A line between the prompt and the options, rendered only when a question is.
+   *
+   * It exists for one caller and one sentence — the host stage's "you may pick more than
+   * one" — and it is here rather than in that page's markup because **this is the only
+   * place that can put a line *between* the prompt and the list**: the two are emitted as
+   * one block, so a sibling in the page can only ever sit above the prompt or below the
+   * bands. Below the bands is where it was, and on a screen shorter than the projector the
+   * stage's `overflow-hidden` cut it off entirely — the sentence that explains the shape
+   * was the first thing to go.
+   *
+   * Optional and unset by default, so the attendee view is unchanged: it does not pass one.
+   */
+  readonly noteText?: string;
   /** What this device has picked so far. */
   readonly selectedOptionIds?: readonly string[];
   /** From `state.revealedOptionIds`. `null` outside a reveal; `[]` means nothing to mark. */
@@ -148,6 +164,15 @@ export function renderQuestion(
     ? question.prompt
     : (options.missingText ?? MISSING_QUESTION_TEXT);
   container.append(prompt);
+
+  // Between the prompt and the list, and only with a real question: a note under the
+  // placeholder would be explaining a question that is not there.
+  if (question && options.noteText) {
+    const note = document.createElement("p");
+    if (options.note) note.className = options.note;
+    note.textContent = options.noteText;
+    container.append(note);
+  }
 
   if (!question?.options?.length) return;
 
