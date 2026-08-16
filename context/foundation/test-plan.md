@@ -42,7 +42,7 @@ research's job, see §1 principle #3).
 | # | Risk (failure scenario) | Impact | Likelihood | Source (evidence — not anchor) |
 |---|---|---|---|---|
 | 1 | The host panel offers a flow verb the current phase refuses, or withholds the one it accepts — the host presses a dead button in front of a live room | High | High | interview Q3; hot-spot dir `src/pages/quiz/` (73 commits/30d); PRD FR-002, FR-003, FR-004, FR-006, FR-014; PRD Success Criteria (host does not fight the tool) |
-| 2 | A regression reaches a live session because the suite was green: the guard covering that area asserts source shape rather than behaviour, and cannot fail when the behaviour breaks | High | High | interview Q2; `context/foundation/lessons.md` (three entries: source-scanning guards, break-the-guard, prove-the-fixture); `context/archive/2026-08-14-per-question-timer/`; **measured 2026-08-16 in `context/changes/testing-host-control-rules/research.md` — of ~150 assertions in the project's highest-churn view, none is a property assertion and six pass against deleted code** |
+| 2 | A regression reaches a live session because the suite was green: the guard covering that area asserts source shape rather than behaviour, and cannot fail when the behaviour breaks | High | High | interview Q2; `context/foundation/lessons.md` (three entries: source-scanning guards, break-the-guard, prove-the-fixture); `context/archive/2026-08-14-per-question-timer/`; **measured 2026-08-16 in `context/changes/testing-host-control-rules/research.md` — of ~150 assertions in the project's highest-churn view, none is a property assertion**; two structural guards elsewhere passed with a detector regex that could never match (rollout phase 1, §6.6). *That measurement also claimed six assertions pass against deleted code; phase 1 tested each and none does — see §6.6, which is the more useful finding* |
 | 3 | A host transition reaches some phones and not others; the room desynchronises and nothing on stage indicates which devices are stuck | High | Medium | interview Q1; PRD Success Criteria guardrails (1-second reflection; no divergence in standings between devices); hot-spot dir `src/lib/client/` (65 commits/30d); `context/archive/2026-08-09-connection-limit-degradation/` |
 | 4 | An answer submitted before the reveal is lost from the tally, or counted twice, under room-scale concurrency | High | Medium | PRD US-02 acceptance criterion ("no answer submitted before a reveal is lost from the tally"); PRD Success Criteria guardrail (150 concurrent, no lost answers); hot-spot dirs `src/lib/session/` (144 commits/30d), `src/pages/api/` (90 commits/30d) |
 | 5 | A submission that omits or malforms a field is scored favourably rather than refused, producing a silently wrong award on a public leaderboard | Medium | Medium | `context/foundation/lessons.md` ("Absent untrusted input must fail toward the safe end", lived in S-03); PRD FR-019; hot-spot dir `src/pages/api/` (90 commits/30d) |
@@ -64,8 +64,8 @@ alerting, and there is no test that would change the outcome).
 
 | Risk | What would prove protection | Must challenge | Context `/10x-research` must ground | Likely cheapest layer | Anti-pattern to avoid |
 |---|---|---|---|---|---|
-| #1 | For every phase and last-question position, the panel offers **no** verb the route would refuse; and every verb the route accepts but the panel withholds appears in an explicit, named exception list. **A one-way implication plus a closed exception set — not an equality** | (a) "The routes refuse illegal transitions anyway, so the panel is cosmetic." The PRD's primary success criterion is the host not fighting the tool; the panel is the interaction, the refusal is the backstop. (b) "The panel's phase rules are one mechanism." They are two — the flow-verb table, and a separate inline rule governing the closing verb | Where the phase-to-verb decision is actually made, whether that decision is reachable from a test process at all, what determines the last-question variant, and the full list of places the panel deliberately offers *less* than the route | unit, over a pure decision function | Asserting panel/route **equality**, which fails on correct code — the panel withholds five verbs the routes accept, four of them for recorded reasons; re-asserting the table's source text; testing the renderer instead of the decision |
-| #2 | Each guard fails when the code it covers is broken, and passes when restored — demonstrated, not assumed | "The test is green, therefore the behaviour holds." A scan for an expression that exists today certifies whatever is there, defects included | Which existing tests execute code and which scan source text; which of the scans assert a property versus a current shape; which properties have no harness and why | unit, plus **conversion of any scan that must remain to the detector-plus-fixture pattern this project already uses in two of its structural guards** — a discipline alone cannot fix a guard that passes on deleted code | Repairing a newly-failing guard back toward the bug it just caught; pinning a symbol name rather than a property; **ordering assertions of the form `indexOf(guard) < indexOf(action)`, which hold when the guard is absent because the miss returns −1** |
+| #1 | For every phase and last-question position, the panel offers **no** verb the route would refuse; and every verb the route accepts but the panel withholds appears in an explicit, named exception list. **A one-way implication plus a closed exception set — not an equality** | (a) "The routes refuse illegal transitions anyway, so the panel is cosmetic." The PRD's primary success criterion is the host not fighting the tool; the panel is the interaction, the refusal is the backstop. (b) "The panel's phase rules are one mechanism." They were two — the flow-verb table, and a separate inline rule governing the closing verb — *until rollout phase 1 folded `end` into the same decision; they are one mechanism now, and that is a property to preserve rather than an assumption to rely on* | Where the phase-to-verb decision is actually made, whether that decision is reachable from a test process at all, what determines the last-question variant, and the full list of places the panel deliberately offers *less* than the route | unit, over a pure decision function | Asserting panel/route **equality**, which fails on correct code — the panel withholds verbs the routes accept — three of them materially, each now named in `MATERIAL_WITHHOLDINGS`; re-asserting the table's source text; testing the renderer instead of the decision |
+| #2 | Each guard fails when the code it covers is broken, and passes when restored — demonstrated, not assumed | "The test is green, therefore the behaviour holds." A scan for an expression that exists today certifies whatever is there, defects included | Which existing tests execute code and which scan source text; which of the scans assert a property versus a current shape; which properties have no harness and why | unit, plus **conversion of any scan that must remain to the detector-plus-fixture pattern this project already uses in two of its structural guards** — a discipline alone cannot fix a guard that passes on deleted code | Repairing a newly-failing guard back toward the bug it just caught; pinning a symbol name rather than a property; **auditing a guard by reading it rather than by breaking it** — phase 1's research condemned six ordering assertions of the form `indexOf(guard) < indexOf(action)` (vacuously true when the guard is absent, since the miss returns −1) and every one of them turned out to carry a presence check on the line above. Read the assertion's neighbours, then delete the guarded statement and watch |
 | #3 | A device whose primary transport drops converges on the host's current phase within the guardrail, and a stop actually stops | "The fallback loop is running, therefore it is delivering." `lessons.md` records a `stop()` silently undone by the `finally` of a request the test never knew about | Both lifecycle exits, what re-arms the loop, what the visibility rule is, and what the real settle points are | integration, with pinned interval randomness and manually-settled deferreds | Advancing fake time by the widest jittered interval and assuming one advance is one tick; a stub that resolves immediately in a test whose name claims an overlap |
 | #4 | An answer accepted at the deadline boundary appears in the tally exactly once, and concurrent submissions do not lose each other | "The write is atomic, therefore the count is right." The race is between the deadline, the reveal transition and the tally write — not inside any one atomic script | The ordering guarantee at the reveal boundary, what the grace window does, and the store's real semantics versus the fake the suite currently uses | integration at the store boundary; room-scale concurrency stays with the existing harness | Mocking the store so that the atomicity under test is the mock's; asserting the count without asserting which submissions produced it |
 | #5 | An absent field is refused rather than coerced, and the test asserts the resulting *award* rather than that the request was accepted | "The hostile value is guarded, therefore the absent value is too." These take different paths through the same code | Every untrusted field on every submission route, and what "said nothing" currently yields for each | integration, at the route | Spelling the absent case as `undefined` where a destructuring default silently replaces it; asserting a status code where the defect is in the number |
@@ -80,7 +80,7 @@ disk.
 
 | # | Phase name | Goal (one line) | Risks covered | Test types | Status | Change folder |
 |---|---|---|---|---|---|---|
-| 1 | Host control rules, executable | Prove the panel offers no verb the phase refuses by running the decision, not by reading its source | #1, #2 | unit | researched | `context/changes/testing-host-control-rules/` |
+| 1 | Host control rules, executable | Prove the panel offers no verb the phase refuses by running the decision, not by reading its source | #1, #2 | unit | complete | `context/changes/testing-host-control-rules/` |
 | 2 | Sync under a degraded link | Prove a device converges on the host's phase after the transport drops, and that no answer is lost at the reveal boundary | #3, #4 | integration | not started | — |
 | 3 | Submission edges and the retention floor | Prove absent and hostile fields fail toward refusal, the per-device cap holds, and no registered key outlives the session | #5, #6, #7 | integration, contract, existing scripts | not started | — |
 | 4 | Gates wired | Make the checks that already run locally run between a commit and production | cross-cutting | gates | not started | — |
@@ -230,15 +230,70 @@ ships; before that, the sub-section reads "TBD — see §3 Phase N."
 
 ### 6.5 Adding a test for an Astro view
 
-- TBD — see §3 Phase 1 for the host panel's decision rules. There is no recipe for the *visual* half
-  and this rollout does not produce one; see §7.
-- The existing files (`src/pages/quiz/host.test.ts`, `src/pages/quiz/index.test.ts`) are structural
-  source scans, which is what Risk #2 is about. Do not add a scan without first asking whether the
-  property can be made executable instead.
+**The recipe is: don't. Move the rule out first.** An inline `<script>` has no harness, so the only
+guard available over it is a source-text scan — and a scan for an expression that exists today
+certifies whatever is there, defects included (§1, rule four). Reference implementation:
+`src/lib/client/controls.ts` and `controls.test.ts`, landed by rollout phase 1.
+
+1. **Find the decision, and check what it closes over.** Anything that only closes over
+   `define:vars` data — the question list, a channel name — is already pure; take that value as a
+   parameter. `verbsFor`, `atLastQuestion` and `pollTargetFor` all moved this way; `syncControls`
+   did not, because it writes the DOM.
+2. **Move it to `src/lib/client/` as plain named exports.** No factory unless it holds state
+   (`classifyConnection` in `session.ts` is the stateless shape; `countdown.ts` is the stateful one).
+   `SessionState`, `SessionPhase` and `PublicQuestion` arrive as `import type` — a value import fails
+   `boundary.test.ts`.
+3. **Keep the lookup table private and export a function over it.** This is the part worth copying.
+   `host.test.ts` used to assert `CONTROL_RULES` had exactly one reader; exporting `verbsFor` with
+   the table private makes a second reader *unrepresentable*, which retires that guard rather than
+   re-expressing it. A guard you can delete is better than a guard you have to maintain.
+4. **Type the table as a `Record` over a union**, so adding a phase or a question kind is a
+   `bun run type-check` failure rather than a silent fallback. This is the project's cheapest
+   exhaustiveness check and it costs one type annotation.
+5. **Assert the property against something other than itself.** The panel's rules are checked
+   against a literal of *route* legality, not against the panel. State the relationship honestly: it
+   is `panel ⊆ routes` plus a named exception list, not equality — an equality assertion fails on
+   correct code. Where the comparison table is hand-maintained, say so at the code and point at the
+   test that executes the other side.
+6. **Leave the page's scan alive, retargeted.** It keeps what only it can see: that the page reaches
+   for the module, applies the decision at every site that could undo it, and states no rule of its
+   own. Add a *positive* assertion that the import exists — without it, the negative assertions are
+   satisfied by a page that dropped the behaviour entirely.
+7. **Build fixtures as literals, not from the committed quiz.** `questionOfKind` is for code that
+   resolves through `getQuestionById`; a predicate taking a list as a parameter does not. A `Record`
+   over the kind union gives coverage the real quiz cannot — it only proves the kinds it happens to
+   contain. `render.test.ts` is the precedent in that directory.
+
+There is still no recipe for the *visual* half — whether the enabled verb is legible and correctly
+placed on a projector. That is out of scope for the whole rollout; see §7.
 
 ### 6.6 Per-rollout-phase notes
 
-(Filled in as phases land.)
+**Phase 1 — Host control rules, executable** (`context/changes/testing-host-control-rules/`,
+`c780a12`, `06b583c`, `fbdc914`).
+
+- **The research's central finding was wrong, and this is the more useful lesson.** It reported six
+  `-1` inversions — `indexOf(a) < indexOf(b)`, which holds vacuously when `a` is absent — and called
+  one of them "the sharpest": the two-tap guard on the irreversible close. Measured by deleting each
+  guarded statement and re-running, **all six failed correctly**. Every one already carried a
+  `toContain` on the line directly above; the audit read the `indexOf` line in isolation. Checked
+  against the commit the research read, so it was not a later fix. **An audit of a guard must
+  execute it, not read it — the same rule the audit was written to enforce.**
+- What *was* real: the presence check and the ordering check were two separable statements, and the
+  second reads redundant beside the third. Reverting one site to the bare idiom and deleting the
+  guarded statement leaves the suite green. `expectOrder(haystack, first, second)` in
+  `host.test.ts` and `index.test.ts` fuses them. Duplicated rather than shared — the two files
+  import nothing from each other, and a helpers module for ten lines is the larger cost.
+- **Two portability gates had never been shown to fire.** Replacing `ASTRO_IMPORT` in
+  `src/quiz/portability.test.ts` or `src/lib/session/portability.test.ts` with a regex that can
+  never match left all 12 and all 32 tests green. Both now export `findAstroImports` with fixtures,
+  following `boundary.test.ts`. **Trap:** each file's `sourceFiles()` globs every `.ts` in its
+  directory *including the test file itself*, so the forbidden specifier must be assembled at
+  runtime — written out in full, the fixture becomes the violation it demonstrates.
+- **A withholding in an unreachable state is not a decision.** The exception-list sweep initially
+  demanded an entry for `end` in `lobby` on the last question; `lobby` carries no current question,
+  so nothing can reach it. The sweep runs over the nine reachable phase × position pairs, with the
+  reachability claim tied to `atLastQuestion`'s own behaviour rather than restated.
 
 ## 7. What We Deliberately Don't Test
 
@@ -273,7 +328,7 @@ assumption changes.
 
 ## 8. Freshness Ledger
 
-- Strategy (§1–§5) last reviewed: 2026-08-16
+- Strategy (§1–§5) last reviewed: 2026-08-16 (§2 Risk #1 and #2 amended 2026-08-16 by rollout phase 1)
 - Stack versions last verified: 2026-08-16
 - AI-native tool references last verified: 2026-08-16
 

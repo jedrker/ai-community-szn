@@ -325,6 +325,14 @@ deliberately in S-02 (roadmap Open Question 2), not by omission: the pattern was
 because the venue network is the one link nobody controls. The accepted cost is that later views do
 hand-written DOM updates with no diffing.
 
+**The directory is also where logic goes to become testable**, and that is now a pattern rather than
+a one-off. An Astro inline `<script>` has no harness, so the only guard available over anything in
+one is a source-text scan — and a scan for an expression that exists today certifies whatever is
+there, defects included. `countdown.ts` was extracted for that reason (S-11: two inline copies, both
+shipping a defect a green suite could not see), `toast.ts` followed it, and `controls.ts` is the
+third — the host panel's phase-to-verb decision plus `atLastQuestion` and `pollTargetFor`. The shape
+is the same each time: **pure named exports here, DOM writes left on the page.** See test-plan §6.5.
+
 `src/lib/client/boundary.test.ts` enforces the boundary. A client module — **and any `<script>`
 block in `src/pages/quiz/*.astro`** — may not read `import.meta.env` and may not *value*-import from
 `src/quiz/` or `src/lib/session/`. `import type` is erased and is therefore allowed; that is how
@@ -479,27 +487,52 @@ See `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md`.
 
 ## The host panel offers only the action the phase accepts
 
-**Which flow verb is enabled in which phase is stated once, as `CONTROL_RULES` in
-`src/pages/quiz/host.astro`, and read only by `syncControls`.** The table mirrors route legality and
-also names the one button ringed as the next step, so the panel leads the sequence instead of leaving
-it in the runbook. S-07 wrote the principle on `pokaż ranking` alone — *disabled elsewhere rather than
-relying on the route's 409; the refusal is the backstop, not the interaction* — and `start`, `dalej`
-and `pokaż odpowiedź` never got it.
+**Which verb is enabled in which phase is stated once, as `verbsFor` in
+`src/lib/client/controls.ts`.** It names the one button ringed as the next step too, so the panel
+leads the sequence instead of leaving it in the runbook. S-07 wrote the principle on `pokaż ranking`
+alone — *disabled elsewhere rather than relying on the route's 409; the refusal is the backstop, not
+the interaction* — and `start`, `dalej` and `pokaż odpowiedź` never got it.
 
-Do not write a phase condition for a flow verb anywhere else; `host.test.ts` fails the suite if the
-table gains a second reader, and a second copy is how the panel and the routes come apart. Three rows
-look inconsistent and are not: **`dalej` stays offered while a question is open** (the host's only
-lever if the wrong thing is on the projector), **`pokaż ranking` stays offered in `standings`** (a
-no-op that re-broadcasts — the retry its own 502 asks for, in the phase the state is already in), and
-**`start` is offered only with no session** (the route is idempotent, so mid-quiz it does nothing).
+**This file used to say "stated once, as `CONTROL_RULES` in `src/pages/quiz/host.astro`, and read
+only by `syncControls`", and `host.test.ts` enforced that single reader by scanning the page's
+source.** Both halves are gone. The table moved into `controls.ts` and is **private** there —
+`verbsFor` is the only export — so a second reader is not expressible rather than merely forbidden,
+which is why the single-reader guard was retired instead of re-expressed. It moved because a scan of
+a table's own literal cannot answer the question the rule exists for: *does the panel offer a verb
+the route refuses?* is a statement about `src/pages/api/quiz/host/*`, and no reading of the panel's
+source can check it. `controls.test.ts` runs the decision against route legality instead.
 
-**The table has a second dimension, `whenLast`, and it is not a phase.** `advance` is a no-op past the
-last question (`advance.ts` returns null when `nextQuestionId` does), and the phase cannot see that —
-`question-revealed` on question 3 and on question 14 are the same phase and want opposite bars. So each
-affected row carries a `whenLast` variant, read by `syncControls` via `atLastQuestion`, which derives
-the position from the published question order the page already holds rather than from a new snapshot
-field. The last `question-revealed` allows **nothing**: `dalej` does nothing there, and `pokaż ranking`
-would show a board the closing beat is about to publish itself.
+Do not write a phase condition for a verb anywhere else — a second copy is how the panel and the
+routes come apart. Three rows look inconsistent and are not: **`dalej` stays offered while a question
+is open** (the host's only lever if the wrong thing is on the projector), **`pokaż ranking` stays
+offered in `standings`** (it re-broadcasts — the retry its own 502 asks for, in the phase the state
+is already in), and **`start` is offered only with no session** (the route is idempotent, so mid-quiz
+it does nothing).
+
+**The panel is a strict subset of route legality, never an equality**, and a test written as an
+equality fails on correct code. `controls.test.ts` asserts the one-way implication — no allowed verb
+is one the route answers with a 409 — plus `MATERIAL_WITHHOLDINGS`, the closed set of places the
+panel offers *less* than a route that would act. There are exactly three: `end` in `lobby`, and
+`pokaż ranking` on the last question in both `question-revealed` and `standings`. A verb withheld
+where the route is a **no-op** needs no entry, because declining to offer a button that would do
+nothing is the whole point. Adding a fourth material withholding means writing down why.
+
+**The decision has a second dimension, `atLast`, and it is not a phase.** `advance` is a no-op past
+the last question (`advance.ts` returns null when `nextQuestionId` does), and the phase cannot see
+that — `question-revealed` on question 3 and on question 14 are the same phase and want opposite
+bars. So each affected row carries a `whenLast` variant, selected by `verbsFor`'s second parameter,
+which the page fills from `atLastQuestion(config.questions, …)` — the published question order the
+page already holds, never a new snapshot field. The last `question-revealed` allows **no flow verb**:
+`dalej` does nothing there, and `pokaż ranking` would show a board the closing beat is about to
+publish itself.
+
+**`end` is the one verb `whenLast` does not collapse**, and this is the most plausible way to break
+the room while the suite stays green. The closing verb stays allowed on the last question in
+`question-revealed` and `standings` — that is precisely the beat where it becomes the only step left
+and takes the next-step ring. Applying the collapse to all five uniformly disables the one control
+the host needs on question 14. `controls.test.ts` asserts `end`'s allowed state is identical for
+`atLast` true and false in every phase; before that test existed, nothing in the project could have
+noticed.
 
 The reveal verb is also **named** by question kind: `zamknij pytanie` on a word cloud, which has no
 answer to show but still needs closing (`answer.ts` accepts only in `question-open`). Keyed on
@@ -515,12 +548,26 @@ host's own copy size on the rest of that bar. Do not re-fix them, and do not let
 geometry: the filled and outlined states must stay the same size or the row reflows when a step becomes
 the next one.
 
-`syncControls` must be called from all three sites — `render`'s ordinary path, `render`'s sessionless
-early return, and `fire`'s `finally`, which re-enables every button unconditionally.
-`zakończ sesję i pokaż wyniki` is deliberately outside the table: it carries arming state and
-`syncEndButton` owns it, including the decision that it stays out of reach in `lobby` even though the
-route accepts it there — and, since the last question empties the lower line, the next-step ring,
-which it takes when `atLastQuestion` and the button is live.
+`syncControls` must be called from **all four sites** — `render`'s ordinary path, `render`'s
+sessionless early return, `fire`'s `finally` (which re-enables every button unconditionally), and the
+reveal's arming tap, which changes the button's label and so must repaint the bar through the same
+function rather than writing `textContent` itself. *This file said three until the rollout's phase 1;
+`host.test.ts` had already asserted four since the arming tap landed.*
+
+**`zakończ sesję i pokaż wyniki` used to be described here as "deliberately outside the table". Its
+phase rule is now inside it** — `end` is a row in `verbsFor` like the other four, which is what makes
+"the panel's phase rules" one mechanism instead of two. The position that was overturned is worth
+keeping: the closing verb was left out because it is not a `data-action` button and carries arming
+state, and that reasoning was right about the arming and wrong about the phase rule. A phase
+condition living outside the table was a second place for the panel to drift from the routes, and it
+was the half no guard could reach.
+
+What `syncEndButton` still owns is everything a table cannot hold: the two-tap arming and its version
+rule, the reparent between the menu and the bar, and the label. It reads its enabled state from
+`verbsFor(...).allow` and its ring from `next === "end"` — the same decision the bar reads, so
+"exactly one filled pill" holds by construction rather than by two conditions agreeing. It stays out
+of reach in `lobby` even though the route accepts it there; that is one of the three entries in
+`MATERIAL_WITHHOLDINGS`.
 
 **That same function also owns *where* the button is, and it has two homes.** It is authored in
 `#host-menu` — the dialog behind the join QR — and moved out to `#end-slot-bar` on the utility line
@@ -587,7 +634,12 @@ asserts the property it always meant: exactly one timer whose callback can reach
 
 The host loop serves **three** endpoints — `/api/quiz/host/participation` for a choice question's
 answered count, `/api/quiz/host/words` for the word cloud, and `/api/quiz/state` for the lobby's
-join count — chosen in `pollTargetFor` by phase, then by question kind. The lobby target exists
+join count — chosen in `pollTargetFor` by phase, then by question kind. **That predicate lives in
+`src/lib/client/controls.ts`, not in `host.astro`** — it moved with the phase rules, for the same
+reason and in the same change, and it is the module that now spells all three URLs. The page passes
+`config.questions` and fetches `target.url`; a URL literal on the page would be a second request
+path. `controls.test.ts` runs the predicate over every question kind, so a sixth kind is a type
+error rather than a question that silently polls nothing. The lobby target exists
 because **a join publishes nothing**, so the snapshot's `playerCount` moves only on a host action:
 in the one phase where the host acts least and the number changes most, the figure sat frozen until
 somebody pressed `odśwież`. It is the only target with no panel of its own, so it writes nothing but

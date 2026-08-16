@@ -483,19 +483,19 @@ reversible by a single revert.
 
 #### Automated
 
-- [x] 3.1 Full suite passes: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 All six repaired assertions verified by deleting the guarded statement
-- [x] 3.4 Both portability fixtures verified by breaking the detector regex
+- [x] 3.1 Full suite passes: `bun run test` — fbdc914
+- [x] 3.2 Type checking passes: `bun run type-check` — fbdc914
+- [x] 3.3 All six repaired assertions verified by deleting the guarded statement — fbdc914
+- [x] 3.4 Both portability fixtures verified by breaking the detector regex — fbdc914
 
 ### Phase 4: Documentation
 
 #### Automated
 
-- [ ] 4.1 Full suite passes: `bun run test`
-- [ ] 4.2 No stale `CONTROL_RULES`-in-`host.astro` claim remains in `CLAUDE.md`
+- [x] 4.1 Full suite passes: `bun run test`
+- [x] 4.2 No stale `CONTROL_RULES`-in-`host.astro` claim remains in `CLAUDE.md`
 
 #### Manual
 
-- [ ] 4.3 §6.5 answers the cookbook question standalone
-- [ ] 4.4 CLAUDE.md amendments quote the overturned positions
+- [x] 4.3 §6.5 answers the cookbook question standalone
+- [x] 4.4 CLAUDE.md amendments quote the overturned positions

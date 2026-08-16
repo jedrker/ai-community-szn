@@ -395,3 +395,24 @@ file anchor to §2.
    creep. **Owner: planning.**
 5. **CLAUDE.md's "three call sites" is stale (four).** Fix in this change, per `lessons.md`'s entry
    on CLAUDE.md edits being part of the slice.
+
+## Correction (2026-08-16, from implementation)
+
+This document records what was found at `c0afc1e`. One finding did not survive being executed, and
+it is left in place above rather than edited, so the reasoning that produced it stays legible.
+
+**§5(a) "The `-1` inversion — six assertions pass when the guarded code is deleted" is wrong. None
+of them does.** Rollout phase 3 deleted each guarded statement from the page and re-ran its named
+test; all six failed correctly. Every one already carried a presence assertion on the line directly
+above — `expect(handler).toContain("revealArmed = true")`, `expect(clearAt).toBeGreaterThan(renderAt)`
+— including `:901`, which this document called "the sharpest". Verified against `c0afc1e` itself, so
+it was not a later repair.
+
+The audit read the `indexOf` line in isolation. **An audit of a guard has to execute it, which is
+the rule the audit existed to enforce.** What was real, and what phase 3 shipped instead: the
+presence check and the ordering check are two separable statements, and the second reads redundant
+beside the third — reverting one site to the bare idiom and deleting the guarded statement leaves
+the suite green. See `context/foundation/test-plan.md` §6.6.
+
+§5's other findings stand, and §4's census stands. The two portability gates named in the plan were
+confirmed dead by measurement.
