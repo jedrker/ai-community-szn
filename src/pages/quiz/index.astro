@@ -483,6 +483,7 @@ import { publicQuiz } from "../../quiz/public";
         type AnswerPayload,
         type OwnResult,
       } from "../../lib/client/answer";
+      import { createCelebration } from "../../lib/client/celebrate";
       import { createCountdown } from "../../lib/client/countdown";
       import {
         el,
@@ -1001,6 +1002,23 @@ import { publicQuiz } from "../../quiz/public";
             : "Ranking",
           "headline"
         );
+        /**
+         * The confetti, on every phone in the room (phase 5).
+         *
+         * **Only at the close, and only once.** `renderBoard` also paints the standings
+         * beat between questions, so the phase test is what keeps the celebration for the
+         * end rather than for every leaderboard; and this function runs again on every
+         * snapshot, poll and connection flap for as long as the closing screen is up, which
+         * is what `fire`'s per-signature guard is for.
+         *
+         * Keyed by the winner as well as the phase, so a second session started in the same
+         * tab celebrates again rather than being mistaken for the first one still ending.
+         * A boardless close still fires: the session ended either way, and the room does not
+         * owe its confetti to a tally read that happened to fail.
+         */
+        if (closing) {
+          celebration.fire(`ended|${board?.rows[0]?.displayName ?? ""}`);
+        }
         // Not a waiting screen: the board is the thing to read, and it belongs under the
         // heading rather than pushed to the foot of the phone with a gap above it.
         showQuestion(false, false);
@@ -1179,6 +1197,13 @@ import { publicQuiz } from "../../quiz/public";
        * already-closed window by return value instead, because it runs *inside* a render
        * and re-entering from there is precisely what crashed.
        */
+      /**
+       * One handle for the page, because the fire-once guard is state and a per-render
+       * handle would forget it every snapshot — the same reason `countdown` below is one
+       * object rather than a function called from `render`.
+       */
+      const celebration = createCelebration();
+
       const countdown = createCountdown({
         onPaint: (remainingMs, limitMs) => {
           renderCountdown(countdownBox, remainingMs, limitMs);
@@ -2371,7 +2396,13 @@ import { publicQuiz } from "../../quiz/public";
         if (document.visibilityState === "hidden") stopCountdown();
         else render();
       });
-      window.addEventListener("pagehide", stopCountdown);
+      window.addEventListener("pagehide", () => {
+        stopCountdown();
+        // The celebration owns timers of its own — six seconds of bursts that must not be
+        // left queued against a page that is going away. Same exit, same reasoning as the
+        // clock; `celebrate.ts` says why a demo page gets to skip this and a phone does not.
+        celebration.stop();
+      });
 
       const stored = readPlayer(config.storageKey);
       if (stored) {

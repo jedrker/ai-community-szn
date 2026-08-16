@@ -422,6 +422,115 @@ appears and folds — still a defect) from authored entrance motion (content arr
 
 ---
 
+## Phase 5: Confetti at the final result
+
+### Overview
+
+Added after Phases 1–4 shipped, at the author's request: the phone's closing screen gets confetti.
+**This phase deliberately reverses two of this plan's own positions** — "no new dependency" was never
+stated but was implied by every other choice, and `@tsparticles/confetti` is now the heaviest client
+dependency in the project. Recorded rather than smoothed over.
+
+### The dependency decision, stated because it is the expensive one
+
+**The effect is two libraries.** `confetti()` and `ribbons()` in the published sample are
+`@tsparticles/confetti` and `@tsparticles/ribbons` — separate packages, not two modes of one. A first
+pass at this phase reproduced the look from confetti alone, on the stated reasoning that "the ribbons
+config is not published in the package". That was wrong, and it was wrong because one look at the
+package README was treated as a search: the config is in the demo page's own bundle, and the second
+library is on npm. Corrected before the phase shipped.
+
+A third package, `@tsparticles/plugin-interactivity`, is an **optional peer dependency of
+`plugin-emitters`** that the build hard-fails without once ribbons are in — confetti alone never
+reached the `EmittersInteractor` that imports it. `@tsparticles/shape-ribbon` must *not* be installed
+separately; it arrives transitively.
+
+`canvas-confetti` — 90 KB, zero dependencies — was offered and declined, because it cannot do the
+ribbons half. That trade was made with both figures on the table.
+
+**Measured after the build, the real cost is much smaller than the package sizes imply**: the lazy
+chunks come to **~42 KB gzipped**, and the attendee's entry script is unchanged at **7 KB gzip** with
+no library code in it. That is what a phone actually downloads, and only at the close. The ~1.5 MB
+unpacked figure is the packages on disk and is the wrong number to argue from — recorded because it
+is the number anyone will find first.
+
+What keeps it inside the rule CLAUDE.md states ("the client bundle to essentially the Ably SDK…
+the venue network is the one link nobody controls"):
+
+- **Loaded through a dynamic `import()`, never a static one**, so it is a separate chunk fetched at
+  the close and is absent from the bundle that has to clear FR-002's 30-second join target.
+- **Never fetched at all on a device that asked for reduced motion** — the gate runs *before* the
+  import, not through the library's own `disableForReducedMotion`.
+- **A failed import is absorbed.** The venue network at the close is the same network as at the
+  start; a chunk that does not arrive must cost the closing screen nothing.
+
+### Changes Required
+
+#### 1. The celebration module
+
+**File**: `src/lib/client/celebrate.ts` (new)
+
+**Intent**: Fire the confetti once per close, off the render path, with the library's cost paid only
+when it is actually going to be seen.
+
+**Contract**: `createCelebration(deps?): Celebration` — the factory shape `countdown.ts` and
+`toast.ts` use, with `load` and `reducedMotion` injected so the tests own both. The handle exposes
+`fire(signature: string): void`, which is **idempotent per signature**: the attendee view re-renders
+on every snapshot, every fallback poll and every connection flap, so a bare call at `ended` would
+re-fire for as long as the closing screen is up. It **never throws and never returns a promise the
+caller must handle** — a render is the caller, and this is decoration.
+
+No timer of its own: two cannons fired once each, shaped into ribbons by `scalar`, `flat`, `ticks`
+and `decay` rather than by a repeating loop. The ribbons config from the demo page is not published
+in the package, so it is **derived from the documented options** and lives as one named constant.
+
+#### 2. The attendee's closing screen
+
+**File**: `src/pages/quiz/index.astro`
+
+**Intent**: Fire at `ended`, on every phone.
+
+**Contract**: One `fire()` call in the branch that already paints the closing board, keyed so a
+second session in the same tab celebrates again. Nothing else in that branch changes.
+
+#### 3. Docs
+
+**Files**: `context/changes/quiz-animations-and-transitions/motion-contract.md`, `CLAUDE.md`
+
+**Intent**: The contract currently says the gate is the project's only motion rule and implies no new
+dependency; both need the confetti case. CLAUDE.md's client-bundle sentence is the one this phase
+makes incomplete.
+
+**Contract**: Name the dependency, its weight, why it is dynamically imported, and that
+`canvas-confetti` was the declined alternative — so the next reader sees a decision rather than an
+accident.
+
+### Success Criteria
+
+#### Automated Verification
+
+- Unit tests pass: `bun run test`
+- `celebrate.test.ts` covers: fires once per signature, never twice; no import at all under reduced
+  motion; a rejected import is absorbed and does not throw
+- `index.test.ts` passes with no assertion changed — in particular the zero-`setTimeout` rule
+- Type checking passes: `bun run type-check`
+- Linting passes: `bun run lint`
+- Boundary gate passes: `boundary.test.ts` sees no new violation
+- The import is dynamic — `src/lib/client/celebrate.ts` carries no static value import of
+  `@tsparticles/confetti`
+- Production build succeeds: `bun run build`
+
+#### Manual Verification
+
+- Close a session with a phone open: confetti fires once on the closing screen
+- It does not re-fire while the closing screen stays up
+- With OS reduced-motion enabled, no confetti and no chunk fetched (check the network panel)
+- With the network throttled to offline at the close, the closing screen and board still render
+
+**Implementation Note**: Pause after this phase for manual confirmation before proceeding.
+
+---
+
 ## Testing Strategy
 
 ### Unit Tests
@@ -544,3 +653,23 @@ None. No stored data, no schema, no wire format. Reverting is deleting the modul
 
 - [x] 4.5 `motion-contract.md` names every deferred item — 7e79275
 - [x] 4.6 No sentence in CLAUDE.md's rendering, client-interactivity or polling sections is left false — 7e79275
+
+### Phase 5: Confetti at the final result
+
+#### Automated
+
+- [x] 5.1 Unit tests pass: `bun run test`
+- [x] 5.2 `celebrate.test.ts` covers fire-once, reduced-motion, and an absorbed import failure
+- [x] 5.3 `index.test.ts` passes with no assertion changed
+- [x] 5.4 Type checking passes: `bun run type-check`
+- [x] 5.5 Linting passes: `bun run lint`
+- [x] 5.6 Boundary gate sees no new violation
+- [x] 5.7 The confetti import is dynamic, not static
+- [x] 5.8 Production build succeeds: `bun run build`
+
+#### Manual
+
+- [ ] 5.9 Confetti fires once on the phone's closing screen
+- [ ] 5.10 It does not re-fire while the closing screen stays up
+- [ ] 5.11 With reduced motion enabled, no confetti and no chunk fetched
+- [ ] 5.12 With the network offline at the close, the closing screen still renders

@@ -85,6 +85,56 @@ the host did, the clock is already running, and the prompt is what the reader ne
 `ENTER_MS` is 240ms; the option stagger is a fraction of it (`OPTION_SPREAD`), so four rows and
 eight rows land inside the same budget.
 
+## The confetti, and the dependencies this change added
+
+The phone's closing screen runs confetti.js.org's **"Confetti + Ribbons"** sample, on **every** phone
+at `ended`, not only the winner's.
+
+**It is two libraries, and that is the thing to know first.** `confetti()` and `ribbons()` are
+separate packages — `@tsparticles/confetti` and `@tsparticles/ribbons` (ribbons.js.org) — not two
+modes of one. The demo's own code calls both. A first attempt at this reproduced the look from
+`@tsparticles/confetti` alone on the reasoning that "the ribbons config is not published", which was
+simply wrong: the config is in the demo page's bundle and the second library is on npm.
+
+Three packages are installed, and the third is not obvious:
+
+| Package | Why |
+| --- | --- |
+| `@tsparticles/confetti` | the bursts |
+| `@tsparticles/ribbons` | the ribbons; pulls `shape-ribbon` transitively, so do **not** install that separately |
+| `@tsparticles/plugin-interactivity` | **an optional peer dependency of `plugin-emitters`.** Without it `bun run build` fails with *"ExternalInteractorBase is not exported by __vite-optional-peer-dep…"*. Confetti alone did not need it; ribbons pulls in `EmittersInteractor`, which does. |
+
+The costs, and which number to argue from:
+
+- **`canvas-confetti` (90 KB, zero dependencies) was offered and declined**, because it cannot do the
+  ribbons half. The trade was made deliberately with both figures visible.
+- **The packages total ~1.5 MB unpacked, but that is not what a phone pays.** Measured from the
+  build: the lazy chunks come to **~42 KB gzipped**, and the attendee's entry script is unchanged at
+  **7 KB gzip** with no library code in it. Argue from the measured number, not the package size —
+  and re-measure rather than trusting this line after a version bump.
+- **The `import()`s are dynamic and must stay dynamic**, and both resolve together — a ribbons chunk
+  arriving after the confetti had finished would be six seconds of nothing followed by ribbons over
+  an empty screen. A static import would move all of it into the bundle that has to clear FR-002's
+  30-second join target on a venue network.
+- **Every timer it starts can be stopped**, wired to the page's `pagehide` beside the countdown's own
+  stop. The published sample does not bother — a demo page has no lifecycle, a phone does, and 120
+  bursts queued against a backgrounded tab is the "clock left running over a session that no longer
+  exists" defect `countdown.ts` was extracted to fix. The ribbons interval is created *inside* a
+  timeout, so the handles live in a list rather than in named variables: at the moment `stop` may
+  first be called, that interval does not exist yet.
+- **The reduced-motion gate runs *before* the import**, not through the library's own
+  `disableForReducedMotion` — a device that asked for less motion should not spend the bytes either.
+  This is the most motion-sensitive thing the app does.
+- **Fires once per signature.** The closing screen re-renders on every snapshot, every fallback poll
+  and every connection flap; the signature is marked *before* the import resolves, so a re-render
+  arriving mid-download cannot start a second one.
+- **A failure is absorbed and never retried.** `celebrate.test.ts` asserts this by watching for
+  unhandled rejections, not just by checking that `fire()` does not throw — the failure path is
+  asynchronous, and the weaker assertion passed against a version with no `catch` at all.
+
+The projector deliberately gets none: the closing screen already inverts to a chrome ground, and
+chrome is rationed to one intense moment per screen.
+
 ## What does not animate, on purpose
 
 - **The rail** — the answered count, the clock, the word-cloud counters. Numbers the room reads

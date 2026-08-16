@@ -343,6 +343,21 @@ done**: it needs row identity across a `replaceChildren()`, which is exactly whe
 hardest. Read `context/changes/quiz-animations-and-transitions/motion-contract.md` before animating
 anything here.
 
+**One deliberate exception to the bundle rule.** The closing screen runs confetti.js.org's
+"Confetti + Ribbons" on every phone (`src/lib/client/celebrate.ts`). **It is two libraries** —
+`@tsparticles/confetti` and `@tsparticles/ribbons` are separate packages, not two modes of one — plus
+`@tsparticles/plugin-interactivity`, which is an *optional peer dependency* of `plugin-emitters` that
+the build hard-fails without once ribbons are in (`"ExternalInteractorBase is not exported by
+__vite-optional-peer-dep…"`). Do not add `@tsparticles/shape-ribbon`; it arrives transitively.
+
+They total ~1.5 MB unpacked but are loaded through **dynamic `import()`s**, so a device downloads
+~42 KB gzipped *at the close* and the attendee's entry script is unchanged at 7 KB gzip. Four things
+keep that true and none is optional: **keep the imports dynamic and resolved together**, keep the
+reduced-motion check *before* them rather than relying on either library's own
+`disableForReducedMotion`, keep the failure absorbed, and **keep every timer stoppable** — the
+sequence is six seconds of intervals and it is wired to `pagehide`. `canvas-confetti` (90 KB, no
+dependencies) was the declined alternative; it cannot do the ribbons half.
+
 **The directory is also where logic goes to become testable**, and that is now a pattern rather than
 a one-off. An Astro inline `<script>` has no harness, so the only guard available over anything in
 one is a source-text scan — and a scan for an expression that exists today certifies whatever is
