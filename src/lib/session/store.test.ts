@@ -2006,6 +2006,53 @@ describe("readStandings", () => {
     });
 
     /**
+     * **The degradation's only trace, and the one thing that trace may not carry**
+     * (impl review F1, F2).
+     *
+     * Two properties in one test because they fail together. A board without arrows is
+     * indistinguishable from a board where nobody moved — the runbook says so in as many
+     * words — so this log line is the sole evidence the baseline was lost, and deleting the
+     * `logSessionEvent` call would otherwise leave the whole suite green.
+     *
+     * The second half is the reason the first one is not enough. The Upstash client builds
+     * its message as `${body.error}, command was: ${JSON.stringify(req.body)}`, so the error
+     * thrown by *this* command carries one `<questionId>:<playerId>` field per player — every
+     * id in the room. Logs are retained ~1 hour and reached by no TTL, no purge and no
+     * rollback, and a player id is the credential that player's device answers with. The
+     * rejection below is shaped exactly like a real one so the assertion can actually fail:
+     * against `reason: String(error)` the id is right there in the stream.
+     *
+     * Asserted against `console.log` rather than a mocked `./log`, deliberately — the
+     * property is about what reaches the stream, and a module mock would only pin what was
+     * handed to a function that might still serialize more than it was given.
+     */
+    it("reports the degradation without letting the store's error reach the log", async () => {
+      hashes({ ala: JSON.stringify(ala) }, { "id-ala": 30 });
+      redisMock.hmget.mockRejectedValue(
+        new Error(
+          `WRONGTYPE Operation against a key holding the wrong kind of value, ` +
+            `command was: ["hmget","livequiz:answers","${answerField(QUESTION, "id-ala")}"]`,
+        ),
+      );
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      try {
+        await readStandings(QUESTION);
+
+        const degraded = log.mock.calls
+          .map((call) => String(call[0]))
+          .filter((line) => line.includes("session.standings.degraded"));
+
+        expect(degraded).toHaveLength(1);
+        expect(degraded[0]).not.toContain("id-ala");
+      } finally {
+        // `mockRestore`, never `vi.restoreAllMocks()` — the file's own convention, and the
+        // teardown does not reach a spy installed inside a test body.
+        log.mockRestore();
+      }
+    });
+
+    /**
      * The other half: a players-or-scores failure still refuses, even now that a question
      * id is being passed. Without this the new argument could quietly turn the one read
      * whose failure must stop the beat into one that degrades — and the projector would go

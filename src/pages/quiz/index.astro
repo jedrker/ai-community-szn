@@ -1074,15 +1074,16 @@ import { publicQuiz } from "../../quiz/public";
            * that should read name-first.
            *
            * `min-w-[3ch]` holds the column so names truncate at a fixed width rather than at
-           * one that depends on who moved this beat. `shrink-0` because `truncate` on the
-           * name is what should absorb a narrow screen, not this cell.
+           * one that depends on who moved this beat — and it is the *only* thing holding it.
+           * A `shrink-0` sat here until impl review F3: the row is a grid, so `flex-shrink`
+           * never applied to its children, and the class read as load-bearing while doing
+           * nothing. What absorbs a narrow screen is `truncate` on the name, as before.
            *
            * No first-child override is needed here: the own row is `chrome-tint`, which is
            * near-black, and the closing screen's chrome bar carries no deltas to colour.
            */
           delta:
-            "min-w-[3ch] shrink-0 text-[20px] leading-[26px] tabular-nums " +
-            "font-semibold",
+            "min-w-[3ch] text-[20px] leading-[26px] tabular-nums font-semibold",
           deltaUp: "text-quiz-mint",
           deltaDown: "text-quiz-signal",
           empty: "text-[26px] leading-[32px] text-quiz-echo",

@@ -1545,12 +1545,28 @@ async function readPreviousScores(
   let raw: Record<string, unknown> | null;
   try {
     raw = await redis.hmget<Record<string, unknown>>(ANSWERS_KEY, ...fields);
-  } catch (error) {
-    // Logged here rather than left to the caller: this is the only place that knows the
-    // difference between "no baseline was asked for" and "the baseline could not be read",
-    // and the two are the same `null` by the time the route sees them.
+    // The error is deliberately not bound — see the note below. Nothing here may read it.
+  } catch {
+    /**
+     * Logged here rather than left to the caller: this is the only place that knows the
+     * difference between "no baseline was asked for" and "the baseline could not be read",
+     * and the two are the same `null` by the time the route sees them.
+     *
+     * **A CONSTANT, and the error is deliberately not in it** (impl review F1). The Upstash
+     * client builds its message as `${body.error}, command was: ${JSON.stringify(req.body)}`,
+     * so a stringified error from *this* call carries the whole `HMGET` — one
+     * `<questionId>:<playerId>` field per player, which is every id in the room. Logs are
+     * retained ~1 hour and are reached by no TTL, no purge and no rollback, and a player id
+     * is the credential that player's device answers with; `standings.ts` keeps ids off a
+     * published row for exactly this reason. `console.error` is not the escape hatch either
+     * — Vercel collects it into the same stream.
+     *
+     * This is the hole `LogFields` cannot close on its own: `reason` has to stay free-text
+     * because genuine failure detail has nowhere else to go, so every caller owes it a
+     * bounded string. Every other `logSessionEvent` in this module passes one.
+     */
     logSessionEvent("session.standings.degraded", {
-      reason: `awards read failed: ${String(error)}`,
+      reason: "awards read failed",
     });
     return null;
   }
