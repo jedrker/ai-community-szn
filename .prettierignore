@@ -1,0 +1,9 @@
+dist/
+.astro/
+.vercel/
+node_modules/
+public/
+bun.lock
+context/
+docs/
+*.md

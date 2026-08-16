@@ -10,7 +10,8 @@ interface Props {
   cover?: string;
 }
 
-const { title, date, slug, description, speakerCount, photoCount, status, cover } =
+// `description` stays on Props — callers pass it — but the card does not render it.
+const { title, date, slug, speakerCount, photoCount, status, cover } =
   Astro.props;
 
 const formattedDate = date.toLocaleDateString("pl-PL", {
@@ -24,11 +25,18 @@ const formattedDate = date.toLocaleDateString("pl-PL", {
   href={`/wydarzenia/${slug}`}
   class="block bg-surface-secondary border border-surface-border rounded-lg overflow-hidden hover:border-brand-purple/50 transition-colors"
 >
-  {cover ? (
-    <img src={cover} alt={title} class="h-40 w-full object-cover" loading="lazy" />
-  ) : (
-    <div class="h-40 bg-gradient-to-br from-surface-secondary to-brand-purple/20"></div>
-  )}
+  {
+    cover ? (
+      <img
+        src={cover}
+        alt={title}
+        class="h-40 w-full object-cover"
+        loading="lazy"
+      />
+    ) : (
+      <div class="h-40 bg-gradient-to-br from-surface-secondary to-brand-purple/20" />
+    )
+  }
   <div class="p-4">
     <div class="flex items-center gap-2 mb-2">
       <span class="text-xs text-brand-purple">{formattedDate}</span>

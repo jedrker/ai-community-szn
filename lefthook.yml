@@ -1,0 +1,27 @@
+# Git-hook layer. Catches what the per-edit agent hook cannot see: manual edits,
+# a teammate's commit, and checks too slow to run on every Write/Edit.
+#
+# `type-check` lives here rather than per-edit on purpose: `astro check` reads
+# all 110 files (~8s) and has no incremental mode, so per-edit it would block
+# the agent loop on every single save. See test-plan.md §5 (typecheck gate).
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: lint
+      glob: "*.{ts,tsx,js,mjs,cjs,astro}"
+      run: bunx eslint {staged_files}
+
+    - name: format
+      glob: "*.{ts,tsx,js,mjs,cjs,astro,json,css}"
+      run: bunx prettier --check --ignore-unknown {staged_files}
+
+    # `--minimumSeverity warning` hides the 57 pre-existing `is:inline` hints so a
+    # real type error is legible; the failure threshold is unchanged (errors only).
+    - name: type-check
+      run: bunx astro check --minimumSeverity warning
+
+pre-push:
+  jobs:
+    - name: test
+      run: bun run test

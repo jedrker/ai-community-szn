@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 
 # macOS
 .DS_Store
+
+# Shared agent hook config. Un-ignores a file the user's global gitignore
+# excludes by name (`settings.json`), so the per-edit hook reaches teammates.
+!.claude/settings.json
