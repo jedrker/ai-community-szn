@@ -492,11 +492,37 @@ export function createFallbackPoll(deps: {
   };
 }
 
-export function createSessionClient(
-  options: SessionClientOptions,
-): SessionClient {
+/** What a device holds, and what it has concluded about the session's lifecycle. */
+export type SnapshotReconciler = {
+  /**
+   * Offer one snapshot. Returns whether it won the version check and was therefore
+   * adopted — `onSnapshot` fires exactly when this returns `true`.
+   */
+  readonly apply: (state: Snapshot, source: SnapshotSource) => boolean;
+  /** The snapshot currently held. */
+  readonly current: () => Snapshot;
+  /** The latch, for the callers that decide whether to keep spending on this session. */
+  readonly lifecycle: () => SessionLifecycle;
+};
+
+/**
+ * The adoption rule, built without any knowledge of Ably.
+ *
+ * Separated from `createSessionClient` for the same reason `createFallbackPoll` is, and
+ * the reason is worth restating because this half went uncovered a slice longer: **a rule
+ * whose only entry point is a channel callback can be exercised only by mocking the SDK**,
+ * and a mock of a third-party client freezes its API and keeps passing after a real
+ * upgrade breaks production. With the reconciler standing on its own, the whole of
+ * convergence — the version guard, the purge wipe and the lifecycle latch — is testable
+ * against a stub `onSnapshot` and nothing else.
+ *
+ * Delivery and adoption are different steps. `createFallbackPoll` covers the first; this
+ * covers the second, and until it existed only the first had executing tests.
+ */
+export function createSnapshotReconciler(deps: {
+  readonly onSnapshot: (state: Snapshot, source: SnapshotSource) => void;
+}): SnapshotReconciler {
   let current: Snapshot = null;
-  let realtime: Ably.Realtime | null = null;
 
   /**
    * The lifecycle latch — the bound that makes `state.ts`'s budget figures true rather than
@@ -529,9 +555,31 @@ export function createSessionClient(
 
     lifecycle = advanceLifecycle(lifecycle, state);
 
-    options.onSnapshot(state, source);
+    deps.onSnapshot(state, source);
     return true;
   };
+
+  return {
+    apply,
+    current: () => current,
+    lifecycle: () => lifecycle,
+  };
+}
+
+export function createSessionClient(
+  options: SessionClientOptions,
+): SessionClient {
+  let realtime: Ably.Realtime | null = null;
+
+  /**
+   * Every snapshot this client sees goes through here, whatever brought it — the prime
+   * fetch, the subscription, a host action's own response. One rule, one place.
+   */
+  const reconciler = createSnapshotReconciler({
+    onSnapshot: (state, source) => options.onSnapshot(state, source),
+  });
+
+  const apply = reconciler.apply;
 
   const refresh = async (): Promise<void> => {
     const response = await fetch("/api/quiz/state", {
@@ -606,7 +654,7 @@ export function createSessionClient(
       shouldFallbackPoll({
         fallbackPolling: options.fallbackPolling,
         transportStatus,
-        sessionOver: lifecycle.sessionOver,
+        sessionOver: reconciler.lifecycle().sessionOver,
       }),
     onDegraded: (next) => {
       degraded = next;
@@ -763,7 +811,7 @@ export function createSessionClient(
   };
 
   return {
-    current: () => current,
+    current: reconciler.current,
     apply,
     refresh,
     start,

@@ -6,9 +6,11 @@ import {
   advanceLifecycle,
   classifyConnection,
   createFallbackPoll,
+  createSnapshotReconciler,
   shouldFallbackPoll,
   INITIAL_LIFECYCLE,
   type Snapshot,
+  type SnapshotSource,
 } from "./session";
 
 /**
@@ -721,5 +723,180 @@ describe("advanceLifecycle", () => {
      */
     const over = advanceLifecycle(INITIAL_LIFECYCLE, snapshot("ended"));
     expect(advanceLifecycle(over, snapshot("lobby")).sessionOver).toBe(true);
+  });
+});
+
+/**
+ * The adoption rule (rollout phase 2, test-plan §2 Risk #3).
+ *
+ * **Delivery and adoption are different steps, and until this block existed only the first
+ * had executing tests.** `createFallbackPoll` above proves a request goes out; nothing
+ * proved that the snapshot it brings back is the one the device ends up rendering. The
+ * archive recorded that gap and accepted it at the time
+ * (`connection-limit-degradation/reviews/impl-review.md:202-208`: "`createSessionClient` is
+ * never constructed in any test").
+ *
+ * Driven through the reconciler rather than through the client, for the reason stated at
+ * the top of this file and on `createFallbackPoll`: constructing the client means faking
+ * `Ably.Realtime`, and a mock of a third-party client freezes its API and keeps passing
+ * after a real upgrade breaks production.
+ *
+ * Every case asserts **both halves of adoption** — the return value and whether
+ * `onSnapshot` fired — because they are two different claims. A guard that returned `false`
+ * while still calling the callback would leave the view rendering a snapshot the
+ * reconciler says it dropped, and a return-only assertion cannot see that.
+ */
+describe("createSnapshotReconciler", () => {
+  /**
+   * A snapshot at a chosen version. Separate from `snapshot()` above, which pins version 1
+   * because `advanceLifecycle` never reads it — here the version *is* the subject, so a
+   * fixture that could not vary it would be testing nothing.
+   */
+  function at(version: number, phase = "question-open"): Snapshot {
+    return { version, phase } as unknown as Snapshot;
+  }
+
+  /**
+   * What a purge looks like on the wire, held in a name rather than written inline.
+   *
+   * Not a style choice: `reconciler.apply(PURGED, …)` is syntactically
+   * `Function.prototype.apply(thisArg, args)`, and ESLint's `prefer-spread` reports it as
+   * such. The rule is right about the shape and wrong about the meaning, and a name is a
+   * cheaper answer than an override.
+   */
+  const PURGED: Snapshot = null;
+
+  function harness() {
+    const onSnapshot =
+      vi.fn<(state: Snapshot, source: SnapshotSource) => void>();
+    return { onSnapshot, reconciler: createSnapshotReconciler({ onSnapshot }) };
+  }
+
+  describe("the version guard", () => {
+    it("adopts the first snapshot it is offered", () => {
+      const { onSnapshot, reconciler } = harness();
+
+      // No `current` to compare against, so the guard must not swallow it — a device whose
+      // very first snapshot were dropped would render nothing until the host acted again.
+      expect(reconciler.apply(at(7), "fetch")).toBe(true);
+      expect(reconciler.current()).toEqual(at(7));
+      expect(onSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("adopts a newer snapshot", () => {
+      const { onSnapshot, reconciler } = harness();
+      reconciler.apply(at(7), "fetch");
+
+      expect(reconciler.apply(at(8), "realtime")).toBe(true);
+      expect(reconciler.current()).toEqual(at(8));
+      expect(onSnapshot).toHaveBeenCalledTimes(2);
+    });
+
+    it("drops a snapshot at the same version", () => {
+      /**
+       * The ordinary case, not an edge one: the prime fetch and the subscription race on
+       * every join, and both legitimately carry the version the host last wrote. Adopting
+       * the second would repaint the whole view — and on the attendee page a repaint at the
+       * wrong moment is an option list rebuilt under a thumb that is mid-tap.
+       */
+      const { onSnapshot, reconciler } = harness();
+      reconciler.apply(at(7), "fetch");
+
+      expect(reconciler.apply(at(7), "realtime")).toBe(false);
+      expect(onSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops an older snapshot and leaves the newer one in place", () => {
+      // The failure the rule exists for: a slow fetch answering after a fast message would
+      // otherwise walk the room backwards into a question the host has already closed.
+      const { onSnapshot, reconciler } = harness();
+      reconciler.apply(at(8), "realtime");
+
+      expect(reconciler.apply(at(7), "fetch")).toBe(false);
+      expect(reconciler.current()).toEqual(at(8));
+      expect(onSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("passes the source through untouched", () => {
+      // The view branches on it, and every source funnels through this one function — so a
+      // reconciler that reported the wrong one would mislabel where the room's state came
+      // from at exactly the moment somebody is debugging a stuck device.
+      const { onSnapshot, reconciler } = harness();
+
+      reconciler.apply(at(1), "http");
+      expect(onSnapshot).toHaveBeenCalledWith(at(1), "http");
+    });
+  });
+
+  describe("the purge wipe", () => {
+    it("applies null regardless of version and clears what was held", () => {
+      /**
+       * `null` carries no version to compare, and it means the session document is gone.
+       * Refusing it would leave a phone rendering a question that no longer exists — the one
+       * state nobody recovers from without a reload.
+       */
+      const { onSnapshot, reconciler } = harness();
+      reconciler.apply(at(9), "realtime");
+
+      expect(reconciler.apply(PURGED, "fetch")).toBe(true);
+      expect(reconciler.current()).toBeNull();
+      expect(onSnapshot).toHaveBeenLastCalledWith(null, "fetch");
+    });
+
+    it("adopts a fresh session after a wipe", () => {
+      // `current` is null again, so the guard has nothing to compare against and the next
+      // snapshot must win even though its version is lower than the wiped one's.
+      const { reconciler } = harness();
+      reconciler.apply(at(9), "realtime");
+      reconciler.apply(PURGED, "fetch");
+
+      expect(reconciler.apply(at(1, "lobby"), "fetch")).toBe(true);
+      expect(reconciler.current()).toEqual(at(1, "lobby"));
+    });
+  });
+
+  describe("the lifecycle latch", () => {
+    it("starts having seen nothing", () => {
+      expect(harness().reconciler.lifecycle()).toEqual(INITIAL_LIFECYCLE);
+    });
+
+    it("does not treat an absent session as a finished one", () => {
+      // A device that arrives before the host has created a session must keep polling. This
+      // is `advanceLifecycle`'s rule, asserted here through the reconciler because the wiring
+      // is what was untested — the rule itself has its own block above.
+      const { reconciler } = harness();
+
+      reconciler.apply(PURGED, "fetch");
+      expect(reconciler.lifecycle().sessionOver).toBe(false);
+    });
+
+    it("latches once a session it has seen disappears", () => {
+      const { reconciler } = harness();
+      reconciler.apply(at(3), "fetch");
+
+      reconciler.apply(PURGED, "realtime");
+      expect(reconciler.lifecycle().sessionOver).toBe(true);
+    });
+
+    it("latches on the ended phase", () => {
+      const { reconciler } = harness();
+
+      reconciler.apply(at(4, "ended"), "realtime");
+      expect(reconciler.lifecycle().sessionOver).toBe(true);
+    });
+
+    it("does not advance the latch on a snapshot the guard dropped", () => {
+      /**
+       * The half that only exists at this seam: `advanceLifecycle` runs *below* the guard,
+       * so a stale `ended` arriving after the host restarted must not end the new session.
+       * Hoisting the fold above the `return false` would look like a tidy-up and would strand
+       * a device on "To już koniec" for a room that is still playing.
+       */
+      const { reconciler } = harness();
+      reconciler.apply(at(9), "realtime");
+
+      expect(reconciler.apply(at(4, "ended"), "fetch")).toBe(false);
+      expect(reconciler.lifecycle().sessionOver).toBe(false);
+    });
   });
 });
