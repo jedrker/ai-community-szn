@@ -842,6 +842,123 @@ describe("renderStandings", () => {
     expect(rows()).toHaveLength(1);
     expect(container.textContent).toContain("Bartek");
   });
+
+  /**
+   * THE MOVEMENT CELL (this change).
+   *
+   * The renderer paints a published delta and decides nothing about it beyond what an
+   * empty one looks like — the direction, the magnitude and the sign all arrive from the
+   * server, for the reason the row order does.
+   */
+  describe("the movement cell", () => {
+    function deltas(): string[] {
+      return [...container.querySelectorAll("li span:nth-child(4)")].map(
+        (node) => node.textContent ?? "",
+      );
+    }
+
+    /**
+     * Direction as a glyph, magnitude as a bare number. The magnitudes are asserted rather
+     * than just the arrows, because a renderer that printed the sign as well would produce
+     * `▼-1` — a double negative that reads as a climb at a glance.
+     */
+    it("paints a climb up and a fall down, with the magnitude", () => {
+      renderStandings(container, [
+        { rank: 1, displayName: "Ala", points: 30, delta: 3 },
+        { rank: 2, displayName: "Bartek", points: 20, delta: -1 },
+      ]);
+
+      expect(deltas()).toEqual(["▲3", "▼1"]);
+    });
+
+    /**
+     * **The cell exists even when it is empty, and that is the point of the test.** Both
+     * views lay a row out on a grid, so a span that came and went would take its column
+     * with it and shift every name sideways between beats depending on who moved.
+     *
+     * `null` and `0` are checked together because they are different facts that this
+     * renderer deliberately shows the same way — and separately from the `toEqual` above,
+     * so a renderer that dropped the span would fail here rather than silently renumbering
+     * the `nth-child` the other tests select on.
+     */
+    it("keeps an empty cell for a row that did not move and for one with no baseline", () => {
+      renderStandings(container, [
+        { rank: 1, displayName: "Ala", points: 30, delta: 0 },
+        { rank: 2, displayName: "Bartek", points: 20, delta: null },
+      ]);
+
+      expect(container.querySelectorAll("li span:nth-child(4)")).toHaveLength(
+        2,
+      );
+      expect(deltas()).toEqual(["", ""]);
+    });
+
+    /**
+     * Marked in the DOM as well as by class, for the reason `data-own` is: a venue network
+     * that failed to deliver the stylesheet still leaves the direction readable.
+     */
+    it("marks the direction on the row, and marks nothing when there is none", () => {
+      renderStandings(container, [
+        { rank: 1, displayName: "Ala", points: 30, delta: 2 },
+        { rank: 2, displayName: "Bartek", points: 20, delta: -2 },
+        { rank: 3, displayName: "Celina", points: 10, delta: 0 },
+        { rank: 4, displayName: "Darek", points: 5, delta: null },
+      ]);
+
+      expect(
+        [...container.querySelectorAll("li")].map(
+          (node) => node.dataset.delta ?? "",
+        ),
+      ).toEqual(["up", "down", "", ""]);
+    });
+
+    /** The two directions take their own classes, on top of the shared cell class. */
+    it("applies the direction classes only where there is a direction", () => {
+      renderStandings(
+        container,
+        [
+          { rank: 1, displayName: "Ala", points: 30, delta: 2 },
+          { rank: 2, displayName: "Bartek", points: 20, delta: -2 },
+          { rank: 3, displayName: "Celina", points: 10, delta: null },
+        ],
+        { delta: "cell", deltaUp: "mint", deltaDown: "signal" },
+      );
+
+      expect(
+        [...container.querySelectorAll("li span:nth-child(4)")].map(
+          (node) => node.className,
+        ),
+      ).toEqual(["cell mint", "cell signal", "cell"]);
+    });
+
+    /**
+     * The motion signature covers the movement too. Two boards holding the same five rows
+     * and different arrows are different boards, and the second must land rather than
+     * appear — the same reasoning that put the points in the signature.
+     *
+     * Checked through `data-entered`, which `runMotion` only writes when it decides the
+     * board is new; a signature blind to the delta would leave the second render alone.
+     */
+    it("re-animates a board whose arrows changed but whose rows did not", () => {
+      const board = (delta: number | null) => [
+        { rank: 1, displayName: "Ala", points: 30, delta },
+      ];
+
+      renderStandings(container, board(1), { animate: true });
+      const first = container.querySelector("ol")?.style.opacity;
+
+      renderStandings(container, board(1), { animate: true });
+      const unchanged = container.querySelector("ol")?.style.opacity;
+
+      renderStandings(container, board(4), { animate: true });
+      const moved = container.querySelector("ol")?.style.opacity;
+
+      // A repaint of the identical board keeps the finished list; a board whose arrows
+      // changed starts its entrance over, which is what the opacity reset shows.
+      expect(unchanged).not.toBe(first);
+      expect(moved).toBe(first);
+    });
+  });
 });
 
 /**

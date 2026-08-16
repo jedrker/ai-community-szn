@@ -70,6 +70,12 @@ this project and falls back to the source scan that `countdown.ts` records as ha
 defect instead. Markup-declared CSS transitions are still fine where nothing depends on them — the
 countdown bar is one.
 
+**A row now states its own rank change, and that is not the deferred reorder.** `renderStandings`
+paints a `delta` the server computed and published — the same relationship it has to `rank`, and the
+same reason it may not sort. What stays deferred is the *motion*: a row visibly travelling from one
+position to another still needs row identity across a `replaceChildren()`. Do not read the arrows as
+the reorder having landed, and do not add per-row motion to them.
+
 **Entrance only, and that is structural rather than taste.** `setHidden` writes the `hidden`
 property, which preflight makes `display: none !important`, so nothing toggled that way can be
 transitioned *out*; and `syncRail` derives the rail's visibility from its sections' **live `hidden`

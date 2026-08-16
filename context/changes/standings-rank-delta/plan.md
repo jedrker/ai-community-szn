@@ -440,31 +440,27 @@ the one after — no host action 409s.
 - [x] 1.7 Omitting `previousScores` leaves every row at `delta: null` — bdf2833
 - [x] 1.8 A row parsed without `delta` still validates — bdf2833
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 `readStandings()` with no argument issues no awards read
-- [x] 2.4 A player who did not answer shows no movement
-- [x] 2.5 A throwing awards read still returns a board, deltas `null`
-- [x] 2.6 A throwing players-or-scores read still returns `null`
-- [x] 2.7 An empty room issues no `HMGET`
-- [x] 2.8 The key registry test still passes
-- [x] 2.9 The route passes the current question id
+- [x] 2.1 Unit tests pass: `bun run test` — 897fe97
+- [x] 2.2 Type checking passes: `bun run type-check` — 897fe97
+- [x] 2.3 `readStandings()` with no argument issues no awards read — 897fe97
+- [x] 2.4 A player who did not answer shows no movement — 897fe97
+- [x] 2.5 A throwing awards read still returns a board, deltas `null` — 897fe97
+- [x] 2.6 A throwing players-or-scores read still returns `null` — 897fe97
+- [x] 2.7 An empty room issues no `HMGET` — 897fe97
+- [x] 2.8 The key registry test still passes — 897fe97
+- [x] 2.9 The route passes the current question id — 897fe97
 
 #### Manual
 
 - [ ] 2.10 Arrows match what the scores actually did, locally, across two devices
 
-### Phase 3: The renderer
-
-#### Automated
-
-- [ ] 3.1 Unit tests pass: `bun run test`
-- [ ] 3.2 Linting passes: `bun run lint`
-- [ ] 3.3 Positive renders `▲N`, negative renders `▼N`
-- [ ] 3.4 `null` and `0` render an empty but present span
-- [ ] 3.5 `data-delta` is set for a move and absent otherwise
-- [ ] 3.6 Motion signature distinguishes boards that differ only by delta
-- [ ] 3.7 The renderer still never sorts
+- [x] 3.1 Unit tests pass: `bun run test`
+- [x] 3.2 Linting passes: `bun run lint`
+- [x] 3.3 Positive renders `▲N`, negative renders `▼N`
+- [x] 3.4 `null` and `0` render an empty but present span
+- [x] 3.5 `data-delta` is set for a move and absent otherwise
+- [x] 3.6 Motion signature distinguishes boards that differ only by delta
+- [x] 3.7 The renderer still never sorts
 
 ### Phase 4: The two views
 

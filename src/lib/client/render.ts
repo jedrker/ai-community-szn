@@ -696,6 +696,12 @@ export type StandingsClassNames = {
   readonly rank?: string;
   readonly name?: string;
   readonly points?: string;
+  /** The movement cell. Applied whether or not there is movement to show. */
+  readonly delta?: string;
+  /** Appended on top of `delta` for a climb. */
+  readonly deltaUp?: string;
+  /** Appended on top of `delta` for a fall. */
+  readonly deltaDown?: string;
   readonly empty?: string;
 };
 
@@ -718,6 +724,13 @@ export type RenderStandingsOptions = StandingsClassNames & {
    * changes this renderer is in no position to make: it is handed a published order and
    * paints it, and rank-change motion needs row identity across a `replaceChildren()` that
    * this function does not have. Deferred deliberately — see `motion-contract.md`.
+   *
+   * **The movement cell did not change that**, and the distinction is worth keeping sharp
+   * now that a row states its own rank change. This function is still in no position to
+   * *derive* one — what it paints is a figure the server computed and published, exactly as
+   * it paints the rank. What stays deferred is the motion: making a row visibly travel from
+   * one position to another still needs the identity across a re-render that no diffing
+   * gives us.
    */
   readonly animate?: boolean;
   /**
@@ -733,6 +746,34 @@ export type RenderStandingsOptions = StandingsClassNames & {
 
 /** Polish, because it renders directly. */
 const NO_STANDINGS_TEXT = "Jeszcze nikt nie zdobył punktów.";
+
+/**
+ * The movement glyphs (this change).
+ *
+ * **The triangle is the direction's second carrier, and that is why there is a glyph at
+ * all** rather than a bare signed number in green or red. Colour alone would leave the
+ * board unreadable to anyone who cannot separate the two hues, on a projector where it is
+ * the fastest channel for everyone else — so the shape says the same thing the colour does.
+ */
+const DELTA_UP = "▲";
+const DELTA_DOWN = "▼";
+
+/**
+ * What the movement cell reads, given a published delta.
+ *
+ * **`null` and `0` produce the same empty string, deliberately.** They are different facts —
+ * "no movement can be stated" and "held their position" — and the field keeps them apart;
+ * what this change decided is that a board says nothing in either case. A marker on three of
+ * five rows is noise on a projector, and a row where nothing happened is the one place a
+ * leaderboard has nothing to say.
+ *
+ * The magnitude is `Math.abs`, because the direction is already in the glyph — `▼-1` reads
+ * as a double negative.
+ */
+function deltaText(delta: number | null): string {
+  if (delta === null || delta === 0) return "";
+  return `${delta > 0 ? DELTA_UP : DELTA_DOWN}${Math.abs(delta)}`;
+}
 
 /**
  * Renders the leaderboard: position, name, points.
@@ -805,14 +846,40 @@ export function renderStandings(
     if (classNames.points) points.className = classNames.points;
     points.textContent = String(entry.points);
 
-    row.append(rank, name, points);
+    /**
+     * The movement cell, and it is **appended whether or not it has anything in it**.
+     *
+     * Both views lay a row out on a grid, so a span that came and went would take its
+     * column with it — and every name on the board would shift sideways between one beat
+     * and the next depending on who happened to move. An empty cell holds the column.
+     */
+    const delta = document.createElement("span");
+    const climbed = entry.delta !== null && entry.delta > 0;
+    const fell = entry.delta !== null && entry.delta < 0;
+    delta.className = optionClassName([
+      classNames.delta,
+      climbed ? classNames.deltaUp : undefined,
+      fell ? classNames.deltaDown : undefined,
+    ]);
+    delta.textContent = deltaText(entry.delta);
+    // Marked in the DOM as well as by class, for the reason `data-own` above is: the
+    // direction survives a stylesheet that failed to load on a venue network.
+    if (climbed) row.dataset.delta = "up";
+    if (fell) row.dataset.delta = "down";
+
+    row.append(rank, name, points, delta);
     list.append(row);
   }
 
-  // Keyed by what the board says — the order, the names and the points — so a re-render of
-  // the same board stands still while a board whose figures moved arrives again.
+  // Keyed by what the board says — the order, the names, the points and the movement — so a
+  // re-render of the same board stands still while a board whose figures moved arrives
+  // again. The delta is part of what it says: two boards holding the same five rows and
+  // different arrows are different boards, and the second should land rather than appear.
   const signature = `${options.motionKey ?? ""}|${rows
-    .map((entry) => `${entry.rank}:${entry.displayName}:${entry.points}`)
+    .map(
+      (entry) =>
+        `${entry.rank}:${entry.displayName}:${entry.points}:${entry.delta ?? ""}`,
+    )
     .join("|")}`;
 
   runMotion(container, {
