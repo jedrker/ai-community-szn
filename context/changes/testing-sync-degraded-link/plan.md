@@ -553,25 +553,25 @@ Not applicable — no data, schema, key or wire-format change. `SessionState` is
 
 #### Automated
 
-- [x] 3.1 Suite passes: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 `scripts/scoped-tests.sh src/pages/api/quiz/answer.ts` runs the new file
+- [x] 3.1 Suite passes: `bun run test` — f56a533
+- [x] 3.2 Type checking passes: `bun run type-check` — f56a533
+- [x] 3.3 `scripts/scoped-tests.sh src/pages/api/quiz/answer.ts` runs the new file — f56a533
 
 #### Manual
 
-- [x] 3.4 The new file's stated scope does not contradict `answer.test.ts`'s docstring
+- [x] 3.4 The new file's stated scope does not contradict `answer.test.ts`'s docstring — f56a533
 
 ### Phase 4: The Distribution Drift
 
 #### Automated
 
-- [ ] 4.1 Suite passes: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 `routes.test.ts` still passes unchanged — no mock leakage
+- [x] 4.1 Suite passes: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 `routes.test.ts` still passes unchanged — no mock leakage
 
 #### Manual
 
-- [ ] 4.4 The increment really lands in the gap — moving it earlier makes the drift disappear
+- [x] 4.4 The increment really lands in the gap — moving it earlier makes the drift disappear
 
 ### Phase 5: Verification and Documents
 
