@@ -130,18 +130,47 @@ means the gate is enforced once that rollout phase lands; before that, the gate 
 | Gate | Where | Required? | Catches |
 |---|---|---|---|
 | quiz definition validity | build (config load) → deploy | required — already enforced | A malformed quiz reaching a live room; the previous good quiz stays live instead |
-| typecheck | local | required after §3 Phase 4 | Type drift; strict-config violations |
-| unit + integration | local | required after §3 Phase 4 | Logic regressions across session, scoring, client and route layers |
+| lint + format (single edited file) | agent `PostToolUse` hook, `.claude/hooks/per-edit-check.sh` | required — enforced 2026-08-16 | Formatting drift and simple lint errors, while the agent can still fix them itself; exit 2 returns the message as `additionalContext` |
+| lint + format (staged files) | pre-commit, `lefthook.yml` | required — enforced 2026-08-16 | The same, on edits the agent hook never saw: manual edits and a teammate's commit |
+| typecheck | pre-commit, `lefthook.yml` (`astro check`) | required — enforced 2026-08-16 locally; §3 Phase 4 moves it to CI | Type drift; strict-config violations |
+| unit + integration | pre-push, `lefthook.yml` (`bun run test`) | required — enforced 2026-08-16 locally; §3 Phase 4 moves it to CI | Logic regressions across session, scoring, client and route layers |
 | guard verification (break-and-restore) | local, per test authored | required after §3 Phase 1 | Guards that cannot fail — the failure mode that produced Risk #2 |
 | retention residue check | between rehearsal runs; before a live session | required after §3 Phase 3 | Attendee data surviving a close, including runtime-assembled key names |
 | pre-session smoke (`docs/runbook-live-session.md`) | between merge and a live session | required, manual — and currently unreliable | Environment-specific failures and a silently failed deploy |
-| lint + format | — | not planned in this rollout | Tracked as health-check fix #6; no linter or formatter is installed and no phase here installs one |
 
-Two honest notes. First, the pre-session smoke is the only gate standing between a commit and a live
+Three honest notes. First, the pre-session smoke is the only gate standing between a commit and a live
 room today, and the archive records its ten manual rows being closed unchecked at least once — a
 gate that exists on paper is listed here as it actually behaves. Second, nothing in this table runs
 in CI, because there is no CI; Phase 4 is what changes that, and authoring the pipeline itself is
-owned outside this plan.
+owned outside this plan. The local layers added on 2026-08-16 do not substitute for it: a git hook
+is skippable with `--no-verify` and is installed per clone, so it protects the author's machine
+rather than the shared repository state.
+
+Third, this table's lint row reversed a position taken at write time. It read "not planned in this
+rollout" until 2026-08-16, when ESLint 10, Prettier 3 and lefthook were installed as Module 3 Lesson
+3's per-edit and pre-commit layers. The reversal is recorded rather than overwritten because the
+original reasoning still stands where it was pointed: no rollout *phase* installed a linter, and
+none of these gates covers any risk in §2 that was not already covered. They shorten the loop; they
+do not extend the map.
+
+**The layer split is a cost decision, not a taxonomy.** `astro check` reads all 111 files with no
+incremental mode (~7.5s), so a per-edit typecheck would block the agent loop on every save — it
+belongs at commit. The per-edit hook stays at roughly a second by lint and format alone, and it is
+the only layer that can hand its output back to the agent mid-session.
+
+**Two files are excluded from the formatter, and the reason is Risk #2 itself.** `src/pages/quiz/host.astro`
+and `index.astro` are pinned by structural source scans that assert their inline scripts as literal
+text. Reformatting them broke five assertions in `host.test.ts` — one of which was the poll-loop
+timer guard, whose regex stopped matching anything at all and would therefore have gone on passing
+against a page with no timer. They are listed in `.prettierignore` rather than reformatted, and the
+five assertions were left alone rather than rewritten to fit the new line wrapping. Do not remove
+those two entries without first re-verifying every scan in `host.test.ts` and `index.test.ts` by
+breaking the behaviour each one covers.
+
+The baseline was made green by targeted ESLint rule overrides rather than by rewriting product code:
+`no-var` off inside `<script is:inline>` blocks (hand-written ES5 on purpose), `no-explicit-any` off
+in `*.test.ts`, and `no-useless-assignment` off globally because it misreads the project's fail-safe
+`let x = <default>` / try-catch shape. Each override carries its reasoning in `eslint.config.js`.
 
 ## 6. Cookbook Patterns
 
