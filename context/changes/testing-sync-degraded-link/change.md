@@ -1,7 +1,7 @@
 ---
 change_id: testing-sync-degraded-link
 title: Sync under a degraded link — rollout phase 2 of the test plan
-status: implementing
+status: implemented
 created: 2026-08-16
 updated: 2026-08-16
 archived_at: null

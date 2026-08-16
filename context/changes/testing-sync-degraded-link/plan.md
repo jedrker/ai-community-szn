@@ -577,13 +577,13 @@ Not applicable — no data, schema, key or wire-format change. `SessionState` is
 
 #### Automated
 
-- [x] 5.1 Full suite passes: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
-- [x] 5.3 Linting and formatting pass: `bun run lint`, `bun run format`
+- [x] 5.1 Full suite passes: `bun run test` — 064d418
+- [x] 5.2 Type checking passes: `bun run type-check` — 064d418
+- [x] 5.3 Linting and formatting pass: `bun run lint`, `bun run format` — 064d418
 
 #### Manual
 
-- [x] 5.4 Every row of `verification.md` was observed, not reasoned about
-- [x] 5.5 §6.2 no longer reads "TBD" and a third seam test could be written from it
-- [x] 5.6 §2's Risk #3 row and §6.6 both record that clause 3 holds for `dispose` only
-- [x] 5.7 No other sentence in CLAUDE.md's client section became false
+- [x] 5.4 Every row of `verification.md` was observed, not reasoned about — 064d418
+- [x] 5.5 §6.2 no longer reads "TBD" and a third seam test could be written from it — 064d418
+- [x] 5.6 §2's Risk #3 row and §6.6 both record that clause 3 holds for `dispose` only — 064d418
+- [x] 5.7 No other sentence in CLAUDE.md's client section became false — 064d418
