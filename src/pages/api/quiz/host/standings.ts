@@ -148,6 +148,26 @@ export const POST: APIRoute = async ({ request }) => {
           },
         });
       }
+
+      /**
+       * **Its own note, because `no-op` would be a false report of the branch above.**
+       *
+       * The transition returned `null`, so nothing in the store changed and `applied` stays
+       * `false` — but a snapshot did go out to every device, which is the entire point of
+       * this branch. Falling through with the generic note left the host panel saying "nic
+       * do zrobienia (koniec pytań?). Stan bez zmian." at the exact moment the retry the 502
+       * asked for had just succeeded, so the one interaction that fixes a lost broadcast
+       * reported itself as the one that does nothing.
+       *
+       * `applied` deliberately stays `false`: no version was bumped and no transition
+       * happened, and claiming otherwise would put the panel's vocabulary at odds with the
+       * state it is looking at. The note is what carries the difference — which is what
+       * notes are for.
+       */
+      return toResponse({
+        status: 200,
+        body: { state: outcome.body.state, applied: false, note: "republished" },
+      });
     }
 
     // Already showing it. A no-op, and not worth an error — see the module note.

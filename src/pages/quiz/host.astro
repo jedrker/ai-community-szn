@@ -1714,6 +1714,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           {
             distribution,
             correctOptionIds: state.revealedOptionIds,
+            /**
+             * The projector is the one surface that opts into the count-up: the reveal is a
+             * beat the host narrates, and bars that grow from zero give the room a second to
+             * read the shape before the figures settle. `renderDistribution` runs it only when
+             * the numbers actually changed, so the several renders a reveal sits through do
+             * not reset it, and a reduced-motion display gets the final figures at once.
+             */
+            animate: true,
             list: BAND_LIST,
             row:
               "relative grid min-h-[92px] grid-cols-[92px_1fr_auto] items-center gap-x-8 " +
@@ -1997,6 +2005,72 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const CLOUD_ALREADY_CLOSED = "Pytanie jest już zamknięte — przejdź do następnego pytania.";
 
       /**
+       * REVEALING WHILE THE CLOCK IS STILL RUNNING TAKES TWO TAPS.
+       *
+       * The reveal is the flow verb with something to lose: `answer.ts` accepts only in
+       * `question-open`, so the tap that shows the answer is the same tap that closes
+       * submissions — and everyone still typing when it lands is simply cut off, with no
+       * undo and nothing on any screen to say it happened early. `dalej` is recoverable and
+       * `pokaż ranking` is a re-broadcast; this one is not.
+       *
+       * **The same two-tap shape as `zakończ sesję`, deliberately, down to the label and the
+       * version rule** — one confirmation idiom on this bar rather than two. It is *not* a
+       * route-side confirmation like `end`'s: the route has no business refusing an early
+       * reveal, since a host who means it is exercising a legitimate call, and the guard is
+       * about the mis-click, not about legality. So nothing travels with the request.
+       *
+       * **It is asked for exactly when it has something to protect** — see
+       * `revealNeedsConfirm`. A confirmation the host meets on every question is one they
+       * learn to double-tap through, which is worse than none: it costs a beat every time
+       * and stops registering as a warning precisely when it is one.
+       */
+      const REVEAL_CONFIRM_LABEL = "na pewno? kliknij ponownie";
+
+      /**
+       * WHAT THE STANDINGS VERB IS CALLED ONCE THE BOARD IS ALREADY ON SCREEN.
+       *
+       * The button stays live in the `standings` phase, and that is load-bearing rather than
+       * an oversight: `applyHostAction` answers a committed-but-unbroadcast board with a 502
+       * reading "Kliknij ponownie, aby rozgłosić go jeszcze raz", and by then the session is
+       * already in `standings`. Disabling it there turns that instruction into a pointer at a
+       * dark button, and leaves `dalej` — which abandons the beat — as the only way on. That
+       * is the failure impl review F5 fixed; do not re-introduce it by tidying the phase rule.
+       *
+       * **So the fix is the name, not the gate** — `REVEAL_LABEL`'s reasoning exactly. Called
+       * "pokaż ranking" in a phase where the ranking is visibly already shown, the button
+       * reads as a step the host forgot to take, and a tap on it reported itself as doing
+       * nothing (the route now says otherwise — see its `republished` note). Named for what
+       * the second tap actually does, it stops looking like a mistake and starts looking like
+       * the recovery it is.
+       *
+       * The hint is on the enabled button rather than in the docs, because the question it
+       * answers — *why would I click this again?* — is asked on stage, by someone who cannot
+       * leave the panel to find out.
+       */
+      const STANDINGS_LABEL = "pokaż ranking";
+      const STANDINGS_LABEL_AGAIN = "wyślij ranking ponownie";
+      const STANDINGS_AGAIN_HINT =
+        "Ranking jest już na ekranie. Kliknij, jeśli nie dotarł do wszystkich telefonów — " +
+        "wyśle go jeszcze raz, bez zmiany stanu sesji.";
+
+      /**
+       * Whether the reveal is armed, and the version it was armed at.
+       *
+       * The version is the disarming rule, and it is `syncEndButton`'s reasoning applied to
+       * the other one-way verb: arming is a statement about the session the host is looking
+       * at, so any accepted action — theirs, or a second host's on another device — makes it
+       * stale. Every accepted transition bumps the version, so it names "the state I looked
+       * at" exactly.
+       */
+      let revealArmed = false;
+      let revealArmedVersion: number | null = null;
+
+      function disarmReveal(): void {
+        revealArmed = false;
+        revealArmedVersion = null;
+      }
+
+      /**
        * The phase rules above, applied to the buttons.
        *
        * Called from `render` AND from `fire`'s `finally`, because that block re-enables
@@ -2012,6 +2086,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         // The current question has no answer to reveal — only submissions to close.
         const revealCloses = pollTargetFor(state)?.kind === "words";
 
+        // The board is already on the projector, so the standings verb is a re-broadcast
+        // rather than a step the host has yet to take. Naming only — see the constants.
+        const standingsAgain = phase === "standings";
+
+        // An arm does not survive the session moving under it. `syncEndButton`'s rule, for
+        // the same reason and against the same mis-click.
+        if (revealArmed && state?.version !== revealArmedVersion) disarmReveal();
+
         for (const button of actionButtons()) {
           const action = button.dataset.action ?? "";
           const allowed = rule.allow.includes(action);
@@ -2019,16 +2101,41 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             revealCloses && action === "reveal" && phase === "question-revealed"
               ? CLOUD_ALREADY_CLOSED
               : rule.why[action];
+          /**
+           * What an **enabled** button explains, which is a different question from what a
+           * dark one does: not "why can I not press this", but "why would I press this in a
+           * phase where it is plainly not the next step". Only the standings re-broadcast has
+           * an answer worth the room's time — every other live verb says what it does in its
+           * own name.
+           */
+          const hint = allowed && standingsAgain && action === "standings"
+            ? STANDINGS_AGAIN_HINT
+            : undefined;
 
           button.disabled = !allowed;
-          // The reason travels on the button itself, so a host who reaches for a dark
-          // button learns why it is dark without leaving the panel.
-          if (!allowed && reason !== undefined) button.title = reason;
+          // The explanation travels on the button itself, so a host who reaches for one
+          // learns why without leaving the panel. **One `title` with two sources**, resolved
+          // here rather than by two writes: the enabled hint and the refusal reason describe
+          // opposite states, so a button must never be able to carry both.
+          const title = allowed ? hint : reason;
+          if (title !== undefined) button.title = title;
           else button.removeAttribute("title");
 
           // Naming only — the phase rule above is untouched by it. See `REVEAL_LABEL`.
           if (action === "reveal") {
-            button.textContent = revealCloses ? REVEAL_LABEL_CLOSES : REVEAL_LABEL;
+            // Disarmed by the disable too: a button that went out of reach must not come
+            // back still holding a tap the host made before the room moved.
+            if (!allowed && revealArmed) disarmReveal();
+            const name = revealCloses ? REVEAL_LABEL_CLOSES : REVEAL_LABEL;
+            // The armed label wins over the name, never the other way round — the host has
+            // to be able to read what the second tap is going to do.
+            button.textContent = revealArmed ? REVEAL_CONFIRM_LABEL : name;
+          }
+
+          // Naming only, exactly like the reveal's above: the allow list is untouched, and
+          // must stay so — this button is the retry the 502 asks for. See the constants.
+          if (action === "standings") {
+            button.textContent = standingsAgain ? STANDINGS_LABEL_AGAIN : STANDINGS_LABEL;
           }
 
           /**
@@ -2999,6 +3106,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           }
 
           if (payload.applied === false) {
+            /**
+             * **The one `applied: false` that did something**, and it needs saying before the
+             * generic branch below reports it as nothing (`standings.ts`, `republished`).
+             *
+             * Nothing in the store changed — no transition, no version — but the snapshot
+             * went out to every device, which is the whole of what the host asked for by
+             * tapping a board that was already on screen. `ok` rather than `attention`: the
+             * retry the 502 asked for has just succeeded, and the register is what the host
+             * reads before the words.
+             */
+            if (payload.note === "republished") {
+              say("ranking wysłany ponownie do urządzeń", "ok");
+              return;
+            }
+
             say(
               payload.note === "no-op"
                 ? `${action}: nic do zrobienia (koniec pytań?). Stan bez zmian.`
@@ -3023,9 +3145,83 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         }
       }
 
+      /**
+       * WHETHER THE ROOM IS ALREADY IN.
+       *
+       * The count the participation poll maintains, against the freshest join figure the page
+       * holds — the same pair the rail prints, read here rather than re-derived, so the guard
+       * and the number the host is looking at cannot disagree.
+       *
+       * **A stale count does not get to waive the confirmation.** `answeredStale` means the
+       * poll is failing, so the last figure is a claim about some earlier moment; treating it
+       * as "everybody answered" would drop the guard exactly when the page is least able to
+       * say so. The cost of being wrong the other way is one extra tap.
+       *
+       * A total of zero is not "everyone" — an empty room answers a question nobody joined,
+       * and `0 >= 0` would read that as a full house.
+       */
+      function everyoneAnswered(state: State): boolean {
+        const total = liveCount ?? state.playerCount;
+        return !answeredStale && answered !== null && total > 0 && answered >= total;
+      }
+
+      /**
+       * WHEN THE REVEAL HAS TO BE MEANT TWICE.
+       *
+       * Two conditions, and each of them alone is the whole of a case where the tap costs
+       * nothing:
+       *
+       * - **The clock has to still be running.** `countdown.isRunning()` is asked rather than
+       *   the deadline recomputed here, because that arithmetic already exists once — a second
+       *   copy is the drift `renderCountdownPanel`'s own note warns about. It answers all three
+       *   no-clock cases at once: the two unscored questions carry no limit and never arm it,
+       *   and an expired window stops it, so revealing after time is up is a single tap. That
+       *   is the common path and it stays as fast as it was.
+       * - **The room must not have finished answering.** A confirmation asks the host to defend
+       *   a decision the room has already made for them, which is the shape a warning stops
+       *   being read at. The clock running past the last answer is the case the host is *meant*
+       *   to cut short.
+       *
+       * The phase is deliberately not tested: `CONTROL_RULES` offers `reveal` in exactly one
+       * phase, and a condition here would be the second phase rule beside a button that the
+       * table exists to prevent. The clock is armed in that phase and no other anyway.
+       */
+      function revealNeedsConfirm(state: State): boolean {
+        if (!countdown.isRunning()) return false;
+        return !everyoneAnswered(state);
+      }
+
       actionButtons().forEach((button) => {
         button.addEventListener("click", () => {
-          void fire(button.dataset.action ?? "");
+          const action = button.dataset.action ?? "";
+          const state = client.current();
+
+          /**
+           * The reveal's first tap arms and says why; the second one fires. Everything else
+           * on this bar fires on the first tap, as it always did — the branch is narrow on
+           * purpose, and `revealNeedsConfirm` narrows it further to the moments it protects.
+           */
+          if (action === "reveal" && !revealArmed && state !== null && revealNeedsConfirm(state)) {
+            revealArmed = true;
+            revealArmedVersion = state.version;
+            syncControls();
+            const total = liveCount ?? state.playerCount;
+            say(
+              // Names both halves of what the tap does. "Pokaż odpowiedź" is the visible
+              // one; closing submissions is the one with no undo, and it is the reason the
+              // host is being asked twice.
+              `czas jeszcze trwa (odpowiedzi: ${answered ?? "—"} z ${total}) — ` +
+                "kliknij ponownie, aby zamknąć odpowiedzi i pokazać wynik",
+              "attention"
+            );
+            return;
+          }
+
+          // Disarmed BEFORE the request, not after it, so a reveal that fails has to be
+          // meant a second time — the arming was a statement about a state the failed
+          // attempt has already outlived. `end`'s handler, for the same reason.
+          disarmReveal();
+          void fire(action);
         });
       });
 

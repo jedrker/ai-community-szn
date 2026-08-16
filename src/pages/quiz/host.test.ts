@@ -557,8 +557,12 @@ describe("flow verbs are offered only where they apply", () => {
    * the early return leaves the previous session's buttons live after a purge or an expiry.
    */
   it("re-applies the rule everywhere a button could come back wrongly enabled", () => {
-    // The trailing semicolon is what separates the three calls from the declaration.
-    expect(occurrences("syncControls();")).toBe(3);
+    // The trailing semicolon is what separates the calls from the declaration. Three of the
+    // four are the sites above; the fourth is the reveal's arming tap, which changes the
+    // button's label and so must repaint the bar through the same function rather than
+    // writing `textContent` itself — a second writer of that label is how the armed state
+    // and the word-cloud rename come apart.
+    expect(occurrences("syncControls();")).toBe(4);
 
     const fireBody = /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(fireBody.length).toBeGreaterThan(0);
@@ -585,13 +589,70 @@ describe("flow verbs are offered only where they apply", () => {
    */
   it("renames the reveal verb from the single predicate, and gates nothing on it", () => {
     expect(sync).toContain('pollTargetFor(state)?.kind === "words"');
-    expect(sync).toContain("button.textContent = revealCloses");
+    // The name still comes from that predicate and from nothing else. What sits between it
+    // and `textContent` now is the armed label, which is a state of the same button rather
+    // than a second opinion about what it is called — see the confirmation block below.
+    expect(sync).toContain("const name = revealCloses ? REVEAL_LABEL_CLOSES : REVEAL_LABEL");
+    expect(sync).toContain("button.textContent = revealArmed ? REVEAL_CONFIRM_LABEL : name");
 
     // The rename must not have become a phase rule: `reveal` stays offered while the cloud
     // is open, because closing it is the only way on to the standings beat.
     expect(table).toContain('allow: ["advance", "reveal"]');
     // …and the label lives outside the table, which states legality and nothing else.
     expect(table).not.toContain("revealCloses");
+  });
+
+  /**
+   * THE STANDINGS VERB ONCE THE BOARD IS ALREADY UP.
+   *
+   * It stays enabled in the `standings` phase, and that is the recovery path its own 502
+   * names: "Kliknij ponownie, aby rozgłosić go jeszcze raz", by which point the session is
+   * already in that phase. Disabling it points that instruction at a dark button and leaves
+   * `dalej` — which abandons the beat — as the only way on (impl review F5).
+   *
+   * So the fix for "why is this still clickable" is the **name and the hint**, never the
+   * gate. Pinned here because the tidy-looking change is to drop `standings` from that row.
+   */
+  it("renames the standings verb rather than gating it once the board is up", () => {
+    expect(sync).toContain('const standingsAgain = phase === "standings"');
+    expect(sync).toContain(
+      "button.textContent = standingsAgain ? STANDINGS_LABEL_AGAIN : STANDINGS_LABEL"
+    );
+
+    // The gate is untouched: the phase still offers the verb, which is what makes the retry
+    // reachable at all.
+    expect(table).toContain('allow: ["advance", "standings"]');
+    // And the naming stays out of the table, exactly as the reveal's does.
+    expect(table).not.toContain("standingsAgain");
+    expect(table).not.toContain("STANDINGS_LABEL");
+  });
+
+  /**
+   * **An enabled button's hint and a dark button's reason are different statements**, and a
+   * button must never carry both — one asks "why can I not press this", the other "why would
+   * I press this here". Resolved into one `title` rather than by two writes, so the second
+   * cannot overwrite the first depending on which branch ran last.
+   */
+  it("carries one title, sourced by whether the button is live", () => {
+    expect(sync).toContain("const title = allowed ? hint : reason");
+    expect(occurrences("button.title = ")).toBe(1);
+    // The only live verb with a hint: everything else says what it does in its own name.
+    expect(sync).toContain("STANDINGS_AGAIN_HINT");
+  });
+
+  /**
+   * **The one `applied: false` that did something.** Without its own branch, a successful
+   * re-broadcast is reported by the generic note as "nic do zrobienia (koniec pytań?)" — the
+   * retry that just worked, described as the interaction that does nothing.
+   */
+  it("reports a re-broadcast as an outcome of its own", () => {
+    const fireBody = /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(fireBody.length).toBeGreaterThan(0);
+    expect(fireBody).toContain('payload.note === "republished"');
+    expect(fireBody.indexOf('payload.note === "republished"')).toBeLessThan(
+      fireBody.indexOf('payload.note === "no-op"')
+    );
   });
 
   /**
@@ -671,6 +732,129 @@ describe("the rail follows its contents", () => {
     const stopBody = /function stopCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(stopBody.length).toBeGreaterThan(0);
     expect(stopBody).toContain("syncRail()");
+  });
+});
+
+/**
+ * THE EARLY REVEAL'S SECOND TAP.
+ *
+ * The reveal is the flow verb that cannot be undone: `answer.ts` accepts only in
+ * `question-open`, so the tap that shows the answer is the tap that cuts off everyone still
+ * typing. The guard is a confirmation, and — like the closing button's — none of it can be
+ * executed by a test, so what is pinned here is the structure.
+ *
+ * The two ways to get it wrong are opposite and both silent: no confirmation at all, and a
+ * confirmation on every reveal, which the host learns to double-tap through and which
+ * therefore stops being read at the one moment it means something.
+ */
+describe("the reveal cannot cut the room off by accident", () => {
+  const handler =
+    /actionButtons\(\)\.forEach\([\s\S]*?\n {6}\}\);/.exec(CODE)?.[0] ?? "";
+  const needs = /function revealNeedsConfirm[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+  const sync = /function syncControls[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+  it("finds the handler and the predicate it is checking", () => {
+    // An empty match would make every assertion below vacuously true.
+    expect(handler.length).toBeGreaterThan(0);
+    expect(needs.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * **The first tap only arms.** The early return is the whole mechanism; without it the
+   * first tap closes the question, which is the state this guard exists to make deliberate.
+   */
+  it("returns after arming rather than firing on the first tap", () => {
+    expect(handler).toContain("revealArmed = true");
+    expect(handler.indexOf("revealArmed = true")).toBeLessThan(handler.indexOf("void fire(action)"));
+  });
+
+  /**
+   * **Only the reveal is gated.** `dalej` is the host's recovery lever and `pokaż ranking`
+   * re-broadcasts; a confirmation on either would be a beat spent on an action with an undo.
+   */
+  it("gates the reveal alone, leaving the other verbs on one tap", () => {
+    expect(handler).toContain('action === "reveal"');
+    expect(handler).not.toContain('action === "advance"');
+    expect(handler).not.toContain('action === "standings"');
+  });
+
+  /**
+   * **The clock is asked, never recomputed.** The deadline arithmetic exists once, in the
+   * countdown the panel already drives; a second copy here would be free to disagree with
+   * the number on the projector about whether time is up.
+   */
+  it("reads the running clock rather than recomputing the deadline", () => {
+    expect(needs).toContain("countdown.isRunning()");
+    expect(needs).not.toContain("timeLimitSeconds");
+    expect(needs).not.toContain("updatedAt");
+  });
+
+  /**
+   * **No phase test beside the button.** `CONTROL_RULES` offers `reveal` in exactly one
+   * phase, and the clock is armed in that phase and no other — a condition here would be the
+   * second phase rule the table exists to prevent.
+   */
+  it("states no phase rule of its own", () => {
+    expect(needs).not.toContain("phase");
+    expect(handler).not.toContain("phase");
+  });
+
+  /**
+   * **A room that has finished answering waives it**, so the confirmation is not something
+   * the host meets on all fourteen questions. A stale count does not waive it: `answeredStale`
+   * means the figure describes some earlier moment, and dropping the guard on it would drop it
+   * exactly when the page is least able to justify doing so.
+   */
+  it("waives the confirmation only on a fresh count that covers the room", () => {
+    const everyone = /function everyoneAnswered[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+
+    expect(everyone.length).toBeGreaterThan(0);
+    expect(everyone).toContain("!answeredStale");
+    expect(everyone).toContain("answered >= total");
+    // An empty room is not a full house — `0 >= 0` would read as one.
+    expect(everyone).toContain("total > 0");
+    expect(needs).toContain("everyoneAnswered(state)");
+  });
+
+  /**
+   * **An arm does not survive the session moving under it**, and it does not survive the
+   * button going out of reach — `syncEndButton`'s two rules, applied to the other one-way
+   * verb so the bar has one confirmation idiom rather than two.
+   */
+  it("disarms when the session moves or the button goes dark", () => {
+    expect(sync).toContain("state?.version !== revealArmedVersion");
+    expect(sync).toContain("if (!allowed && revealArmed) disarmReveal()");
+  });
+
+  /**
+   * **Disarmed before the request, not after it.** A reveal that failed has already outlived
+   * the state the host confirmed against, so it has to be meant a second time.
+   */
+  it("disarms ahead of the request", () => {
+    expect(handler).toContain("disarmReveal();");
+    expect(handler.indexOf("disarmReveal();")).toBeLessThan(handler.indexOf("void fire(action)"));
+  });
+
+  /**
+   * **One place clears the arming**, so the label, the version and the flag cannot be reset
+   * in three different combinations.
+   */
+  it("clears the arming from one function", () => {
+    expect(occurrences("revealArmedVersion = null")).toBe(1);
+    // Two: the declaration's initial value, and `disarmReveal`. A third would be a second
+    // reset — the shape that leaves the flag cleared while the version still holds an arm.
+    expect(occurrences("revealArmed = false")).toBe(2);
+    expect(CODE).toContain("function disarmReveal()");
+  });
+
+  /**
+   * **It adds no timer.** An arming that expired on its own would be a second clock on this
+   * page, and this file's central guard is that exactly one timer here can reach a `fetch`.
+   * The arm is cleared by the session moving, not by waiting.
+   */
+  it("arms without a clock of its own", () => {
+    expect(needs).not.toContain("setTimeout");
+    expect(handler).not.toContain("setTimeout");
   });
 });
 
