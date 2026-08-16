@@ -482,17 +482,17 @@ None. No stored data, no schema, no wire format. Reverting is deleting the modul
 
 #### Automated
 
-- [ ] 1.1 Unit tests pass: `bun run test`
-- [ ] 1.2 Type checking passes: `bun run type-check`
-- [ ] 1.3 Linting passes: `bun run lint`
-- [ ] 1.4 `render.test.ts`'s existing count-up suite passes unchanged
-- [ ] 1.5 Boundary gate sees no new violation
-- [ ] 1.6 The four private mechanisms no longer appear in `render.ts`
+- [x] 1.1 Unit tests pass: `bun run test`
+- [x] 1.2 Type checking passes: `bun run type-check`
+- [x] 1.3 Linting passes: `bun run lint`
+- [x] 1.4 `render.test.ts`'s existing count-up suite passes unchanged
+- [x] 1.5 Boundary gate sees no new violation
+- [x] 1.6 The four private mechanisms no longer appear in `render.ts`
 
 #### Manual
 
-- [ ] 1.7 Distribution bars still count up exactly as before
-- [ ] 1.8 With reduced motion enabled, bars appear at final figures
+- [x] 1.7 Distribution bars still count up exactly as before
+- [x] 1.8 With reduced motion enabled, bars appear at final figures
 
 ### Phase 2: Projector entrance beats
 

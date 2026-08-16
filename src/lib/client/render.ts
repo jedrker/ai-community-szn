@@ -1,3 +1,4 @@
+import { cancelMotion, forgetMotion, runMotion } from "./motion";
 import type { StandingsRow } from "../session/standings";
 import type { PublicQuestion } from "../../quiz/public";
 
@@ -329,14 +330,13 @@ const NO_ANSWERS_TEXT = "Nikt jeszcze nie odpowiedział.";
  *
  * Long enough for the room to watch the shares separate, short enough that the host is
  * not waiting on an animation before they can talk over the chart. It is spent once per
- * reveal, not per render — see `countUpSignature`.
+ * reveal, not per render — `motion.ts` owns that rule, keyed by the signature below.
+ *
+ * A figure about bars rather than about motion, which is why it stays here while the
+ * mechanism moved: the easing, the cancellation and the replay guard are the same for
+ * every animation in the project, and how long a *chart* should take to settle is not.
  */
 const COUNT_UP_MS = 900;
-
-/** Ease-out cubic: fast off the mark, settling onto the true figure rather than snapping to it. */
-function easeOut(t: number): number {
-  return 1 - (1 - t) ** 3;
-}
 
 /**
  * One bar's final figures plus the two nodes that carry them, so the count-up writes the
@@ -349,30 +349,6 @@ type BarTarget = {
   readonly count: number;
   readonly share: number;
 };
-
-/**
- * The animation in flight for a container, so a re-render cancels it rather than leaving
- * two loops writing the same nodes.
- */
-const countUpFrames = new WeakMap<HTMLElement, number>();
-
-/**
- * What was last painted into a container, so **an unchanged chart is not re-animated**.
- *
- * The host re-renders on every snapshot and on every fallback poll, and a reveal sits on
- * screen across several of them. Without this, a dropped Ably message replaying the same
- * state would reset all eight bars to zero in front of the room. Keyed by the numbers
- * actually drawn, so the one case that *should* re-animate — a fresh reveal on the next
- * question — still does.
- */
-const countUpSignatures = new WeakMap<HTMLElement, string>();
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)
-  );
-}
 
 /**
  * Writes every bar at `progress`, where 1 is the true figure.
@@ -415,7 +391,8 @@ function paintBars(targets: readonly BarTarget[], progress: number): void {
  * an unscored question.
  *
  * With `animate`, the figures and the bars count up from zero on ease-out — decoration
- * only, and it is the *change* that triggers it, not the render. See `countUpSignatures`.
+ * only, and it is the *change* that triggers it, not the render. `motion.ts` owns that
+ * distinction, along with the cancellation and the reduced-motion gate.
  */
 export function renderDistribution(
   container: HTMLElement,
@@ -426,11 +403,7 @@ export function renderDistribution(
 
   // Whatever was counting up into the nodes just detached. Cancelled before the early
   // returns below, so a chart that disappears takes its animation with it.
-  const inFlight = countUpFrames.get(container);
-  if (inFlight !== undefined) {
-    cancelAnimationFrame(inFlight);
-    countUpFrames.delete(container);
-  }
+  cancelMotion(container);
 
   // One options bag, matching `renderQuestion` — not four positional parameters. Two of
   // them were nullable and adjacent, so a call site could transpose the distribution and
@@ -443,7 +416,7 @@ export function renderDistribution(
   // did not answer, which is the specific wrong message `reveal.ts` sends `null` to
   // avoid.
   if (!question?.options?.length || distribution === null) {
-    countUpSignatures.delete(container);
+    forgetMotion(container);
     return;
   }
 
@@ -456,7 +429,7 @@ export function renderDistribution(
   const { answered } = distribution;
 
   if (answered === 0) {
-    countUpSignatures.delete(container);
+    forgetMotion(container);
     const empty = document.createElement("p");
     if (classNames.empty) empty.className = classNames.empty;
     empty.textContent = NO_ANSWERS_TEXT;
@@ -516,42 +489,19 @@ export function renderDistribution(
    * again, while the same chart re-rendered stands still.
    */
   const signature = `${question.id}|${answered}|${targets.map((target) => target.count).join(",")}`;
-  const changed = countUpSignatures.get(container) !== signature;
-  countUpSignatures.set(container, signature);
 
-  const animate =
-    options.animate === true &&
-    changed &&
-    typeof requestAnimationFrame === "function" &&
-    !prefersReducedMotion();
+  // Called before the list is attached, so the first frame the room sees is already the
+  // start of the animation rather than a flash of the final figures. `runMotion` paints
+  // synchronously either way — zero when it is going to animate, the true figures when it
+  // is not — so there is no second static path here that could format them differently.
+  runMotion(container, {
+    signature,
+    durationMs: COUNT_UP_MS,
+    enabled: options.animate === true,
+    paint: (progress) => paintBars(targets, progress),
+  });
 
-  // Painted before the list is attached, so the first frame the room sees is already the
-  // start of the animation rather than a flash of the final figures.
-  paintBars(targets, animate ? 0 : 1);
   container.append(list);
-
-  if (!animate) return;
-
-  // The rAF timestamp is the clock, so nothing here reads `Date.now`.
-  let started: number | null = null;
-
-  const step = (now: number): void => {
-    started ??= now;
-    const progress = Math.min((now - started) / COUNT_UP_MS, 1);
-
-    if (progress >= 1) {
-      // The true figures are written by the end of the loop, never by the last tick
-      // happening to land on 1 — a dropped frame must not leave a bar short.
-      countUpFrames.delete(container);
-      paintBars(targets, 1);
-      return;
-    }
-
-    paintBars(targets, easeOut(progress));
-    countUpFrames.set(container, requestAnimationFrame(step));
-  };
-
-  countUpFrames.set(container, requestAnimationFrame(step));
 }
 
 /**
