@@ -9,8 +9,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Project guide — Brave AI Community Szczecin
 
 Community website for a Polish AI meetup group in Szczecin: event archive, speaker directory,
-newsletter signup, speaker applications. Sponsored by Brave Courses. All user-facing copy is Polish;
-code, comments, and commits are English.
+newsletter signup, speaker applications, plus LiveQuiz (a live in-room quiz). Sponsored by Brave
+Courses. All user-facing copy is Polish; code, comments, and commits are English.
+
+## Where the detailed rules live
+
+Most of this project's load-bearing rules are local to one directory, and each of those directories
+carries its own `CLAUDE.md`. **Read the relevant one before planning a change there** — do not rely
+on it loading by accident.
+
+| Directory | What its `CLAUDE.md` covers |
+| --- | --- |
+| `src/quiz/` | the quiz definition (not a content collection), the three Polish text folds, the schema invariants enforced at the build gate |
+| `src/lib/session/` | Redis keys and the retention guardrail, `SessionState`'s transition fields, scoring and the derived deadline |
+| `src/lib/client/` | the server/client boundary, motion, `localStorage`, testing with `happy-dom` |
+| `src/pages/quiz/` | the host panel's verbs, the projector rail, the two polling loops |
+| `src/lib/` | server module conventions (Resend, Slack, newsletter) |
 
 ## Commands
 
@@ -30,72 +44,49 @@ bun run format     # prettier --write .
 bun audit          # dependency advisories
 ```
 
+Do not invent script names beyond these; if you need a check to exist, add the tooling first and say
+that you did. ESLint and Prettier are wired into three layers: `.claude/hooks/per-edit-check.sh`
+(format + lint + scoped tests on one file), `lefthook.yml`'s `pre-commit` (lint, format, scoped
+tests, `astro check`) and `pre-push` (the full suite).
+
 **Two test runners share this repo, and the `--dir src` is what keeps them apart.** Every vitest
 test lives under `src/`; Playwright's live in `e2e/`. Without the flag, vitest globs the `.spec.ts`
 files too, collects them, and Playwright's `test` object throws *"did not expect test.beforeEach()
 to be called here"* — two test files failing on correct code, on the `pre-push` job and on every
-`bun run test`. **`--dir` rather than a `vitest.config.ts`**, deliberately: see the happy-dom note
-below for why this project has no vitest config file. `scripts/scoped-tests.sh` skips `e2e/` for the
-same reason, since `vitest related` collects a named spec regardless.
+`bun run test`. **`--dir` rather than a `vitest.config.ts`**, deliberately: there is no vitest config
+file in this project, because `happy-dom` is selected per file by a `// @vitest-environment
+happy-dom` docblock (see `src/lib/client/CLAUDE.md`) and adding a config to set it globally is what
+that arrangement exists to avoid. `scripts/scoped-tests.sh` skips `e2e/` for the same reason, since
+`vitest related` collects a named spec regardless.
 
-**This file used to say "there is still no `lint` or `format` script" — that is no longer true.**
-ESLint and Prettier are installed and wired into three layers: `.claude/hooks/per-edit-check.sh`
-(format + lint + scoped tests on one file), `lefthook.yml`'s `pre-commit` (lint, format, scoped
-tests, `astro check`) and `pre-push` (the full suite). Do not invent script names beyond these; if
-you need a check to exist, add the tooling first and say that you did.
+### Dependency constraints
 
 `tsconfig.json` extends `astro/tsconfigs/strict`, and `bun run type-check` (`astro check`, via
-`@astrojs/check` + `typescript`) enforces it. **`astro check` requires TypeScript 6.x** — TypeScript 7
-dropped the programmatic API it uses, so do not bump `typescript` past `^6` until Astro supports it.
+`@astrojs/check` + `typescript`) enforces it.
 
-Vite must stay deduplicated: `vite` is an explicit devDependency pinned to the same range Astro
-resolves. If a second copy ends up nested under `node_modules/astro/`, `astro check` fails with a
-`PluginOption` type mismatch on `@tailwindcss/vite`. The fix is `rm -rf node_modules && bun install`.
-
-**`zod` has the same constraint, for the same reason.** It is declared in `dependencies` at `^4.3.6`
-— the range `astro` itself declares — so the two deduplicate to a single hoisted `node_modules/zod`.
-Zod's types are nominal, so two copies produce schemas that do not match across the boundary. Check
-with `find node_modules -type d -name zod` (expect exactly one line); `bun pm ls zod` does **not**
-work — bun ignores the package argument and exits 0 regardless. Note the range only overlaps Astro's
-by coincidence of the current major: **when Astro takes a major bump, re-check that this range still
-matches what Astro resolves.**
-
-`@astrojs/vercel` must stay on the **`^10`** line. **v11 requires Astro 7**, so widening the range is a
-framework major disguised as an adapter bump — an Astro major is always a separate, deliberate change
-and is never bundled with feature work. Update in-range with `bun update @astrojs/vercel`; never
-`bun add @astrojs/vercel@latest`. Relatedly, the Vercel **function region cannot be configured in
-`astro.config.ts`** — the v10 adapter exposes no region option, so region lives in `vercel.json`.
-
-`happy-dom` is a **devDependency and a test-environment only**, added in S-03 because
-`src/lib/client/render.test.ts` and `answer.test.ts` need a DOM and this project had none.
-**It is selected per file** by a `// @vitest-environment happy-dom` docblock at the top of those
-two files — the suite's default environment is still `node`, so nothing else pays for it, and a new
-test only gets a DOM by asking for one. Do not add a `vitest.config.ts` to set it globally; there is
-no vitest config file in this project and the per-file docblock is what keeps it that way.
-
-One trap it carries, and **it has two halves that point in opposite directions** — a fix for either
-one alone is what shipped here for four months and certified nothing. Its `localStorage` is a Proxy:
-
-- **Install with `vi.spyOn`.** A plain assignment — `window.localStorage.setItem = () => { throw }` —
-  is *swallowed by the Proxy's set trap*. The write goes on succeeding, the test never meets a
-  failure, and it passes against code whose `try`/`catch` has been deleted. Three tests in
-  `answer.test.ts` were in exactly this state until S-09 deleted the guards and watched them stay
-  green.
-- **Restore with `spy.mockRestore()`, never `vi.restoreAllMocks()`** — the global teardown does not
-  reach a spy on the Proxy, so the throwing implementation leaks into every later test in the file,
-  where it silently swallows writes and fails unrelated assertions in a way that reads as a bug in
-  the code under test.
-
-`answer.test.ts`'s and `device.test.ts`'s `withBroken(method, body)` helper is the pattern. Note
-which method a test needs: `clearSeen` calls `removeItem` and never `setItem`, so breaking the write
-would have left it exercising perfectly healthy storage.
-
-`qrcode` (with `@types/qrcode`) carries no version constraint — recorded here because in this file
-an unmentioned dependency is indistinguishable from an unconsidered one. It is **server-side only**:
-`/quiz/host` calls it in frontmatter to render the join QR as inline SVG, so nothing ships to the
-phones. Never import it from a client module — `src/lib/client/boundary.test.ts` will not catch that
-for you, since the rule it enforces is about `src/quiz/` and `src/lib/session/`, not about bundle
-weight in general.
+- **`typescript` stays on `^6`.** `astro check` requires TypeScript 6.x; TypeScript 7 dropped the
+  programmatic API it uses.
+- **`vite` must stay deduplicated** — an explicit devDependency pinned to the same range Astro
+  resolves. If a second copy ends up nested under `node_modules/astro/`, `astro check` fails with a
+  `PluginOption` type mismatch on `@tailwindcss/vite`. The fix is `rm -rf node_modules && bun install`.
+- **`zod` has the same constraint, for the same reason.** Declared in `dependencies` at `^4.3.6` —
+  the range `astro` itself declares — so the two deduplicate to a single hoisted `node_modules/zod`.
+  Zod's types are nominal, so two copies produce schemas that do not match across the boundary. Check
+  with `find node_modules -type d -name zod` (expect exactly one line); `bun pm ls zod` does **not**
+  work — bun ignores the package argument and exits 0 regardless. The range only overlaps Astro's by
+  coincidence of the current major: **when Astro takes a major bump, re-check it.**
+- **`@astrojs/vercel` must stay on `^10`.** v11 requires Astro 7, so widening the range is a
+  framework major disguised as an adapter bump — an Astro major is always a separate, deliberate
+  change and is never bundled with feature work. Update in-range with `bun update @astrojs/vercel`;
+  never `bun add @astrojs/vercel@latest`. Relatedly, the Vercel **function region cannot be
+  configured in `astro.config.ts`** — the v10 adapter exposes no region option, so region lives in
+  `vercel.json`.
+- `happy-dom` is a devDependency and a **test environment only**.
+- `qrcode` (with `@types/qrcode`) carries no version constraint. It is **server-side only**:
+  `/quiz/host` calls it in frontmatter to render the join QR as inline SVG, so nothing ships to the
+  phones.
+- The `@tsparticles/*` packages are the closing screen's confetti and are **loaded dynamically, never
+  statically** — see `src/lib/client/CLAUDE.md` before touching them.
 
 ## Rendering model — hybrid, and easy to get wrong
 
@@ -142,603 +133,34 @@ Event photos live at `public/photos/events/<event-slug>/` and are listed explici
 `photos` frontmatter array — they are not globbed from disk. Galleries use `glightbox` for the
 lightbox.
 
-## The quiz definition is NOT a content collection (`src/quiz/`)
-
-The LiveQuiz question set lives at `src/quiz/definition.ts` as a typed TypeScript literal validated
-by a Zod schema — deliberately *not* a third content collection, even though it is content and the
-section above says collections are the CMS. Do not "fix" this by moving it.
-
-Two reasons, both load-bearing:
-
-- **Audience.** Events and speakers are organizer-edited Markdown. The quiz is developer-authored
-  source (PRD FR-001 — avoiding a builder interface is the reason LiveQuiz is built rather than
-  rented), and `satisfies Quiz` on the literal means an authoring mistake is a red squiggle in the
-  editor rather than a runtime surprise.
-- **Portability.** `astro:content` does not resolve outside the Astro build — a bare `vitest run`
-  fails with `Cannot find package 'astro:content'`. This module is imported by tests today and by
-  serverless functions from S-02 onward, so it imports `zod` directly instead.
-  `src/quiz/portability.test.ts` fails the suite if anything under `src/quiz/` ever imports an
-  `astro:` specifier.
-
-Layout: `schema.ts` (discriminated union over five question kinds plus the domain invariants),
-`normalize.ts` (FR-011 answer folding), `definition.ts` (the questions), `index.ts` (the accessors
-downstream slices import — never import `definition.ts` directly), `test-support.ts` (test-only, see
-below).
-
-**No test may name a question id, an option id, an accepted answer or a true value.** The quiz is in
-source so it can be *edited* (FR-001), and a test that transcribes its content converts routine
-editing into breakage somewhere unrelated: swapping the quiz for the next event used to fail six
-assertions in `definition.test.ts` plus fixtures in four session and route files, every one of them
-reporting only "the quiz changed". Three rules, in order of preference:
-
-- **Need only a question-shaped value?** Build a literal. `deadline.test.ts` and `scoring.test.ts`
-  are the pattern, and their fixture ids all start with `fixture-` so nobody mistakes one for
-  content.
-- **Need a question the code will resolve through `getQuestionById`?** Take it from
-  `questionOfKind(kind, { scored })` / `questionsOfKind` in `src/quiz/test-support.ts` — by kind,
-  never by id, never by positional index. Derive what you submit against it too
-  (`question.correctOptionIds[0]`, `question.acceptedAnswers[0]`, `question.correctValue`), and
-  derive the *guesses* from `correctValue` rather than typing figures that only fit one question.
-- **Need to assert something about the committed quiz?** Say it as a rule over whatever the quiz
-  contains — `definition.test.ts` asserts that no id gives away its own answer and that the opener
-  scores nothing; it counts nothing and quotes nothing.
-
-Two consequences worth knowing. `definition.test.ts` still requires the quiz to **exercise every
-question kind**, because the route tests derive fixtures by kind and a dropped kind silently drops
-its coverage — that one constraint is deliberate and documented at the assertion. And an *unscored
-choice* question is treated as optional: the two tests needing one `skipIf` it away, so retiring the
-gather beat is an editorial decision rather than a red build.
-
-Properties that need a population — the option shuffle's lack of a positional tell is the one — are
-measured over generated questions via `projectQuiz(source)` in `public.ts`, with the real quiz kept
-only for conformance. Reading a distribution off fourteen committed questions made the strength of
-the test depend on how many the event happened to want.
-
-`normalize.ts` carries a trap worth knowing: **`ł` and `Ł` need an explicit mapping.** Every other
-Polish diacritic decomposes under NFD and is removed by `\p{Diacritic}`, but `ł` is an atomic
-codepoint with no decomposition, so the idiomatic fold leaves it untouched — `"żółć łódź"` becomes
-`"zołc łodz"`.
-
-**There are THREE folds in this project, two of them in `normalize.ts`, and merging any pair of
-them is a bug with no visible symptom until a live session.** The two here differ by exactly one
-rule — trailing sentence punctuation. The third lives in `src/lib/session/words.ts` and differs from
-both by keeping diacritics:
-
-| | `normalizePolish` | `normalizeAnswer` | `foldWord` |
-| --- | --- | --- | --- |
-| Where | `src/quiz/normalize.ts` | `src/quiz/normalize.ts` | **`src/lib/session/words.ts`** |
-| Folds | case, whitespace, diacritics | the same, plus trailing `. ! ? , ; :` | case and whitespace **only** |
-| Used by | the display-name claim key (`src/lib/session/players.ts`) | answer matching (`scoreTextAnswer`) **and** the authoring-collision check in `schema.ts` | word-cloud grouping (`wordField`, `readWordCloud`) |
-| Owns | FR-008 name uniqueness | FR-011 answer matching | FR-012/FR-015 word grouping |
-
-**`foldWord` keeps diacritics because its output is *rendered*.** The other two are comparison
-artefacts nobody ever sees; the folded word *is* the chip on the projector, so folding `ó` away would
-put a misspelt Polish word on the big screen in front of the room. The accepted cost: a word typed
-both with and without its diacritics counts as two entries — cosmetic on an unscored question, where
-the same slip in `normalizeAnswer` would cost somebody points. Its tripwire is in
-`src/lib/session/words.test.ts`, and that test's fixture is `Gęś` rather than `Żółw` on purpose:
-`ł` survives a bare NFD pass, so a `żółw`-based assertion still holds against a fold that has lost
-every *other* diacritic.
-
-It lives outside `src/quiz/` because it is a session-aggregation rule rather than a rule about the
-quiz definition — the same reasoning that keeps `scoring.ts` out of that directory.
-
-The narrower one must keep punctuation because `.` is a legal display-name character
-(`players.ts`'s `ALLOWED_CHARACTERS`), and the claim keys already stored in `livequiz:players` were
-written with it — so widening it in place would merge `"Ania."` and `"Ania"` into one claim and,
-mid-deploy, let two visually identical names onto the leaderboard. `normalize.test.ts` asserts
-`normalizePolish("Ania.") !== normalizePolish("Ania")`; that assertion is the tripwire.
-
-Answer matching and the build-time collision check deliberately share **one** function, so an author
-cannot ship two accepted variants the schema allows and the scorer treats as identical. Matching
-stops at case, spacing, diacritics and trailing punctuation — **no fuzzy or edit-distance matching**,
-because a threshold is something the host would have to defend out loud in front of the room.
-
-For a text question, **`acceptedAnswers[0]` is the variant the room sees**: `reveal.ts` publishes it
-as the accepted answer to every phone and the projector. Order there is not arbitrary.
-
-A number question's `correctValue` **may not be zero**, and the schema refuses one at the build gate
-alongside a non-finite value. The closeness rule divides by the true value, and there is no reading of
-"within 5% of zero".
-
-A **word-cloud question must be unscored** (`points: null`), refused at the build gate alongside the
-two rules above. FR-015 lets its aggregate display live precisely because it has no correct answer to
-leak, and scoring one would break that reasoning. It also takes no scoring function at all: the route
-writes `correct: false, awarded: 0` directly, because there is nothing to weigh.
-
-A scored question must carry **`timeLimitSeconds`**, and an unscored one may not (S-11, FR-020).
-Required where `points !== null`, refused where `points === null`, bounded to
-`[MIN_TIME_LIMIT_SECONDS, MAX_TIME_LIMIT_SECONDS]` (5–180) — all three at the build gate, all three
-keyed on `points` rather than on `kind`, so marking a question unscored is enough to take its clock
-away. A value below the 20-second speed window is legal and compresses the reward curve; every
-authored value sits at or above it.
-
-Scoring rules deliberately do **not** live here. `points` (a number, or `null` for an unscored
-question per FR-017) is the only *scoring* field — **`timeLimitSeconds` is pacing, not scoring**, and
-that distinction is the whole of why it is allowed in this file: it decides how long a question
-accepts answers, never what an answer is worth. The deadline arithmetic it feeds lives in
-`src/lib/session/deadline.ts`. The speed weighting, the answer-length bound
-(`MAX_TEXT_ANSWER_LENGTH`) and the numeric-closeness curve live in `src/lib/session/scoring.ts`.
-The word bound (`MAX_WORD_LENGTH`, 24) lives in `src/lib/session/words.ts` for the same reason, and it
-is **24 rather than the text field's 80 because a word goes on a projector** — the same number and the
-same reasoning as `MAX_DISPLAY_NAME_LENGTH`. It has three readers that must not drift: the route's
-visible refusal, `answerRecordSchema`'s `.max()`, and the input's `maxlength` (which reaches the markup
-through frontmatter, never through a `<script>` block).
-
-## Numeric answers carry partial credit, and one flag lies about it
-
-A guess is worth `points × closeness × speedWeight`, where closeness is banded on **relative error**
-— `|guess − correctValue| / |correctValue|`, so the rule behaves identically on an answer of 67 and
-one of 10,000, which is the whole of FR-013's resolution and the reason there is no per-question
-tolerance knob:
-
-| Relative error | Closeness |
-| --- | --- |
-| exactly 0 | 1.00 |
-| ≤ 0.05 | 0.80 |
-| ≤ 0.10 | 0.60 |
-| ≤ 0.25 | 0.30 |
-| > 0.25 | 0 |
-
-These five rows exist **once**, as `CLOSENESS_BANDS` in `src/lib/session/scoring.ts`; this table and
-the plan quote it. Comparisons carry a small epsilon so a guess engineered onto a band edge does not
-fall through by floating-point luck — three of the twelve exact-edge cases across the two live
-questions do overshoot in binary, and `scoring.test.ts` asserts every one of them.
-
-**`AnswerRecord.correct` is exact-hit-only for a number question, so it is `false` on an answer that
-scored 800 of 1000.** No consumer may read that flag as "scored nothing" — S-07's leaderboard is the
-likeliest place to get this wrong. The attendee reveal branches on question **kind before** it
-branches on `correct`, because a kind-blind branch renders "Tym razem nie." beside a positive award.
-
-The true value reaches the room formatted **server-side** into `revealedAnswerText`, the same field
-S-05 added, via `Intl.NumberFormat("pl-PL")` — so the host view needed no change at all, and 150
-phones and the projector cannot disagree about the string. **Its group separator is U+00A0**: a test
-that types `"10 000"` by hand fails with a diff in which both sides look identical, so build the
-expectation from the formatter.
-
-There is exactly **one parser** for a typed guess, `parseGuess` in `src/lib/session/guess.ts`, and it
-is server-side. The attendee view gates its submit button on "contains a digit" rather than parsing —
-a client-side parser would either duplicate this one or cross the boundary `boundary.test.ts`
-enforces, and two parsers that disagree is a scoring dispute on stage. A comma is the **decimal**
-separator (`67,5` is 67.5, never 675) and spaces are grouping **in grouping positions only** — the
-shape is validated before the separators are stripped, so `6 7` is refused rather than read as 67. The
-consequence of the comma rule, accepted deliberately, is that `10,000` reads as ten. An absent, empty
-or unparseable field is refused, never coerced.
+**The LiveQuiz question set is deliberately not a third collection** — see `src/quiz/CLAUDE.md`.
 
 ## Styling
 
 Tailwind CSS 4, wired through **`@tailwindcss/vite`** in `astro.config.ts`'s `vite.plugins`.
 
-**`@astrojs/tailwind` is gone as of 2026-08-14** (health-check fix #7) and must not come back. It was
-a leftover from the Tailwind 3 integration style: declared *and* installed while `astro.config.ts`
-never referenced it, so it was importable and would have appeared to work while producing a second,
-conflicting Tailwind setup. If a future task seems to want it, the answer is `@tailwindcss/vite` in
-`vite.plugins` — the line above — not an entry in the Astro `integrations` array.
+**`@astrojs/tailwind` is gone and must not come back.** It was a leftover from the Tailwind 3
+integration style: declared *and* installed while `astro.config.ts` never referenced it, so it was
+importable and would have appeared to work while producing a second, conflicting Tailwind setup. If a
+future task seems to want it, the answer is `@tailwindcss/vite` in `vite.plugins`, not an entry in the
+Astro `integrations` array.
 
-## Client interactivity — vanilla modules, and no framework
+## Client interactivity — vanilla modules, no framework
 
-Browser behaviour lives in **`src/lib/client/` as plain TypeScript modules**, imported by Astro
-`<script>` tags. The server hands values down with **`define:vars`**. **No UI-framework integration
-is installed and none should be added** — not React, not Preact, not Alpine. This was decided
-deliberately in S-02 (roadmap Open Question 2), not by omission: the pattern was already proven by
-`spine-check.astro`, and it keeps the client bundle to essentially the Ably SDK, which matters
-because the venue network is the one link nobody controls. The accepted cost is that later views do
-hand-written DOM updates with no diffing.
-
-**That cost is what bounds the animation work, and the boundary is now written down.**
-`src/lib/client/motion.ts` owns every rule that makes an animation safe here — the reduced-motion
-gate, the cancel-in-flight, and the signature that stops an unchanged thing re-animating on a page
-that re-renders on every snapshot and every fallback poll. It is **rAF only**: `happy-dom` has no
-animation engine, no `Element.animate` and no `TransitionEvent`, so motion built on CSS transitions
-or the Web Animations API cannot be tested in this project and falls back to the source scan that
-`countdown.ts` records as having certified a defect instead. Markup-declared CSS transitions are
-still fine where nothing depends on them — the countdown bar is one.
-
-**Entrance only, and that is structural rather than taste.** `setHidden` writes the `hidden`
-property, which preflight makes `display: none !important`, so nothing toggled that way can be
-transitioned *out*; and `syncRail` derives the rail's visibility from its sections' **live `hidden`
-state**, so a hide deferred until an animation finished would put an empty column beside the stage —
-the defect `rail-empty-at-reveal` exists to prevent. The **standings reorder is deliberately not
-done**: it needs row identity across a `replaceChildren()`, which is exactly where no-diffing bites
-hardest. Read `context/changes/quiz-animations-and-transitions/motion-contract.md` before animating
-anything here.
-
-**One deliberate exception to the bundle rule.** The closing screen runs confetti.js.org's
-"Confetti + Ribbons" on every phone (`src/lib/client/celebrate.ts`). **It is two libraries** —
-`@tsparticles/confetti` and `@tsparticles/ribbons` are separate packages, not two modes of one — plus
-`@tsparticles/plugin-interactivity`, which is an *optional peer dependency* of `plugin-emitters` that
-the build hard-fails without once ribbons are in (`"ExternalInteractorBase is not exported by
-__vite-optional-peer-dep…"`). Do not add `@tsparticles/shape-ribbon`; it arrives transitively.
-
-They total ~1.5 MB unpacked but are loaded through **dynamic `import()`s**, so a device downloads
-~42 KB gzipped *at the close* and the attendee's entry script is unchanged at 7 KB gzip. Four things
-keep that true and none is optional: **keep the imports dynamic and resolved together**, keep the
-reduced-motion check *before* them rather than relying on either library's own
-`disableForReducedMotion`, keep the failure absorbed, and **keep every timer stoppable** — the
-sequence is six seconds of intervals and it is wired to `pagehide`. `canvas-confetti` (90 KB, no
-dependencies) was the declined alternative; it cannot do the ribbons half.
-
-**The directory is also where logic goes to become testable**, and that is now a pattern rather than
-a one-off. An Astro inline `<script>` has no harness, so the only guard available over anything in
-one is a source-text scan — and a scan for an expression that exists today certifies whatever is
-there, defects included. `countdown.ts` was extracted for that reason (S-11: two inline copies, both
-shipping a defect a green suite could not see), `toast.ts` followed it, and `controls.ts` is the
-third — the host panel's phase-to-verb decision plus `atLastQuestion` and `pollTargetFor`. The shape
-is the same each time: **pure named exports here, DOM writes left on the page.** See test-plan §6.5.
-
-`src/lib/client/boundary.test.ts` enforces the boundary. A client module — **and any `<script>`
-block in `src/pages/quiz/*.astro`** — may not read `import.meta.env` and may not *value*-import from
-`src/quiz/` or `src/lib/session/`. `import type` is erased and is therefore allowed; that is how
-`SessionState` and `PublicQuestion` reach these modules.
-
-Name the two failure modes, because the rule reads arbitrary without them:
-
-- A value import from `src/quiz/` ships every question's `correctOptionIds`, `acceptedAnswers` and
-  `correctValue` **to the phone being asked the question**. That is the exact leak `src/quiz/public.ts`
-  exists to prevent, and the page still looks correct afterwards.
-- A value import from `src/lib/session/`, or an `import.meta.env` read, pulls server configuration
-  into a public bundle and drags `zod` and the Upstash and Ably server SDKs into a download budget
-  that has to survive a venue network.
-
-**Astro frontmatter is deliberately not scanned** — it runs server-side and is *meant* to read env
-and import server modules. That is how the views get the channel name to pass down. Do not "fix" a
-boundary failure by deleting a frontmatter import.
-
-**Three modules write to `localStorage`, and one of them behaves oppositely to the other two.**
-`player.ts` and `answer.ts` absorb every storage failure and report *nothing stored* — a join must
-never fail over a storage quirk. `device.ts` (S-09) absorbs the same failures but **always returns an
-id**, minting one in memory when it cannot persist. The asymmetry is load-bearing: `/api/quiz/join`
-**refuses a claim that carries no `deviceId`**, because an absent id treated as un-counted is the
-per-device cap's bypass, and a shared "unknown device" bucket would let a few private-mode attendees
-consume the room's whole allowance. A client that forgets to send one gets a 400, not a free pass.
-
-## Server-side modules (`src/lib/`, except `src/lib/client/`)
-
-Named exports, no default exports. Secrets come from `import.meta.env` and are documented in
-`.env.example` (`RESEND_API_KEY`, `ADMIN_EMAIL`, `RESEND_AUDIENCE_ID`, `SLACK_WEBHOOK_URL`).
-
-- `resend.ts` — transactional email (welcome mail, admin notifications) and Resend Audience contacts.
-- `slack.ts` — webhook notifications. **This is the error-handling pattern to copy**: missing config
-  warns and no-ops, failures are caught and logged with context, and nothing ever throws into a
-  request path. **It returns `boolean` rather than `void`, and that is the half that is easy to
-  drop**: "never throws" is not the same as "the caller cannot tell". `sendSlackNotification`
-  reports `false` for all three failures (missing config, non-OK response, transport error), so
-  `speaker-signup.ts` can distinguish *notified somebody* from *notified nobody and said thank you*.
-  Do not narrow it back to `void` to "match the fire-and-forget style" — the swallow is about not
-  throwing, never about hiding the outcome.
-- `newsletter.ts` — the subscriber store, backed by **Resend Audiences**. `addSubscriber` derives
-  duplicate detection from `contacts.get` and throws when a signup could not be recorded, so the
-  route can never report success it didn't achieve. Covered by `newsletter.test.ts`.
-  (It replaced `subscribers.ts`, which wrote `data/subscribers.json` through `node:fs/promises` and
-  therefore always rejected on Vercel's read-only serverless filesystem.)
-
-**The Resend SDK resolves with `{ data, error }` and does NOT throw on an API failure**, so a bare
-`await resend.emails.send(...)` inside a `try`/`catch` is a swallow with no log line at all: an
-invalid key, an unverified domain, a 429 or a bounce all read as a successful send, and the `catch`
-never runs. **Every call site must inspect `.error`** — `emails.send` in both signup routes and
-`contacts.get` / `contacts.create` in `newsletter.ts`. The `contacts.get` case is the subtle one:
-only `error.name === "not_found"` means the contact is genuinely absent, and treating any other
-error as "not a duplicate" degrades a store outage into a second create attempt.
-
-**A route with no database may not report success it cannot back.** `speaker-signup.ts` is the
-worked example: with no store, the admin email and the Slack message *are* the application, so the
-route answers 200 only once at least one of the two landed, and 503s with retry copy when neither
-did. Two orderings there are load-bearing — the applicant's confirmation mail is sent *after* that
-check (so nobody is thanked for an application that reached no organiser) and is *excluded* from it
-(the application is already recorded by then, and refusing would ask for a duplicate). Missing
-`RESEND_API_KEY` or `ADMIN_EMAIL` is logged rather than silently skipped, for the same reason.
-
-**There is no database and no writable filesystem.** Never persist anything that must outlive a
-request through `node:fs` — it works locally and fails in production.
-
-## LiveQuiz session data — two rules that break the build
-
-The session lives in Upstash Redis under the `livequiz:` namespace, and the PRD carries a retention
-guardrail: nothing about who played survives the session. Two mechanisms enforce it, and both are
-easy to defeat by accident.
-
-**Every `livequiz:`-prefixed name is declared in `src/lib/session/keys.ts`.** Nowhere else.
-`end` re-arms the registered set to a short lifetime and `purge` deletes it, so a key created
-outside the registry is reached by neither and sits holding attendee data with nothing to say so.
-`keys.test.ts` fails the suite on a namespaced string literal anywhere but that module. It catches
-literals, not runtime-assembled names — `scripts/check-purge-residue.ts` covers the rest, against
-the real store.
-
-**Never pass a display name or an answer to `logSessionEvent`.** `LogFields` is a closed type, so
-`{ displayName }` is a compile error — and that closure *is* the enforcement, not a comment
-alongside one. Do not restore the index signature or add a catch-all field; add the specific field
-you need. Logs are retained ~1 hour and are covered by no TTL, no purge and no rollback, so anything
-written there outlives the session document by design.
-
-**`livequiz:tallies` has three field families, and it is no longer counters-only.**
-`answered:<questionId>`, `opt:<questionId>:<optionId>` and — since S-08 — `word:<questionId>:<foldedWord>`,
-all spelled by `src/lib/session/tallies.ts` and nowhere else. That module's registry entry used to
-open "NOT attendee data — the first registered key that is not", and the word family made it too
-strong to leave standing: its **field names are attendee-authored text**, folded only for case. It is
-still keyed by no player id and no display name, so nothing in it says *who* wrote or chose anything —
-and it is still re-armed by `end` and deleted by `purge`. Note also that the word family is the only
-one whose field count grows with the **room** rather than with the quiz, up to one field per attendee.
-
-**`livequiz:devices` is a count per device, and it is the one key that is not attendee data.**
-S-09 added it for the per-device player cap (FR-018): opaque device id → how many players that device
-has claimed. The id is minted by the browser about itself and stored beside no name, no player id and
-no answer, so nothing in it says *who* played. It is registered anyway, for two reasons worth keeping
-apart — the registry has no exemption list, and a device id left behind after a session would still
-be a stable handle on a returning phone.
-
-Read and written **only inside `CLAIM_PLAYER`**, where the count going up is part of the same atomic
-claim. Two orderings there are load-bearing and silent when wrong: the cap check sits *before* the
-collision check, so a device that is both capped and typing a taken name hears the final reason; the
-increment sits *after* it, so a claim refused as taken charges nobody. The counter only ever goes up
-— a releasable slot could be cycled indefinitely, which is the guard defeated by a mechanism built to
-be forgiving.
-
-Before adding any key or any field to a published snapshot, read
-`context/archive/2026-08-06-session-end-and-data-purge/retention-contract.md`. It also records the one
-constraint that is not enforceable in code: Ably retains published snapshots for ~2 minutes and that
-floor cannot be configured away.
-
-**Names never enter a published snapshot.** S-02 added two attendee-data keys —
-`livequiz:players` (folded display name → player record) and `livequiz:player-ids` (opaque id →
-folded name, the reverse index a reloading device is recognised by) — and both are in the registry,
-so `end` and `purge` reach them. What it deliberately did *not* do is put a name on the wire.
-`SessionState` gained exactly one field, `playerCount`: a count, not attendee data.
-
-The reason is the ~2-minute Ably floor above, plus the fact that `/api/quiz/token` is deliberately
-open — so a display name in a snapshot is readable for two minutes by anyone who asks for a token.
-A count carries nothing about who played, and a device knows only its own name. Joining also
-publishes nothing at all: 150 joins fanning out to 150 subscribers is the O(N²) shape the spine
-contract forbids, so the count reaches the room on the host's next action instead.
-
-**S-07 took that open half and reversed the position**: `SessionState.standings` publishes up to
-`STANDINGS_SIZE` (5) display names, and the binding exposure turned out to be the deliberately
-unauthenticated `GET /api/quiz/state` rather than the Ably floor. Read
-`context/archive/2026-08-07-join-and-follow-host/join-contract.md` for the decision it was handed and
-`context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md` for what it did with it.
-
-**S-10 changed the window's shape, not its bound.** The same five names now also ride the *terminal*
-document, so they are readable for `ENDED_TTL_SECONDS` — **bounded by a TTL rather than by the host's
-attention**, which is longer and out of anyone's hands once the close lands. Accepted: the same names
-reached the same devices minutes earlier, and both fixes break something built on purpose (shortening
-the TTL removes the reload window F-03 chose; stripping the field from the state route recreates the
-failure S-07 rejected it for). Recorded in the PRD's retention guardrail and
-`context/archive/2026-08-14-final-winner-reveal/winner-reveal-contract.md`.
-
-**`SessionState` has one decoration field and four transition fields, and they behave oppositely.**
-`playerCount` is decoration: `applyHostAction` overwrites it on every action and a stale value costs
-nothing. `revealedOptionIds`, `revealedDistribution`, `revealedAnswerText` and `standings` are *part
-of* a transition — set by the constructor that owns the transition (`reveal.ts` for the first three;
-the standings route **and, since S-10, `endedSessionState`** for the fourth), nulled by every other,
-and guarded by its own `superRefine` clause so the failure names the field. **Never inject one of the
-four in `applyHostAction`**, which is where a reader who pattern-matched on "aggregate fact about the
-room" would naturally put them: that publishes one question's answer key, bar chart, accepted answer or
-leaderboard while the *next* question is open, and it looks entirely correct on screen. Each carries
-`.default(null)` so a document written before it shipped still parses — required, the host's next
-action 409s mid-segment.
-
-**`standings` is the one with two owners, and its two phases are asymmetric** (S-10, FR-006).
-`BOARD_PHASES` in `state.ts` permits a board in `standings` and in `ended`; only `standings` *requires*
-one. That is not an oversight to tidy: the board **is** the standings phase, so a null one is a blank
-projector and the route refuses the transition — while `end` is what moves every key onto
-`ENDED_TTL_SECONDS`, so it may never be refused over a board read that failed, and a boardless close
-falls back to the plain closing screen. Widening the requires-clause to both phases makes a transient
-store blip un-closeable. Both views therefore key the board's *visibility* on `standings !== null`
-rather than on a phase list — the schema owns that rule, and a list in a view is a copy that falls
-behind. Read `context/archive/2026-08-14-final-winner-reveal/winner-reveal-contract.md` before touching either.
-
-The three reveal fields carry quiz content about a question the host has already closed, so none of
-them touches the retention reasoning above. What an attendee *typed* is per-player and travels on
-`/api/quiz/result`, never on the snapshot.
-
-**The word cloud is the one aggregate that does NOT ride the snapshot, and it must stay that way.**
-S-08 added no field, no phase and no change to `state.ts` at all. Every other aggregate here reaches
-the room attached to a *host action* — but a cloud that fills as the room types has none, and Ably's
-allowance bills one broadcast to 150 clients as 150 messages against a 100/second ceiling, so
-publishing per submission is the O(N²) fan-out the spine contract forbids. Instead the projector polls
-`GET /api/quiz/host/words` on its own device. Moving the cloud onto the snapshot "for consistency" is
-the single most plausible way to break the room, and it would look correct in every test.
-See `context/archive/2026-08-12-word-cloud-question/word-cloud-contract.md`.
-
-## The host panel offers only the action the phase accepts
-
-**Which verb is enabled in which phase is stated once, as `verbsFor` in
-`src/lib/client/controls.ts`.** It names the one button ringed as the next step too, so the panel
-leads the sequence instead of leaving it in the runbook. S-07 wrote the principle on `pokaż ranking`
-alone — *disabled elsewhere rather than relying on the route's 409; the refusal is the backstop, not
-the interaction* — and `start`, `dalej` and `pokaż odpowiedź` never got it.
-
-**This file used to say "stated once, as `CONTROL_RULES` in `src/pages/quiz/host.astro`, and read
-only by `syncControls`", and `host.test.ts` enforced that single reader by scanning the page's
-source.** Both halves are gone. The table moved into `controls.ts` and is **private** there —
-`verbsFor` is the only export — so a second reader is not expressible rather than merely forbidden,
-which is why the single-reader guard was retired instead of re-expressed. It moved because a scan of
-a table's own literal cannot answer the question the rule exists for: *does the panel offer a verb
-the route refuses?* is a statement about `src/pages/api/quiz/host/*`, and no reading of the panel's
-source can check it. `controls.test.ts` runs the decision against route legality instead.
-
-Do not write a phase condition for a verb anywhere else — a second copy is how the panel and the
-routes come apart. Three rows look inconsistent and are not: **`dalej` stays offered while a question
-is open** (the host's only lever if the wrong thing is on the projector), **`pokaż ranking` stays
-offered in `standings`** (it re-broadcasts — the retry its own 502 asks for, in the phase the state
-is already in), and **`start` is offered only with no session** (the route is idempotent, so mid-quiz
-it does nothing).
-
-**The panel is a strict subset of route legality, never an equality**, and a test written as an
-equality fails on correct code. `controls.test.ts` asserts the one-way implication — no allowed verb
-is one the route answers with a 409 — plus `MATERIAL_WITHHOLDINGS`, the closed set of places the
-panel offers *less* than a route that would act. There are exactly three: `end` in `lobby`, and
-`pokaż ranking` on the last question in both `question-revealed` and `standings`. A verb withheld
-where the route is a **no-op** needs no entry, because declining to offer a button that would do
-nothing is the whole point. Adding a fourth material withholding means writing down why.
-
-**The decision has a second dimension, `atLast`, and it is not a phase.** `advance` is a no-op past
-the last question (`advance.ts` returns null when `nextQuestionId` does), and the phase cannot see
-that — `question-revealed` on question 3 and on question 14 are the same phase and want opposite
-bars. So each affected row carries a `whenLast` variant, selected by `verbsFor`'s second parameter,
-which the page fills from `atLastQuestion(config.questions, …)` — the published question order the
-page already holds, never a new snapshot field. The last `question-revealed` allows **no flow verb**:
-`dalej` does nothing there, and `pokaż ranking` would show a board the closing beat is about to
-publish itself.
-
-**`end` is the one verb `whenLast` does not collapse**, and this is the most plausible way to break
-the room while the suite stays green. The closing verb stays allowed on the last question in
-`question-revealed` and `standings` — that is precisely the beat where it becomes the only step left
-and takes the next-step ring. Applying the collapse to all five uniformly disables the one control
-the host needs on question 14. `controls.test.ts` asserts `end`'s allowed state is identical for
-`atLast` true and false in every phase; before that test existed, nothing in the project could have
-noticed.
-
-The reveal verb is also **named** by question kind: `zamknij pytanie` on a word cloud, which has no
-answer to show but still needs closing (`answer.ts` accepts only in `question-open`). Keyed on
-`pollTargetFor`, this file's single kind predicate — never on a fresh `kind === "word-cloud"` test, and
-never "fixed" by dropping `reveal` from the row, which would leave the cloud with no way to close.
-
-**The verbs' geometry is also stated once**, as `FLOW_PILL` in that file's frontmatter, and its sizes
-are `clamp` rather than fixed. The row was measured for a 1920 projector (`text-[40px] px-8`), which is
-not the window the host drives it from: at 1440 the four verbs need more width than the bar has and
-`flex-wrap` stacks them mid-session. Each figure keeps its projector value as the maximum — `2.08vw` is
-exactly 40px at 1920, so nothing changed on the screen it was measured for — and floors at 26px, the
-host's own copy size on the rest of that bar. Do not re-fix them, and do not let `data-[next=true]` set
-geometry: the filled and outlined states must stay the same size or the row reflows when a step becomes
-the next one.
-
-`syncControls` must be called from **all four sites** — `render`'s ordinary path, `render`'s
-sessionless early return, `fire`'s `finally` (which re-enables every button unconditionally), and the
-reveal's arming tap, which changes the button's label and so must repaint the bar through the same
-function rather than writing `textContent` itself. *This file said three until the rollout's phase 1;
-`host.test.ts` had already asserted four since the arming tap landed.*
-
-**`zakończ sesję i pokaż wyniki` used to be described here as "deliberately outside the table". Its
-phase rule is now inside it** — `end` is a row in `verbsFor` like the other four, which is what makes
-"the panel's phase rules" one mechanism instead of two. The position that was overturned is worth
-keeping: the closing verb was left out because it is not a `data-action` button and carries arming
-state, and that reasoning was right about the arming and wrong about the phase rule. A phase
-condition living outside the table was a second place for the panel to drift from the routes, and it
-was the half no guard could reach.
-
-What `syncEndButton` still owns is everything a table cannot hold: the two-tap arming and its version
-rule, the reparent between the menu and the bar, and the label. It reads its enabled state from
-`verbsFor(...).allow` and its ring from `next === "end"` — the same decision the bar reads, so
-"exactly one filled pill" holds by construction rather than by two conditions agreeing. It stays out
-of reach in `lobby` even though the route accepts it there; that is one of the three entries in
-`MATERIAL_WITHHOLDINGS`.
-
-**That same function also owns *where* the button is, and it has two homes.** It is authored in
-`#host-menu` — the dialog behind the join QR — and moved out to `#end-slot-bar` on the utility line
-when `atLastQuestion` holds and the phase is not `ended`; `home.append(endButton)` is the only
-reparent in the file. **One element moved, never one per place**: two copies would be two arming
-labels, two `disabled` flags and two listeners, and the copy that fell behind is the one that fires
-unarmed. The bar's slot is an empty `display: contents` div, so it takes no `gap` while it is empty.
-
-**The row around that slot, `#end-row`, is `hidden` whenever the slot is — same function, same
-reading (`setHidden(endRow, home !== endSlotBar)`), so the region cannot outlive its only content.**
-It briefly held itself open with a `min-h` instead, to keep the bar's height constant; that reserved
-a band of empty asphalt above the flow verbs for thirteen questions out of fourteen, which reads as
-the docked message row the toast replaced. **Reserved emptiness is on screen all session; the bar
-growing once at the close is on screen for a moment** — the stage is `flex-1` and absorbs it. Do not
-restore the `min-h`, and note `hidden` beats a `flex` class here only because Tailwind's preflight
-carries `[hidden] { display: none !important }`.
-
-Two halves, both load-bearing. For thirteen questions the one control with no undo takes opening a
-menu on purpose; on the fourteenth it is exactly where the host has always found it, ringed as the
-only step left. **The menu is a route, not a bypass** — the phase rule is unchanged in either place,
-so a host abandoning a session mid-quiz meets the same refusal `end` would give them. Do not answer
-"the host cannot end early" by widening the phase rule, and do not answer "the button is hidden" by
-`hidden` on a button that stays on the bar: it has to be somewhere while it is away, and a hidden
-button on the bar is a button in no place at all.
-
-**The projector's rail obeys the same discipline from the other direction: it is present exactly
-when one of its three blocks is, and `syncRail` is its only writer.** The blocks — the answered
-count, the clock, the word cloud's counters — each hide on their own rule, and `#rail` used to
-outlive all of them, so an empty 440px column with a divider sat beside the stage in four states:
-every non-cloud reveal, the standings beat, the sessionless `brak sesji` fallback, and the close
-(which `applyShell` handled as a special case). `syncRail` reads those three sections' own `hidden`
-state, so it is one rule rather than a fourth copy of predicates that already exist, and the close
-falls out of it — which is why `applyShell` no longer touches `railBox` at all.
-
-**Never key the rail on the phase.** A `phase === "question-revealed"` condition looks equivalent
-and is wrong: `pollTargetFor` keeps returning a words target through the reveal so the host can talk
-over a frozen cloud, so a phase list takes the rail away from the one reveal that still has
-something in it. `host.test.ts` fails the suite on a second `setHidden(railBox` or a missing call
-site — the rule must reach both `render`'s ordinary path and its sessionless early return, each
-after the panel renderers it reads. The rail's *absence* is what hands the distribution bars and the
-leaderboard the full width; `#stage` is `flex-1` and widens on its own.
-
-## Polling: two loops, three endpoints, and why every one has to be nameable
-
-The runbook's command tripwire is a polling detector, so **an unaccounted-for loop reads as an
-incident.** There are exactly two loops that *fetch*, and they are bounded differently:
-
-| Loop | Where | Bounded by |
-| --- | --- | --- |
-| The host panel poll | `src/pages/quiz/host.astro` | one device; the lobby or a question kind; ~2.5 s (~10 s in the lobby) with exponential backoff; tab visibility |
-| The connection fallback | `src/lib/client/session.ts` | the channel outage; tab visibility; the session ending |
-
-**There are also timers that fetch nothing** — the countdowns in `host.astro` and `index.astro`
-(S-11), and the host toast's dismissal clock (`src/lib/client/toast.ts`) — and the distinction is
-the point rather than a footnote. They issue no request, so
-they spend no commands and cannot appear in the tripwire; what bounds them is their question, not a
-backoff. Their rule is narrower and different — the countdown's is cleared on every render, armed
-only while a question with a limit is open, stopped at both lifecycle exits; the toast's is one
-pending hide, re-armed by whatever was said last. Both live in `src/lib/client/` rather than inline,
-because `host.test.ts` pins that page to the poll's single timer handle and single `clearTimeout`,
-and because a scan cannot execute a timer. **Do not count timers and do not merge the rules** — `host.test.ts`'s guard used to assert `occurrences("setTimeout") === 1`, a *shape*, and the
-only way to fit a countdown under it was to weaken it to `=== 2`, which protects nothing. It now
-asserts the property it always meant: exactly one timer whose callback can reach a `fetch`.
-
-**The motion layer is a third kind, and it holds no timer at all.** `motion.ts` drives every
-animation off `requestAnimationFrame`, including the option stagger — which is a per-element offset
-*inside one loop* rather than one `setTimeout` per row, precisely so it stays out of this count.
-That is what lets it exist without weakening either guard: `host.test.ts`'s property is about timers
-that can reach a `fetch`, and `index.test.ts` requires the attendee page to hold **zero** timers,
-which a rAF loop in a module satisfies without argument.
-
-The host loop serves **three** endpoints — `/api/quiz/host/participation` for a choice question's
-answered count, `/api/quiz/host/words` for the word cloud, and `/api/quiz/state` for the lobby's
-join count — chosen in `pollTargetFor` by phase, then by question kind. **That predicate lives in
-`src/lib/client/controls.ts`, not in `host.astro`** — it moved with the phase rules, for the same
-reason and in the same change, and it is the module that now spells all three URLs. The page passes
-`config.questions` and fetches `target.url`; a URL literal on the page would be a second request
-path. `controls.test.ts` runs the predicate over every question kind, so a sixth kind is a type
-error rather than a question that silently polls nothing. The lobby target exists
-because **a join publishes nothing**, so the snapshot's `playerCount` moves only on a host action:
-in the one phase where the host acts least and the number changes most, the figure sat frozen until
-somebody pressed `odśwież`. It is the only target with no panel of its own, so it writes nothing but
-`liveCount` and `pollFailed` marks nothing stale for it. It also ticks slower — a 10-second
-**floor** on the loop's single `pollDelay`, applied in `schedulePoll`, never a second interval
-variable: a second delay is a second backoff, which is most of what a second loop is. **One loop, not three**, and that is
-load-bearing: `host.astro`'s `polling` flag exists
-because a tick armed from `render` while a fetch was open held several requests at once, worst exactly
-when the venue network was worst. Two loops would mean two backoffs, two in-flight flags and two
-chances to leave a timer running for a panel that is off screen. `src/pages/quiz/host.test.ts` is a
-structural source scan that fails if a second timer, a second fetch site or a second copy of the
-predicate appears — it cannot check behaviour, because an Astro page's inline script has no harness.
-
-The word-cloud target is the only one that runs in `question-revealed`, so the host keeps a complete
-cloud to talk over; `cloudFinalReadFor` closes the loop after that final read, since no submission can
-arrive in that phase.
-
-**Nothing polled may write.** During `question-open` the session document's `updatedAt` *is* the moment
-the question opened, and it is the upper bound `clampElapsed` measures every award against — so a
-host-side write on a polled path inflates every award after it, with nothing on any screen to say
-scoring changed. Both route tests assert the ban against their own source.
-
-**S-11 made that timestamp load-bearing twice, and it is now the reason two features have no knobs.**
-The submission window is derived from the same `updatedAt` — `deadline = updatedAt + timeLimitSeconds`,
-stored nowhere, so no `SessionState` field, no key and no new snapshot traffic. A write during
-`question-open` therefore both inflates every later award *and* silently grants the room extra time
-nobody authored. That is why there is no host override on the clock, and why "just stamp a
-`deadlineAt` when the question opens" is a worse trade than it looks: it buys nothing the subtraction
-does not, and costs a fourth kind of state field with its own guard clause and back-compat default.
-See `context/changes/per-question-timer/timer-contract.md`.
+Browser behaviour lives in `src/lib/client/` as plain TypeScript modules, imported by Astro
+`<script>` tags; the server hands values down with `define:vars`. **No UI-framework integration is
+installed and none should be added** — not React, not Preact, not Alpine. Full reasoning, the
+server/client boundary, and the motion rules are in `src/lib/client/CLAUDE.md`.
 
 ## API route conventions
 
 Handlers live one per file in `src/pages/api/`, exporting a named method (`export const POST:
 APIRoute`). They read `await request.formData()` — not JSON — and reply with a JSON body. User-facing
 `error`/`message` strings are Polish, since the client renders them directly. Validation is currently
-inline and minimal; prefer parsing request bodies with Zod, which is now a declared dependency (see
-Commands for the pinning constraint).
+inline and minimal; prefer parsing request bodies with Zod (see the pinning constraint above).
+
+Server-side helpers these routes call live in `src/lib/` — read `src/lib/CLAUDE.md` before adding one,
+especially the rule that a route with no database may not report success it cannot back.
 
 ## Deployment
 
@@ -761,10 +183,14 @@ did not. `docs/runbook-live-session.md` carries the pre-session check that close
 ## Project context artifacts
 
 Product and audit context for in-flight work lives in `context/foundation/`: `shape-notes.md`,
-`prd.md` (currently the LiveQuiz change), `stack-assessment.md`, and `health-check.md`. Read these
-before planning feature work — `prd.md` carries the requirements and open questions, and
-`health-check.md` lists known defects and prioritized fixes. `.ai/prd.md` is the older PRD for the
-existing website; `docs/superpowers/plans/` holds an earlier build plan.
+`prd.md` (currently the LiveQuiz change), `stack-assessment.md`, `test-plan.md`, and
+`health-check.md`. Read these before planning feature work — `prd.md` carries the requirements and
+open questions, and `health-check.md` lists known defects and prioritized fixes.
+
+Per-change decision records live in `context/changes/<change-id>/` while in flight and move to
+`context/archive/<date>-<change-id>/` when done; the `*-contract.md` files there carry the reasoning
+the directory `CLAUDE.md` files point at. `.ai/prd.md` is the older PRD for the existing website;
+`docs/superpowers/plans/` holds an earlier build plan.
 
 <!-- BEGIN @przeprogramowani/10x-cli -->
 

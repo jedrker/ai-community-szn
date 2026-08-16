@@ -468,8 +468,8 @@ describe("the decision is internally consistent", () => {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Question-shaped values rather than questions off the committed quiz, per CLAUDE.md's first
- * fixture rule: neither predicate resolves anything through `getQuestionById`, so nothing
+ * Question-shaped values rather than questions off the committed quiz, per `src/quiz/CLAUDE.md`'s
+ * first fixture rule: neither predicate resolves anything through `getQuestionById`, so nothing
  * here needs a real id. `render.test.ts` is the precedent in this directory, and it is also
  * what keeps a value import from `src/quiz/` out of `src/lib/client/` — legal in a test file
  * today only because `boundary.test.ts` excludes them, which its own note calls provisional.
