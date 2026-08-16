@@ -23,7 +23,9 @@ describe("normalizePolish", () => {
   });
 
   it("collapses repeated internal whitespace", () => {
-    expect(normalizePolish("large   language\tmodel")).toBe("large language model");
+    expect(normalizePolish("large   language\tmodel")).toBe(
+      "large language model",
+    );
   });
 
   it.each([
@@ -44,21 +46,30 @@ describe("normalizePolish", () => {
     ["łódź", "lodz"],
     ["Michał", "michal"],
     ["żółć łódź", "zolc lodz"],
-  ])("folds the stroked ł that NFD alone misses: %s -> %s", (input, expected) => {
-    expect(normalizePolish(input)).toBe(expected);
-  });
+  ])(
+    "folds the stroked ł that NFD alone misses: %s -> %s",
+    (input, expected) => {
+      expect(normalizePolish(input)).toBe(expected);
+    },
+  );
 
   it("does not leave any ł behind in a mixed phrase", () => {
     expect(normalizePolish("Wesoła Łódka")).not.toMatch(/[łŁ]/);
   });
 
   it("treats the Q4 accepted variants as equal under folding", () => {
-    expect(normalizePolish("  Halucynacje ")).toBe(normalizePolish("halucynacje"));
+    expect(normalizePolish("  Halucynacje ")).toBe(
+      normalizePolish("halucynacje"),
+    );
   });
 
   it("keeps distinct answers distinct — no misspelling tolerance", () => {
-    expect(normalizePolish("halucynacje")).not.toBe(normalizePolish("halucynacja"));
-    expect(normalizePolish("halucynacje")).not.toBe(normalizePolish("halucynacke"));
+    expect(normalizePolish("halucynacje")).not.toBe(
+      normalizePolish("halucynacja"),
+    );
+    expect(normalizePolish("halucynacje")).not.toBe(
+      normalizePolish("halucynacke"),
+    );
   });
 
   it("is idempotent", () => {
@@ -123,12 +134,18 @@ describe("normalizeAnswer", () => {
   });
 
   it("folds a capitalised, punctuated answer onto the bare variant", () => {
-    expect(normalizeAnswer("Halucynacje.")).toBe(normalizeAnswer("halucynacje"));
+    expect(normalizeAnswer("Halucynacje.")).toBe(
+      normalizeAnswer("halucynacje"),
+    );
   });
 
   it("keeps distinct answers distinct — no misspelling tolerance", () => {
-    expect(normalizeAnswer("halucynacje")).not.toBe(normalizeAnswer("halucynacja"));
-    expect(normalizeAnswer("halucynacje")).not.toBe(normalizeAnswer("halucynajce"));
+    expect(normalizeAnswer("halucynacje")).not.toBe(
+      normalizeAnswer("halucynacja"),
+    );
+    expect(normalizeAnswer("halucynacje")).not.toBe(
+      normalizeAnswer("halucynajce"),
+    );
   });
 
   it("folds a punctuation-only answer to empty", () => {

@@ -40,7 +40,11 @@ const single: PublicQuestion = {
   ],
 };
 
-const multi: PublicQuestion = { ...single, id: "multi", kind: "multiple-choice" };
+const multi: PublicQuestion = {
+  ...single,
+  id: "multi",
+  kind: "multiple-choice",
+};
 
 /**
  * The gather beat's shape: a choice question worth nothing, whose `correctOptionIds` is
@@ -93,7 +97,11 @@ describe("static mode", () => {
 
     // The order is shuffled per question by `publicQuiz`, so anything mapping a
     // selection back must go through ids and never through indices.
-    expect(options().map((item) => item.dataset.optionId)).toEqual(["a", "b", "c"]);
+    expect(options().map((item) => item.dataset.optionId)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
   });
 
   it("marks a locked selection without saying anything about correctness", () => {
@@ -123,9 +131,13 @@ describe("static mode", () => {
    * placeholder.
    */
   it("lets the caller replace the placeholder text", () => {
-    renderQuestion(container, undefined, { missingText: "Wpisz sekret hosta." });
+    renderQuestion(container, undefined, {
+      missingText: "Wpisz sekret hosta.",
+    });
 
-    expect(container.querySelector("p")?.textContent).toBe("Wpisz sekret hosta.");
+    expect(container.querySelector("p")?.textContent).toBe(
+      "Wpisz sekret hosta.",
+    );
   });
 
   it("ignores the override when there is a question to show", () => {
@@ -215,7 +227,11 @@ describe("answerable mode", () => {
     // The caller stores what it is handed and re-renders. This module keeps no state,
     // which is what makes an out-of-order snapshot harmless.
     const onSelect = vi.fn();
-    renderQuestion(container, multi, { mode: "answerable", selectedOptionIds: [], onSelect });
+    renderQuestion(container, multi, {
+      mode: "answerable",
+      selectedOptionIds: [],
+      onSelect,
+    });
 
     buttons()[2]!.click();
 
@@ -229,11 +245,9 @@ describe("answerable mode", () => {
       optionSelected: "picked",
     });
 
-    expect(buttons().map((button) => button.getAttribute("aria-pressed"))).toEqual([
-      "false",
-      "true",
-      "false",
-    ]);
+    expect(
+      buttons().map((button) => button.getAttribute("aria-pressed")),
+    ).toEqual(["false", "true", "false"]);
     expect(buttons()[1]!.className).toContain("picked");
   });
 });
@@ -306,14 +320,23 @@ describe("revealed mode", () => {
       optionWrong: "wrong",
     });
 
-    expect(options().map((item) => item.dataset.correct)).toEqual(["true", "true", "true"]);
-    expect(options().every((item) => item.className.includes("right"))).toBe(true);
+    expect(options().map((item) => item.dataset.correct)).toEqual([
+      "true",
+      "true",
+      "true",
+    ]);
+    expect(options().every((item) => item.className.includes("right"))).toBe(
+      true,
+    );
     // Nobody can be wrong on a question where everyone is right.
     expect(container.innerHTML).not.toContain("wrong");
   });
 
   it("renders no controls — the answer is already locked", () => {
-    renderQuestion(container, single, { mode: "revealed", correctOptionIds: ["a"] });
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+    });
 
     expect(buttons()).toHaveLength(0);
   });
@@ -327,7 +350,9 @@ describe("revealed mode", () => {
     });
 
     expect(options()[0]!.className).toContain("right");
-    expect(options().some((item) => item.dataset.selected === "true")).toBe(false);
+    expect(options().some((item) => item.dataset.selected === "true")).toBe(
+      false,
+    );
   });
 });
 
@@ -338,10 +363,11 @@ describe("revealed mode", () => {
  * order, counts, shares, and which option is marked — rather than that elements exist.
  */
 describe("renderDistribution", () => {
-  const rows = (): HTMLElement[] => Array.from(container.querySelectorAll("li"));
+  const rows = (): HTMLElement[] =>
+    Array.from(container.querySelectorAll("li"));
   const fillWidths = (): string[] =>
     Array.from(container.querySelectorAll("li div div")).map(
-      (node) => (node as HTMLElement).style.width
+      (node) => (node as HTMLElement).style.width,
     );
 
   it("draws one bar per option, in definition order, with counts and shares", () => {
@@ -428,15 +454,25 @@ describe("renderDistribution", () => {
    * that nobody answered.
    */
   it("renders nothing at all for a null distribution", () => {
-    renderDistribution(container, single, { distribution: null, correctOptionIds: ["a"] });
+    renderDistribution(container, single, {
+      distribution: null,
+      correctOptionIds: ["a"],
+    });
 
     expect(container.children).toHaveLength(0);
   });
 
   it("renders nothing for a kind with no options", () => {
-    const text: PublicQuestion = { id: "t", kind: "text", prompt: "Coś", scored: true };
+    const text: PublicQuestion = {
+      id: "t",
+      kind: "text",
+      prompt: "Coś",
+      scored: true,
+    };
 
-    renderDistribution(container, text, { distribution: { answered: 3, options: {} } });
+    renderDistribution(container, text, {
+      distribution: { answered: 3, options: {} },
+    });
 
     expect(container.children).toHaveLength(0);
   });
@@ -447,7 +483,9 @@ describe("renderDistribution", () => {
       options: [{ id: "a", text: "<img src=x onerror=alert(1)>" }],
     };
 
-    renderDistribution(container, hostile, { distribution: { answered: 1, options: { a: 1 } } });
+    renderDistribution(container, hostile, {
+      distribution: { answered: 1, options: { a: 1 } },
+    });
 
     // S-08 will feed this module attendee-supplied strings. `textContent`, never
     // `innerHTML` — the same rule `renderQuestion` follows, asserted the same way.
@@ -458,7 +496,9 @@ describe("renderDistribution", () => {
   it("clears whatever was there before", () => {
     container.append(document.createElement("p"));
 
-    renderDistribution(container, single, { distribution: { answered: 2, options: { a: 2 } } });
+    renderDistribution(container, single, {
+      distribution: { answered: 2, options: { a: 2 } },
+    });
 
     expect(container.querySelectorAll("p")).toHaveLength(0);
   });
@@ -475,7 +515,11 @@ describe("renderDistribution", () => {
       rowCorrect: "right",
     });
 
-    expect(rows().map((row) => row.dataset.correct)).toEqual(["true", "true", "true"]);
+    expect(rows().map((row) => row.dataset.correct)).toEqual([
+      "true",
+      "true",
+      "true",
+    ]);
     expect(rows().every((row) => row.className.includes("right"))).toBe(true);
   });
 
@@ -501,24 +545,28 @@ describe("renderDistribution", () => {
  * this test takes rather than a wall-clock race.
  */
 describe("renderDistribution count-up", () => {
-  const rows = (): HTMLElement[] => Array.from(container.querySelectorAll("li"));
+  const rows = (): HTMLElement[] =>
+    Array.from(container.querySelectorAll("li"));
   const figures = (): string[] =>
     Array.from(container.querySelectorAll("li span:nth-child(2)")).map(
-      (node) => node.textContent ?? ""
+      (node) => node.textContent ?? "",
     );
   const fillWidths = (): string[] =>
     Array.from(container.querySelectorAll("li div div")).map(
-      (node) => (node as HTMLElement).style.width
+      (node) => (node as HTMLElement).style.width,
     );
 
   let frames: ((now: number) => void)[];
 
   beforeEach(() => {
     frames = [];
-    vi.stubGlobal("requestAnimationFrame", (callback: (now: number) => void) => {
-      frames.push(callback);
-      return frames.length;
-    });
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (callback: (now: number) => void) => {
+        frames.push(callback);
+        return frames.length;
+      },
+    );
     vi.stubGlobal("cancelAnimationFrame", () => {});
   });
 
@@ -623,7 +671,10 @@ describe("renderDistribution count-up", () => {
 
     // The next question opens: no distribution, so the container empties. Coming back to
     // the same numbers later is a new reveal, not a re-render of this one.
-    renderDistribution(container, single, { distribution: null, animate: true });
+    renderDistribution(container, single, {
+      distribution: null,
+      animate: true,
+    });
     draw({ a: 5, b: 3, c: 2 }, 10);
 
     expect(figures()[0]).toBe("0 · 0%");
@@ -653,7 +704,9 @@ describe("renderStandings", () => {
   });
 
   function rows(): string[] {
-    return [...container.querySelectorAll("li")].map((node) => node.textContent ?? "");
+    return [...container.querySelectorAll("li")].map(
+      (node) => node.textContent ?? "",
+    );
   }
 
   /**
@@ -691,9 +744,11 @@ describe("renderStandings", () => {
       { rank: 3, displayName: "Celina", points: 10 },
     ]);
 
-    expect([...container.querySelectorAll("li span:first-child")].map((n) => n.textContent)).toEqual(
-      ["1.", "1.", "3."]
-    );
+    expect(
+      [...container.querySelectorAll("li span:first-child")].map(
+        (n) => n.textContent,
+      ),
+    ).toEqual(["1.", "1.", "3."]);
   });
 
   it("marks this device's own row, in the DOM as well as by class", () => {
@@ -703,7 +758,7 @@ describe("renderStandings", () => {
         { rank: 1, displayName: "Ala", points: 30 },
         { rank: 2, displayName: "Bartek", points: 10 },
       ],
-      { ownDisplayName: "Bartek", rowOwn: "is-me" }
+      { ownDisplayName: "Bartek", rowOwn: "is-me" },
     );
 
     const own = container.querySelectorAll("li[data-own='true']");
@@ -762,7 +817,9 @@ describe("renderStandings", () => {
 
   it("replaces a previous board rather than appending to it", () => {
     renderStandings(container, [{ rank: 1, displayName: "Ala", points: 30 }]);
-    renderStandings(container, [{ rank: 1, displayName: "Bartek", points: 40 }]);
+    renderStandings(container, [
+      { rank: 1, displayName: "Bartek", points: 40 },
+    ]);
 
     expect(rows()).toHaveLength(1);
     expect(container.textContent).toContain("Bartek");
@@ -805,7 +862,9 @@ describe("standingsPositionText", () => {
    * request was still open.
    */
   it("says it is still checking while a request for this beat is open", () => {
-    expect(standingsPositionText(null, 42, true)).toBe("Sprawdzamy Twoją pozycję…");
+    expect(standingsPositionText(null, 42, true)).toBe(
+      "Sprawdzamy Twoją pozycję…",
+    );
   });
 
   it("still reports a real failure once nothing is in flight", () => {
@@ -862,7 +921,11 @@ describe("renderWordCloud", () => {
       { word: "srednie", count: 4 },
     ]);
 
-    expect(chips().map((chip) => chip.textContent)).toEqual(["rzadkie", "czeste", "srednie"]);
+    expect(chips().map((chip) => chip.textContent)).toEqual([
+      "rzadkie",
+      "czeste",
+      "srednie",
+    ]);
   });
 
   it("marks each chip in the DOM as well as rendering it", () => {
@@ -899,7 +962,7 @@ describe("renderWordCloud", () => {
           { word: "srednie", count: 5 },
           { word: "male", count: 1 },
         ],
-        { minRem: 2, maxRem: 6 }
+        { minRem: 2, maxRem: 6 },
       );
 
       const [large, middle, small] = sizes();
@@ -913,10 +976,17 @@ describe("renderWordCloud", () => {
     it("scales relative to the largest count present, not to an absolute", () => {
       // Three votes is the top of this room, so it gets the ceiling — a cloud of ten words
       // must not look like ten identical chips waiting for a hundred more votes.
-      renderWordCloud(container, [{ word: "szczyt", count: 3 }, { word: "dol", count: 1 }], {
-        minRem: 2,
-        maxRem: 6,
-      });
+      renderWordCloud(
+        container,
+        [
+          { word: "szczyt", count: 3 },
+          { word: "dol", count: 1 },
+        ],
+        {
+          minRem: 2,
+          maxRem: 6,
+        },
+      );
 
       expect(sizes()[0]).toBe(6);
     });
@@ -935,14 +1005,17 @@ describe("renderWordCloud", () => {
           { word: "b", count: 1 },
           { word: "c", count: 1 },
         ],
-        { minRem: 2, maxRem: 6 }
+        { minRem: 2, maxRem: 6 },
       );
 
       expect(sizes()).toEqual([6, 6, 6]);
     });
 
     it("gives a single word the ceiling", () => {
-      renderWordCloud(container, [{ word: "pierwsze", count: 1 }], { minRem: 2, maxRem: 6 });
+      renderWordCloud(container, [{ word: "pierwsze", count: 1 }], {
+        minRem: 2,
+        maxRem: 6,
+      });
 
       expect(sizes()).toEqual([6]);
     });
@@ -1118,7 +1191,8 @@ describe("renderCountdown", () => {
     node = document.getElementById("countdown")!;
   });
 
-  const label = (): string => node.querySelector("[data-countdown-text]")!.textContent ?? "";
+  const label = (): string =>
+    node.querySelector("[data-countdown-text]")!.textContent ?? "";
   const width = (): string =>
     (node.querySelector("[data-countdown-bar]") as HTMLElement).style.width;
 
@@ -1176,7 +1250,9 @@ describe("renderCountdown", () => {
     // would be the precedent that matters.
     renderCountdown(node, 5_000, 25_000);
 
-    expect(node.querySelector("[data-countdown-text]")!.innerHTML).not.toContain("<");
+    expect(
+      node.querySelector("[data-countdown-text]")!.innerHTML,
+    ).not.toContain("<");
   });
 
   it("leaves the bar alone when there is none to paint", () => {
@@ -1185,7 +1261,9 @@ describe("renderCountdown", () => {
     const bare = document.getElementById("bare")!;
 
     expect(() => renderCountdown(bare, 5_000, 25_000)).not.toThrow();
-    expect(bare.querySelector("[data-countdown-text]")!.textContent).toBe("5 s");
+    expect(bare.querySelector("[data-countdown-text]")!.textContent).toBe(
+      "5 s",
+    );
   });
 });
 
@@ -1202,7 +1280,9 @@ describe("renderCountdown", () => {
  */
 describe("the note between the prompt and the options", () => {
   it("renders between the prompt and the list, in that order", () => {
-    renderQuestion(container, multi, { noteText: "Możesz wybrać więcej niż jedną" });
+    renderQuestion(container, multi, {
+      noteText: "Możesz wybrać więcej niż jedną",
+    });
 
     const children = [...container.children];
     expect(children.map((node) => node.tagName)).toEqual(["P", "P", "UL"]);
@@ -1210,7 +1290,10 @@ describe("the note between the prompt and the options", () => {
   });
 
   it("takes its class from the caller", () => {
-    renderQuestion(container, multi, { noteText: "uwaga", note: "text-chrome" });
+    renderQuestion(container, multi, {
+      noteText: "uwaga",
+      note: "text-chrome",
+    });
 
     expect(container.children[1]?.className).toBe("text-chrome");
   });
@@ -1222,7 +1305,10 @@ describe("the note between the prompt and the options", () => {
   it("renders nothing when the caller passes no note", () => {
     renderQuestion(container, multi);
 
-    expect([...container.children].map((node) => node.tagName)).toEqual(["P", "UL"]);
+    expect([...container.children].map((node) => node.tagName)).toEqual([
+      "P",
+      "UL",
+    ]);
   });
 
   /**
@@ -1230,7 +1316,9 @@ describe("the note between the prompt and the options", () => {
    * between-questions gap, and the sessionless first paint.
    */
   it("renders nothing when there is no question to explain", () => {
-    renderQuestion(container, undefined, { noteText: "Możesz wybrać więcej niż jedną" });
+    renderQuestion(container, undefined, {
+      noteText: "Możesz wybrać więcej niż jedną",
+    });
 
     expect([...container.children].map((node) => node.tagName)).toEqual(["P"]);
     expect(container.textContent).not.toContain("Możesz");

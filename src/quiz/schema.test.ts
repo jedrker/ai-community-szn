@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_TIME_LIMIT_SECONDS, MIN_TIME_LIMIT_SECONDS, quizSchema } from "./schema";
+import {
+  MAX_TIME_LIMIT_SECONDS,
+  MIN_TIME_LIMIT_SECONDS,
+  quizSchema,
+} from "./schema";
 
 /**
  * Synthetic fixtures only — the real quiz is Phase 2's concern. Keeping them
@@ -90,7 +94,7 @@ describe("accepts a valid question of every kind", () => {
 
   it("accepts a whole quiz of mixed kinds", () => {
     const result = quizSchema.safeParse(
-      quizOf(singleChoice, multipleChoice, text, number, wordCloud)
+      quizOf(singleChoice, multipleChoice, text, number, wordCloud),
     );
     expect(result.success).toBe(true);
   });
@@ -112,7 +116,9 @@ describe("accepts a valid question of every kind", () => {
 
 describe("rejects a violation of every domain invariant", () => {
   it("rejects duplicate question ids", () => {
-    const message = rejectionMessage(quizOf(singleChoice, { ...text, id: singleChoice.id }));
+    const message = rejectionMessage(
+      quizOf(singleChoice, { ...text, id: singleChoice.id }),
+    );
     expect(message).toContain("fixture-single-choice");
     expect(message).toContain("Zduplikowane id pytań");
   });
@@ -125,7 +131,7 @@ describe("rejects a violation of every domain invariant", () => {
           { id: "a", text: "Large Language Model" },
           { id: "a", text: "Linear Logic Machine" },
         ],
-      })
+      }),
     );
     expect(message).toContain("fixture-single-choice");
     expect(message).toContain("zduplikowane id odpowiedzi");
@@ -133,31 +139,42 @@ describe("rejects a violation of every domain invariant", () => {
 
   it("rejects a choice question with fewer than two options", () => {
     const message = rejectionMessage(
-      quizOf({ ...singleChoice, options: [{ id: "a", text: "Large Language Model" }] })
+      quizOf({
+        ...singleChoice,
+        options: [{ id: "a", text: "Large Language Model" }],
+      }),
     );
     expect(message).toContain("fixture-single-choice");
     expect(message).toContain("co najmniej 2 odpowiedzi");
   });
 
   it("rejects correctOptionIds pointing at an option that does not exist", () => {
-    const message = rejectionMessage(quizOf({ ...singleChoice, correctOptionIds: ["nope"] }));
+    const message = rejectionMessage(
+      quizOf({ ...singleChoice, correctOptionIds: ["nope"] }),
+    );
     expect(message).toContain("fixture-single-choice");
     expect(message).toContain("nieistniejące odpowiedzi");
   });
 
   it("rejects a scored single-choice question with two correct options", () => {
-    const message = rejectionMessage(quizOf({ ...singleChoice, correctOptionIds: ["a", "b"] }));
+    const message = rejectionMessage(
+      quizOf({ ...singleChoice, correctOptionIds: ["a", "b"] }),
+    );
     expect(message).toContain("fixture-single-choice");
     expect(message).toContain("dokładnie 1 poprawną odpowiedź");
   });
 
   it("rejects a scored single-choice question with no correct option", () => {
-    const message = rejectionMessage(quizOf({ ...singleChoice, correctOptionIds: [] }));
+    const message = rejectionMessage(
+      quizOf({ ...singleChoice, correctOptionIds: [] }),
+    );
     expect(message).toContain("dokładnie 1 poprawną odpowiedź");
   });
 
   it("rejects a scored multiple-choice question with no correct option", () => {
-    const message = rejectionMessage(quizOf({ ...multipleChoice, correctOptionIds: [] }));
+    const message = rejectionMessage(
+      quizOf({ ...multipleChoice, correctOptionIds: [] }),
+    );
     expect(message).toContain("fixture-multi-choice");
     expect(message).toContain("co najmniej 1 poprawną odpowiedź");
   });
@@ -170,7 +187,7 @@ describe("rejects a violation of every domain invariant", () => {
 
   it("rejects accepted answers that collapse to the same value under folding", () => {
     const message = rejectionMessage(
-      quizOf({ ...text, acceptedAnswers: ["halucynacje", "  HALUCYNACJE "] })
+      quizOf({ ...text, acceptedAnswers: ["halucynacje", "  HALUCYNACJE "] }),
     );
     expect(message).toContain("halucynacje");
     expect(message).toContain("sprowadzają się do tej samej wartości");
@@ -179,11 +196,16 @@ describe("rejects a violation of every domain invariant", () => {
   it.each([
     ["Infinity", Number.POSITIVE_INFINITY],
     ["NaN", Number.NaN],
-  ])("rejects a non-finite correctValue (%s), naming the question", (_label, value) => {
-    const message = rejectionMessage(quizOf({ ...number, correctValue: value }));
-    expect(message).toContain("fixture-number");
-    expect(message).toContain("skończoną liczbą");
-  });
+  ])(
+    "rejects a non-finite correctValue (%s), naming the question",
+    (_label, value) => {
+      const message = rejectionMessage(
+        quizOf({ ...number, correctValue: value }),
+      );
+      expect(message).toContain("fixture-number");
+      expect(message).toContain("skończoną liczbą");
+    },
+  );
 
   it("rejects a correctValue of zero, naming the question", () => {
     // Zero is finite, so the sibling refinement above does not catch it — and a
@@ -195,7 +217,9 @@ describe("rejects a violation of every domain invariant", () => {
   });
 
   it("rejects a correctValue that is not a number at all", () => {
-    expect(quizSchema.safeParse(quizOf({ ...number, correctValue: "67" })).success).toBe(false);
+    expect(
+      quizSchema.safeParse(quizOf({ ...number, correctValue: "67" })).success,
+    ).toBe(false);
   });
 
   it("rejects a scored word-cloud question", () => {
@@ -213,26 +237,39 @@ describe("rejects a violation of every domain invariant", () => {
 
   it.each([
     ["word-cloud", { ...wordCloud, timeLimitSeconds: 30 }],
-    ["the gather question", { ...multipleChoice, points: null, correctOptionIds: [] }],
-  ])("rejects a time limit on an unscored question (%s)", (_label, question) => {
-    // Refused rather than ignored: a limit nothing enforces is worse than no limit,
-    // because the author believes it is enforced. Both unscored shapes are covered —
-    // the word cloud and the choice question whose answers are all "right".
-    const message = rejectionMessage(quizOf(question));
-    expect(message).toContain("nie może mieć timeLimitSeconds");
-  });
+    [
+      "the gather question",
+      { ...multipleChoice, points: null, correctOptionIds: [] },
+    ],
+  ])(
+    "rejects a time limit on an unscored question (%s)",
+    (_label, question) => {
+      // Refused rather than ignored: a limit nothing enforces is worse than no limit,
+      // because the author believes it is enforced. Both unscored shapes are covered —
+      // the word cloud and the choice question whose answers are all "right".
+      const message = rejectionMessage(quizOf(question));
+      expect(message).toContain("nie może mieć timeLimitSeconds");
+    },
+  );
 
   it.each([
     ["below the floor", MIN_TIME_LIMIT_SECONDS - 1],
     ["above the ceiling", MAX_TIME_LIMIT_SECONDS + 1],
-  ])("rejects a time limit %s, naming the question and the range", (_label, value) => {
-    // Built from the exported bounds, so widening them cannot leave this test asserting
-    // a range the schema no longer enforces.
-    const message = rejectionMessage(quizOf({ ...singleChoice, timeLimitSeconds: value }));
-    expect(message).toContain("fixture-single-choice");
-    expect(message).toContain(`${MIN_TIME_LIMIT_SECONDS}–${MAX_TIME_LIMIT_SECONDS}`);
-    expect(message).toContain(String(value));
-  });
+  ])(
+    "rejects a time limit %s, naming the question and the range",
+    (_label, value) => {
+      // Built from the exported bounds, so widening them cannot leave this test asserting
+      // a range the schema no longer enforces.
+      const message = rejectionMessage(
+        quizOf({ ...singleChoice, timeLimitSeconds: value }),
+      );
+      expect(message).toContain("fixture-single-choice");
+      expect(message).toContain(
+        `${MIN_TIME_LIMIT_SECONDS}–${MAX_TIME_LIMIT_SECONDS}`,
+      );
+      expect(message).toContain(String(value));
+    },
+  );
 
   it.each([
     ["the floor exactly", MIN_TIME_LIMIT_SECONDS],
@@ -241,25 +278,29 @@ describe("rejects a violation of every domain invariant", () => {
     // The bounds are inclusive. Without these two, a `<=` written for a `<` would pass
     // every rejection test above and quietly refuse a legal value.
     expect(
-      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: value })).success
+      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: value }))
+        .success,
     ).toBe(true);
   });
 
   it("rejects a fractional or non-integer time limit", () => {
     expect(
-      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: 25.5 })).success
+      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: 25.5 }))
+        .success,
     ).toBe(false);
     expect(
-      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: "25" })).success
+      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: "25" }))
+        .success,
     ).toBe(false);
   });
 
   it("accepts a time limit shorter than the speed window, which is a legal tradeoff", () => {
     // Below 20s the speed weight can never reach its floor. That is an authoring
     // decision the gate deliberately permits — see the bounds' docstring.
-    expect(quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: 10 })).success).toBe(
-      true
-    );
+    expect(
+      quizSchema.safeParse(quizOf({ ...singleChoice, timeLimitSeconds: 10 }))
+        .success,
+    ).toBe(true);
   });
 
   it("rejects an empty quiz", () => {
@@ -267,22 +308,34 @@ describe("rejects a violation of every domain invariant", () => {
   });
 
   it("rejects a question id that is not a slug", () => {
-    expect(quizSchema.safeParse(quizOf({ ...singleChoice, id: "LLM Skrót" })).success).toBe(false);
+    expect(
+      quizSchema.safeParse(quizOf({ ...singleChoice, id: "LLM Skrót" }))
+        .success,
+    ).toBe(false);
   });
 
   it("rejects an unknown question kind", () => {
-    expect(quizSchema.safeParse(quizOf({ ...singleChoice, kind: "ranking" })).success).toBe(false);
+    expect(
+      quizSchema.safeParse(quizOf({ ...singleChoice, kind: "ranking" }))
+        .success,
+    ).toBe(false);
   });
 
   it("rejects zero or negative points", () => {
-    expect(quizSchema.safeParse(quizOf({ ...singleChoice, points: 0 })).success).toBe(false);
-    expect(quizSchema.safeParse(quizOf({ ...singleChoice, points: -100 })).success).toBe(false);
+    expect(
+      quizSchema.safeParse(quizOf({ ...singleChoice, points: 0 })).success,
+    ).toBe(false);
+    expect(
+      quizSchema.safeParse(quizOf({ ...singleChoice, points: -100 })).success,
+    ).toBe(false);
   });
 });
 
 describe("rejection messages are actionable", () => {
   it("names the offending question rather than only a Zod path", () => {
-    const message = rejectionMessage(quizOf(singleChoice, { ...wordCloud, points: 500 }));
+    const message = rejectionMessage(
+      quizOf(singleChoice, { ...wordCloud, points: 500 }),
+    );
     expect(message).toMatch(/Pytanie "fixture-word-cloud"/);
   });
 });

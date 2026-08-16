@@ -73,8 +73,14 @@ const choiceFields = {
   correctOptionIds: z.array(z.string()).default([]),
 };
 
-const singleChoiceSchema = z.object({ kind: z.literal("single-choice"), ...choiceFields });
-const multipleChoiceSchema = z.object({ kind: z.literal("multiple-choice"), ...choiceFields });
+const singleChoiceSchema = z.object({
+  kind: z.literal("single-choice"),
+  ...choiceFields,
+});
+const multipleChoiceSchema = z.object({
+  kind: z.literal("multiple-choice"),
+  ...choiceFields,
+});
 const textSchema = z.object({
   kind: z.literal("text"),
   ...baseFields,
@@ -100,7 +106,10 @@ const numberSchema = z.object({
     error: "correctValue musi być liczbą.",
   }),
 });
-const wordCloudSchema = z.object({ kind: z.literal("word-cloud"), ...baseFields });
+const wordCloudSchema = z.object({
+  kind: z.literal("word-cloud"),
+  ...baseFields,
+});
 
 const questionShapeSchema = z.discriminatedUnion("kind", [
   singleChoiceSchema,
@@ -121,7 +130,10 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
   const where = `Pytanie "${question.id}"`;
   const scored = question.points !== null;
 
-  if (question.kind === "single-choice" || question.kind === "multiple-choice") {
+  if (
+    question.kind === "single-choice" ||
+    question.kind === "multiple-choice"
+  ) {
     if (question.options.length < 2) {
       ctx.addIssue({
         code: "custom",
@@ -138,7 +150,9 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
       });
     }
 
-    const unknown = question.correctOptionIds.filter((id) => !optionIds.includes(id));
+    const unknown = question.correctOptionIds.filter(
+      (id) => !optionIds.includes(id),
+    );
     if (unknown.length > 0) {
       ctx.addIssue({
         code: "custom",
@@ -146,14 +160,22 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
       });
     }
 
-    if (scored && question.kind === "single-choice" && question.correctOptionIds.length !== 1) {
+    if (
+      scored &&
+      question.kind === "single-choice" &&
+      question.correctOptionIds.length !== 1
+    ) {
       ctx.addIssue({
         code: "custom",
         message: `${where}: punktowane pytanie jednokrotnego wyboru musi mieć dokładnie 1 poprawną odpowiedź (ma ${question.correctOptionIds.length}).`,
       });
     }
 
-    if (scored && question.kind === "multiple-choice" && question.correctOptionIds.length === 0) {
+    if (
+      scored &&
+      question.kind === "multiple-choice" &&
+      question.correctOptionIds.length === 0
+    ) {
       ctx.addIssue({
         code: "custom",
         message: `${where}: punktowane pytanie wielokrotnego wyboru musi mieć co najmniej 1 poprawną odpowiedź.`,
@@ -176,7 +198,9 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
     // narrower `normalizePolish` here would let an author ship "halucynacje" and
     // "halucynacje." as two variants the schema accepts and the scorer treats as
     // one.
-    const collapsed = findDuplicates(question.acceptedAnswers.map(normalizeAnswer));
+    const collapsed = findDuplicates(
+      question.acceptedAnswers.map(normalizeAnswer),
+    );
     if (collapsed.length > 0) {
       ctx.addIssue({
         code: "custom",
@@ -256,10 +280,14 @@ const questionSchema = questionShapeSchema.superRefine(checkQuestion);
 
 export const quizSchema = z
   .object({
-    questions: z.array(questionSchema).min(1, "Quiz musi mieć co najmniej 1 pytanie."),
+    questions: z
+      .array(questionSchema)
+      .min(1, "Quiz musi mieć co najmniej 1 pytanie."),
   })
   .superRefine((quiz, ctx) => {
-    const duplicateIds = findDuplicates(quiz.questions.map((question) => question.id));
+    const duplicateIds = findDuplicates(
+      quiz.questions.map((question) => question.id),
+    );
     if (duplicateIds.length > 0) {
       ctx.addIssue({
         code: "custom",
@@ -283,7 +311,10 @@ function findDuplicates(values: readonly string[]): string[] {
 export type Quiz = z.infer<typeof quizSchema>;
 export type Question = Quiz["questions"][number];
 export type SingleChoiceQuestion = Extract<Question, { kind: "single-choice" }>;
-export type MultipleChoiceQuestion = Extract<Question, { kind: "multiple-choice" }>;
+export type MultipleChoiceQuestion = Extract<
+  Question,
+  { kind: "multiple-choice" }
+>;
 export type TextQuestion = Extract<Question, { kind: "text" }>;
 export type NumberQuestion = Extract<Question, { kind: "number" }>;
 export type WordCloudQuestion = Extract<Question, { kind: "word-cloud" }>;

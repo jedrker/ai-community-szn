@@ -158,7 +158,10 @@ describe("extractSecret", () => {
 describe("applyHostAction", () => {
   it("writes and publishes, reporting the new state", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
-    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(2) });
+    writeSessionMock.mockResolvedValue({
+      outcome: "applied",
+      state: opened(2),
+    });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
     const result = await applyHostAction(openFirstQuestion, NOW);
@@ -182,7 +185,10 @@ describe("applyHostAction", () => {
     const result = await applyHostAction(openFirstQuestion, NOW);
 
     expect(result.status).toBe(200);
-    expect(result.body).toMatchObject({ applied: false, note: "already-applied" });
+    expect(result.body).toMatchObject({
+      applied: false,
+      note: "already-applied",
+    });
     // The host is shown where the room actually is, not where it was.
     expect(result.body).toMatchObject({ state: opened(2) });
     expect(publishSnapshotMock).not.toHaveBeenCalled();
@@ -204,8 +210,14 @@ describe("applyHostAction", () => {
    */
   it("reports a publish failure as committed-but-not-broadcast", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
-    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(2) });
-    publishSnapshotMock.mockResolvedValue({ outcome: "failed", reason: "down" });
+    writeSessionMock.mockResolvedValue({
+      outcome: "applied",
+      state: opened(2),
+    });
+    publishSnapshotMock.mockResolvedValue({
+      outcome: "failed",
+      reason: "down",
+    });
 
     const result = await applyHostAction(openFirstQuestion, NOW);
 
@@ -224,21 +236,30 @@ describe("applyHostAction", () => {
   });
 
   it("surfaces an unconfigured store as 503", async () => {
-    readSessionMock.mockResolvedValue({ outcome: "unconfigured", reason: "no url" });
+    readSessionMock.mockResolvedValue({
+      outcome: "unconfigured",
+      reason: "no url",
+    });
 
     const result = await applyHostAction(openFirstQuestion, NOW);
     expect(result.status).toBe(503);
   });
 
   it("surfaces a store failure as 503 without throwing", async () => {
-    readSessionMock.mockResolvedValue({ outcome: "failed", reason: "unreachable" });
+    readSessionMock.mockResolvedValue({
+      outcome: "failed",
+      reason: "unreachable",
+    });
 
     const result = await applyHostAction(openFirstQuestion, NOW);
     expect(result.status).toBe(503);
   });
 
   it("surfaces an invalid stored document as 409", async () => {
-    readSessionMock.mockResolvedValue({ outcome: "invalid", problems: ["bad phase"] });
+    readSessionMock.mockResolvedValue({
+      outcome: "invalid",
+      problems: ["bad phase"],
+    });
 
     const result = await applyHostAction(openFirstQuestion, NOW);
     expect(result.status).toBe(409);
@@ -261,11 +282,17 @@ describe("applyHostAction", () => {
   it("writes a freshly-read count, not the one the transition copied", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
     readPlayerCountMock.mockResolvedValue(42);
-    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(2, 42) });
+    writeSessionMock.mockResolvedValue({
+      outcome: "applied",
+      state: opened(2, 42),
+    });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
     // The transition copies `current.playerCount` (3), exactly as the real ones do.
-    await applyHostAction((current) => opened(current.version + 1, current.playerCount), NOW);
+    await applyHostAction(
+      (current) => opened(current.version + 1, current.playerCount),
+      NOW,
+    );
 
     const [, written] = writeSessionMock.mock.calls[0]!;
     expect(written.playerCount).toBe(42);
@@ -279,7 +306,10 @@ describe("applyHostAction", () => {
   it("keeps the previous count when the store cannot report one", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
     readPlayerCountMock.mockResolvedValue(null);
-    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(2) });
+    writeSessionMock.mockResolvedValue({
+      outcome: "applied",
+      state: opened(2),
+    });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
     const result = await applyHostAction(openFirstQuestion, NOW);
@@ -325,33 +355,59 @@ describe("applyHostAction with a caller-confirmed version", () => {
   it("refuses when the session moved since the caller confirmed it", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(4) });
 
-    const outcome = await applyHostAction(openFirstQuestion, NOW, writeSessionMock, 3);
+    const outcome = await applyHostAction(
+      openFirstQuestion,
+      NOW,
+      writeSessionMock,
+      3,
+    );
 
     expect(outcome.status).toBe(200);
-    expect(outcome.body).toMatchObject({ applied: false, note: "already-applied" });
+    expect(outcome.body).toMatchObject({
+      applied: false,
+      note: "already-applied",
+    });
     // Nothing was committed against a version the caller never saw.
     expect(writeSessionMock).not.toHaveBeenCalled();
   });
 
   it("proceeds when the confirmed version still matches", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(3) });
-    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(4) });
+    writeSessionMock.mockResolvedValue({
+      outcome: "applied",
+      state: opened(4),
+    });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
-    const outcome = await applyHostAction(openFirstQuestion, NOW, writeSessionMock, 3);
+    const outcome = await applyHostAction(
+      openFirstQuestion,
+      NOW,
+      writeSessionMock,
+      3,
+    );
 
     expect(outcome.status).toBe(200);
-    expect(writeSessionMock).toHaveBeenCalledWith(3, expect.objectContaining({ version: 4 }));
+    expect(writeSessionMock).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ version: 4 }),
+    );
   });
 
   it("leaves the flow verbs unguarded — a replayed advance stays a harmless no-op", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(9) });
-    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(10) });
+    writeSessionMock.mockResolvedValue({
+      outcome: "applied",
+      state: opened(10),
+    });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
     // No confirmed version supplied: start/advance/reveal are safe precisely
     // BECAUSE a repeat is idempotent, and must not inherit end's stricter guard.
-    const outcome = await applyHostAction(openFirstQuestion, NOW, writeSessionMock);
+    const outcome = await applyHostAction(
+      openFirstQuestion,
+      NOW,
+      writeSessionMock,
+    );
 
     expect(outcome.status).toBe(200);
     expect(writeSessionMock).toHaveBeenCalled();
@@ -367,13 +423,16 @@ describe("applyHostAction with a caller-confirmed version", () => {
 describe("an async nextFrom", () => {
   it("is awaited, not spread as a pending Promise", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(3) });
-    writeSessionMock.mockResolvedValue({ outcome: "applied", state: opened(4) });
+    writeSessionMock.mockResolvedValue({
+      outcome: "applied",
+      state: opened(4),
+    });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
     const outcome = await applyHostAction(
       async (current: SessionState) => opened(current.version + 1),
       NOW,
-      writeSessionMock
+      writeSessionMock,
     );
 
     expect(outcome.status).toBe(200);
@@ -383,14 +442,18 @@ describe("an async nextFrom", () => {
     // rejection it produced would name `version`, pointing at the wrong thing entirely.
     expect(writeSessionMock).toHaveBeenCalledWith(
       3,
-      expect.objectContaining({ version: 4, phase: "question-open" })
+      expect.objectContaining({ version: 4, phase: "question-open" }),
     );
   });
 
   it("still treats an async null as a no-op rather than a write", async () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(3) });
 
-    const outcome = await applyHostAction(async () => null, NOW, writeSessionMock);
+    const outcome = await applyHostAction(
+      async () => null,
+      NOW,
+      writeSessionMock,
+    );
 
     expect(outcome.status).toBe(200);
     expect(outcome.body).toMatchObject({ applied: false, note: "no-op" });
@@ -407,7 +470,11 @@ describe("an async nextFrom", () => {
     readSessionMock.mockResolvedValue({ outcome: "ok", state: opened(3) });
 
     await expect(
-      applyHostAction(async () => Promise.reject(new Error("tally read exploded")), NOW, writeSessionMock)
+      applyHostAction(
+        async () => Promise.reject(new Error("tally read exploded")),
+        NOW,
+        writeSessionMock,
+      ),
     ).rejects.toThrow("tally read exploded");
 
     expect(writeSessionMock).not.toHaveBeenCalled();

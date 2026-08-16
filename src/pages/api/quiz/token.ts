@@ -30,15 +30,17 @@ export const GET: APIRoute = async () => {
     console.warn("Ably token requested but ABLY_API_KEY is not set");
     return new Response(
       JSON.stringify({ error: "Realtime nie jest skonfigurowane." }),
-      { status: 503, headers: { "Content-Type": "application/json" } }
+      { status: 503, headers: { "Content-Type": "application/json" } },
     );
   }
 
   if (result.outcome === "failed") {
     console.error("Ably token request failed:", result.reason);
     return new Response(
-      JSON.stringify({ error: "Nie udało się uzyskać tokenu. Spróbuj ponownie." }),
-      { status: 503, headers: { "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: "Nie udało się uzyskać tokenu. Spróbuj ponownie.",
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
     );
   }
 

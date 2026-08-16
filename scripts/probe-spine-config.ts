@@ -53,7 +53,7 @@ function env(name: string): string | undefined {
 
 function resolveUpstashCredentials(): { url: string; token: string } | null {
   const present = UPSTASH_NAME_PAIRS.filter(
-    (pair) => env(pair.url) && env(pair.token)
+    (pair) => env(pair.url) && env(pair.token),
   );
 
   // Exactly one pair is the correct state — .env.example says "do not set both" — so the
@@ -64,14 +64,14 @@ function resolveUpstashCredentials(): { url: string; token: string } | null {
     "exactly one Upstash name pair is set",
     present.length === 0
       ? "neither pair is set"
-      : present.map((pair) => `${pair.url} / ${pair.token}`).join(" and ")
+      : present.map((pair) => `${pair.url} / ${pair.token}`).join(" and "),
   );
 
   if (present.length === 0) {
     console.log(
       "\n  → Neither name pair is set. Provision Upstash via the Vercel Marketplace,\n" +
         "    then pull the values locally (`vercel env pull`) or export them by hand.\n" +
-        "    Record in .env.example whichever pair the integration actually injected."
+        "    Record in .env.example whichever pair the integration actually injected.",
     );
     return null;
   }
@@ -79,7 +79,7 @@ function resolveUpstashCredentials(): { url: string; token: string } | null {
   if (present.length > 1) {
     console.log(
       "\n  → Both name pairs are set. Harmless for the client, but ambiguous for a reader:\n" +
-        "    keep one and delete the other so there is a single source of truth."
+        "    keep one and delete the other so there is a single source of truth.",
     );
   }
 
@@ -96,14 +96,16 @@ async function probeRoundTrip(redis: Redis): Promise<void> {
   record(
     read === written,
     "SET / GET round trip",
-    read === written ? `read back ${read}` : `wrote ${written}, read ${String(read)}`
+    read === written
+      ? `read back ${read}`
+      : `wrote ${written}, read ${String(read)}`,
   );
 
   const ttl = await redis.ttl(PROBE_KEY);
   record(
     ttl > 0 && ttl <= PROBE_TTL_SECONDS,
     "TTL is set and counting down",
-    `ttl=${ttl}s (expected 0 < ttl <= ${PROBE_TTL_SECONDS})`
+    `ttl=${ttl}s (expected 0 < ttl <= ${PROBE_TTL_SECONDS})`,
   );
 }
 
@@ -134,30 +136,30 @@ async function probeEval(redis: Redis): Promise<void> {
     const applied = await redis.eval<[string, string], [number, number]>(
       script,
       [evalKey],
-      ["0", String(PROBE_TTL_SECONDS)]
+      ["0", String(PROBE_TTL_SECONDS)],
     );
     record(
       Number(applied?.[0]) === 1 && Number(applied?.[1]) === 1,
       "EVAL compare-and-set applies a matching write",
-      `returned [${String(applied?.[0])}, ${String(applied?.[1])}] (expected [1, 1])`
+      `returned [${String(applied?.[0])}, ${String(applied?.[1])}] (expected [1, 1])`,
     );
 
     const rejected = await redis.eval<[string, string], [number, number]>(
       script,
       [evalKey],
-      ["0", String(PROBE_TTL_SECONDS)]
+      ["0", String(PROBE_TTL_SECONDS)],
     );
     record(
       Number(rejected?.[0]) === 0 && Number(rejected?.[1]) === 1,
       "EVAL compare-and-set rejects a stale write",
-      `returned [${String(rejected?.[0])}, ${String(rejected?.[1])}] (expected [0, 1])`
+      `returned [${String(rejected?.[0])}, ${String(rejected?.[1])}] (expected [0, 1])`,
     );
 
     const evalTtl = await redis.ttl(evalKey);
     record(
       evalTtl > 0,
       "EVAL set the TTL in the same round trip",
-      `ttl=${evalTtl}s`
+      `ttl=${evalTtl}s`,
     );
 
     await redis.del(evalKey);
@@ -165,12 +167,12 @@ async function probeEval(redis: Redis): Promise<void> {
     record(
       false,
       "EVAL (Lua scripting over the HTTP interface)",
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
     console.log(
       "\n  → This is the blocking one. Phase 2's atomic version guard assumes EVAL works\n" +
         "    here. If it genuinely does not, STOP and retake that design decision\n" +
-        "    (advisory lock, or a version key plus SETNX) before writing the store module."
+        "    (advisory lock, or a version key plus SETNX) before writing the store module.",
     );
   }
 }
@@ -186,19 +188,20 @@ async function probeAbly(): Promise<void> {
       capability: { "livequiz:session": ["subscribe"] },
     });
     const looksRight =
-      typeof tokenRequest.keyName === "string" && typeof tokenRequest.mac === "string";
+      typeof tokenRequest.keyName === "string" &&
+      typeof tokenRequest.mac === "string";
     record(
       looksRight,
       "Ably mints a subscribe-only token request",
       looksRight
         ? `keyName=${tokenRequest.keyName}, capability=${tokenRequest.capability ?? "(default)"}`
-        : "response did not look like a token request"
+        : "response did not look like a token request",
     );
   } catch (err) {
     record(
       false,
       "Ably token request",
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
   }
 }
@@ -208,12 +211,14 @@ function probeHostSecret(): void {
   record(
     Boolean(secret && secret.length >= 16),
     "env LIVEQUIZ_HOST_SECRET",
-    secret ? `present, ${secret.length} chars (want >= 16)` : "absent"
+    secret ? `present, ${secret.length} chars (want >= 16)` : "absent",
   );
 }
 
 async function main(): Promise<void> {
-  console.log("\nProbing the LiveQuiz session spine configuration (F-02 Phase 1).\n");
+  console.log(
+    "\nProbing the LiveQuiz session spine configuration (F-02 Phase 1).\n",
+  );
 
   const credentials = resolveUpstashCredentials();
 
@@ -226,7 +231,7 @@ async function main(): Promise<void> {
       record(
         false,
         "Upstash reachability",
-        err instanceof Error ? err.message : String(err)
+        err instanceof Error ? err.message : String(err),
       );
     } finally {
       await redis.del(PROBE_KEY).catch(() => {
@@ -240,7 +245,7 @@ async function main(): Promise<void> {
 
   const failed = findings.filter((finding) => !finding.ok);
   console.log(
-    `\n${findings.length - failed.length}/${findings.length} checks passed.\n`
+    `\n${findings.length - failed.length}/${findings.length} checks passed.\n`,
   );
 
   if (failed.length > 0) {
@@ -252,7 +257,7 @@ async function main(): Promise<void> {
 
   console.log(
     "All checks passed. Record the variable pair above in .env.example, then Phase 2\n" +
-      "can rely on EVAL being available.\n"
+      "can rely on EVAL being available.\n",
   );
 }
 

@@ -107,8 +107,7 @@ export const playerRecordSchema = z.object({
 export type PlayerRecord = z.infer<typeof playerRecordSchema>;
 
 export type ValidatedDisplayName =
-  | { ok: true; displayName: string; key: string }
-  | { ok: false; error: string };
+  { ok: true; displayName: string; key: string } | { ok: false; error: string };
 
 /**
  * Trims, collapses internal whitespace, and checks the bounds and the character set.

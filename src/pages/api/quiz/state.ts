@@ -29,15 +29,18 @@ export const GET: APIRoute = async () => {
     console.warn("Session state requested but the store is not configured");
     return new Response(
       JSON.stringify({ error: "Sesja nie jest skonfigurowana." }),
-      { status: 503, headers: { "Content-Type": "application/json" } }
+      { status: 503, headers: { "Content-Type": "application/json" } },
     );
   }
 
   if (result.outcome === "invalid") {
-    console.error("Stored session state is invalid:", result.problems.join("; "));
+    console.error(
+      "Stored session state is invalid:",
+      result.problems.join("; "),
+    );
     return new Response(
       JSON.stringify({ error: "Stan sesji jest nieprawidłowy." }),
-      { status: 409, headers: { "Content-Type": "application/json" } }
+      { status: 409, headers: { "Content-Type": "application/json" } },
     );
   }
 
@@ -45,7 +48,7 @@ export const GET: APIRoute = async () => {
     console.error("Session read failed:", result.reason);
     return new Response(
       JSON.stringify({ error: "Nie udało się odczytać stanu sesji." }),
-      { status: 503, headers: { "Content-Type": "application/json" } }
+      { status: 503, headers: { "Content-Type": "application/json" } },
     );
   }
 
@@ -102,6 +105,9 @@ export const GET: APIRoute = async () => {
   // render "waiting for the host" from it.
   return new Response(JSON.stringify({ state: result.state, playerCount }), {
     status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
   });
 };

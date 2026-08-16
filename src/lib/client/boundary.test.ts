@@ -91,7 +91,8 @@ export function clientScriptOnly(rawSource: string): string {
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(source)) !== null) {
     const body = match[1] ?? "";
-    const bodyStart = match.index + match[0].length - body.length - "</script>".length;
+    const bodyStart =
+      match.index + match[0].length - body.length - "</script>".length;
     const startLine = source.slice(0, bodyStart).split("\n").length - 1;
 
     body.split("\n").forEach((line, offset) => {
@@ -122,7 +123,8 @@ function resolvesIntoForbiddenArea(specifier: string): boolean {
 function importsOn(line: string): { specifier: string; typeOnly: boolean }[] {
   const found: { specifier: string; typeOnly: boolean }[] = [];
 
-  const fromForm = /\b(?:import|export)\s+([^;]*?)\s+from\s*["']([^"']+)["']/.exec(line);
+  const fromForm =
+    /\b(?:import|export)\s+([^;]*?)\s+from\s*["']([^"']+)["']/.exec(line);
   if (fromForm) {
     found.push({
       specifier: fromForm[2]!,
@@ -178,7 +180,10 @@ function scannedFiles(): { label: string; source: string }[] {
       source: readFileSync(join(CLIENT_DIR, name), "utf8"),
     }));
 
-  const pageFiles = readdirSync(PAGES_DIR, { recursive: true, encoding: "utf8" })
+  const pageFiles = readdirSync(PAGES_DIR, {
+    recursive: true,
+    encoding: "utf8",
+  })
     .filter((name) => name.endsWith(".astro"))
     .map((name) => ({
       label: `src/pages/quiz/${name} (<script> blocks)`,
@@ -196,7 +201,10 @@ describe("client modules stay on the client side of the boundary", () => {
   it("detects a server-side env read", () => {
     // Assembled rather than written out, so this fixture does not become the violation
     // it describes when the scan is later widened to test files.
-    const fixture = ["const fine = 1;", `const leak = import.meta${".env"}.SECRET;`].join("\n");
+    const fixture = [
+      "const fine = 1;",
+      `const leak = import.meta${".env"}.SECRET;`,
+    ].join("\n");
 
     const violations = findBoundaryViolations(fixture);
 
@@ -217,7 +225,9 @@ describe("client modules stay on the client side of the boundary", () => {
     const violations = findBoundaryViolations(fixture);
 
     expect(violations.map((violation) => violation.number)).toEqual([3, 4]);
-    expect(violations.every((violation) => violation.rule === "import")).toBe(true);
+    expect(violations.every((violation) => violation.rule === "import")).toBe(
+      true,
+    );
   });
 
   it("reports nothing for a clean module", () => {
@@ -238,7 +248,7 @@ describe("client modules stay on the client side of the boundary", () => {
       "---",
       "<body>",
       "  <script>",
-      '    const leak = import.meta' + '.env.ABLY_API_KEY;',
+      "    const leak = import.meta" + ".env.ABLY_API_KEY;",
       "  </script>",
       "</body>",
     ].join("\n");
@@ -281,44 +291,55 @@ describe("client modules stay on the client side of the boundary", () => {
   it.each(
     readdirSync(PAGES_DIR, { recursive: true, encoding: "utf8" })
       .filter((name) => name.endsWith(".astro"))
-      .map((name) => ({ name, source: readFileSync(join(PAGES_DIR, name), "utf8") }))
-  )("$name only names the host secret behind the harness guard", ({ name, source }) => {
-    // Assembled so this file does not itself count as naming it.
-    const variable = `LIVEQUIZ_${"HOST"}_SECRET`;
-    if (!source.includes(variable)) return;
+      .map((name) => ({
+        name,
+        source: readFileSync(join(PAGES_DIR, name), "utf8"),
+      })),
+  )(
+    "$name only names the host secret behind the harness guard",
+    ({ name, source }) => {
+      // Assembled so this file does not itself count as naming it.
+      const variable = `LIVEQUIZ_${"HOST"}_SECRET`;
+      if (!source.includes(variable)) return;
 
-    expect(
-      source.includes("isHarnessEnabled()"),
-      `src/pages/quiz/${name} names ${variable} but does not call isHarnessEnabled().\n\n` +
-        `A page that puts the host secret in its markup hands the write credential to ` +
-        `every\ndevice that opens it. Only a page gated by the harness flag — which is ` +
-        `never set in\nProduction — may do that. The production host view has the host ` +
-        `type the secret into\na field and sends it as the x-livequiz-host-secret header ` +
-        `instead.`
-    ).toBe(true);
-  });
+      expect(
+        source.includes("isHarnessEnabled()"),
+        `src/pages/quiz/${name} names ${variable} but does not call isHarnessEnabled().\n\n` +
+          `A page that puts the host secret in its markup hands the write credential to ` +
+          `every\ndevice that opens it. Only a page gated by the harness flag — which is ` +
+          `never set in\nProduction — may do that. The production host view has the host ` +
+          `type the secret into\na field and sends it as the x-livequiz-host-secret header ` +
+          `instead.`,
+      ).toBe(true);
+    },
+  );
 
-  it.each(scannedFiles())("$label stays inside the boundary", ({ label, source }) => {
-    const violations = findBoundaryViolations(source);
+  it.each(scannedFiles())(
+    "$label stays inside the boundary",
+    ({ label, source }) => {
+      const violations = findBoundaryViolations(source);
 
-    expect(
-      violations,
-      `${label} crosses the client boundary:\n` +
-        violations
-          .map(({ line, number, rule }) => `  line ${number} (${rule}): ${line}`)
-          .join("\n") +
-        `\n\nBrowser code may not read "${ENV_READ}", and may not *value*-import from ` +
-        `src/quiz/\nor src/lib/session/. A quiz import ships every correct answer to ` +
-        `the phone being\nasked the question; a session import or an env read ships ` +
-        `server configuration and\npulls zod and the server SDKs into a bundle that has ` +
-        `to load on a venue network.\n\n` +
-        `Use \`import type\` (erased at compile time), or pass the value in from the ` +
-        `page\nvia \`define:vars\` — which is how the channel name, the snapshot event ` +
-        `and the\nplayer storage key already reach these modules.\n\n` +
-        `Astro frontmatter is NOT scanned and never was: it runs server-side and is ` +
-        `meant to\nread env and import server modules. Only what sits between ` +
-        `<script> and </script> is\nchecked, so do not "fix" this by deleting a ` +
-        `frontmatter import.`
-    ).toEqual([]);
-  });
+      expect(
+        violations,
+        `${label} crosses the client boundary:\n` +
+          violations
+            .map(
+              ({ line, number, rule }) => `  line ${number} (${rule}): ${line}`,
+            )
+            .join("\n") +
+          `\n\nBrowser code may not read "${ENV_READ}", and may not *value*-import from ` +
+          `src/quiz/\nor src/lib/session/. A quiz import ships every correct answer to ` +
+          `the phone being\nasked the question; a session import or an env read ships ` +
+          `server configuration and\npulls zod and the server SDKs into a bundle that has ` +
+          `to load on a venue network.\n\n` +
+          `Use \`import type\` (erased at compile time), or pass the value in from the ` +
+          `page\nvia \`define:vars\` — which is how the channel name, the snapshot event ` +
+          `and the\nplayer storage key already reach these modules.\n\n` +
+          `Astro frontmatter is NOT scanned and never was: it runs server-side and is ` +
+          `meant to\nread env and import server modules. Only what sits between ` +
+          `<script> and </script> is\nchecked, so do not "fix" this by deleting a ` +
+          `frontmatter import.`,
+      ).toEqual([]);
+    },
+  );
 });

@@ -86,7 +86,8 @@ function resolveConfig(): Config | null {
   const rawBase = arg("base") ?? env("LIVEQUIZ_BASE_URL");
   const hostSecret = env("LIVEQUIZ_HOST_SECRET");
   const redisUrl = env("KV_REST_API_URL") ?? env("UPSTASH_REDIS_REST_URL");
-  const redisToken = env("KV_REST_API_TOKEN") ?? env("UPSTASH_REDIS_REST_TOKEN");
+  const redisToken =
+    env("KV_REST_API_TOKEN") ?? env("UPSTASH_REDIS_REST_TOKEN");
 
   let baseUrl: string | undefined;
   if (rawBase) {
@@ -100,19 +101,23 @@ function resolveConfig(): Config | null {
   record(
     Boolean(baseUrl),
     "target base URL",
-    baseUrl ?? (rawBase ? `"${rawBase}" is not a URL` : "absent")
+    baseUrl ?? (rawBase ? `"${rawBase}" is not a URL` : "absent"),
   );
-  record(Boolean(hostSecret), "env LIVEQUIZ_HOST_SECRET", hostSecret ? "present" : "absent");
+  record(
+    Boolean(hostSecret),
+    "env LIVEQUIZ_HOST_SECRET",
+    hostSecret ? "present" : "absent",
+  );
   record(
     Boolean(redisUrl && redisToken),
     "Upstash credentials",
-    redisUrl && redisToken ? "present" : "absent"
+    redisUrl && redisToken ? "present" : "absent",
   );
 
   if (!baseUrl || !hostSecret || !redisUrl || !redisToken) {
     console.log(
       "\n  → Pull credentials locally (`vercel env pull`) or export them by hand, and\n" +
-        "    name the target: bun scripts/reset-quiz.ts --base=https://<production-url>\n"
+        "    name the target: bun scripts/reset-quiz.ts --base=https://<production-url>\n",
     );
     return null;
   }
@@ -121,9 +126,11 @@ function resolveConfig(): Config | null {
 }
 
 /** The confirmation version `purge` demands whenever a readable session exists. */
-async function readVersion(
-  config: Config
-): Promise<{ version: number | null; phase: string | null; error: string | null }> {
+async function readVersion(config: Config): Promise<{
+  version: number | null;
+  phase: string | null;
+  error: string | null;
+}> {
   try {
     const response = await fetch(`${config.baseUrl}/api/quiz/state`, {
       headers: { "Cache-Control": "no-store" },
@@ -133,7 +140,8 @@ async function readVersion(
       state?: { version?: unknown; phase?: unknown } | null;
     };
     return {
-      version: typeof body.state?.version === "number" ? body.state.version : null,
+      version:
+        typeof body.state?.version === "number" ? body.state.version : null,
       phase: typeof body.state?.phase === "string" ? body.state.phase : null,
       error: null,
     };
@@ -181,7 +189,8 @@ async function purge(config: Config, version: number | null): Promise<boolean> {
     /* a non-JSON body is reported through the status below */
   }
 
-  const removed = typeof body.keysRemoved === "number" ? body.keysRemoved : null;
+  const removed =
+    typeof body.keysRemoved === "number" ? body.keysRemoved : null;
   const detail =
     `${response.status}` +
     (removed !== null ? `, ${removed} key(s) removed` : "") +
@@ -193,7 +202,7 @@ async function purge(config: Config, version: number | null): Promise<boolean> {
       false,
       "purge",
       `${detail}. Nothing was deleted — the session moved between the read and the ` +
-        "write, which means someone else is driving it. Re-run rather than forcing"
+        "write, which means someone else is driving it. Re-run rather than forcing",
     );
     return false;
   }
@@ -206,7 +215,7 @@ async function purge(config: Config, version: number | null): Promise<boolean> {
     note(
       "closing broadcast",
       "the data is gone but the closing snapshot never reached the room, so a device " +
-        "still holding the old snapshot shows a stale screen until it reloads"
+        "still holding the old snapshot shows a stale screen until it reloads",
     );
     return true;
   }
@@ -244,7 +253,7 @@ async function main(): Promise<void> {
   if (state.error) {
     record(false, "read the current session", state.error);
     console.log(
-      "\n  → The confirmation version could not be read, so the purge was not attempted.\n"
+      "\n  → The confirmation version could not be read, so the purge was not attempted.\n",
     );
     process.exit(1);
   }
@@ -254,7 +263,7 @@ async function main(): Promise<void> {
     "read the current session",
     state.version === null
       ? "no readable session — purging any residue anyway"
-      : `version ${state.version}, phase "${state.phase ?? "unknown"}"`
+      : `version ${state.version}, phase "${state.phase ?? "unknown"}"`,
   );
 
   const purged = await purge(config, state.version);
@@ -270,14 +279,14 @@ async function main(): Promise<void> {
     "namespace is empty",
     survivors.length === 0
       ? `nothing matches ${SESSION_NAMESPACE}*`
-      : `${survivors.length} key(s) survived: ${survivors.join(", ")}`
+      : `${survivors.length} key(s) survived: ${survivors.join(", ")}`,
   );
 
   if (registeredSurvivors.length > 0) {
     note(
       "registered keys survived",
       "the purge reported on them but they are still there — this is the purge not " +
-        "doing its job, not a gap in the registry"
+        "doing its job, not a gap in the registry",
     );
   }
 
@@ -285,12 +294,14 @@ async function main(): Promise<void> {
     note(
       "unregistered keys survived",
       `${unregisteredSurvivors.join(", ")} — outside the registry, so no purge and no ` +
-        "TTL re-arm reaches them. Add them to src/lib/session/keys.ts or delete them by hand"
+        "TTL re-arm reaches them. Add them to src/lib/session/keys.ts or delete them by hand",
     );
   }
 
   const failed = findings.filter((finding) => !finding.ok);
-  console.log(`\n${findings.length - failed.length}/${findings.length} checks passed.\n`);
+  console.log(
+    `\n${findings.length - failed.length}/${findings.length} checks passed.\n`,
+  );
 
   if (failed.length > 0) {
     console.log("Failed checks:");
@@ -304,7 +315,7 @@ async function main(): Promise<void> {
       "  - Attendee phones still hold their playerId in localStorage. On reload they\n" +
       "    call /api/quiz/join with it, get a 404, clear it and show the name form —\n" +
       "    so reload them, and treat it as the check that this path works.\n" +
-      "  - The host tab keeps its secret in sessionStorage, so it is not re-entered.\n"
+      "  - The host tab keeps its secret in sessionStorage, so it is not re-entered.\n",
   );
 
   if (!purged) process.exit(1);

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { normalizeAnswer, normalizePolish } from "../../quiz/index";
-import { foldWord, MAX_WORD_LENGTH, validateWord, WORD_CLOUD_SIZE } from "./words";
+import {
+  foldWord,
+  MAX_WORD_LENGTH,
+  validateWord,
+  WORD_CLOUD_SIZE,
+} from "./words";
 
 /**
  * The word-cloud domain rule (roadmap S-08, PRD FR-012/FR-015). Mirrors
@@ -119,7 +124,11 @@ describe("foldWord", () => {
 describe("validateWord accepts one word", () => {
   it("returns the trimmed word and its fold", () => {
     const result = validateWord("  Halucynacja  ");
-    expect(result).toEqual({ ok: true, word: "Halucynacja", key: "halucynacja" });
+    expect(result).toEqual({
+      ok: true,
+      word: "Halucynacja",
+      key: "halucynacja",
+    });
   });
 
   it("keeps the typed form separate from the counted form", () => {
@@ -130,12 +139,17 @@ describe("validateWord accepts one word", () => {
     expect(result.key).toBe("skynet");
   });
 
-  it.each(["robot", "GPT-4", "e-mail", "d'Artagnan", "sztuczna.inteligencja", "AI_2026", "ł"])(
-    "accepts %s",
-    (word) => {
-      expect(validateWord(word).ok).toBe(true);
-    }
-  );
+  it.each([
+    "robot",
+    "GPT-4",
+    "e-mail",
+    "d'Artagnan",
+    "sztuczna.inteligencja",
+    "AI_2026",
+    "ł",
+  ])("accepts %s", (word) => {
+    expect(validateWord(word).ok).toBe(true);
+  });
 
   it("accepts a word of exactly the maximum length", () => {
     expect(validateWord("a".repeat(MAX_WORD_LENGTH)).ok).toBe(true);
@@ -190,12 +204,12 @@ describe("validateWord refuses, with a message rather than a silent repair", () 
     "refuses internal whitespace: %s",
     (raw) => {
       expect(refusal(raw)).toBe("Wpisz tylko jedno słowo — bez spacji.");
-    }
+    },
   );
 
   it("refuses a word one character over the bound", () => {
     expect(refusal("a".repeat(MAX_WORD_LENGTH + 1))).toBe(
-      `Słowo może mieć najwyżej ${MAX_WORD_LENGTH} znaki.`
+      `Słowo może mieć najwyżej ${MAX_WORD_LENGTH} znaki.`,
     );
   });
 
@@ -207,8 +221,10 @@ describe("validateWord refuses, with a message rather than a silent repair", () 
   it.each(["🤖", "robot🤖", "słowo!", "a+b", "cena$", "<b>", "\\"])(
     "refuses a disallowed character: %s",
     (raw) => {
-      expect(refusal(raw)).toBe("Słowo może zawierać tylko litery, cyfry i znaki . _ - '");
-    }
+      expect(refusal(raw)).toBe(
+        "Słowo może zawierać tylko litery, cyfry i znaki . _ - '",
+      );
+    },
   );
 
   /**

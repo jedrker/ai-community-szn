@@ -113,21 +113,23 @@ const answerRecordShape = z.object({
  * Deliberately **not** a check that `text` is non-null when `word` is: a record is allowed to
  * carry neither, and every other kind carries neither.
  */
-export const answerRecordSchema = answerRecordShape.superRefine((record, ctx) => {
-  if (record.word === null) return;
+export const answerRecordSchema = answerRecordShape.superRefine(
+  (record, ctx) => {
+    if (record.word === null) return;
 
-  if (record.text === null || foldWord(record.text) !== record.word) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["word"],
-      message:
-        `word ("${record.word}") must be foldWord(text) — ` +
-        `text is ${record.text === null ? "null" : `"${record.text}"`}. ` +
-        "The projector renders the fold and the attendee's phone echoes the raw text; " +
-        "a mismatch shows the room one word and its author another.",
-    });
-  }
-});
+    if (record.text === null || foldWord(record.text) !== record.word) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["word"],
+        message:
+          `word ("${record.word}") must be foldWord(text) — ` +
+          `text is ${record.text === null ? "null" : `"${record.text}"`}. ` +
+          "The projector renders the fold and the attendee's phone echoes the raw text; " +
+          "a mismatch shows the room one word and its author another.",
+      });
+    }
+  },
+);
 
 export type AnswerRecord = z.infer<typeof answerRecordSchema>;
 

@@ -20,7 +20,7 @@ const events = defineCollection({
           title: z.string(),
           file: z.string(),
           speaker: z.string().optional(),
-        })
+        }),
       )
       .default([]),
     partner: z
@@ -36,7 +36,7 @@ const events = defineCollection({
           name: z.string(),
           logo: z.string(),
           url: z.string().url(),
-        })
+        }),
       )
       .default([]),
     status: z.enum(["upcoming", "past"]),

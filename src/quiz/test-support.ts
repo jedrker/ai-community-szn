@@ -30,19 +30,27 @@ export interface QuestionFilter {
   readonly scored?: boolean;
 }
 
-function matches(question: Question, kind: string, filter: QuestionFilter): boolean {
+function matches(
+  question: Question,
+  kind: string,
+  filter: QuestionFilter,
+): boolean {
   if (question.kind !== kind) return false;
-  if (filter.scored !== undefined && (question.points !== null) !== filter.scored) return false;
+  if (
+    filter.scored !== undefined &&
+    (question.points !== null) !== filter.scored
+  )
+    return false;
   return true;
 }
 
 /** Every question of `kind` in authoring order, possibly empty. */
 export function questionsOfKind<K extends Question["kind"]>(
   kind: K,
-  filter: QuestionFilter = {}
+  filter: QuestionFilter = {},
 ): ReadonlyArray<OfKind<K>> {
   return quiz.questions.filter((question): question is OfKind<K> =>
-    matches(question, kind, filter)
+    matches(question, kind, filter),
   );
 }
 
@@ -56,16 +64,20 @@ export function questionsOfKind<K extends Question["kind"]>(
  */
 export function questionOfKind<K extends Question["kind"]>(
   kind: K,
-  filter: QuestionFilter = {}
+  filter: QuestionFilter = {},
 ): OfKind<K> {
   const [first] = questionsOfKind(kind, filter);
   if (first === undefined) {
     const scoring =
-      filter.scored === undefined ? "" : filter.scored ? " scored" : " unscored (points: null)";
+      filter.scored === undefined
+        ? ""
+        : filter.scored
+          ? " scored"
+          : " unscored (points: null)";
     throw new Error(
       `The committed quiz has no${scoring} "${kind}" question, so this test has nothing ` +
         `to run against. Tests derive their fixtures by kind rather than by id — add one ` +
-        `to src/quiz/definition.ts, or retire the coverage deliberately.`
+        `to src/quiz/definition.ts, or retire the coverage deliberately.`,
     );
   }
   return first;

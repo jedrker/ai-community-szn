@@ -8,7 +8,11 @@ import {
 } from "../../../../lib/session/host";
 import { publishSnapshot } from "../../../../lib/session/realtime";
 import { endedSessionState } from "../../../../lib/session/state";
-import { endSession, purgeSession, readSession } from "../../../../lib/session/store";
+import {
+  endSession,
+  purgeSession,
+  readSession,
+} from "../../../../lib/session/store";
 
 /**
  * Removes the room's data now (roadmap F-03).
@@ -43,7 +47,9 @@ export const POST: APIRoute = async ({ request }) => {
   if (current.outcome === "unconfigured") {
     return toResponse({
       status: 503,
-      body: { error: "Sesja nie jest skonfigurowana. Sprawdź zmienne środowiskowe." },
+      body: {
+        error: "Sesja nie jest skonfigurowana. Sprawdź zmienne środowiskowe.",
+      },
     });
   }
 
@@ -79,7 +85,7 @@ export const POST: APIRoute = async ({ request }) => {
         keysRemoved: purged.keysRemoved,
         note: purged.keysRemoved === 0 ? "nothing-to-purge" : "residue-removed",
       }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      { status: 200, headers: { "Content-Type": "application/json" } },
     );
   }
 
@@ -129,10 +135,15 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     if (written.outcome !== "applied") {
-      console.error("Purge could not write the terminal state:", written.reason);
+      console.error(
+        "Purge could not write the terminal state:",
+        written.reason,
+      );
       return toResponse({
         status: 503,
-        body: { error: "Nie udało się zakończyć sesji przed usunięciem danych." },
+        body: {
+          error: "Nie udało się zakończyć sesji przed usunięciem danych.",
+        },
       });
     }
 
@@ -166,12 +177,16 @@ export const POST: APIRoute = async ({ request }) => {
         error:
           "Dane zostały usunięte, ale informacja o zakończeniu nie dotarła do urządzeń.",
       }),
-      { status: 502, headers: { "Content-Type": "application/json" } }
+      { status: 502, headers: { "Content-Type": "application/json" } },
     );
   }
 
   return new Response(
-    JSON.stringify({ purged: true, keysRemoved: purged.keysRemoved, state: terminal }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
+    JSON.stringify({
+      purged: true,
+      keysRemoved: purged.keysRemoved,
+      state: terminal,
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
   );
 };

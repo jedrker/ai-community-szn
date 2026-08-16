@@ -12,7 +12,10 @@ const links = [
   <div class="max-w-6xl mx-auto flex items-center justify-between">
     <a href="/" class="flex items-center gap-2">
       <img src="/images/logo/BRAVE-WHITE.svg" alt="BRAVE" class="h-6 md:h-7" />
-      <span class="text-[10px] md:text-xs text-white font-semibold leading-tight">AI Community<br/>Szczecin</span>
+      <span
+        class="text-[10px] md:text-xs text-white font-semibold leading-tight"
+        >AI Community<br />Szczecin</span
+      >
     </a>
 
     <!-- Desktop nav -->
@@ -53,7 +56,8 @@ const links = [
   id="drawer-backdrop"
   class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300 md:hidden"
   aria-hidden="true"
-></div>
+>
+</div>
 
 <!-- Mobile drawer -->
 <div
@@ -61,18 +65,31 @@ const links = [
   class="fixed top-0 right-0 z-50 h-full w-[75vw] max-w-[320px] bg-surface-secondary border-l border-surface-border translate-x-full transition-transform duration-300 ease-out md:hidden"
 >
   <!-- Drawer header -->
-  <div class="flex items-center justify-between px-6 py-4 border-b border-surface-border">
+  <div
+    class="flex items-center justify-between px-6 py-4 border-b border-surface-border"
+  >
     <a href="/" class="flex items-center gap-2">
       <img src="/images/logo/BRAVE-WHITE.svg" alt="BRAVE" class="h-6" />
-      <span class="text-[10px] text-white font-semibold leading-tight">AI Community<br/>Szczecin</span>
+      <span class="text-[10px] text-white font-semibold leading-tight"
+        >AI Community<br />Szczecin</span
+      >
     </a>
     <button
       id="drawer-close"
       class="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-white transition-colors"
       aria-label="Zamknij menu"
     >
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+      <svg
+        class="w-6 h-6"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M6 18L18 6M6 6l12 12"></path>
       </svg>
     </button>
   </div>
@@ -106,7 +123,9 @@ const links = [
   </div>
 
   <!-- Drawer footer -->
-  <div class="absolute bottom-0 left-0 right-0 px-6 py-6 border-t border-surface-border">
+  <div
+    class="absolute bottom-0 left-0 right-0 px-6 py-6 border-t border-surface-border"
+  >
     <p class="text-xs text-text-secondary">Brave AI Community Szczecin</p>
   </div>
 </div>
@@ -119,22 +138,40 @@ const links = [
     height: 2px;
     background-color: currentColor;
     border-radius: 1px;
-    transition: transform 0.3s ease, opacity 0.3s ease;
+    transition:
+      transform 0.3s ease,
+      opacity 0.3s ease;
   }
-  .hamburger-line-1 { transform: translateY(-6px); }
-  .hamburger-line-2 { transform: translateY(0); }
-  .hamburger-line-3 { transform: translateY(6px); }
+  .hamburger-line-1 {
+    transform: translateY(-6px);
+  }
+  .hamburger-line-2 {
+    transform: translateY(0);
+  }
+  .hamburger-line-3 {
+    transform: translateY(6px);
+  }
 
   /* Hamburger → X animation */
-  .is-open .hamburger-line-1 { transform: rotate(45deg); }
-  .is-open .hamburger-line-2 { opacity: 0; }
-  .is-open .hamburger-line-3 { transform: rotate(-45deg); }
+  .is-open .hamburger-line-1 {
+    transform: rotate(45deg);
+  }
+  .is-open .hamburger-line-2 {
+    opacity: 0;
+  }
+  .is-open .hamburger-line-3 {
+    transform: rotate(-45deg);
+  }
 
   /* Drawer link staggered entrance */
   .drawer-link {
     opacity: 0;
     transform: translateX(16px);
-    transition: opacity 0.3s ease, transform 0.3s ease, background-color 0.2s ease, color 0.2s ease;
+    transition:
+      opacity 0.3s ease,
+      transform 0.3s ease,
+      background-color 0.2s ease,
+      color 0.2s ease;
   }
   .drawer-open .drawer-link {
     opacity: 1;

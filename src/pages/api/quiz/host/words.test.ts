@@ -28,9 +28,13 @@ const { quiz } = await import("../../../../quiz/index");
 const SECRET = "a-very-long-test-secret-value";
 
 /** The word-cloud question, found by kind rather than by position. */
-const WORD_CLOUD = quiz.questions.find((question) => question.kind === "word-cloud")!;
+const WORD_CLOUD = quiz.questions.find(
+  (question) => question.kind === "word-cloud",
+)!;
 /** A question of another kind, for the refusal below. */
-const CHOICE = quiz.questions.find((question) => question.kind === "single-choice")!;
+const CHOICE = quiz.questions.find(
+  (question) => question.kind === "single-choice",
+)!;
 
 const EMPTY = { answered: 0, distinct: 0, words: [] };
 
@@ -46,7 +50,10 @@ const EMPTY = { answered: 0, distinct: 0, words: [] };
 function call({
   secret = SECRET,
   questionId = WORD_CLOUD.id,
-}: { secret?: string | null; questionId?: string | null } = {}): Promise<Response> {
+}: {
+  secret?: string | null;
+  questionId?: string | null;
+} = {}): Promise<Response> {
   const headers: Record<string, string> = {};
   if (secret !== null) headers[HOST_SECRET_HEADER] = secret;
 
@@ -125,7 +132,10 @@ describe("GET /api/quiz/host/words", () => {
     readWordCloudMock.mockResolvedValue({
       answered: 60,
       distinct: 47,
-      words: Array.from({ length: 30 }, (_, index) => ({ word: `w${index}`, count: 1 })),
+      words: Array.from({ length: 30 }, (_, index) => ({
+        word: `w${index}`,
+        count: 1,
+      })),
     });
 
     const payload = await body(await call());
@@ -196,7 +206,9 @@ describe("the host secret gates it", () => {
   });
 
   it("carries no-store even on a refusal", async () => {
-    expect((await call({ secret: null })).headers.get("Cache-Control")).toBe("no-store");
+    expect((await call({ secret: null })).headers.get("Cache-Control")).toBe(
+      "no-store",
+    );
   });
 });
 
@@ -227,7 +239,9 @@ describe("an unusable questionId is refused, never guessed", () => {
     const response = await call({ questionId: CHOICE.id });
 
     expect(response.status).toBe(400);
-    expect((await body(response)).error).toBe("To pytanie nie jest chmurą słów.");
+    expect((await body(response)).error).toBe(
+      "To pytanie nie jest chmurą słów.",
+    );
     expect(readWordCloudMock).not.toHaveBeenCalled();
   });
 });
@@ -241,7 +255,9 @@ describe("a store failure is not an empty cloud", () => {
     // The page takes its staleness path and holds the cloud it has. A 200 with no words
     // would tell the room it had written nothing.
     expect(response.status).toBe(503);
-    expect((await body(response)).error).toBe("Nie udało się odczytać chmury słów.");
+    expect((await body(response)).error).toBe(
+      "Nie udało się odczytać chmury słów.",
+    );
   });
 
   it("keeps the two absences distinguishable", async () => {
@@ -271,7 +287,10 @@ describe("the route's shape", () => {
    * force the file to choose between explaining itself and passing. What the gate is about
    * is what the code can *call*, which lives in the code.
    */
-  const source = readFileSync(fileURLToPath(new URL("./words.ts", import.meta.url)), "utf8")
+  const source = readFileSync(
+    fileURLToPath(new URL("./words.ts", import.meta.url)),
+    "utf8",
+  )
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/.*$/gm, "");
 
@@ -289,10 +308,16 @@ describe("the route's shape", () => {
      * moves it forward and inflates every award after it, silently — and this route is
      * polled while a question is open, which is precisely when that matters.
      */
-    for (const forbidden of ["writeSession", "endSession", "applyHostAction", "createSession"]) {
-      expect(source, `words.ts must not reference ${forbidden} — it is a read`).not.toContain(
-        forbidden
-      );
+    for (const forbidden of [
+      "writeSession",
+      "endSession",
+      "applyHostAction",
+      "createSession",
+    ]) {
+      expect(
+        source,
+        `words.ts must not reference ${forbidden} — it is a read`,
+      ).not.toContain(forbidden);
     }
   });
 

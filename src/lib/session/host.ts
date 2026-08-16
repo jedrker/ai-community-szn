@@ -1,6 +1,11 @@
 import { logSessionEvent } from "./log";
 import { publishSnapshot } from "./realtime";
-import { readPlayerCount, readSession, writeSession, type WriteResult } from "./store";
+import {
+  readPlayerCount,
+  readSession,
+  writeSession,
+  type WriteResult,
+} from "./store";
 import { type SessionState } from "./state";
 
 /**
@@ -96,7 +101,7 @@ export async function extractSecret(request: Request): Promise<string | null> {
  * only have learned by reading current state.
  */
 export async function extractHostFields(
-  request: Request
+  request: Request,
 ): Promise<{ secret: string | null; confirmVersion: number | null }> {
   const header = request.headers.get(HOST_SECRET_HEADER);
 
@@ -114,8 +119,7 @@ export async function extractHostFields(
 
   const rawVersion = form?.get("version");
   const parsed = typeof rawVersion === "string" ? Number(rawVersion) : NaN;
-  const confirmVersion =
-    Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  const confirmVersion = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 
   return { secret, confirmVersion };
 }
@@ -125,7 +129,9 @@ export function authorizeHost(secret: string | null): { ok: boolean } {
 
   // Logged so a host tailing the stream sees rejected attempts. No secret
   // material in the log line — neither the expected value nor what was offered.
-  logSessionEvent("session.auth.rejected", { reason: "host secret did not match" });
+  logSessionEvent("session.auth.rejected", {
+    reason: "host secret did not match",
+  });
   return { ok: false };
 }
 
@@ -152,7 +158,7 @@ export function unauthorized(): HostActionOutcome {
 export async function applyHostAction(
   nextFrom: (
     current: SessionState,
-    now: number
+    now: number,
   ) => SessionState | null | Promise<SessionState | null>,
   now: number,
   /**
@@ -164,7 +170,10 @@ export async function applyHostAction(
    * outcomes, each with its own Polish message and status — exists once for every
    * verb that writes.
    */
-  write: (expectedVersion: number, next: SessionState) => Promise<WriteResult> = writeSession,
+  write: (
+    expectedVersion: number,
+    next: SessionState,
+  ) => Promise<WriteResult> = writeSession,
   /**
    * The version the *caller* already validated against, when it validated one.
    *
@@ -182,7 +191,7 @@ export async function applyHostAction(
    * Omitted by the three flow verbs, which have nothing to confirm — a replayed
    * `advance` is a harmless no-op by design.
    */
-  expectedVersion?: number
+  expectedVersion?: number,
 ): Promise<HostActionOutcome> {
   const current = await readSession();
 
@@ -204,7 +213,10 @@ export async function applyHostAction(
   // than commit something the caller never confirmed — reported as `stale`,
   // which the host already reads as "already applied, you are not where you
   // thought you were", so this needs no new vocabulary at the control view.
-  if (expectedVersion !== undefined && expectedVersion !== current.state.version) {
+  if (
+    expectedVersion !== undefined &&
+    expectedVersion !== current.state.version
+  ) {
     logSessionEvent("session.action.stale", { version: current.state.version });
     return {
       status: 200,
@@ -248,7 +260,10 @@ export async function applyHostAction(
   const next =
     computed === null
       ? null
-      : { ...computed, playerCount: (await readPlayerCount()) ?? current.state.playerCount };
+      : {
+          ...computed,
+          playerCount: (await readPlayerCount()) ?? current.state.playerCount,
+        };
 
   if (next === null) {
     // Nothing to do — report the unchanged state rather than inventing an error.
@@ -276,7 +291,9 @@ export async function applyHostAction(
     // the host sees where the room actually is.
     const fresh = await readSession();
     const state =
-      fresh.outcome === "ok" && fresh.state !== null ? fresh.state : current.state;
+      fresh.outcome === "ok" && fresh.state !== null
+        ? fresh.state
+        : current.state;
 
     return {
       status: 200,

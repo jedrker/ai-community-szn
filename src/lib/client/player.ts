@@ -78,7 +78,7 @@ export function writePlayer(storageKey: string, player: StoredPlayer): void {
   try {
     window.localStorage.setItem(
       storageKey,
-      JSON.stringify({ id: player.id, displayName: player.displayName })
+      JSON.stringify({ id: player.id, displayName: player.displayName }),
     );
   } catch {
     // Private mode, quota, disabled storage. Nothing to do and nothing to report.

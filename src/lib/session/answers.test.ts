@@ -28,7 +28,7 @@ describe("the answer field name", () => {
     // The read path and the write path both call this. A disagreement about the
     // separator would present as "answered, but the reveal says they did not".
     expect(answerField(valid.questionId, valid.playerId)).toBe(
-      answerField(valid.questionId, valid.playerId)
+      answerField(valid.questionId, valid.playerId),
     );
   });
 
@@ -60,21 +60,28 @@ describe("the answer record schema", () => {
   });
 
   it("accepts an empty selection — a submitted non-answer is still an answer", () => {
-    expect(answerRecordSchema.safeParse({ ...valid, optionIds: [] }).success).toBe(true);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, optionIds: [] }).success,
+    ).toBe(true);
   });
 
   it("accepts a zero award on a wrong or unscored answer", () => {
     expect(
-      answerRecordSchema.safeParse({ ...valid, correct: false, awarded: 0 }).success
+      answerRecordSchema.safeParse({ ...valid, correct: false, awarded: 0 })
+        .success,
     ).toBe(true);
   });
 
   it("refuses a negative award", () => {
-    expect(answerRecordSchema.safeParse({ ...valid, awarded: -1 }).success).toBe(false);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, awarded: -1 }).success,
+    ).toBe(false);
   });
 
   it("refuses a negative elapsed time", () => {
-    expect(answerRecordSchema.safeParse({ ...valid, elapsedMs: -1 }).success).toBe(false);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, elapsedMs: -1 }).success,
+    ).toBe(false);
   });
 });
 
@@ -110,17 +117,23 @@ describe("the typed-answer field (roadmap S-05)", () => {
     // that breaks its own shape can be stopped from being stored.
     const tooLong = "a".repeat(MAX_TEXT_ANSWER_LENGTH + 1);
 
-    expect(answerRecordSchema.safeParse({ ...valid, text: tooLong }).success).toBe(false);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, text: tooLong }).success,
+    ).toBe(false);
   });
 
   it("accepts text exactly at the bound", () => {
     const atBound = "a".repeat(MAX_TEXT_ANSWER_LENGTH);
 
-    expect(answerRecordSchema.safeParse({ ...valid, text: atBound }).success).toBe(true);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, text: atBound }).success,
+    ).toBe(true);
   });
 
   it("refuses a non-string, non-null text", () => {
-    expect(answerRecordSchema.safeParse({ ...valid, text: 42 }).success).toBe(false);
+    expect(answerRecordSchema.safeParse({ ...valid, text: 42 }).success).toBe(
+      false,
+    );
   });
 });
 
@@ -154,15 +167,21 @@ describe("the numeric-guess field (roadmap S-06)", () => {
   ])("refuses a non-finite value (%s)", (_label, value) => {
     // `Infinity` serialises to `null` through JSON, so a record holding one would
     // round-trip into a record that parses and has lost its answer.
-    expect(answerRecordSchema.safeParse({ ...valid, value }).success).toBe(false);
+    expect(answerRecordSchema.safeParse({ ...valid, value }).success).toBe(
+      false,
+    );
   });
 
   it("accepts a negative guess — wrong is not malformed", () => {
-    expect(answerRecordSchema.safeParse({ ...valid, value: -12 }).success).toBe(true);
+    expect(answerRecordSchema.safeParse({ ...valid, value: -12 }).success).toBe(
+      true,
+    );
   });
 
   it("refuses a non-number, non-null value", () => {
-    expect(answerRecordSchema.safeParse({ ...valid, value: "67" }).success).toBe(false);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, value: "67" }).success,
+    ).toBe(false);
   });
 });
 
@@ -195,7 +214,9 @@ describe("the word field (roadmap S-08)", () => {
   it("refuses a word longer than the bound the route enforces", () => {
     const tooLong = "a".repeat(MAX_WORD_LENGTH + 1);
 
-    expect(answerRecordSchema.safeParse({ ...valid, word: tooLong }).success).toBe(false);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, word: tooLong }).success,
+    ).toBe(false);
   });
 
   it("accepts a word exactly at the bound", () => {
@@ -204,12 +225,15 @@ describe("the word field (roadmap S-08)", () => {
     // `text` must match, or the fold invariant below refuses it for a different reason — which
     // would leave this test passing for the wrong one.
     expect(
-      answerRecordSchema.safeParse({ ...valid, text: atBound, word: atBound }).success
+      answerRecordSchema.safeParse({ ...valid, text: atBound, word: atBound })
+        .success,
     ).toBe(true);
   });
 
   it("refuses a non-string, non-null word", () => {
-    expect(answerRecordSchema.safeParse({ ...valid, word: 42 }).success).toBe(false);
+    expect(answerRecordSchema.safeParse({ ...valid, word: 42 }).success).toBe(
+      false,
+    );
   });
 
   it("bounds a word more tightly than free text, because it goes on a projector", () => {
@@ -218,9 +242,12 @@ describe("the word field (roadmap S-08)", () => {
     // answer at 25 is fine.
     expect(MAX_WORD_LENGTH).toBeLessThan(MAX_TEXT_ANSWER_LENGTH);
     const between = "a".repeat(MAX_WORD_LENGTH + 1);
-    expect(answerRecordSchema.safeParse({ ...valid, text: between }).success).toBe(true);
     expect(
-      answerRecordSchema.safeParse({ ...valid, text: between, word: between }).success
+      answerRecordSchema.safeParse({ ...valid, text: between }).success,
+    ).toBe(true);
+    expect(
+      answerRecordSchema.safeParse({ ...valid, text: between, word: between })
+        .success,
     ).toBe(false);
   });
 
@@ -235,46 +262,64 @@ describe("the word field (roadmap S-08)", () => {
   describe("word must be the fold of text", () => {
     it("accepts a record whose word is the fold of its text", () => {
       expect(
-        answerRecordSchema.safeParse({ ...valid, text: "Żółw", word: "żółw" }).success
+        answerRecordSchema.safeParse({ ...valid, text: "Żółw", word: "żółw" })
+          .success,
       ).toBe(true);
     });
 
     it("refuses a word that is not the fold of the stored text", () => {
       expect(
-        answerRecordSchema.safeParse({ ...valid, text: "kawa", word: "herbata" }).success
+        answerRecordSchema.safeParse({
+          ...valid,
+          text: "kawa",
+          word: "herbata",
+        }).success,
       ).toBe(false);
     });
 
     it("refuses an unfolded word — the case the single current writer cannot produce", () => {
       // `validateWord` folds before storing, so this is what a *second* writer would get wrong.
       expect(
-        answerRecordSchema.safeParse({ ...valid, text: "KAWA", word: "KAWA" }).success
+        answerRecordSchema.safeParse({ ...valid, text: "KAWA", word: "KAWA" })
+          .success,
       ).toBe(false);
     });
 
     it("refuses a word with no text beside it", () => {
-      expect(answerRecordSchema.safeParse({ ...valid, text: null, word: "kawa" }).success).toBe(
-        false
-      );
+      expect(
+        answerRecordSchema.safeParse({ ...valid, text: null, word: "kawa" })
+          .success,
+      ).toBe(false);
     });
 
     it("still allows a record carrying neither, which every other kind is", () => {
-      expect(answerRecordSchema.safeParse({ ...valid, text: null, word: null }).success).toBe(
-        true
-      );
+      expect(
+        answerRecordSchema.safeParse({ ...valid, text: null, word: null })
+          .success,
+      ).toBe(true);
     });
 
     it("still allows text with no word — the free-text kind", () => {
       expect(
-        answerRecordSchema.safeParse({ ...valid, text: "halucynacje", word: null }).success
+        answerRecordSchema.safeParse({
+          ...valid,
+          text: "halucynacje",
+          word: null,
+        }).success,
       ).toBe(true);
     });
 
     it("names the field in its message, so a failure points at the right one", () => {
-      const parsed = answerRecordSchema.safeParse({ ...valid, text: "kawa", word: "herbata" });
+      const parsed = answerRecordSchema.safeParse({
+        ...valid,
+        text: "kawa",
+        word: "herbata",
+      });
 
       expect(parsed.success).toBe(false);
-      expect(parsed.success === false && parsed.error.issues[0]?.path).toEqual(["word"]);
+      expect(parsed.success === false && parsed.error.issues[0]?.path).toEqual([
+        "word",
+      ]);
     });
   });
 });

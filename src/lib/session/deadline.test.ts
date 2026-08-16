@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { Question } from "../../quiz/schema";
-import { SUBMISSION_GRACE_MS, deadlineAt, isSubmissionExpired } from "./deadline";
+import {
+  SUBMISSION_GRACE_MS,
+  deadlineAt,
+  isSubmissionExpired,
+} from "./deadline";
 
 /**
  * The submission window (roadmap S-11, FR-020).
@@ -55,7 +59,9 @@ describe("deadlineAt", () => {
     // The two must not be conflated: this value is what a countdown renders, and the
     // grace is added only by the enforcement decision.
     expect(deadlineAt(OPENED_AT, scored)).not.toBe(ENFORCED_CUTOFF);
-    expect(ENFORCED_CUTOFF - deadlineAt(OPENED_AT, scored)!).toBe(SUBMISSION_GRACE_MS);
+    expect(ENFORCED_CUTOFF - deadlineAt(OPENED_AT, scored)!).toBe(
+      SUBMISSION_GRACE_MS,
+    );
   });
 
   it("is null for a question with no limit", () => {
@@ -69,19 +75,27 @@ describe("deadlineAt", () => {
     ["negative", -1],
     ["NaN", Number.NaN],
     ["Infinity", Number.POSITIVE_INFINITY],
-  ])("is null for a %s open time rather than a nonsense deadline", (_label, openedAt) => {
-    expect(deadlineAt(openedAt, scored)).toBeNull();
-  });
+  ])(
+    "is null for a %s open time rather than a nonsense deadline",
+    (_label, openedAt) => {
+      expect(deadlineAt(openedAt, scored)).toBeNull();
+    },
+  );
 
   it("scales with the limit rather than assuming one", () => {
-    const longer = { ...scored, timeLimitSeconds: 180 } as const satisfies Question;
+    const longer = {
+      ...scored,
+      timeLimitSeconds: 180,
+    } as const satisfies Question;
     expect(deadlineAt(OPENED_AT, longer)).toBe(OPENED_AT + 180_000);
   });
 });
 
 describe("isSubmissionExpired", () => {
   it("accepts a submission well inside the window", () => {
-    expect(isSubmissionExpired(OPENED_AT + 1_000, OPENED_AT, scored)).toBe(false);
+    expect(isSubmissionExpired(OPENED_AT + 1_000, OPENED_AT, scored)).toBe(
+      false,
+    );
   });
 
   it("accepts one arriving exactly at the visible zero", () => {
@@ -91,23 +105,31 @@ describe("isSubmissionExpired", () => {
   it("accepts one inside the grace, which is what the grace is for", () => {
     // An answer the attendee watched themselves send at 0.3s remaining, on a venue
     // network. The PRD calls losing one of these the most expensive requirement it has.
-    expect(isSubmissionExpired(VISIBLE_ZERO + 1, OPENED_AT, scored)).toBe(false);
+    expect(isSubmissionExpired(VISIBLE_ZERO + 1, OPENED_AT, scored)).toBe(
+      false,
+    );
     expect(isSubmissionExpired(ENFORCED_CUTOFF, OPENED_AT, scored)).toBe(false);
   });
 
   it("refuses one a millisecond past the grace", () => {
     // The exact edge, from the far side. Together with the row above this pins the
     // comparison as `>` against the cutoff rather than `>=`.
-    expect(isSubmissionExpired(ENFORCED_CUTOFF + 1, OPENED_AT, scored)).toBe(true);
+    expect(isSubmissionExpired(ENFORCED_CUTOFF + 1, OPENED_AT, scored)).toBe(
+      true,
+    );
   });
 
   it("refuses one long past the deadline", () => {
-    expect(isSubmissionExpired(VISIBLE_ZERO + 60_000, OPENED_AT, scored)).toBe(true);
+    expect(isSubmissionExpired(VISIBLE_ZERO + 60_000, OPENED_AT, scored)).toBe(
+      true,
+    );
   });
 
   it("never expires a question with no limit, however long it has been open", () => {
     // The word cloud fills until the host reveals it. An hour in, it is still open.
-    expect(isSubmissionExpired(OPENED_AT + 3_600_000, OPENED_AT, unscored)).toBe(false);
+    expect(
+      isSubmissionExpired(OPENED_AT + 3_600_000, OPENED_AT, unscored),
+    ).toBe(false);
   });
 
   /**
@@ -130,8 +152,14 @@ describe("isSubmissionExpired", () => {
 
   it("reads the question's own limit, not a shared constant", () => {
     // A moment that is late for a 5-second question and early for a 180-second one.
-    const short = { ...scored, timeLimitSeconds: 5 } as const satisfies Question;
-    const long = { ...scored, timeLimitSeconds: 180 } as const satisfies Question;
+    const short = {
+      ...scored,
+      timeLimitSeconds: 5,
+    } as const satisfies Question;
+    const long = {
+      ...scored,
+      timeLimitSeconds: 180,
+    } as const satisfies Question;
     const at = OPENED_AT + 30_000;
 
     expect(isSubmissionExpired(at, OPENED_AT, short)).toBe(true);

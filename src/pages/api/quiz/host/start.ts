@@ -31,15 +31,22 @@ export const POST: APIRoute = async ({ request }) => {
   if (result.outcome === "unconfigured") {
     return toResponse({
       status: 503,
-      body: { error: "Sesja nie jest skonfigurowana. Sprawdź zmienne środowiskowe." },
+      body: {
+        error: "Sesja nie jest skonfigurowana. Sprawdź zmienne środowiskowe.",
+      },
     });
   }
 
   if (result.outcome === "invalid") {
-    console.error("Session document invalid on start:", result.problems.join("; "));
+    console.error(
+      "Session document invalid on start:",
+      result.problems.join("; "),
+    );
     return toResponse({
       status: 409,
-      body: { error: "Stan sesji jest nieprawidłowy. Sprawdź definicję quizu." },
+      body: {
+        error: "Stan sesji jest nieprawidłowy. Sprawdź definicję quizu.",
+      },
     });
   }
 
@@ -71,7 +78,10 @@ export const POST: APIRoute = async ({ request }) => {
   // Branch the whole outcome, not just `body` — a ternary inside the object
   // widens `body` into a union the discriminated type will not narrow.
   if (result.outcome === "created") {
-    return toResponse({ status: 200, body: { state: result.state, applied: true } });
+    return toResponse({
+      status: 200,
+      body: { state: result.state, applied: true },
+    });
   }
 
   return toResponse({

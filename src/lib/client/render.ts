@@ -114,7 +114,7 @@ export type RenderQuestionOptions = QuestionClassNames & {
 function nextSelection(
   kind: PublicQuestion["kind"],
   selected: readonly string[],
-  optionId: string
+  optionId: string,
 ): string[] {
   if (kind !== "multiple-choice") return [optionId];
 
@@ -151,9 +151,10 @@ function optionClassName(parts: readonly (string | undefined)[]): string {
  */
 function revealedCorrectIds(
   question: PublicQuestion,
-  correctOptionIds: readonly string[] | null
+  correctOptionIds: readonly string[] | null,
 ): readonly string[] | null {
-  if (correctOptionIds === null || correctOptionIds.length > 0) return correctOptionIds;
+  if (correctOptionIds === null || correctOptionIds.length > 0)
+    return correctOptionIds;
   if (question.scored) return correctOptionIds;
   return question.options?.map((option) => option.id) ?? correctOptionIds;
 }
@@ -180,14 +181,16 @@ function revealedCorrectIds(
 export function renderQuestion(
   container: HTMLElement,
   question: PublicQuestion | undefined,
-  options: RenderQuestionOptions = {}
+  options: RenderQuestionOptions = {},
 ): void {
   container.replaceChildren();
 
   const mode = options.mode ?? "static";
   const selected = options.selectedOptionIds ?? [];
   // Expanded rather than read literally — see `revealedCorrectIds` for the unscored case.
-  const correct = question ? revealedCorrectIds(question, options.correctOptionIds ?? null) : null;
+  const correct = question
+    ? revealedCorrectIds(question, options.correctOptionIds ?? null)
+    : null;
 
   const prompt = document.createElement("p");
   if (options.prompt) prompt.className = options.prompt;
@@ -248,8 +251,12 @@ export function renderQuestion(
       item.className = optionClassName([
         options.option,
         mode === "revealed" && isCorrect ? options.optionCorrect : undefined,
-        mode === "revealed" && isSelected && !isCorrect ? options.optionWrong : undefined,
-        isSelected && (mode === "static" || isCorrect) ? options.optionSelected : undefined,
+        mode === "revealed" && isSelected && !isCorrect
+          ? options.optionWrong
+          : undefined,
+        isSelected && (mode === "static" || isCorrect)
+          ? options.optionSelected
+          : undefined,
       ]);
       item.textContent = option.text;
 
@@ -361,7 +368,10 @@ const countUpFrames = new WeakMap<HTMLElement, number>();
 const countUpSignatures = new WeakMap<HTMLElement, string>();
 
 function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  return (
+    typeof window !== "undefined" &&
+    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)
+  );
 }
 
 /**
@@ -410,7 +420,7 @@ function paintBars(targets: readonly BarTarget[], progress: number): void {
 export function renderDistribution(
   container: HTMLElement,
   question: PublicQuestion | undefined,
-  options: RenderDistributionOptions = {}
+  options: RenderDistributionOptions = {},
 ): void {
   container.replaceChildren();
 
@@ -438,7 +448,10 @@ export function renderDistribution(
   }
 
   // Expanded rather than read literally — see `revealedCorrectIds` for the unscored case.
-  const correctOptionIds = revealedCorrectIds(question, options.correctOptionIds ?? null);
+  const correctOptionIds = revealedCorrectIds(
+    question,
+    options.correctOptionIds ?? null,
+  );
 
   const { answered } = distribution;
 
@@ -461,7 +474,8 @@ export function renderDistribution(
     // dropping its row would leave the bars unreadable against the question on screen.
     const count = distribution.options[option.id] ?? 0;
     const share = (count / answered) * 100;
-    const isCorrect = correctOptionIds !== null && correctOptionIds.includes(option.id);
+    const isCorrect =
+      correctOptionIds !== null && correctOptionIds.includes(option.id);
 
     const row = document.createElement("li");
     row.className = optionClassName([
@@ -601,7 +615,7 @@ const NO_STANDINGS_TEXT = "Jeszcze nikt nie zdobył punktów.";
 export function renderStandings(
   container: HTMLElement,
   rows: readonly StandingsRow[] | undefined,
-  options: RenderStandingsOptions = {}
+  options: RenderStandingsOptions = {},
 ): void {
   container.replaceChildren();
 
@@ -626,7 +640,10 @@ export function renderStandings(
     const isOwn = own !== null && entry.displayName === own;
 
     const row = document.createElement("li");
-    row.className = optionClassName([classNames.row, isOwn ? classNames.rowOwn : undefined]);
+    row.className = optionClassName([
+      classNames.row,
+      isOwn ? classNames.rowOwn : undefined,
+    ]);
     // Marked in the DOM as well as by class, so the highlight survives a stylesheet that
     // failed to load on a venue network — `renderDistribution`'s rule for `data-correct`.
     if (isOwn) row.dataset.own = "true";
@@ -680,7 +697,7 @@ export function standingsPositionText(
    * flapped mid-beat was told its position could not be fetched while the request was still
    * running. Waiting is not failing.
    */
-  pending = false
+  pending = false,
 ): string {
   if (pending && rank === null) return POSITION_PENDING_TEXT;
   if (rank === null) return POSITION_UNAVAILABLE_TEXT;
@@ -754,7 +771,7 @@ const DEFAULT_MAX_REM = 5;
 export function renderWordCloud(
   container: HTMLElement,
   words: readonly WordCount[] | undefined,
-  options: RenderWordCloudOptions = {}
+  options: RenderWordCloudOptions = {},
 ): void {
   container.replaceChildren();
 
@@ -877,7 +894,11 @@ export function countdownText(remainingMs: number): string {
  * A degenerate `limitMs` yields a width of `0%` rather than a division by zero, matching
  * `countdownText`'s posture on the same inputs.
  */
-export function renderCountdown(node: HTMLElement, remainingMs: number, limitMs: number): void {
+export function renderCountdown(
+  node: HTMLElement,
+  remainingMs: number,
+  limitMs: number,
+): void {
   /**
    * **Clamped into `[0, limitMs]` once, and the text uses the same clamped value as the
    * bar** (impl review F6). The remainder mixes a server timestamp with the device's own
@@ -894,7 +915,9 @@ export function renderCountdown(node: HTMLElement, remainingMs: number, limitMs:
    * being the only thing that actually decides.
    */
   const usable = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 0;
-  const left = Number.isFinite(remainingMs) ? Math.max(0, Math.min(remainingMs, usable)) : 0;
+  const left = Number.isFinite(remainingMs)
+    ? Math.max(0, Math.min(remainingMs, usable))
+    : 0;
 
   // The label is a child rather than the node itself, because the node also holds the
   // bar — writing `textContent` on the container would delete it.

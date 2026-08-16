@@ -24,7 +24,10 @@ import { describe, expect, it } from "vitest";
  * them.
  */
 
-const SOURCE = readFileSync(fileURLToPath(new URL("./host.astro", import.meta.url)), "utf8");
+const SOURCE = readFileSync(
+  fileURLToPath(new URL("./host.astro", import.meta.url)),
+  "utf8",
+);
 
 /**
  * Comments stripped, for the reason `participation.test.ts` gives: a rule whose reason is not
@@ -95,7 +98,8 @@ describe("there is exactly one poll loop", () => {
    * *are* the poll; a second timer inside either is a second loop, and that is what fails here.
    */
   it("arms the polled tick from exactly one place", () => {
-    const scheduler = /function schedulePoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const scheduler =
+      /function schedulePoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     const runner = /function runPoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     // Non-vacuity: both bodies must actually have been found, or the count below is zero
@@ -115,13 +119,15 @@ describe("there is exactly one poll loop", () => {
    * and two chances to leave requests firing for a panel that is off screen.
    */
   it("has exactly one timer whose callback can fetch", () => {
-    const callbacks = [...CODE.matchAll(/setTimeout\(\(\) => \{([\s\S]*?)\}, /g)].map((m) => m[1]!);
+    const callbacks = [
+      ...CODE.matchAll(/setTimeout\(\(\) => \{([\s\S]*?)\}, /g),
+    ].map((m) => m[1]!);
 
     // Non-vacuity: if the pattern stops matching, fail rather than pass on an empty list.
     expect(callbacks.length).toBeGreaterThan(0);
 
     const fetching = callbacks.filter(
-      (body) => body.includes("runPoll") || body.includes("fetch(")
+      (body) => body.includes("runPoll") || body.includes("fetch("),
     );
     expect(fetching).toHaveLength(1);
   });
@@ -154,7 +160,8 @@ describe("there is exactly one poll loop", () => {
     // cancellation lives in `countdown.ts` and is tested there.
     expect(occurrences("clearTimeout")).toBe(1);
 
-    const stopPolling = /function stopPolling\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const stopPolling =
+      /function stopPolling\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(stopPolling.split("clearTimeout").length - 1).toBe(1);
   });
 
@@ -221,7 +228,8 @@ describe("the countdown cannot outlive its question", () => {
   });
 
   it("arms from the panel renderer without clearing there, so the two cannot drift", () => {
-    const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const panel =
+      /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     // Non-vacuity: the body must have been found.
     expect(panel).toContain("state.phase");
@@ -235,7 +243,7 @@ describe("the countdown cannot outlive its question", () => {
     // outlives the page" case that handler exists for.
     const visibility = CODE.slice(
       CODE.indexOf('addEventListener("visibilitychange"'),
-      CODE.indexOf('addEventListener("pagehide"')
+      CODE.indexOf('addEventListener("pagehide"'),
     );
     expect(visibility).toContain("stopCountdown()");
 
@@ -250,7 +258,8 @@ describe("the countdown cannot outlive its question", () => {
    * reasoning to the standings board's visibility.
    */
   it("keys on the limit rather than re-deciding which kinds have a clock", () => {
-    const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const panel =
+      /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(panel).toContain("timeLimitSeconds === undefined");
     expect(panel).not.toContain('kind === "word-cloud"');
@@ -261,7 +270,8 @@ describe("the countdown cannot outlive its question", () => {
     // `updatedAt + limit` is the same arithmetic every phone does from the same two values,
     // which is what stops the projector drifting from the room. A countdown seeded from when
     // this page happened to paint would disagree with all 150 of them.
-    const panel = /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const panel =
+      /function renderCountdownPanel\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(panel).toContain("countdown.start(state.updatedAt");
   });
@@ -311,7 +321,7 @@ describe("one predicate decides both the panels and the poll", () => {
      */
     const withoutCountdown = elsewhere.replace(
       /function renderCountdownPanel\([\s\S]*?\n {6}}/,
-      ""
+      "",
     );
 
     // Non-vacuity: the exclusion must have removed something, or it is hiding nothing and
@@ -334,7 +344,8 @@ describe("one predicate decides both the panels and the poll", () => {
  */
 describe("the lobby's join count refreshes on the one loop", () => {
   it("gives the lobby a target rather than a loop of its own", () => {
-    const predicate = /function pollTargetFor[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const predicate =
+      /function pollTargetFor[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     // Non-vacuity: the body must have been found.
     expect(predicate).toContain("PollTarget");
@@ -359,7 +370,8 @@ describe("the lobby's join count refreshes on the one loop", () => {
    * count exactly as frozen as before while the requests went out.
    */
   it("exempts the lobby from the stale-question discard", () => {
-    const runner = /async function runPoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const runner =
+      /async function runPoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(runner).toContain("fetch(target.url");
     expect(runner).toContain('target.kind !== "lobby" &&');
@@ -373,7 +385,8 @@ describe("the lobby's join count refreshes on the one loop", () => {
    * forces this shape, and `Math.max` is what keeps the backoff working on top of the floor.
    */
   it("slows the lobby with a floor rather than a second delay", () => {
-    const scheduler = /function schedulePoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const scheduler =
+      /function schedulePoll\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(scheduler).toContain("LOBBY_POLL_MS");
     // The backoff must survive the floor: pinned at the floor, a failing lobby tick would
@@ -417,7 +430,9 @@ describe("the word cloud's final read closes the loop", () => {
     // Two call sites: `render` and the `finally` in `runPoll`. Both must consult the gate, or
     // a revealed word-cloud question polls until the host advances.
     expect(occurrences("if (pollWanted(")).toBe(2);
-    expect(CODE).not.toContain("if (pollTargetFor(client.current())) schedulePoll()");
+    expect(CODE).not.toContain(
+      "if (pollTargetFor(client.current())) schedulePoll()",
+    );
   });
 
   /**
@@ -441,7 +456,9 @@ describe("the word cloud's final read closes the loop", () => {
    */
   it("clears staleness only inside the branch where a cloud arrived", () => {
     const branch =
-      /if \(Array\.isArray\(payload\.words\)\) \{[\s\S]*?\n {12}\}/.exec(CODE)?.[0] ?? "";
+      /if \(Array\.isArray\(payload\.words\)\) \{[\s\S]*?\n {12}\}/.exec(
+        CODE,
+      )?.[0] ?? "";
 
     expect(branch).toContain("cloudWords = payload.words");
     expect(branch).toContain("cloudStale = false");
@@ -453,7 +470,10 @@ describe("the word cloud's final read closes the loop", () => {
      * matters is that the words handler clears it *only* inside the branch above — so this looks
      * at what follows that branch, which is where moving the line puts it.
      */
-    const afterBranch = CODE.slice(CODE.indexOf(branch) + branch.length, CODE.indexOf("} else {"));
+    const afterBranch = CODE.slice(
+      CODE.indexOf(branch) + branch.length,
+      CODE.indexOf("} else {"),
+    );
     expect(afterBranch).not.toContain("cloudStale = false");
   });
 
@@ -462,7 +482,9 @@ describe("the word cloud's final read closes the loop", () => {
     expect(CODE).toContain('issuedInPhase === "question-revealed"');
     // Recorded while the question is open, the loop would end on the first tick and the cloud
     // would freeze while the room was still writing into it.
-    expect(CODE).not.toContain('client.current()?.phase === "question-revealed"');
+    expect(CODE).not.toContain(
+      'client.current()?.phase === "question-revealed"',
+    );
   });
 });
 
@@ -564,7 +586,8 @@ describe("flow verbs are offered only where they apply", () => {
     // and the word-cloud rename come apart.
     expect(occurrences("syncControls();")).toBe(4);
 
-    const fireBody = /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const fireBody =
+      /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(fireBody.length).toBeGreaterThan(0);
     expect(fireBody).toContain("syncControls()");
   });
@@ -592,8 +615,12 @@ describe("flow verbs are offered only where they apply", () => {
     // The name still comes from that predicate and from nothing else. What sits between it
     // and `textContent` now is the armed label, which is a state of the same button rather
     // than a second opinion about what it is called — see the confirmation block below.
-    expect(sync).toContain("const name = revealCloses ? REVEAL_LABEL_CLOSES : REVEAL_LABEL");
-    expect(sync).toContain("button.textContent = revealArmed ? REVEAL_CONFIRM_LABEL : name");
+    expect(sync).toContain(
+      "const name = revealCloses ? REVEAL_LABEL_CLOSES : REVEAL_LABEL",
+    );
+    expect(sync).toContain(
+      "button.textContent = revealArmed ? REVEAL_CONFIRM_LABEL : name",
+    );
 
     // The rename must not have become a phase rule: `reveal` stays offered while the cloud
     // is open, because closing it is the only way on to the standings beat.
@@ -616,7 +643,7 @@ describe("flow verbs are offered only where they apply", () => {
   it("renames the standings verb rather than gating it once the board is up", () => {
     expect(sync).toContain('const standingsAgain = phase === "standings"');
     expect(sync).toContain(
-      "button.textContent = standingsAgain ? STANDINGS_LABEL_AGAIN : STANDINGS_LABEL"
+      "button.textContent = standingsAgain ? STANDINGS_LABEL_AGAIN : STANDINGS_LABEL",
     );
 
     // The gate is untouched: the phase still offers the verb, which is what makes the retry
@@ -646,12 +673,13 @@ describe("flow verbs are offered only where they apply", () => {
    * retry that just worked, described as the interaction that does nothing.
    */
   it("reports a re-broadcast as an outcome of its own", () => {
-    const fireBody = /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const fireBody =
+      /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(fireBody.length).toBeGreaterThan(0);
     expect(fireBody).toContain('payload.note === "republished"');
     expect(fireBody.indexOf('payload.note === "republished"')).toBeLessThan(
-      fireBody.indexOf('payload.note === "no-op"')
+      fireBody.indexOf('payload.note === "no-op"'),
     );
   });
 
@@ -684,7 +712,8 @@ describe("flow verbs are offered only where they apply", () => {
    * still: the row that empties the bar is the row that sets `next: null`.
    */
   it("hands the next-step ring to the closing button when the bar empties", () => {
-    const endSync = /function syncEndButton[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const endSync =
+      /function syncEndButton[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(endSync.length).toBeGreaterThan(0);
 
     expect(endSync).toContain("endButton.dataset.next");
@@ -729,7 +758,8 @@ describe("the rail follows its contents", () => {
     // The trailing semicolon separates the calls from the declaration, as above.
     expect(occurrences("syncRail();")).toBe(3);
 
-    const stopBody = /function stopCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const stopBody =
+      /function stopCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(stopBody.length).toBeGreaterThan(0);
     expect(stopBody).toContain("syncRail()");
   });
@@ -750,7 +780,8 @@ describe("the rail follows its contents", () => {
 describe("the reveal cannot cut the room off by accident", () => {
   const handler =
     /actionButtons\(\)\.forEach\([\s\S]*?\n {6}\}\);/.exec(CODE)?.[0] ?? "";
-  const needs = /function revealNeedsConfirm[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+  const needs =
+    /function revealNeedsConfirm[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
   const sync = /function syncControls[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
   it("finds the handler and the predicate it is checking", () => {
@@ -765,7 +796,9 @@ describe("the reveal cannot cut the room off by accident", () => {
    */
   it("returns after arming rather than firing on the first tap", () => {
     expect(handler).toContain("revealArmed = true");
-    expect(handler.indexOf("revealArmed = true")).toBeLessThan(handler.indexOf("void fire(action)"));
+    expect(handler.indexOf("revealArmed = true")).toBeLessThan(
+      handler.indexOf("void fire(action)"),
+    );
   });
 
   /**
@@ -806,7 +839,8 @@ describe("the reveal cannot cut the room off by accident", () => {
    * exactly when the page is least able to justify doing so.
    */
   it("waives the confirmation only on a fresh count that covers the room", () => {
-    const everyone = /function everyoneAnswered[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const everyone =
+      /function everyoneAnswered[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(everyone.length).toBeGreaterThan(0);
     expect(everyone).toContain("!answeredStale");
@@ -832,7 +866,9 @@ describe("the reveal cannot cut the room off by accident", () => {
    */
   it("disarms ahead of the request", () => {
     expect(handler).toContain("disarmReveal();");
-    expect(handler.indexOf("disarmReveal();")).toBeLessThan(handler.indexOf("void fire(action)"));
+    expect(handler.indexOf("disarmReveal();")).toBeLessThan(
+      handler.indexOf("void fire(action)"),
+    );
   });
 
   /**
@@ -871,7 +907,8 @@ describe("the reveal cannot cut the room off by accident", () => {
  * been written, not verified (`lessons.md`).
  */
 describe("the closing button cannot fire by accident", () => {
-  const handler = /endButton\.addEventListener\([\s\S]*?\n {6}\}\);/.exec(CODE)?.[0] ?? "";
+  const handler =
+    /endButton\.addEventListener\([\s\S]*?\n {6}\}\);/.exec(CODE)?.[0] ?? "";
   const sync = /function syncEndButton[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
   it("finds the handler and the sync it is checking", () => {
@@ -898,7 +935,9 @@ describe("the closing button cannot fire by accident", () => {
    */
   it("returns after arming rather than firing on the first tap", () => {
     expect(handler).toContain("if (!endArmed)");
-    expect(handler.indexOf("if (!endArmed)")).toBeLessThan(handler.indexOf('fire("end"'));
+    expect(handler.indexOf("if (!endArmed)")).toBeLessThan(
+      handler.indexOf('fire("end"'),
+    );
   });
 
   /**
@@ -935,7 +974,8 @@ describe("the closing button cannot fire by accident", () => {
    * hand back a closing button enabled in a phase that refuses it — and still armed.
    */
   it("re-applies the phase rule after every action's blanket re-enable", () => {
-    const fireBody = /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const fireBody =
+      /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(fireBody.length).toBeGreaterThan(0);
     expect(fireBody).toContain("syncEndButton()");
@@ -960,7 +1000,9 @@ describe("the closing button cannot fire by accident", () => {
 
     // Authored inside the menu's slot: the bar's slot is the empty one, and the script is
     // what fills it. Source order is the only reading a scan has of "which slot holds it".
-    expect(CODE.indexOf('id="end-slot-menu"')).toBeLessThan(CODE.indexOf('id="end"'));
+    expect(CODE.indexOf('id="end-slot-menu"')).toBeLessThan(
+      CODE.indexOf('id="end"'),
+    );
     expect(CODE).toContain('<div id="end-slot-bar" class="contents"></div>');
   });
 
@@ -991,7 +1033,9 @@ describe("the closing button cannot fire by accident", () => {
    */
   it("places the button on the last question only, and never by hiding it", () => {
     expect(sync).toContain("const last = atLastQuestion(state)");
-    expect(sync).toContain('const home = last && phase !== "ended" ? endSlotBar : endSlotMenu');
+    expect(sync).toContain(
+      'const home = last && phase !== "ended" ? endSlotBar : endSlotMenu',
+    );
     expect(CODE).not.toContain("setHidden(endButton");
     expect(CODE).not.toContain("endButton.hidden");
   });
@@ -1032,7 +1076,8 @@ describe("the closing button cannot fire by accident", () => {
    * `disabled`.
    */
   it("does not let the menu re-enable what the phase rule refused", () => {
-    const opener = /function openHostMenu\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const opener =
+      /function openHostMenu\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(opener.length).toBeGreaterThan(0);
     expect(opener).not.toContain("endButton");
@@ -1059,7 +1104,9 @@ describe("the closing button cannot fire by accident", () => {
 describe("both polled panels reset together when the question changes", () => {
   it("resets through one function rather than per panel", () => {
     expect(CODE).toContain("function resetPanels");
-    expect(CODE).toContain("if (state.currentQuestionId !== panelQuestionId) resetPanels(");
+    expect(CODE).toContain(
+      "if (state.currentQuestionId !== panelQuestionId) resetPanels(",
+    );
   });
 
   it("clears the cloud's state in that reset", () => {
@@ -1124,8 +1171,12 @@ describe("the message toast dismisses itself from one place", () => {
   it("swaps the edge colour without rewriting the bubble's classes", () => {
     const say = /function say\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
-    expect(say).toContain("messageBubble.classList.remove(...Object.values(EDGE_COLOURS))");
-    expect(say).toContain("messageBubble.classList.add(EDGE_COLOURS[register])");
+    expect(say).toContain(
+      "messageBubble.classList.remove(...Object.values(EDGE_COLOURS))",
+    );
+    expect(say).toContain(
+      "messageBubble.classList.add(EDGE_COLOURS[register])",
+    );
     expect(CODE).not.toContain("messageBubble.className");
   });
 
@@ -1213,7 +1264,8 @@ describe("the host secret is typed behind the menu", () => {
    * on screen with no control under it, or a control on the bar with its explanation stranded.
    */
   it("hides the closing sentence from the move that took its button away", () => {
-    const sync = /function syncEndButton\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const sync =
+      /function syncEndButton\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     // Non-vacuity: the body must actually have been found.
     expect(sync).toContain("home.append(endButton)");
@@ -1233,7 +1285,8 @@ describe("the host secret is typed behind the menu", () => {
    * to do exactly that, back when the field was on the bar.
    */
   it("reaches the field's focus only through the opener", () => {
-    const opener = /function openHostMenu\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const opener =
+      /function openHostMenu\(\)[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(opener).toContain("secretField.focus()");
     expect(occurrences("secretField.focus()")).toBe(1);
@@ -1248,7 +1301,8 @@ describe("the host secret is typed behind the menu", () => {
   it("leaves the QR button out of the action machinery", () => {
     // Anchored on the id rather than on the first `<button` in the file, so the match cannot
     // start at some earlier button and swallow the markup in between.
-    const opener = /<button\s+id="host-menu-open"[\s\S]*?>/.exec(CODE)?.[0] ?? "";
+    const opener =
+      /<button\s+id="host-menu-open"[\s\S]*?>/.exec(CODE)?.[0] ?? "";
 
     expect(opener).toContain('aria-label="Menu prowadzącego"');
     expect(opener).toContain('type="button"');
@@ -1266,7 +1320,8 @@ describe("the host secret is typed behind the menu", () => {
  * timer here would be a third clock in a file whose whole guard set is about having one.
  */
 describe("the connection status is a lamp, not a sentence", () => {
-  const table = /const CONNECTION_COLOURS[\s\S]*?\n {6}};/.exec(CODE)?.[0] ?? "";
+  const table =
+    /const CONNECTION_COLOURS[\s\S]*?\n {6}};/.exec(CODE)?.[0] ?? "";
 
   /**
    * Every `ConnectionStatus` in `session.ts`. A missing row is a lamp holding the previous
@@ -1287,7 +1342,8 @@ describe("the connection status is a lamp, not a sentence", () => {
    * thing this page gets to decide.
    */
   it("clears the unlit colour along with the lit ones", () => {
-    const remove = /connection-dot"\)\.classList\.remove\([\s\S]*?\)/.exec(CODE)?.[0] ?? "";
+    const remove =
+      /connection-dot"\)\.classList\.remove\([\s\S]*?\)/.exec(CODE)?.[0] ?? "";
 
     expect(remove).toContain("CONNECTION_UNLIT");
   });
@@ -1297,9 +1353,11 @@ describe("the connection status is a lamp, not a sentence", () => {
    * so a `className =` here would be a hand-maintained second copy of them.
    */
   it("swaps the colour without rewriting the lamp's classes", () => {
-    expect(CODE).toContain("el(\"connection-dot\").classList.add(CONNECTION_COLOURS[status])");
-    expect(CODE).not.toContain("connection-dot\").className");
-    expect(CODE).not.toContain("el(\"connection\").className");
+    expect(CODE).toContain(
+      'el("connection-dot").classList.add(CONNECTION_COLOURS[status])',
+    );
+    expect(CODE).not.toContain('connection-dot").className');
+    expect(CODE).not.toContain('el("connection").className');
   });
 
   /**
@@ -1337,7 +1395,7 @@ describe("the connection status is a lamp, not a sentence", () => {
   it("keeps the sentence in the accessibility tree while it is invisible", () => {
     expect(CODE).toContain('id="connection"');
     expect(CODE).toContain('aria-live="polite"');
-    expect(CODE).not.toContain("setHidden(el(\"connection\")");
+    expect(CODE).not.toContain('setHidden(el("connection")');
   });
 });
 

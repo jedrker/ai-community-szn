@@ -30,7 +30,9 @@ describe("initialSessionState", () => {
   });
 
   it("produces a document that satisfies its own schema", () => {
-    expect(sessionStateSchema.safeParse(initialSessionState(NOW)).success).toBe(true);
+    expect(sessionStateSchema.safeParse(initialSessionState(NOW)).success).toBe(
+      true,
+    );
   });
 
   /**
@@ -59,8 +61,12 @@ describe("initialSessionState", () => {
 
   it("refuses a negative or fractional count", () => {
     const base = initialSessionState(NOW);
-    expect(sessionStateSchema.safeParse({ ...base, playerCount: -1 }).success).toBe(false);
-    expect(sessionStateSchema.safeParse({ ...base, playerCount: 1.5 }).success).toBe(false);
+    expect(
+      sessionStateSchema.safeParse({ ...base, playerCount: -1 }).success,
+    ).toBe(false);
+    expect(
+      sessionStateSchema.safeParse({ ...base, playerCount: 1.5 }).success,
+    ).toBe(false);
   });
 
   it("does not open the first question — FR-002 keeps a gathering beat", () => {
@@ -140,7 +146,9 @@ describe("parseSessionState", () => {
   });
 
   it("rejects an unknown phase", () => {
-    expect(parseSessionState({ ...openState, phase: "finished" }).ok).toBe(false);
+    expect(parseSessionState({ ...openState, phase: "finished" }).ok).toBe(
+      false,
+    );
   });
 
   it("reports problems instead of throwing on junk", () => {
@@ -172,7 +180,9 @@ describe("endedSessionState", () => {
   });
 
   it("clears the current question", () => {
-    expect(endedSessionState(revealed, NOW + 9_000).currentQuestionId).toBeNull();
+    expect(
+      endedSessionState(revealed, NOW + 9_000).currentQuestionId,
+    ).toBeNull();
   });
 
   it("preserves startedAt and stamps updatedAt", () => {
@@ -182,9 +192,10 @@ describe("endedSessionState", () => {
   });
 
   it("produces a document that satisfies its own schema", () => {
-    expect(sessionStateSchema.safeParse(endedSessionState(revealed, NOW + 9_000)).success).toBe(
-      true
-    );
+    expect(
+      sessionStateSchema.safeParse(endedSessionState(revealed, NOW + 9_000))
+        .success,
+    ).toBe(true);
   });
 
   /**
@@ -221,7 +232,10 @@ describe("the ended phase invariant", () => {
   it("rejects an ended session that still carries a question", () => {
     // The rule is stated as two explicit phase sets. Written as "not lobby implies a
     // question", `ended` would have fallen through and demanded one.
-    const result = parseSessionState({ ...ended, currentQuestionId: quiz.questions[0]!.id });
+    const result = parseSessionState({
+      ...ended,
+      currentQuestionId: quiz.questions[0]!.id,
+    });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -230,8 +244,12 @@ describe("the ended phase invariant", () => {
   });
 
   it("still requires a question for the phases that have one", () => {
-    expect(parseSessionState({ ...ended, phase: "question-open" }).ok).toBe(false);
-    expect(parseSessionState({ ...ended, phase: "question-revealed" }).ok).toBe(false);
+    expect(parseSessionState({ ...ended, phase: "question-open" }).ok).toBe(
+      false,
+    );
+    expect(parseSessionState({ ...ended, phase: "question-revealed" }).ok).toBe(
+      false,
+    );
   });
 });
 
@@ -246,7 +264,10 @@ describe("the ended phase invariant", () => {
  * the schema both satisfied.
  */
 describe("the standings phase invariant", () => {
-  const board = { rows: [{ rank: 1, displayName: "Ala", points: 30 }], playerCount: 4 };
+  const board = {
+    rows: [{ rank: 1, displayName: "Ala", points: 30 }],
+    playerCount: 4,
+  };
 
   const standings = {
     version: 6,
@@ -311,7 +332,11 @@ describe("revealedOptionIds", () => {
   });
 
   it("accepts the correct ids in question-revealed", () => {
-    const revealed = { ...open, phase: "question-revealed" as const, revealedOptionIds: ["a"] };
+    const revealed = {
+      ...open,
+      phase: "question-revealed" as const,
+      revealedOptionIds: ["a"],
+    };
 
     expect(sessionStateSchema.safeParse(revealed).success).toBe(true);
   });
@@ -319,7 +344,11 @@ describe("revealedOptionIds", () => {
   it("accepts an empty array in question-revealed — nothing to highlight", () => {
     // What an unscored question and a non-choice question both produce. It must not
     // read as an error, because a warm-up is a normal beat.
-    const revealed = { ...open, phase: "question-revealed" as const, revealedOptionIds: [] };
+    const revealed = {
+      ...open,
+      phase: "question-revealed" as const,
+      revealedOptionIds: [],
+    };
 
     expect(sessionStateSchema.safeParse(revealed).success).toBe(true);
   });
@@ -344,7 +373,7 @@ describe("revealedOptionIds", () => {
       };
 
       expect(sessionStateSchema.safeParse(candidate).success).toBe(false);
-    }
+    },
   );
 
   it("is null on every constructor that is not a reveal (option ids)", () => {
@@ -357,7 +386,9 @@ describe("revealedOptionIds", () => {
     };
     // Cleared, not carried: the ending snapshot is about the session, not about
     // whichever question was on screen when the host closed it.
-    expect(endedSessionState(revealed, NOW + 9_000).revealedOptionIds).toBeNull();
+    expect(
+      endedSessionState(revealed, NOW + 9_000).revealedOptionIds,
+    ).toBeNull();
   });
 });
 
@@ -442,7 +473,7 @@ describe("revealedDistribution", () => {
       };
 
       expect(sessionStateSchema.safeParse(candidate).success).toBe(false);
-    }
+    },
   );
 
   it("names itself when it is the field at fault", () => {
@@ -452,9 +483,11 @@ describe("revealedDistribution", () => {
 
     // Its own superRefine clause rather than one shared with `revealedOptionIds`, so a
     // host reading the 409 learns which field broke.
-    expect(result.error?.issues.some((issue) => issue.path[0] === "revealedDistribution")).toBe(
-      true
-    );
+    expect(
+      result.error?.issues.some(
+        (issue) => issue.path[0] === "revealedDistribution",
+      ),
+    ).toBe(true);
   });
 
   it("is null on every constructor that is not a reveal", () => {
@@ -467,7 +500,9 @@ describe("revealedDistribution", () => {
     };
     // Cleared, not carried — the closing screen showing the last question's bars would
     // make the segment look like it ended mid-question.
-    expect(endedSessionState(revealed, NOW + 9_000).revealedDistribution).toBeNull();
+    expect(
+      endedSessionState(revealed, NOW + 9_000).revealedDistribution,
+    ).toBeNull();
   });
 });
 
@@ -531,7 +566,7 @@ describe("revealedAnswerText", () => {
       };
 
       expect(sessionStateSchema.safeParse(candidate).success).toBe(false);
-    }
+    },
   );
 
   it("names itself when it is the field at fault", () => {
@@ -539,9 +574,11 @@ describe("revealedAnswerText", () => {
 
     const result = sessionStateSchema.safeParse(candidate);
 
-    expect(result.error?.issues.some((issue) => issue.path[0] === "revealedAnswerText")).toBe(
-      true
-    );
+    expect(
+      result.error?.issues.some(
+        (issue) => issue.path[0] === "revealedAnswerText",
+      ),
+    ).toBe(true);
   });
 
   it("is null on every constructor that is not a reveal", () => {
@@ -552,7 +589,9 @@ describe("revealedAnswerText", () => {
       phase: "question-revealed" as const,
       revealedAnswerText: accepted,
     };
-    expect(endedSessionState(revealed, NOW + 9_000).revealedAnswerText).toBeNull();
+    expect(
+      endedSessionState(revealed, NOW + 9_000).revealedAnswerText,
+    ).toBeNull();
   });
 });
 
@@ -597,7 +636,11 @@ describe("standings", () => {
   });
 
   it("accepts a board in the standings phase", () => {
-    const candidate = { ...open, phase: "standings" as const, standings: board };
+    const candidate = {
+      ...open,
+      phase: "standings" as const,
+      standings: board,
+    };
 
     expect(sessionStateSchema.safeParse(candidate).success).toBe(true);
   });
@@ -655,7 +698,7 @@ describe("standings", () => {
       };
 
       expect(sessionStateSchema.safeParse(candidate).success).toBe(false);
-    }
+    },
   );
 
   /**
@@ -669,7 +712,9 @@ describe("standings", () => {
     const result = sessionStateSchema.safeParse(candidate);
 
     expect(result.success).toBe(false);
-    expect(result.error?.issues.some((issue) => issue.path[0] === "standings")).toBe(true);
+    expect(
+      result.error?.issues.some((issue) => issue.path[0] === "standings"),
+    ).toBe(true);
   });
 
   it("names itself when it is the field at fault", () => {
@@ -677,7 +722,9 @@ describe("standings", () => {
 
     const result = sessionStateSchema.safeParse(candidate);
 
-    expect(result.error?.issues.some((issue) => issue.path[0] === "standings")).toBe(true);
+    expect(
+      result.error?.issues.some((issue) => issue.path[0] === "standings"),
+    ).toBe(true);
   });
 
   /**
@@ -689,7 +736,10 @@ describe("standings", () => {
    */
   it.each([
     ["revealedOptionIds", { revealedOptionIds: ["a"] }],
-    ["revealedDistribution", { revealedDistribution: { answered: 3, options: { a: 3 } } }],
+    [
+      "revealedDistribution",
+      { revealedDistribution: { answered: 3, options: { a: 3 } } },
+    ],
     ["revealedAnswerText", { revealedAnswerText: "halucynacje" }],
   ] as const)("still refuses %s in the standings phase", (field, overlay) => {
     const candidate = {
@@ -702,7 +752,9 @@ describe("standings", () => {
     const result = sessionStateSchema.safeParse(candidate);
 
     expect(result.success).toBe(false);
-    expect(result.error?.issues.some((issue) => issue.path[0] === field)).toBe(true);
+    expect(result.error?.issues.some((issue) => issue.path[0] === field)).toBe(
+      true,
+    );
   });
 
   it("is null in the lobby, which has nothing to rank", () => {
@@ -717,7 +769,9 @@ describe("standings", () => {
     const showing = { ...open, phase: "standings" as const, standings: board };
 
     it("carries the board it is handed", () => {
-      expect(endedSessionState(showing, NOW + 9_000, board).standings).toEqual(board);
+      expect(endedSessionState(showing, NOW + 9_000, board).standings).toEqual(
+        board,
+      );
     });
 
     /**
@@ -733,7 +787,9 @@ describe("standings", () => {
         playerCount: 5,
       };
 
-      expect(endedSessionState(showing, NOW + 9_000, fresher).standings).toEqual(fresher);
+      expect(
+        endedSessionState(showing, NOW + 9_000, fresher).standings,
+      ).toEqual(fresher);
     });
 
     /**

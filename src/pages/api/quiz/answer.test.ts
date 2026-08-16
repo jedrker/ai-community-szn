@@ -19,8 +19,10 @@ vi.mock("../../../lib/session/store", () => ({
 }));
 
 const { POST: answer } = await import("./answer");
-const { questionOfKind, questionsOfKind } = await import("../../../quiz/test-support");
-const { SPEED_WINDOW_MS, MAX_TEXT_ANSWER_LENGTH } = await import("../../../lib/session/scoring");
+const { questionOfKind, questionsOfKind } =
+  await import("../../../quiz/test-support");
+const { SPEED_WINDOW_MS, MAX_TEXT_ANSWER_LENGTH } =
+  await import("../../../lib/session/scoring");
 const { MAX_GUESS_MAGNITUDE } = await import("../../../lib/session/guess");
 const { MAX_WORD_LENGTH } = await import("../../../lib/session/words");
 const { SUBMISSION_GRACE_MS } = await import("../../../lib/session/deadline");
@@ -62,7 +64,9 @@ const wordCloud = questionOfKind("word-cloud");
 const singleCorrect = single.correctOptionIds[0]!;
 const multiCorrect = [...multi.correctOptionIds];
 /** An option the multi-select fixture does *not* count, for the superset case. */
-const multiWrong = multi.options.find((option) => !multiCorrect.includes(option.id))!.id;
+const multiWrong = multi.options.find(
+  (option) => !multiCorrect.includes(option.id),
+)!.id;
 const unscoredOption = unscored?.options[0]?.id ?? "";
 /** The canonical accepted spelling — the one `reveal.ts` puts on the projector. */
 const accepted = text.acceptedAnswers[0]!;
@@ -86,17 +90,30 @@ function openOn(questionId: string, openedAt = NOW - 4_000) {
   };
 }
 
-function request(fields: Record<string, string>, optionIds: string[] = []): Request {
+function request(
+  fields: Record<string, string>,
+  optionIds: string[] = [],
+): Request {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.set(key, value);
   for (const id of optionIds) form.append("optionIds", id);
 
-  return new Request("https://example.test/api/quiz/answer", { method: "POST", body: form });
+  return new Request("https://example.test/api/quiz/answer", {
+    method: "POST",
+    body: form,
+  });
 }
 
-function submit(questionId: string, optionIds: string[], elapsedMs = 4_000): Promise<Response> {
+function submit(
+  questionId: string,
+  optionIds: string[],
+  elapsedMs = 4_000,
+): Promise<Response> {
   return answer({
-    request: request({ playerId: "player-abc", questionId, elapsedMs: String(elapsedMs) }, optionIds),
+    request: request(
+      { playerId: "player-abc", questionId, elapsedMs: String(elapsedMs) },
+      optionIds,
+    ),
   } as Parameters<typeof answer>[0]) as Promise<Response>;
 }
 
@@ -167,7 +184,7 @@ describe("scoring happens at submit, from the raw definition", () => {
       // Recorded, so the reveal can say "you took part" rather than "you were silent".
       expect(response.status).toBe(200);
       expect(submitted()).toMatchObject({ correct: false, awarded: 0 });
-    }
+    },
   );
 
   it("records the selection it scored, so the reveal cannot disagree with it", async () => {
@@ -244,7 +261,9 @@ describe("the elapsed time is the device's, but it is bounded", () => {
      * accepted at all. That squeeze is real for any question whose limit is close to the
      * window, and it is the reason the definition keeps every limit at or above 20s.
      */
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - (SPEED_WINDOW_MS + 1_000)));
+    readSessionMock.mockResolvedValue(
+      openOn(single.id, NOW - (SPEED_WINDOW_MS + 1_000)),
+    );
 
     await answer({
       request: request({ playerId: "player-abc", questionId: single.id }, [
@@ -286,7 +305,9 @@ describe("the response carries no verdict", () => {
   it("leaks nothing even when the answer was correct and scored high", async () => {
     submitAnswerMock.mockResolvedValue({ outcome: "accepted", total: 4_820 });
 
-    const serialized = JSON.stringify(await body(await submit(single.id, [singleCorrect])));
+    const serialized = JSON.stringify(
+      await body(await submit(single.id, [singleCorrect])),
+    );
 
     expect(serialized).not.toContain("correct");
     expect(serialized).not.toContain("awarded");
@@ -309,7 +330,10 @@ describe("text answers", () => {
    * the one `lessons.md` rule 2 is about, and a helper that quietly supplies a value
    * would test the present case while reading as though it covered the absent one.
    */
-  function submitText(answerText?: string, elapsedMs = 4_000): Promise<Response> {
+  function submitText(
+    answerText?: string,
+    elapsedMs = 4_000,
+  ): Promise<Response> {
     const fields: Record<string, string> = {
       playerId: "player-abc",
       questionId: text.id,
@@ -317,7 +341,9 @@ describe("text answers", () => {
     };
     if (answerText !== undefined) fields.text = answerText;
 
-    return answer({ request: request(fields) } as Parameters<typeof answer>[0]) as Promise<Response>;
+    return answer({ request: request(fields) } as Parameters<
+      typeof answer
+    >[0]) as Promise<Response>;
   }
 
   beforeEach(() => {
@@ -383,7 +409,9 @@ describe("text answers", () => {
     const response = await submitText("a".repeat(MAX_TEXT_ANSWER_LENGTH + 1));
 
     expect(response.status).toBe(400);
-    expect((await body(response)).error).toContain(String(MAX_TEXT_ANSWER_LENGTH));
+    expect((await body(response)).error).toContain(
+      String(MAX_TEXT_ANSWER_LENGTH),
+    );
     expect(submitAnswerMock).not.toHaveBeenCalled();
   });
 
@@ -396,7 +424,9 @@ describe("text answers", () => {
 
   it("bounds the trimmed length, so surrounding whitespace does not push it over", async () => {
     // The stored value is what the bound protects, and the stored value is trimmed.
-    const response = await submitText(`   ${"a".repeat(MAX_TEXT_ANSWER_LENGTH)}   `);
+    const response = await submitText(
+      `   ${"a".repeat(MAX_TEXT_ANSWER_LENGTH)}   `,
+    );
 
     expect(response.status).toBe(200);
     expect((submitted().text as string).length).toBe(MAX_TEXT_ANSWER_LENGTH);
@@ -456,7 +486,9 @@ describe("numeric guesses", () => {
     };
     if (raw !== undefined) fields.value = raw;
 
-    return answer({ request: request(fields) } as Parameters<typeof answer>[0]) as Promise<Response>;
+    return answer({ request: request(fields) } as Parameters<
+      typeof answer
+    >[0]) as Promise<Response>;
   }
 
   beforeEach(() => {
@@ -522,15 +554,18 @@ describe("numeric guesses", () => {
     expect(submitAnswerMock).not.toHaveBeenCalled();
   });
 
-  it.each([["", "empty"], ["   ", "whitespace"], ["abc", "letters"], ["67abc", "a remainder"], ["1e300", "exponent notation"]])(
-    "refuses %s (%s) without writing",
-    async (value) => {
-      const response = await submitGuess(value);
+  it.each([
+    ["", "empty"],
+    ["   ", "whitespace"],
+    ["abc", "letters"],
+    ["67abc", "a remainder"],
+    ["1e300", "exponent notation"],
+  ])("refuses %s (%s) without writing", async (value) => {
+    const response = await submitGuess(value);
 
-      expect(response.status).toBe(400);
-      expect(submitAnswerMock).not.toHaveBeenCalled();
-    }
-  );
+    expect(response.status).toBe(400);
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
 
   it("refuses an over-magnitude value with its own message and writes nothing", async () => {
     const response = await submitGuess("9".repeat(13));
@@ -601,7 +636,9 @@ describe("word-cloud answers", () => {
     };
     if (value !== undefined) fields.word = value;
 
-    return answer({ request: request(fields) } as Parameters<typeof answer>[0]) as Promise<Response>;
+    return answer({ request: request(fields) } as Parameters<
+      typeof answer
+    >[0]) as Promise<Response>;
   }
 
   beforeEach(() => {
@@ -690,15 +727,26 @@ describe("word-cloud answers", () => {
   it.each([
     ["empty", "", "Napisz jedno słowo."],
     ["whitespace only", "   ", "Napisz jedno słowo."],
-    ["two words", "sztuczna inteligencja", "Wpisz tylko jedno słowo — bez spacji."],
-    ["an emoji", "🤖", "Słowo może zawierać tylko litery, cyfry i znaki . _ - '"],
-  ])("refuses %s with its own message and writes nothing", async (_label, value, message) => {
-    const response = await submitWord(value);
+    [
+      "two words",
+      "sztuczna inteligencja",
+      "Wpisz tylko jedno słowo — bez spacji.",
+    ],
+    [
+      "an emoji",
+      "🤖",
+      "Słowo może zawierać tylko litery, cyfry i znaki . _ - '",
+    ],
+  ])(
+    "refuses %s with its own message and writes nothing",
+    async (_label, value, message) => {
+      const response = await submitWord(value);
 
-    expect(response.status).toBe(400);
-    expect((await body(response)).error).toBe(message);
-    expect(submitAnswerMock).not.toHaveBeenCalled();
-  });
+      expect(response.status).toBe(400);
+      expect((await body(response)).error).toBe(message);
+      expect(submitAnswerMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("refuses an over-length word — curl ignores maxlength", async () => {
     const response = await submitWord("a".repeat(MAX_WORD_LENGTH + 1));
@@ -758,14 +806,18 @@ describe("the time limit closes the submission window", () => {
 
   it("accepts one inside the grace, which is what the grace is for", async () => {
     // The attendee tapped as the bar emptied and the request crossed a venue network.
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - SUBMISSION_GRACE_MS));
+    readSessionMock.mockResolvedValue(
+      openOn(single.id, NOW - LIMIT_MS - SUBMISSION_GRACE_MS),
+    );
 
     expect((await submit(single.id, [singleCorrect])).status).toBe(200);
     expect(submitAnswerMock).toHaveBeenCalled();
   });
 
   it("refuses one a millisecond past the grace, with its own discriminator", async () => {
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - SUBMISSION_GRACE_MS - 1));
+    readSessionMock.mockResolvedValue(
+      openOn(single.id, NOW - LIMIT_MS - SUBMISSION_GRACE_MS - 1),
+    );
 
     const response = await submit(single.id, [singleCorrect]);
 
@@ -777,7 +829,9 @@ describe("the time limit closes the submission window", () => {
   });
 
   it("spends no write on a refusal", async () => {
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+    readSessionMock.mockResolvedValue(
+      openOn(single.id, NOW - LIMIT_MS - 60_000),
+    );
 
     await submit(single.id, [singleCorrect]);
 
@@ -788,7 +842,9 @@ describe("the time limit closes the submission window", () => {
   it("says the time ran out, not that the question closed", async () => {
     // The question IS still open — the host has not advanced. Reusing `notOpen` here
     // would tell the room the projector is lying to them.
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+    readSessionMock.mockResolvedValue(
+      openOn(single.id, NOW - LIMIT_MS - 60_000),
+    );
 
     const expired = await body(await submit(single.id, [singleCorrect]));
 
@@ -823,30 +879,40 @@ describe("the time limit closes the submission window", () => {
 
     readSessionMock.mockResolvedValue(openOn(text.id, at));
     const typed = await answer({
-      request: request({ playerId: "player-abc", questionId: text.id, text: accepted }),
+      request: request({
+        playerId: "player-abc",
+        questionId: text.id,
+        text: accepted,
+      }),
     } as Parameters<typeof answer>[0]);
     expect(typed.status).toBe(200);
   });
 
-  const hostPaced: Array<[string, () => string]> = [["the word cloud", () => wordCloud.id]];
-  if (unscored !== undefined) hostPaced.push(["the gather question", () => unscored.id]);
+  const hostPaced: Array<[string, () => string]> = [
+    ["the word cloud", () => wordCloud.id],
+  ];
+  if (unscored !== undefined)
+    hostPaced.push(["the gather question", () => unscored.id]);
 
-  it.each(hostPaced)("never expires %s, whose pacing is the host's", async (_label, id) => {
-    // An hour in, an unscored question is still open — the schema refuses to give it a
-    // limit at all, so there is nothing for the window to close.
-    readSessionMock.mockResolvedValue(openOn(id(), NOW - 3_600_000));
+  it.each(hostPaced)(
+    "never expires %s, whose pacing is the host's",
+    async (_label, id) => {
+      // An hour in, an unscored question is still open — the schema refuses to give it a
+      // limit at all, so there is nothing for the window to close.
+      readSessionMock.mockResolvedValue(openOn(id(), NOW - 3_600_000));
 
-    const response = await answer({
-      request: request(
-        id() === wordCloud.id
-          ? { playerId: "player-abc", questionId: id(), word: "robot" }
-          : { playerId: "player-abc", questionId: id() },
-        id() === wordCloud.id ? [] : [unscoredOption]
-      ),
-    } as Parameters<typeof answer>[0]);
+      const response = await answer({
+        request: request(
+          id() === wordCloud.id
+            ? { playerId: "player-abc", questionId: id(), word: "robot" }
+            : { playerId: "player-abc", questionId: id() },
+          id() === wordCloud.id ? [] : [unscoredOption],
+        ),
+      } as Parameters<typeof answer>[0]);
 
-    expect(response.status).toBe(200);
-  });
+      expect(response.status).toBe(200);
+    },
+  );
 
   /**
    * **The cutoff must not read the attendee's clock.**
@@ -856,7 +922,9 @@ describe("the time limit closes the submission window", () => {
    * and claiming to have answered instantly. Neither may rescue an expired submission.
    */
   it("refuses an expired submission that omits elapsedMs entirely", async () => {
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+    readSessionMock.mockResolvedValue(
+      openOn(single.id, NOW - LIMIT_MS - 60_000),
+    );
 
     const response = await answer({
       request: request({ playerId: "player-abc", questionId: single.id }, [
@@ -869,7 +937,9 @@ describe("the time limit closes the submission window", () => {
   });
 
   it("refuses an expired submission claiming elapsedMs of zero", async () => {
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+    readSessionMock.mockResolvedValue(
+      openOn(single.id, NOW - LIMIT_MS - 60_000),
+    );
 
     const response = await submit(single.id, [singleCorrect], 0);
 
@@ -878,11 +948,15 @@ describe("the time limit closes the submission window", () => {
   });
 
   it("logs the class, and nothing about the timing", async () => {
-    readSessionMock.mockResolvedValue(openOn(single.id, NOW - LIMIT_MS - 60_000));
+    readSessionMock.mockResolvedValue(
+      openOn(single.id, NOW - LIMIT_MS - 60_000),
+    );
 
     await submit(single.id, [singleCorrect]);
 
-    const line = (console.log as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    const line = (
+      console.log as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls
       .map((call) => String(call[0]))
       .find((text) => text.includes("session.answer.rejected"));
 
@@ -906,7 +980,11 @@ describe("refusals", () => {
   it("refuses while the question is revealed", async () => {
     readSessionMock.mockResolvedValue({
       outcome: "ok",
-      state: { ...openOn(single.id).state, phase: "question-revealed", revealedOptionIds: [] },
+      state: {
+        ...openOn(single.id).state,
+        phase: "question-revealed",
+        revealedOptionIds: [],
+      },
     });
 
     expect((await submit(single.id, [singleCorrect])).status).toBe(409);
@@ -921,7 +999,9 @@ describe("refusals", () => {
 
   it("reports a missing player id without touching the store", async () => {
     const response = (await answer({
-      request: request({ questionId: single.id, elapsedMs: "1000" }, [singleCorrect]),
+      request: request({ questionId: single.id, elapsedMs: "1000" }, [
+        singleCorrect,
+      ]),
     } as Parameters<typeof answer>[0])) as Response;
 
     expect(response.status).toBe(400);
@@ -942,7 +1022,10 @@ describe("refusals", () => {
   });
 
   it("reports an unreadable session as 503 rather than recording an unscored answer", async () => {
-    readSessionMock.mockResolvedValue({ outcome: "failed", reason: "unreachable" });
+    readSessionMock.mockResolvedValue({
+      outcome: "failed",
+      reason: "unreachable",
+    });
 
     expect((await submit(single.id, [singleCorrect])).status).toBe(503);
     expect(submitAnswerMock).not.toHaveBeenCalled();
@@ -952,7 +1035,9 @@ describe("refusals", () => {
 describe("what reaches the log", () => {
   it("never logs the selected options", async () => {
     const logged: string[] = [];
-    vi.spyOn(console, "log").mockImplementation((line) => void logged.push(String(line)));
+    vi.spyOn(console, "log").mockImplementation(
+      (line) => void logged.push(String(line)),
+    );
 
     await submit(single.id, [singleCorrect]);
 
@@ -964,7 +1049,9 @@ describe("what reaches the log", () => {
 
   it("logs the rejection class on a refusal", async () => {
     const logged: string[] = [];
-    vi.spyOn(console, "log").mockImplementation((line) => void logged.push(String(line)));
+    vi.spyOn(console, "log").mockImplementation(
+      (line) => void logged.push(String(line)),
+    );
     submitAnswerMock.mockResolvedValue({ outcome: "already-answered" });
 
     await submit(single.id, [singleCorrect]);

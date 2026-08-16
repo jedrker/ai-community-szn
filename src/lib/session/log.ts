@@ -252,13 +252,18 @@ type LogFields = {
  * is not covered by the store's TTL — anything written here outlives the session
  * document by design.
  */
-export function logSessionEvent(event: SessionEvent, fields: LogFields = {}): void {
+export function logSessionEvent(
+  event: SessionEvent,
+  fields: LogFields = {},
+): void {
   try {
     console.log(`${LOG_PREFIX} ${JSON.stringify({ event, ...fields })}`);
   } catch {
     // A field that cannot be serialized (a cycle, a BigInt) must not take a host
     // action down with it. Fall back to the event name, which is the part the
     // host actually greps for.
-    console.log(`${LOG_PREFIX} ${JSON.stringify({ event, note: "fields unserializable" })}`);
+    console.log(
+      `${LOG_PREFIX} ${JSON.stringify({ event, note: "fields unserializable" })}`,
+    );
   }
 }

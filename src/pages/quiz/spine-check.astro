@@ -44,36 +44,115 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LiveQuiz — spine check</title>
     <style>
-      :root { color-scheme: dark; font-family: ui-monospace, monospace; }
-      body { margin: 0; background: #12121c; color: #e8e8f0; padding: 1rem; }
-      h1 { font-size: 1rem; color: #a78bfa; margin: 0 0 .75rem; }
-      .panes { display: grid; gap: 1rem; grid-template-columns: 1fr; }
-      @media (min-width: 720px) { .panes { grid-template-columns: 1fr 1fr; } }
-      section { background: #1c1c2b; border: 1px solid #2f2f45; border-radius: .5rem; padding: 1rem; }
-      h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: #9ca3af; margin: 0 0 .75rem; }
-      button { font: inherit; background: #7c3aed; color: white; border: 0; border-radius: .375rem;
-               padding: .6rem 1rem; margin: 0 .4rem .4rem 0; cursor: pointer; }
-      button:disabled { opacity: .5; cursor: default; }
-      pre { background: #0e0e17; padding: .6rem; border-radius: .375rem; overflow-x: auto;
-            font-size: .8rem; margin: .5rem 0 0; }
-      .big { font-size: 1.6rem; color: #34d399; margin: .25rem 0; }
-      .bad { color: #f87171; }
+      :root {
+        color-scheme: dark;
+        font-family: ui-monospace, monospace;
+      }
+      body {
+        margin: 0;
+        background: #12121c;
+        color: #e8e8f0;
+        padding: 1rem;
+      }
+      h1 {
+        font-size: 1rem;
+        color: #a78bfa;
+        margin: 0 0 0.75rem;
+      }
+      .panes {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 720px) {
+        .panes {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      section {
+        background: #1c1c2b;
+        border: 1px solid #2f2f45;
+        border-radius: 0.5rem;
+        padding: 1rem;
+      }
+      h2 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #9ca3af;
+        margin: 0 0 0.75rem;
+      }
+      button {
+        font: inherit;
+        background: #7c3aed;
+        color: white;
+        border: 0;
+        border-radius: 0.375rem;
+        padding: 0.6rem 1rem;
+        margin: 0 0.4rem 0.4rem 0;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      pre {
+        background: #0e0e17;
+        padding: 0.6rem;
+        border-radius: 0.375rem;
+        overflow-x: auto;
+        font-size: 0.8rem;
+        margin: 0.5rem 0 0;
+      }
+      .big {
+        font-size: 1.6rem;
+        color: #34d399;
+        margin: 0.25rem 0;
+      }
+      .bad {
+        color: #f87171;
+      }
       /* Set apart from the flow verbs so a mis-click is unlikely — these are the
          only two actions on this page that cannot be undone. */
-      .danger { margin-top: 1rem; padding-top: .75rem; border-top: 1px dashed #4b2b3a; }
-      .danger .muted { margin-bottom: .5rem; }
-      .danger-button { background: #9f1239; }
-      .ended { color: #fbbf24; font-weight: 600; }
-      .muted { color: #9ca3af; font-size: .8rem; }
-      table { width: 100%; border-collapse: collapse; font-size: .8rem; }
-      td { padding: .2rem 0; border-bottom: 1px solid #2f2f45; }
-      td:first-child { color: #9ca3af; width: 45%; }
+      .danger {
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+        border-top: 1px dashed #4b2b3a;
+      }
+      .danger .muted {
+        margin-bottom: 0.5rem;
+      }
+      .danger-button {
+        background: #9f1239;
+      }
+      .ended {
+        color: #fbbf24;
+        font-weight: 600;
+      }
+      .muted {
+        color: #9ca3af;
+        font-size: 0.8rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+      }
+      td {
+        padding: 0.2rem 0;
+        border-bottom: 1px solid #2f2f45;
+      }
+      td:first-child {
+        color: #9ca3af;
+        width: 45%;
+      }
     </style>
   </head>
   <body>
     <h1>LiveQuiz spine check — F-02</h1>
     <p class="muted">
-      Dev-only. Not reachable in production. Open this on a second device to watch fan-out.
+      Dev-only. Not reachable in production. Open this on a second device to
+      watch fan-out.
     </p>
 
     <div class="panes">
@@ -85,21 +164,26 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
 
         <div class="danger">
           <div class="muted">
-            Irreversible (F-03). Both send the current version as confirmation, so a
-            stale click is refused rather than applied. <code>end</code> is refused
-            while a question is open; <code>purge</code> deliberately is not — it is
-            the escape hatch for exactly that case.
+            Irreversible (F-03). Both send the current version as confirmation,
+            so a stale click is refused rather than applied. <code>end</code> is refused
+            while a question is open; <code>purge</code> deliberately is not — it
+            is the escape hatch for exactly that case.
           </div>
-          <button data-action="end" data-confirm class="danger-button">end</button>
-          <button data-action="purge" data-confirm class="danger-button">purge</button>
+          <button data-action="end" data-confirm class="danger-button"
+            >end</button
+          >
+          <button data-action="purge" data-confirm class="danger-button"
+            >purge</button
+          >
         </div>
         <div class="muted">Round trip (click → HTTP response)</div>
         <div class="big" id="rtt">—</div>
         <div class="muted">End to end (click → snapshot rendered here)</div>
         <div class="big" id="e2e">—</div>
         <div class="muted">
-          Both measured on this device's clock, so no cross-device skew. The second
-          device confirms arrival and agreement, not its own absolute delta.
+          Both measured on this device's clock, so no cross-device skew. The
+          second device confirms arrival and agreement, not its own absolute
+          delta.
         </div>
         <pre id="log">ready</pre>
       </section>
@@ -127,7 +211,12 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         snapshotEvent: SNAPSHOT_EVENT,
       }}
     >
-      window.__spineCheck = { hostSecret, secretHeader, channelName, snapshotEvent };
+      window.__spineCheck = {
+        hostSecret,
+        secretHeader,
+        channelName,
+        snapshotEvent,
+      };
     </script>
 
     <script>
@@ -158,7 +247,9 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         el(id).textContent = String(value);
       };
       const buttons = (): HTMLButtonElement[] =>
-        Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-action]"));
+        Array.from(
+          document.querySelectorAll<HTMLButtonElement>("button[data-action]"),
+        );
 
       /**
        * The client's single reconciliation rule: apply whichever snapshot carries
@@ -172,7 +263,10 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
       /** Set by a host click; consumed by the first snapshot that arrives after it. */
       let pendingClickAt: number | null = null;
 
-      function apply(state: Snapshot, source: "fetch" | "ably" | "http"): boolean {
+      function apply(
+        state: Snapshot,
+        source: "fetch" | "ably" | "http",
+      ): boolean {
         if (state && current && state.version <= current.version) {
           droppedCount += 1;
           write("dropped", droppedCount);
@@ -189,7 +283,10 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         // must be able to tell "the quiz finished" from "the quiz never started" and
         // from "my connection died". Three different states, three different renders.
         el("phase").className = state?.phase === "ended" ? "ended" : "";
-        write("question", state && state.currentQuestionId ? state.currentQuestionId : "—");
+        write(
+          "question",
+          state && state.currentQuestionId ? state.currentQuestionId : "—",
+        );
         write("state", JSON.stringify(state, null, 2));
 
         if (pendingClickAt !== null && source === "ably") {
@@ -226,7 +323,10 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
         });
       }
 
-      async function fire(action: string, needsConfirm: boolean): Promise<void> {
+      async function fire(
+        action: string,
+        needsConfirm: boolean,
+      ): Promise<void> {
         /**
          * The confirmation the destructive routes demand: the version this device
          * believes is current, which it can only know from having applied a snapshot.
@@ -247,7 +347,9 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
           if (!window.confirm(what)) return;
         }
 
-        buttons().forEach((button) => { button.disabled = true; });
+        buttons().forEach((button) => {
+          button.disabled = true;
+        });
 
         // The headline figure starts HERE — at the click, before the request — not
         // at the response. The guardrail is "within 1 second of the host acting",
@@ -268,7 +370,7 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
           const payload = (await response.json()) as { state?: Snapshot };
           write(
             "log",
-            `${action} → ${response.status} ${JSON.stringify(payload).slice(0, 300)}`
+            `${action} → ${response.status} ${JSON.stringify(payload).slice(0, 300)}`,
           );
 
           // Render the authoritative response too, so the host pane is correct even
@@ -286,13 +388,18 @@ const hostSecret = import.meta.env.LIVEQUIZ_HOST_SECRET ?? "";
           write("log", `${action} → request failed: ${err}`);
           pendingClickAt = null;
         } finally {
-          buttons().forEach((button) => { button.disabled = false; });
+          buttons().forEach((button) => {
+            button.disabled = false;
+          });
         }
       }
 
       buttons().forEach((button) => {
         button.addEventListener("click", () => {
-          void fire(button.dataset.action ?? "", button.hasAttribute("data-confirm"));
+          void fire(
+            button.dataset.action ?? "",
+            button.hasAttribute("data-confirm"),
+          );
         });
       });
 

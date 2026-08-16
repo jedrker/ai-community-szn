@@ -60,7 +60,10 @@ export const SUBMISSION_GRACE_MS = 2_000;
  * This is the **visible** zero. The enforced cutoff is `SUBMISSION_GRACE_MS` later —
  * use `isSubmissionExpired` for that decision rather than comparing against this.
  */
-export function deadlineAt(openedAt: number, question: Question): number | null {
+export function deadlineAt(
+  openedAt: number,
+  question: Question,
+): number | null {
   if (question.timeLimitSeconds === undefined) return null;
   if (!Number.isFinite(openedAt) || openedAt <= 0) return null;
 
@@ -83,7 +86,11 @@ export function deadlineAt(openedAt: number, question: Question): number | null 
  * outage with nothing on screen to explain it. Accepting a late answer is recoverable;
  * refusing a whole room is not.
  */
-export function isSubmissionExpired(now: number, openedAt: number, question: Question): boolean {
+export function isSubmissionExpired(
+  now: number,
+  openedAt: number,
+  question: Question,
+): boolean {
   const deadline = deadlineAt(openedAt, question);
   if (deadline === null) return false;
   if (!Number.isFinite(now)) return false;

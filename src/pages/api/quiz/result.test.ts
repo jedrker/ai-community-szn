@@ -30,8 +30,9 @@ const QUESTION = quiz.questions[0]!.id;
 const OTHER = quiz.questions[1]!.id;
 
 function state(
-  phase: "lobby" | "question-open" | "question-revealed" | "ended" | "standings",
-  questionId = QUESTION
+  phase:
+    "lobby" | "question-open" | "question-revealed" | "ended" | "standings",
+  questionId = QUESTION,
 ) {
   const questionless = phase === "lobby" || phase === "ended";
   return {
@@ -41,7 +42,8 @@ function state(
     startedAt: NOW - 60_000,
     updatedAt: NOW,
     playerCount: 12,
-    revealedOptionIds: phase === "question-revealed" ? ["fixture-option"] : null,
+    revealedOptionIds:
+      phase === "question-revealed" ? ["fixture-option"] : null,
   };
 }
 
@@ -84,13 +86,19 @@ const answeredNumber = {
   value: 9_800,
 };
 
-function ask(questionId = QUESTION, playerId = "player-abc"): Promise<Response> {
+function ask(
+  questionId = QUESTION,
+  playerId = "player-abc",
+): Promise<Response> {
   const form = new FormData();
   form.set("playerId", playerId);
   form.set("questionId", questionId);
 
   return result({
-    request: new Request("https://example.test/api/quiz/result", { method: "POST", body: form }),
+    request: new Request("https://example.test/api/quiz/result", {
+      method: "POST",
+      body: form,
+    }),
   } as Parameters<typeof result>[0]) as Promise<Response>;
 }
 
@@ -123,19 +131,22 @@ describe("the phase gate", () => {
    * sheet anyone in the room can reach with one `curl`, and the check has to read the
    * session document rather than trust a parameter.
    */
-  it.each(["lobby", "question-open"] as const)("refuses in %s", async (phase) => {
-    readOwnResultMock.mockResolvedValue({
-      outcome: "ok",
-      state: state(phase),
-      answer: answered,
-      total: 2_740,
-    });
+  it.each(["lobby", "question-open"] as const)(
+    "refuses in %s",
+    async (phase) => {
+      readOwnResultMock.mockResolvedValue({
+        outcome: "ok",
+        state: state(phase),
+        answer: answered,
+        total: 2_740,
+      });
 
-    const response = await ask();
+      const response = await ask();
 
-    expect(response.status).toBe(409);
-    expect(JSON.stringify(await body(response))).not.toContain("awarded");
-  });
+      expect(response.status).toBe(409);
+      expect(JSON.stringify(await body(response))).not.toContain("awarded");
+    },
+  );
 
   it("refuses when a different question is the one revealed", async () => {
     readOwnResultMock.mockResolvedValue({
@@ -151,7 +162,12 @@ describe("the phase gate", () => {
   });
 
   it("refuses when there is no session at all", async () => {
-    readOwnResultMock.mockResolvedValue({ outcome: "ok", state: null, answer: null, total: 0 });
+    readOwnResultMock.mockResolvedValue({
+      outcome: "ok",
+      state: null,
+      answer: null,
+      total: 0,
+    });
 
     expect((await ask()).status).toBe(409);
   });
@@ -202,7 +218,10 @@ describe("the typed answer travels back to its own device", () => {
       total: 2_740,
     });
 
-    expect(await body(await ask())).toMatchObject({ answered: false, text: null });
+    expect(await body(await ask())).toMatchObject({
+      answered: false,
+      text: null,
+    });
   });
 
   it("stays behind the phase gate, like the verdict it travels with", async () => {
@@ -253,7 +272,10 @@ describe("the numeric guess travels back to its own device", () => {
       total: 2_740,
     });
 
-    expect(await body(await ask())).toMatchObject({ answered: false, value: null });
+    expect(await body(await ask())).toMatchObject({
+      answered: false,
+      value: null,
+    });
   });
 
   it("stays behind the phase gate, like the verdict it travels with", async () => {
@@ -358,7 +380,10 @@ describe("not-found and failed stay distinct", () => {
   });
 
   it("reports a store failure as 503, never as a silent non-answer", async () => {
-    readOwnResultMock.mockResolvedValue({ outcome: "failed", reason: "unreachable" });
+    readOwnResultMock.mockResolvedValue({
+      outcome: "failed",
+      reason: "unreachable",
+    });
 
     const response = await ask();
 
@@ -367,7 +392,10 @@ describe("not-found and failed stay distinct", () => {
   });
 
   it("reports an unconfigured store as 503", async () => {
-    readOwnResultMock.mockResolvedValue({ outcome: "unconfigured", reason: "no creds" });
+    readOwnResultMock.mockResolvedValue({
+      outcome: "unconfigured",
+      reason: "no creds",
+    });
 
     expect((await ask()).status).toBe(503);
   });
@@ -379,7 +407,10 @@ describe("input handling", () => {
     form.set("questionId", QUESTION);
 
     const response = (await result({
-      request: new Request("https://example.test/api/quiz/result", { method: "POST", body: form }),
+      request: new Request("https://example.test/api/quiz/result", {
+        method: "POST",
+        body: form,
+      }),
     } as Parameters<typeof result>[0])) as Response;
 
     expect(response.status).toBe(400);
@@ -424,7 +455,10 @@ describe("the standings branch", () => {
     const response = await ask();
 
     expect(response.status).toBe(200);
-    await expect(body(response)).resolves.toMatchObject({ rank: 7, total: 2_740 });
+    await expect(body(response)).resolves.toMatchObject({
+      rank: 7,
+      total: 2_740,
+    });
   });
 
   /**

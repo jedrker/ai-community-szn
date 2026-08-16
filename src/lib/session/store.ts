@@ -17,10 +17,23 @@ import {
   TALLIES_KEY,
 } from "./keys";
 import { logSessionEvent } from "./log";
-import { MAX_PLAYERS_PER_DEVICE, parsePlayerRecord, type PlayerRecord } from "./players";
+import {
+  MAX_PLAYERS_PER_DEVICE,
+  parsePlayerRecord,
+  type PlayerRecord,
+} from "./players";
 import { buildStandings, rankOf, type Standings } from "./standings";
-import { initialSessionState, parseSessionState, type SessionState } from "./state";
-import { answeredField, optionField, wordField, wordFromField } from "./tallies";
+import {
+  initialSessionState,
+  parseSessionState,
+  type SessionState,
+} from "./state";
+import {
+  answeredField,
+  optionField,
+  wordField,
+  wordFromField,
+} from "./tallies";
 import { WORD_CLOUD_SIZE } from "./words";
 
 /**
@@ -553,7 +566,9 @@ export async function readSession(): Promise<ReadResult> {
 
   const parsed = parseSessionState(asDocument(raw));
   if (!parsed.ok) {
-    logSessionEvent("session.read.invalid", { reason: parsed.problems.join("; ") });
+    logSessionEvent("session.read.invalid", {
+      reason: parsed.problems.join("; "),
+    });
     return { outcome: "invalid", problems: parsed.problems };
   }
 
@@ -576,7 +591,7 @@ export async function createSession(now: number): Promise<CreateResult> {
     result = await redis.eval<[string, string], [number, unknown]>(
       CREATE_IF_ABSENT,
       [SESSION_KEY],
-      [JSON.stringify(initial), String(SESSION_TTL_SECONDS)]
+      [JSON.stringify(initial), String(SESSION_TTL_SECONDS)],
     );
   } catch (err) {
     return { outcome: "failed", reason: describe(err) };
@@ -586,7 +601,9 @@ export async function createSession(now: number): Promise<CreateResult> {
   const parsed = parseSessionState(asDocument(result?.[1]));
 
   if (!parsed.ok) {
-    logSessionEvent("session.read.invalid", { reason: parsed.problems.join("; ") });
+    logSessionEvent("session.read.invalid", {
+      reason: parsed.problems.join("; "),
+    });
     return { outcome: "invalid", problems: parsed.problems };
   }
 
@@ -612,7 +629,7 @@ export async function createSession(now: number): Promise<CreateResult> {
  */
 export async function writeSession(
   expectedVersion: number,
-  next: SessionState
+  next: SessionState,
 ): Promise<WriteResult> {
   const redis = client();
   if (!redis) return unconfigured();
@@ -637,7 +654,11 @@ export async function writeSession(
     result = await redis.eval<[string, string, string], [number, number]>(
       COMPARE_AND_SET,
       [SESSION_KEY],
-      [String(expectedVersion), JSON.stringify(next), String(SESSION_TTL_SECONDS)]
+      [
+        String(expectedVersion),
+        JSON.stringify(next),
+        String(SESSION_TTL_SECONDS),
+      ],
     );
   } catch (err) {
     return { outcome: "failed", reason: describe(err) };
@@ -679,7 +700,7 @@ export async function writeSession(
  */
 export async function endSession(
   expectedVersion: number,
-  next: SessionState
+  next: SessionState,
 ): Promise<WriteResult> {
   const redis = client();
   if (!redis) return unconfigured();
@@ -690,7 +711,10 @@ export async function endSession(
   }
 
   if (next.phase !== "ended") {
-    return { outcome: "failed", reason: `endSession requires phase "ended", got "${next.phase}"` };
+    return {
+      outcome: "failed",
+      reason: `endSession requires phase "ended", got "${next.phase}"`,
+    };
   }
 
   if (next.version !== expectedVersion + 1) {
@@ -702,14 +726,21 @@ export async function endSession(
 
   // Session key first — the script re-arms KEYS[2..n], and treats KEYS[1] as the
   // document it is writing.
-  const keys = [SESSION_KEY, ...registeredKeys().filter((key) => key !== SESSION_KEY)];
+  const keys = [
+    SESSION_KEY,
+    ...registeredKeys().filter((key) => key !== SESSION_KEY),
+  ];
 
   let result: [number, number] | null;
   try {
     result = await redis.eval<[string, string, string], [number, number]>(
       COMPARE_AND_END,
       keys,
-      [String(expectedVersion), JSON.stringify(next), String(ENDED_TTL_SECONDS)]
+      [
+        String(expectedVersion),
+        JSON.stringify(next),
+        String(ENDED_TTL_SECONDS),
+      ],
     );
   } catch (err) {
     return { outcome: "failed", reason: describe(err) };
@@ -788,7 +819,7 @@ export type ClaimResult =
 export async function claimPlayer(
   key: string,
   record: PlayerRecord,
-  deviceId: string
+  deviceId: string,
 ): Promise<ClaimResult> {
   const redis = client();
   if (!redis) return unconfigured();
@@ -809,7 +840,7 @@ export async function claimPlayer(
         deviceId,
         // Read here rather than passed in by the route, so the number is spelled once.
         String(MAX_PLAYERS_PER_DEVICE),
-      ]
+      ],
     );
   } catch (err) {
     return { outcome: "failed", reason: describe(err) };
@@ -829,7 +860,9 @@ export async function claimPlayer(
     if (raw === null || raw === undefined || raw === false) return null;
     const parsed = parseSessionState(asDocument(raw));
     if (!parsed.ok) {
-      logSessionEvent("session.read.invalid", { reason: parsed.problems.join("; ") });
+      logSessionEvent("session.read.invalid", {
+        reason: parsed.problems.join("; "),
+      });
       return null;
     }
     return parsed.state;
@@ -924,7 +957,7 @@ export async function readPlayerById(id: string): Promise<LookupResult> {
     result = await redis.eval<[string], [unknown, unknown, unknown]>(
       READ_PLAYER_BY_ID,
       [PLAYER_IDS_KEY, PLAYERS_KEY, SESSION_KEY, SCORES_KEY],
-      [id]
+      [id],
     );
   } catch (err) {
     console.error("Player lookup failed:", describe(err));
@@ -940,7 +973,8 @@ export async function readPlayerById(id: string): Promise<LookupResult> {
       : parsePlayerRecord(asDocument(rawPlayer));
 
   const state = ((): SessionState | null => {
-    if (rawState === null || rawState === undefined || rawState === false) return null;
+    if (rawState === null || rawState === undefined || rawState === false)
+      return null;
     const parsed = parseSessionState(asDocument(rawState));
     return parsed.ok ? parsed.state : null;
   })();
@@ -985,10 +1019,13 @@ export type SubmitResult =
  * that counts something alongside options does not have to restructure this.
  */
 function counterFields(record: AnswerRecord): string[] {
-  const fields = record.optionIds.map((optionId) => optionField(record.questionId, optionId));
+  const fields = record.optionIds.map((optionId) =>
+    optionField(record.questionId, optionId),
+  );
 
   // Roadmap S-08. `null` for every other kind, so this contributes nothing to them.
-  if (record.word !== null) fields.push(wordField(record.questionId, record.word));
+  if (record.word !== null)
+    fields.push(wordField(record.questionId, record.word));
 
   return fields;
 }
@@ -1009,7 +1046,9 @@ function counterFields(record: AnswerRecord): string[] {
  * six rejection branches it already owns, so the event family stays in one layer
  * (`claimPlayer`'s precedent).
  */
-export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> {
+export async function submitAnswer(
+  record: AnswerRecord,
+): Promise<SubmitResult> {
   const redis = client();
   if (!redis) return unconfigured();
 
@@ -1067,7 +1106,7 @@ export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> 
         // "how many people answered" and "what did they choose", and those are not
         // the same question.
         ...counterFields(stored),
-      ]
+      ],
     );
   } catch (err) {
     return { outcome: "failed", reason: describe(err) };
@@ -1085,9 +1124,13 @@ export async function submitAnswer(record: AnswerRecord): Promise<SubmitResult> 
   // there would report an answer the store never wrote as recorded. The other scripts
   // in this file fall through to a *refusal*, which is harmless; here the fall-through
   // direction is the unsafe one, so this branch names its condition.
-  if (status === 1) return { outcome: "accepted", total: Number(result?.[1]) || 0 };
+  if (status === 1)
+    return { outcome: "accepted", total: Number(result?.[1]) || 0 };
 
-  return { outcome: "failed", reason: `unexpected submit status: ${String(result?.[0])}` };
+  return {
+    outcome: "failed",
+    reason: `unexpected submit status: ${String(result?.[0])}`,
+  };
 }
 
 /**
@@ -1133,12 +1176,16 @@ export type QuestionTallies = {
  *
  * One billed command (`HGET`).
  */
-export async function readAnsweredCount(questionId: string): Promise<number | null> {
+export async function readAnsweredCount(
+  questionId: string,
+): Promise<number | null> {
   const redis = client();
   if (!redis) return null;
 
   try {
-    return counterFrom(await redis.hget(TALLIES_KEY, answeredField(questionId)));
+    return counterFrom(
+      await redis.hget(TALLIES_KEY, answeredField(questionId)),
+    );
   } catch {
     return null;
   }
@@ -1161,7 +1208,7 @@ export async function readAnsweredCount(questionId: string): Promise<number | nu
  */
 export async function readQuestionTallies(
   questionId: string,
-  optionIds: readonly string[]
+  optionIds: readonly string[],
 ): Promise<QuestionTallies | null> {
   const redis = client();
   if (!redis) return null;
@@ -1171,7 +1218,11 @@ export async function readQuestionTallies(
 
   let raw: Record<string, unknown> | null;
   try {
-    raw = await redis.hmget<Record<string, unknown>>(TALLIES_KEY, answered, ...fields);
+    raw = await redis.hmget<Record<string, unknown>>(
+      TALLIES_KEY,
+      answered,
+      ...fields,
+    );
   } catch {
     return null;
   }
@@ -1234,7 +1285,9 @@ export type WordCloud = {
  * failed read must never surface as an empty cloud: on a projector that is the claim
  * "nobody in this room wrote anything", at the moment the room is looking at it.
  */
-export async function readWordCloud(questionId: string): Promise<WordCloud | null> {
+export async function readWordCloud(
+  questionId: string,
+): Promise<WordCloud | null> {
   const redis = client();
   if (!redis) return null;
 
@@ -1259,7 +1312,10 @@ export async function readWordCloud(questionId: string): Promise<WordCloud | nul
     words.push({ word, count: counterFrom(value) });
   }
 
-  words.sort((a, b) => b.count - a.count || (a.word < b.word ? -1 : a.word > b.word ? 1 : 0));
+  words.sort(
+    (a, b) =>
+      b.count - a.count || (a.word < b.word ? -1 : a.word > b.word ? 1 : 0),
+  );
 
   return {
     answered: counterFrom(values[answeredField(questionId)]),
@@ -1297,7 +1353,10 @@ export type OwnResult =
  * gates it on "I answered" and "this question is scored" rather than issuing it
  * unconditionally.
  */
-export async function readOwnResult(playerId: string, questionId: string): Promise<OwnResult> {
+export async function readOwnResult(
+  playerId: string,
+  questionId: string,
+): Promise<OwnResult> {
   const redis = client();
   if (!redis) return unconfigured();
 
@@ -1306,20 +1365,27 @@ export async function readOwnResult(playerId: string, questionId: string): Promi
     result = await redis.eval<[string, string], [unknown, unknown, unknown]>(
       READ_ANSWER,
       [SESSION_KEY, ANSWERS_KEY, SCORES_KEY],
-      [answerField(questionId, playerId), playerId]
+      [answerField(questionId, playerId), playerId],
     );
   } catch (err) {
     console.error("Result lookup failed:", describe(err));
     return { outcome: "failed", reason: describe(err) };
   }
 
-  const [rawState, rawAnswer, rawTotal] = [result?.[0], result?.[1], result?.[2]];
+  const [rawState, rawAnswer, rawTotal] = [
+    result?.[0],
+    result?.[1],
+    result?.[2],
+  ];
 
   const state = ((): SessionState | null => {
-    if (rawState === null || rawState === undefined || rawState === false) return null;
+    if (rawState === null || rawState === undefined || rawState === false)
+      return null;
     const parsed = parseSessionState(asDocument(rawState));
     if (!parsed.ok) {
-      logSessionEvent("session.read.invalid", { reason: parsed.problems.join("; ") });
+      logSessionEvent("session.read.invalid", {
+        reason: parsed.problems.join("; "),
+      });
       return null;
     }
     return parsed.state;
@@ -1433,7 +1499,7 @@ export async function readStandings(): Promise<Standings | null> {
  * reserved for "the store could not say".
  */
 export async function readOwnRank(
-  playerId: string
+  playerId: string,
 ): Promise<{ rank: number; total: number } | null> {
   const redis = client();
   if (!redis) return null;
@@ -1496,7 +1562,10 @@ export async function purgeSession(): Promise<PurgeResult> {
   // Lua error, and `keys.test.ts` asserts the registry is non-empty for the same
   // reason. Fail loudly rather than reporting a vacuous success.
   if (keys.length === 0) {
-    return { outcome: "failed", reason: "the key registry is empty — nothing would be purged" };
+    return {
+      outcome: "failed",
+      reason: "the key registry is empty — nothing would be purged",
+    };
   }
 
   let removed: unknown;

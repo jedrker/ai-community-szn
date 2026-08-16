@@ -26,7 +26,10 @@ import { describe, expect, it } from "vitest";
  * source would force the page to choose between explaining itself and passing.
  */
 
-const SOURCE = readFileSync(fileURLToPath(new URL("./index.astro", import.meta.url)), "utf8");
+const SOURCE = readFileSync(
+  fileURLToPath(new URL("./index.astro", import.meta.url)),
+  "utf8",
+);
 
 const CODE = SOURCE.replace(/<!--[\s\S]*?-->/g, "")
   .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -98,7 +101,7 @@ describe("the countdown cannot outlive its question", () => {
     // What matters is the two exits: a hidden tab and a page going away.
     const visibility = CODE.slice(
       CODE.indexOf('addEventListener("visibilitychange"'),
-      CODE.indexOf('addEventListener("pagehide"')
+      CODE.indexOf('addEventListener("pagehide"'),
     );
     expect(visibility).toContain("stopCountdown()");
 
@@ -168,18 +171,23 @@ describe("an expired answer is never recorded as submitted", () => {
    * into `render`, and the closed state arrives as a value.
    */
   it("re-enters render from onExpire alone", () => {
-    const wiring = /createCountdown\(\{[\s\S]*?\n {6}\}\);/.exec(CODE)?.[0] ?? "";
+    const wiring =
+      /createCountdown\(\{[\s\S]*?\n {6}\}\);/.exec(CODE)?.[0] ?? "";
 
     // Non-vacuity: the wiring must have been found.
     expect(wiring).toContain("onPaint");
     expect(wiring).toContain("onExpire");
     // The paint callback must not re-enter the state machine; only the expiry may.
-    const onPaintLine = wiring.slice(wiring.indexOf("onPaint"), wiring.indexOf("onExpire"));
+    const onPaintLine = wiring.slice(
+      wiring.indexOf("onPaint"),
+      wiring.indexOf("onExpire"),
+    );
     expect(onPaintLine).not.toContain("render()");
   });
 
   it("keeps startCountdown free of any path back into render", () => {
-    const start = /function startCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
+    const start =
+      /function startCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(start).toContain("countdown.start(");
     expect(start).not.toContain("render()");

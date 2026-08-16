@@ -95,14 +95,20 @@ export const POST: APIRoute = async ({ request }) => {
   }, Date.now());
 
   if (readFailed) {
-    logSessionEvent("session.standings.failed", { reason: "standings read failed" });
+    logSessionEvent("session.standings.failed", {
+      reason: "standings read failed",
+    });
     return toResponse({
       status: 503,
       body: { error: "Nie udało się odczytać rankingu. Spróbuj ponownie." },
     });
   }
 
-  if (outcome.status === 200 && "applied" in outcome.body && outcome.body.applied === true) {
+  if (
+    outcome.status === 200 &&
+    "applied" in outcome.body &&
+    outcome.body.applied === true
+  ) {
     // Two counts, and deliberately nothing about who is on the board — see the event's note
     // in `log.ts`. `rowCount` is the one worth having: a board shorter than `STANDINGS_SIZE`
     // means the room was smaller than the board or records were dropped, and without it a
@@ -113,7 +119,11 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  if (outcome.status === 200 && "applied" in outcome.body && outcome.body.applied === false) {
+  if (
+    outcome.status === 200 &&
+    "applied" in outcome.body &&
+    outcome.body.applied === false
+  ) {
     const phase = outcome.body.state.phase;
 
     /**
@@ -166,7 +176,11 @@ export const POST: APIRoute = async ({ request }) => {
        */
       return toResponse({
         status: 200,
-        body: { state: outcome.body.state, applied: false, note: "republished" },
+        body: {
+          state: outcome.body.state,
+          applied: false,
+          note: "republished",
+        },
       });
     }
 

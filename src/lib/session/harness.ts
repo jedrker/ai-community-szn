@@ -17,5 +17,10 @@
  */
 export function isHarnessEnabled(): boolean {
   const value = import.meta.env.LIVEQUIZ_HARNESS;
-  return typeof value === "string" && value.length > 0 && value !== "0" && value !== "false";
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value !== "0" &&
+    value !== "false"
+  );
 }

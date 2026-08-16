@@ -168,7 +168,9 @@ function readSeen(storageKey: string): SeenMap {
     if (typeof parsed !== "object" || parsed === null) return {};
 
     const map: SeenMap = {};
-    for (const [questionId, value] of Object.entries(parsed as Record<string, unknown>)) {
+    for (const [questionId, value] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
       // A bare number is the shape this store held before it carried `submitted`. Read
       // it rather than discarding it: a device mid-question when the deploy lands would
       // otherwise restart its clock and be handed full speed weight.
@@ -184,7 +186,11 @@ function readSeen(storageKey: string): SeenMap {
           text?: unknown;
           optionIds?: unknown;
         };
-        if (typeof entry.at === "number" && Number.isFinite(entry.at) && entry.at > 0) {
+        if (
+          typeof entry.at === "number" &&
+          Number.isFinite(entry.at) &&
+          entry.at > 0
+        ) {
           map[questionId] = {
             at: entry.at,
             submitted: entry.submitted === true,
@@ -239,7 +245,11 @@ function writeSeen(storageKey: string, map: SeenMap): void {
  * posture `writePlayer` takes, because a storage quirk must not stop an attendee
  * answering.
  */
-export function markSeen(storageKey: string, questionId: string, now = Date.now()): number {
+export function markSeen(
+  storageKey: string,
+  questionId: string,
+  now = Date.now(),
+): number {
   const seen = readSeen(storageKey);
   const existing = seen[questionId];
   if (existing) return existing.at;
@@ -265,7 +275,7 @@ export function markSeen(storageKey: string, questionId: string, now = Date.now(
 export function markSubmitted(
   storageKey: string,
   questionId: string,
-  options: { text?: string; optionIds?: readonly string[]; now?: number } = {}
+  options: { text?: string; optionIds?: readonly string[]; now?: number } = {},
 ): void {
   const seen = readSeen(storageKey);
   const existing = seen[questionId];
@@ -278,7 +288,9 @@ export function markSubmitted(
     // absent, so the record does not grow a field it has no use for.
     ...(options.text === undefined ? {} : { text: options.text }),
     // And the mirror image: only for a choice answer.
-    ...(options.optionIds === undefined ? {} : { optionIds: [...options.optionIds] }),
+    ...(options.optionIds === undefined
+      ? {}
+      : { optionIds: [...options.optionIds] }),
   };
   writeSeen(storageKey, seen);
 }
@@ -295,7 +307,10 @@ export function hasSubmitted(storageKey: string, questionId: string): boolean {
  * answer submitted before this was persisted — the view treats all three the same way:
  * there is nothing to put back in the field.
  */
-export function submittedText(storageKey: string, questionId: string): string | null {
+export function submittedText(
+  storageKey: string,
+  questionId: string,
+): string | null {
   return readSeen(storageKey)[questionId]?.text ?? null;
 }
 
@@ -312,7 +327,7 @@ export function submittedText(storageKey: string, questionId: string): string | 
  */
 export function submittedOptionIds(
   storageKey: string,
-  questionId: string
+  questionId: string,
 ): readonly string[] | null {
   return readSeen(storageKey)[questionId]?.optionIds ?? null;
 }
@@ -381,7 +396,7 @@ export async function submitAnswer(
   playerId: string,
   questionId: string,
   payload: AnswerPayload,
-  elapsedMs: number
+  elapsedMs: number,
 ): Promise<SubmitOutcome> {
   if (inFlight.has(questionId)) return { outcome: "failed" };
   inFlight.add(questionId);
@@ -438,7 +453,8 @@ export async function submitAnswer(
     // closed, or its time ran out — the three cases where taking the control away is
     // correct. Every other 4xx wrote nothing, so the attendee must keep the field and be
     // able to try again.
-    if (response.status !== 409) return { outcome: "invalid", error: payload.error };
+    if (response.status !== 409)
+      return { outcome: "invalid", error: payload.error };
 
     // Two final refusals, told apart by the class the route sends rather than by its
     // wording: one recorded an answer, the other recorded nothing. See `expired`.
@@ -463,7 +479,10 @@ export async function submitAnswer(
  * the snapshot at all, so a failure here should cost the attendee their score line and
  * nothing else.
  */
-export async function fetchResult(playerId: string, questionId: string): Promise<OwnResult | null> {
+export async function fetchResult(
+  playerId: string,
+  questionId: string,
+): Promise<OwnResult | null> {
   const body = new FormData();
   body.set("playerId", playerId);
   body.set("questionId", questionId);
@@ -476,7 +495,9 @@ export async function fetchResult(playerId: string, questionId: string): Promise
     });
     if (!response.ok) return null;
 
-    const result = (await response.json().catch(() => null)) as OwnResult | null;
+    const result = (await response
+      .json()
+      .catch(() => null)) as OwnResult | null;
     if (result === null || typeof result.answered !== "boolean") return null;
 
     return result;

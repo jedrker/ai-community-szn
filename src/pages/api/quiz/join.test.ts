@@ -46,7 +46,10 @@ function request(fields: Record<string, string>): Request {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.set(key, value);
 
-  return new Request("https://example.test/api/quiz/join", { method: "POST", body: form });
+  return new Request("https://example.test/api/quiz/join", {
+    method: "POST",
+    body: form,
+  });
 }
 
 /**
@@ -70,7 +73,11 @@ beforeEach(() => {
   readSessionMock.mockReset();
   publishSnapshotMock.mockReset();
   readSessionMock.mockResolvedValue({ outcome: "ok", state: lobby });
-  claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
+  claimPlayerMock.mockResolvedValue({
+    outcome: "claimed",
+    playerCount: 1,
+    state: lobby,
+  });
   readPlayerByIdMock.mockResolvedValue({
     outcome: "not-found",
     player: null,
@@ -92,9 +99,15 @@ async function body(response: Response): Promise<Record<string, unknown>> {
 
 describe("claiming a name", () => {
   it("returns the player and the current state on a successful claim", async () => {
-    claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 5, state: lobby });
+    claimPlayerMock.mockResolvedValue({
+      outcome: "claimed",
+      playerCount: 5,
+      state: lobby,
+    });
 
-    const response = await join({ request: claiming({ displayName: "Anna" }) } as never);
+    const response = await join({
+      request: claiming({ displayName: "Anna" }),
+    } as never);
 
     expect(response.status).toBe(200);
     const payload = await body(response);
@@ -109,7 +122,11 @@ describe("claiming a name", () => {
    * FR-002 allows.
    */
   it("claims on the folded key but stores what was typed", async () => {
-    claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
+    claimPlayerMock.mockResolvedValue({
+      outcome: "claimed",
+      playerCount: 1,
+      state: lobby,
+    });
 
     await join({ request: claiming({ displayName: "  ZaŻÓŁĆ  " }) } as never);
 
@@ -119,7 +136,11 @@ describe("claiming a name", () => {
   });
 
   it("mints a distinct player id per claim", async () => {
-    claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
+    claimPlayerMock.mockResolvedValue({
+      outcome: "claimed",
+      playerCount: 1,
+      state: lobby,
+    });
 
     await join({ request: claiming({ displayName: "Anna" }) } as never);
     await join({ request: claiming({ displayName: "Hanna" }) } as never);
@@ -131,14 +152,18 @@ describe("claiming a name", () => {
   it("rejects a taken name with 409 and a prompt to pick another", async () => {
     claimPlayerMock.mockResolvedValue({ outcome: "taken", state: lobby });
 
-    const response = await join({ request: claiming({ displayName: "Anna" }) } as never);
+    const response = await join({
+      request: claiming({ displayName: "Anna" }),
+    } as never);
 
     expect(response.status).toBe(409);
     expect((await body(response)).error).toContain("zajęta");
   });
 
   it("rejects an invalid name with 400 and the validator's own message", async () => {
-    const response = await join({ request: claiming({ displayName: "<script>" }) } as never);
+    const response = await join({
+      request: claiming({ displayName: "<script>" }),
+    } as never);
 
     expect(response.status).toBe(400);
     expect(claimPlayerMock).not.toHaveBeenCalled();
@@ -159,11 +184,13 @@ describe("claiming a name", () => {
   it("distinguishes a session that has not started from one that has ended", async () => {
     claimPlayerMock.mockResolvedValue({ outcome: "no-session" });
     const notStarted = await body(
-      await join({ request: claiming({ displayName: "Anna" }) } as never)
+      await join({ request: claiming({ displayName: "Anna" }) } as never),
     );
 
     claimPlayerMock.mockResolvedValue({ outcome: "closed", state: lobby });
-    const ended = await body(await join({ request: claiming({ displayName: "Anna" }) } as never));
+    const ended = await body(
+      await join({ request: claiming({ displayName: "Anna" }) } as never),
+    );
 
     expect(notStarted.error).not.toBe(ended.error);
     expect(String(notStarted.error)).toContain("jeszcze");
@@ -180,10 +207,14 @@ describe("claiming a name", () => {
    */
   it("refuses a device at its allowance with copy that does not invite another name", async () => {
     claimPlayerMock.mockResolvedValue({ outcome: "taken", state: lobby });
-    const taken = await body(await join({ request: claiming({ displayName: "Anna" }) } as never));
+    const taken = await body(
+      await join({ request: claiming({ displayName: "Anna" }) } as never),
+    );
 
     claimPlayerMock.mockResolvedValue({ outcome: "capped", state: lobby });
-    const response = await join({ request: claiming({ displayName: "Anna" }) } as never);
+    const response = await join({
+      request: claiming({ displayName: "Anna" }),
+    } as never);
     const capped = await body(response);
 
     expect(response.status).toBe(409);
@@ -208,7 +239,9 @@ describe("claiming a name", () => {
    * records under "prove the fixture reaches the branch".
    */
   it("refuses a claim that carries no device id, without reaching the store", async () => {
-    const response = await join({ request: request({ displayName: "Anna" }) } as never);
+    const response = await join({
+      request: request({ displayName: "Anna" }),
+    } as never);
 
     expect(response.status).toBe(400);
     expect(claimPlayerMock).not.toHaveBeenCalled();
@@ -259,16 +292,26 @@ describe("claiming a name", () => {
   });
 
   it("surfaces an unconfigured store as 503", async () => {
-    claimPlayerMock.mockResolvedValue({ outcome: "unconfigured", reason: "no url" });
+    claimPlayerMock.mockResolvedValue({
+      outcome: "unconfigured",
+      reason: "no url",
+    });
 
-    const response = await join({ request: claiming({ displayName: "Anna" }) } as never);
+    const response = await join({
+      request: claiming({ displayName: "Anna" }),
+    } as never);
     expect(response.status).toBe(503);
   });
 
   it("surfaces a store failure as 503 without throwing", async () => {
-    claimPlayerMock.mockResolvedValue({ outcome: "failed", reason: "unreachable" });
+    claimPlayerMock.mockResolvedValue({
+      outcome: "failed",
+      reason: "unreachable",
+    });
 
-    const response = await join({ request: claiming({ displayName: "Anna" }) } as never);
+    const response = await join({
+      request: claiming({ displayName: "Anna" }),
+    } as never);
     expect(response.status).toBe(503);
   });
 });
@@ -282,7 +325,9 @@ describe("a device coming back", () => {
       total: 0,
     });
 
-    const response = await join({ request: request({ playerId: "player-abc" }) } as never);
+    const response = await join({
+      request: request({ playerId: "player-abc" }),
+    } as never);
 
     expect(response.status).toBe(200);
     const payload = await body(response);
@@ -332,7 +377,9 @@ describe("a device coming back", () => {
       total: 0,
     });
 
-    const response = await join({ request: request({ playerId: "player-abc" }) } as never);
+    const response = await join({
+      request: request({ playerId: "player-abc" }),
+    } as never);
 
     expect(response.status).toBe(200);
     expect((await body(response)).resumed).toBe(true);
@@ -378,7 +425,7 @@ describe("a device coming back", () => {
     });
 
     const payload = await body(
-      await join({ request: request({ playerId: "player-abc" }) } as never)
+      await join({ request: request({ playerId: "player-abc" }) } as never),
     );
 
     expect(payload.total).toBe(1_200);
@@ -399,7 +446,7 @@ describe("a device coming back", () => {
     });
 
     const payload = await body(
-      await join({ request: request({ playerId: "player-abc" }) } as never)
+      await join({ request: request({ playerId: "player-abc" }) } as never),
     );
 
     expect(payload.total).toBe(0);
@@ -414,7 +461,9 @@ describe("a device coming back", () => {
       total: 0,
     });
 
-    await join({ request: request({ playerId: "player-abc", displayName: "Anna" }) } as never);
+    await join({
+      request: request({ playerId: "player-abc", displayName: "Anna" }),
+    } as never);
 
     expect(claimPlayerMock).not.toHaveBeenCalled();
   });
@@ -435,18 +484,30 @@ describe("a device coming back", () => {
    */
   it("reports a store failure as 503 so the client keeps its stored id", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    readPlayerByIdMock.mockResolvedValue({ outcome: "failed", player: null, state: null });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "failed",
+      player: null,
+      state: null,
+    });
 
-    const response = await join({ request: request({ playerId: "player-abc" }) } as never);
+    const response = await join({
+      request: request({ playerId: "player-abc" }),
+    } as never);
 
     expect(response.status).toBe(503);
     expect(claimPlayerMock).not.toHaveBeenCalled();
   });
 
   it("reports an unknown id as 404 so the client falls back to the form", async () => {
-    readPlayerByIdMock.mockResolvedValue({ outcome: "not-found", player: null, state: null });
+    readPlayerByIdMock.mockResolvedValue({
+      outcome: "not-found",
+      player: null,
+      state: null,
+    });
 
-    const response = await join({ request: request({ playerId: "gone" }) } as never);
+    const response = await join({
+      request: request({ playerId: "gone" }),
+    } as never);
 
     expect(response.status).toBe(404);
     expect(claimPlayerMock).not.toHaveBeenCalled();
@@ -459,7 +520,11 @@ describe("what joining must never do", () => {
    * spine contract forbids. The count reaches the room on the host's next action.
    */
   it("publishes nothing, on any path", async () => {
-    claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
+    claimPlayerMock.mockResolvedValue({
+      outcome: "claimed",
+      playerCount: 1,
+      state: lobby,
+    });
     await join({ request: claiming({ displayName: "Anna" }) } as never);
 
     claimPlayerMock.mockResolvedValue({ outcome: "taken", state: lobby });
@@ -489,7 +554,11 @@ describe("what joining must never do", () => {
    * back, since nothing else about the response would change if it did.
    */
   it("joins in one store round trip, on both paths", async () => {
-    claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 1, state: lobby });
+    claimPlayerMock.mockResolvedValue({
+      outcome: "claimed",
+      playerCount: 1,
+      state: lobby,
+    });
     await join({ request: claiming({ displayName: "Anna" }) } as never);
 
     readPlayerByIdMock.mockResolvedValue({
@@ -511,10 +580,21 @@ describe("what joining must never do", () => {
    * hand a just-joined attendee a null state (impl review F5).
    */
   it("returns the state the claim itself was checked against", async () => {
-    const opened = { ...lobby, version: 9, phase: "question-open" as const, currentQuestionId: "fixture-question" };
-    claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 2, state: opened });
+    const opened = {
+      ...lobby,
+      version: 9,
+      phase: "question-open" as const,
+      currentQuestionId: "fixture-question",
+    };
+    claimPlayerMock.mockResolvedValue({
+      outcome: "claimed",
+      playerCount: 2,
+      state: opened,
+    });
 
-    const payload = await body(await join({ request: claiming({ displayName: "Anna" }) } as never));
+    const payload = await body(
+      await join({ request: claiming({ displayName: "Anna" }) } as never),
+    );
 
     expect(payload.state).toEqual(opened);
   });
@@ -522,7 +602,11 @@ describe("what joining must never do", () => {
   it("emits both join events from this one layer", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    claimPlayerMock.mockResolvedValue({ outcome: "claimed", playerCount: 3, state: lobby });
+    claimPlayerMock.mockResolvedValue({
+      outcome: "claimed",
+      playerCount: 3,
+      state: lobby,
+    });
     await join({ request: claiming({ displayName: "Anna" }) } as never);
 
     claimPlayerMock.mockResolvedValue({ outcome: "taken", state: lobby });

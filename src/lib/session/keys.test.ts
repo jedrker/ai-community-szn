@@ -88,21 +88,36 @@ function sourceFiles(): { label: string; path: string }[] {
     .filter((name) => name.endsWith(".ts"))
     .filter((name) => !name.endsWith(".test.ts"))
     .filter((name) => name !== REGISTRY_FILE)
-    .map((name) => ({ label: `src/lib/session/${name}`, path: join(SESSION_DIR, name) }));
+    .map((name) => ({
+      label: `src/lib/session/${name}`,
+      path: join(SESSION_DIR, name),
+    }));
 
   const clientFiles = readdirSync(CLIENT_DIR)
     .filter((name) => name.endsWith(".ts"))
     .filter((name) => !name.endsWith(".test.ts"))
-    .map((name) => ({ label: `src/lib/client/${name}`, path: join(CLIENT_DIR, name) }));
+    .map((name) => ({
+      label: `src/lib/client/${name}`,
+      path: join(CLIENT_DIR, name),
+    }));
 
   const apiFiles = readdirSync(API_DIR, { recursive: true, encoding: "utf8" })
     .filter((name) => name.endsWith(".ts"))
     .filter((name) => !name.endsWith(".test.ts"))
-    .map((name) => ({ label: `src/pages/api/quiz/${name}`, path: join(API_DIR, name) }));
+    .map((name) => ({
+      label: `src/pages/api/quiz/${name}`,
+      path: join(API_DIR, name),
+    }));
 
-  const pageFiles = readdirSync(PAGES_DIR, { recursive: true, encoding: "utf8" })
+  const pageFiles = readdirSync(PAGES_DIR, {
+    recursive: true,
+    encoding: "utf8",
+  })
     .filter((name) => name.endsWith(".astro"))
-    .map((name) => ({ label: `src/pages/quiz/${name}`, path: join(PAGES_DIR, name) }));
+    .map((name) => ({
+      label: `src/pages/quiz/${name}`,
+      path: join(PAGES_DIR, name),
+    }));
 
   return [...sessionFiles, ...clientFiles, ...apiFiles, ...pageFiles];
 }
@@ -136,24 +151,31 @@ describe("every namespaced name is declared in keys.ts", () => {
   });
 
   it("reports nothing for source with no namespaced literal", () => {
-    expect(findNamespacedLiterals("const fine = SESSION_KEY;\nconst n = 1;")).toEqual([]);
-  });
-
-  it.each(sourceFiles())("$label declares no namespaced literal of its own", ({ label, path }) => {
-    const offenders = findNamespacedLiterals(readFileSync(path, "utf8"));
-
     expect(
-      offenders,
-      `${label} contains a "${SESSION_NAMESPACE}"-prefixed string literal:\n` +
-        offenders.map(({ line, number }) => `  line ${number}: ${line}`).join("\n") +
-        `\n\nEvery namespaced name belongs in src/lib/session/keys.ts, because that is ` +
-        `the list\n` +
-        `the end and purge operations read. A key declared anywhere else survives both ` +
-        `the\n` +
-        `TTL re-arm and the purge, holding attendee data past the session that ` +
-        `collected it —\n` +
-        `which is the PRD retention guardrail F-03 exists to enforce.\n\n` +
-        `Add it to REGISTERED_KEYS in keys.ts and import it from there.`
+      findNamespacedLiterals("const fine = SESSION_KEY;\nconst n = 1;"),
     ).toEqual([]);
   });
+
+  it.each(sourceFiles())(
+    "$label declares no namespaced literal of its own",
+    ({ label, path }) => {
+      const offenders = findNamespacedLiterals(readFileSync(path, "utf8"));
+
+      expect(
+        offenders,
+        `${label} contains a "${SESSION_NAMESPACE}"-prefixed string literal:\n` +
+          offenders
+            .map(({ line, number }) => `  line ${number}: ${line}`)
+            .join("\n") +
+          `\n\nEvery namespaced name belongs in src/lib/session/keys.ts, because that is ` +
+          `the list\n` +
+          `the end and purge operations read. A key declared anywhere else survives both ` +
+          `the\n` +
+          `TTL re-arm and the purge, holding attendee data past the session that ` +
+          `collected it —\n` +
+          `which is the PRD retention guardrail F-03 exists to enforce.\n\n` +
+          `Add it to REGISTERED_KEYS in keys.ts and import it from there.`,
+      ).toEqual([]);
+    },
+  );
 });

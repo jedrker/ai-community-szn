@@ -29,7 +29,11 @@
 
 import { Redis } from "@upstash/redis";
 
-import { registeredKeys, SESSION_KEY, SESSION_NAMESPACE } from "../src/lib/session/keys";
+import {
+  registeredKeys,
+  SESSION_KEY,
+  SESSION_NAMESPACE,
+} from "../src/lib/session/keys";
 
 /**
  * Imported from the registry, not mirrored (corrected 2026-08-07, during S-02).
@@ -99,7 +103,10 @@ async function scanNamespace(redis: Redis): Promise<string[]> {
   let cursor = "0";
 
   do {
-    const [next, keys] = await redis.scan(cursor, { match: `${NAMESPACE}*`, count: 100 });
+    const [next, keys] = await redis.scan(cursor, {
+      match: `${NAMESPACE}*`,
+      count: 100,
+    });
     cursor = String(next);
     found.push(...keys);
   } while (cursor !== "0");
@@ -108,13 +115,17 @@ async function scanNamespace(redis: Redis): Promise<string[]> {
 }
 
 async function main(): Promise<void> {
-  console.log("\nChecking that a purge leaves nothing behind (F-03 Phase 4).\n");
+  console.log(
+    "\nChecking that a purge leaves nothing behind (F-03 Phase 4).\n",
+  );
 
   const config = credentials();
   record(Boolean(config), "Upstash credentials", config ? "present" : "absent");
 
   if (!config) {
-    console.log("\n  → Pull them locally (`vercel env pull`) or export them by hand.\n");
+    console.log(
+      "\n  → Pull them locally (`vercel env pull`) or export them by hand.\n",
+    );
     process.exit(1);
   }
 
@@ -134,7 +145,8 @@ async function main(): Promise<void> {
   if (existing !== null) {
     let phase = "unreadable";
     try {
-      const doc = typeof existing === "string" ? JSON.parse(existing) : existing;
+      const doc =
+        typeof existing === "string" ? JSON.parse(existing) : existing;
       phase = String((doc as { phase?: unknown })?.phase ?? "unknown");
     } catch {
       /* leave it as unreadable — the refusal does not depend on parsing it */
@@ -145,7 +157,7 @@ async function main(): Promise<void> {
         "  → This script seeds and then deletes keys in the live namespace. Refusing to\n" +
         "    run while ANY session document exists, including a lobby waiting for a room\n" +
         "    and an ended session still inside its retention window.\n\n" +
-        "    Wait for the TTL, or purge deliberately through the host route first.\n"
+        "    Wait for the TTL, or purge deliberately through the host route first.\n",
     );
     process.exit(1);
   }
@@ -173,31 +185,35 @@ async function main(): Promise<void> {
   record(
     seeded.every((key) => afterSeed.includes(key)),
     "seeded the namespace",
-    `${afterSeed.length} key(s): ${afterSeed.join(", ")}`
+    `${afterSeed.length} key(s): ${afterSeed.join(", ")}`,
   );
 
   // Purge exactly as `purgeSession` does — one DEL over the registered set.
   const removed = await redis.eval<[], number>(
     "return redis.call('DEL', unpack(KEYS))",
     EXPECTED_REGISTERED,
-    []
+    [],
   );
   record(
     Number(removed) === EXPECTED_REGISTERED.length,
     "purge removed every registered key",
-    `removed ${removed} of ${EXPECTED_REGISTERED.length}`
+    `removed ${removed} of ${EXPECTED_REGISTERED.length}`,
   );
 
   const afterPurge = await scanNamespace(redis);
-  const registeredSurvivors = afterPurge.filter((key) => EXPECTED_REGISTERED.includes(key));
-  const otherSurvivors = afterPurge.filter((key) => !EXPECTED_REGISTERED.includes(key));
+  const registeredSurvivors = afterPurge.filter((key) =>
+    EXPECTED_REGISTERED.includes(key),
+  );
+  const otherSurvivors = afterPurge.filter(
+    (key) => !EXPECTED_REGISTERED.includes(key),
+  );
 
   record(
     registeredSurvivors.length === 0,
     "no registered key survives the purge",
     registeredSurvivors.length === 0
       ? "namespace holds none of the registered keys"
-      : `SURVIVED: ${registeredSurvivors.join(", ")}`
+      : `SURVIVED: ${registeredSurvivors.join(", ")}`,
   );
 
   const decoySurvived = otherSurvivors.includes(DECOY_UNREGISTERED);
@@ -207,15 +223,17 @@ async function main(): Promise<void> {
       ? `${DECOY_UNREGISTERED} SURVIVED — expected, and the whole point: a ` +
           "registry-based purge cannot reach what the registry does not know about"
       : `${DECOY_UNREGISTERED} did not survive — unexpected; the purge reached further ` +
-          "than the registry, which is worth understanding before trusting it"
+          "than the registry, which is worth understanding before trusting it",
   );
 
-  const unexplained = otherSurvivors.filter((key) => key !== DECOY_UNREGISTERED);
+  const unexplained = otherSurvivors.filter(
+    (key) => key !== DECOY_UNREGISTERED,
+  );
   if (unexplained.length > 0) {
     note(
       "unexplained residue",
       `${unexplained.join(", ")} — not seeded by this run and not registered. Someone ` +
-        "wrote a key outside keys.ts, which is exactly the leak this slice exists to close"
+        "wrote a key outside keys.ts, which is exactly the leak this slice exists to close",
     );
   }
 
@@ -226,11 +244,13 @@ async function main(): Promise<void> {
   record(
     finalScan.length === 0,
     "the namespace is empty when this script exits",
-    finalScan.length === 0 ? "clean" : `still present: ${finalScan.join(", ")}`
+    finalScan.length === 0 ? "clean" : `still present: ${finalScan.join(", ")}`,
   );
 
   const failed = findings.filter((finding) => !finding.ok);
-  console.log(`\n${findings.length - failed.length}/${findings.length} checks passed.`);
+  console.log(
+    `\n${findings.length - failed.length}/${findings.length} checks passed.`,
+  );
 
   if (notes.length > 0) {
     console.log("\nNotes (reported, not failed):");
@@ -248,7 +268,7 @@ async function main(): Promise<void> {
 
   console.log(
     "Record this run in\n" +
-      "context/changes/session-end-and-data-purge/purge-verification.md.\n"
+      "context/changes/session-end-and-data-purge/purge-verification.md.\n",
   );
 }
 

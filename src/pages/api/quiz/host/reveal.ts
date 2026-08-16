@@ -30,7 +30,8 @@ export function formatCorrectValue(value: number): string {
 /** What the room is told the answer was, for the kinds that have one to state. */
 function revealedAnswerTextFor(question: Question | undefined): string | null {
   if (question?.kind === "text") return question.acceptedAnswers[0] ?? null;
-  if (question?.kind === "number") return formatCorrectValue(question.correctValue);
+  if (question?.kind === "number")
+    return formatCorrectValue(question.correctValue);
   return null;
 }
 
@@ -83,7 +84,8 @@ export const POST: APIRoute = async ({ request }) => {
     const question = getQuestionById(current.currentQuestionId ?? "");
     const isChoice =
       question !== undefined &&
-      (question.kind === "single-choice" || question.kind === "multiple-choice");
+      (question.kind === "single-choice" ||
+        question.kind === "multiple-choice");
 
     /**
      * The room's answers, read HERE and for the same reason `revealedOptionIds` is set
@@ -108,7 +110,7 @@ export const POST: APIRoute = async ({ request }) => {
     const revealedDistribution = isChoice
       ? await readQuestionTallies(
           current.currentQuestionId!,
-          question.options.map((option) => option.id)
+          question.options.map((option) => option.id),
         )
       : // For a non-choice kind the read is skipped entirely — no submission for one can
         // exist today, and Phase 4 hides the panel for them. **This is the one place the
@@ -169,18 +171,26 @@ export const POST: APIRoute = async ({ request }) => {
 
   // Distinguish "nothing to reveal" from "already revealed": both are no-ops in
   // the store, but only the first is a mistake worth telling the host about.
-  if (outcome.status === 200 && "applied" in outcome.body && outcome.body.applied === false) {
+  if (
+    outcome.status === 200 &&
+    "applied" in outcome.body &&
+    outcome.body.applied === false
+  ) {
     if (outcome.body.state.phase === "lobby") {
       return toResponse({
         status: 409,
-        body: { error: "Żadne pytanie nie jest otwarte — nie ma czego pokazać." },
+        body: {
+          error: "Żadne pytanie nie jest otwarte — nie ma czego pokazać.",
+        },
       });
     }
 
     if (outcome.body.state.phase === "standings") {
       return toResponse({
         status: 409,
-        body: { error: "Ranking jest już pokazany — przejdź do następnego pytania." },
+        body: {
+          error: "Ranking jest już pokazany — przejdź do następnego pytania.",
+        },
       });
     }
 

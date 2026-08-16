@@ -15,7 +15,7 @@ export const POST: APIRoute = async ({ request }) => {
   if (!name || !email || !topic || !bio) {
     return new Response(
       JSON.stringify({ error: "Wypełnij wszystkie wymagane pola." }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
+      { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
 
@@ -77,7 +77,7 @@ export const POST: APIRoute = async ({ request }) => {
   // Slack notification
   try {
     await sendSlackNotification(
-      `🎤 Nowe zgłoszenie prelegenta!\n*${name}* (${email})\nTemat: ${topic}`
+      `🎤 Nowe zgłoszenie prelegenta!\n*${name}* (${email})\nTemat: ${topic}`,
     );
   } catch (err) {
     console.error("Failed to send Slack notification:", err);
@@ -87,6 +87,6 @@ export const POST: APIRoute = async ({ request }) => {
     JSON.stringify({
       message: "Dziękujemy za zgłoszenie! Odezwiemy się wkrótce.",
     }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
+    { status: 200, headers: { "Content-Type": "application/json" } },
   );
 };

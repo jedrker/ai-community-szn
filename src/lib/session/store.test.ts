@@ -129,8 +129,12 @@ describe("configuration", () => {
     vi.stubEnv("KV_REST_API_URL", "");
     vi.stubEnv("KV_REST_API_TOKEN", "");
 
-    await expect(readSession()).resolves.toMatchObject({ outcome: "unconfigured" });
-    await expect(createSession(NOW)).resolves.toMatchObject({ outcome: "unconfigured" });
+    await expect(readSession()).resolves.toMatchObject({
+      outcome: "unconfigured",
+    });
+    await expect(createSession(NOW)).resolves.toMatchObject({
+      outcome: "unconfigured",
+    });
     await expect(writeSession(1, firstQuestionOpen)).resolves.toMatchObject({
       outcome: "unconfigured",
     });
@@ -143,7 +147,10 @@ describe("configuration", () => {
     vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "test-token");
     redisMock.get.mockResolvedValue(null);
 
-    await expect(readSession()).resolves.toEqual({ outcome: "ok", state: null });
+    await expect(readSession()).resolves.toEqual({
+      outcome: "ok",
+      state: null,
+    });
   });
 });
 
@@ -153,7 +160,10 @@ describe("readSession", () => {
   it("returns null when no session exists", async () => {
     redisMock.get.mockResolvedValue(null);
 
-    await expect(readSession()).resolves.toEqual({ outcome: "ok", state: null });
+    await expect(readSession()).resolves.toEqual({
+      outcome: "ok",
+      state: null,
+    });
     expect(redisMock.get).toHaveBeenCalledWith(SESSION_KEY);
   });
 
@@ -188,7 +198,10 @@ describe("readSession", () => {
   });
 
   it("reports an invalid document instead of returning it", async () => {
-    redisMock.get.mockResolvedValue({ ...firstQuestionOpen, phase: "nonsense" });
+    redisMock.get.mockResolvedValue({
+      ...firstQuestionOpen,
+      phase: "nonsense",
+    });
 
     const result = await readSession();
     expect(result.outcome).toBe("invalid");
@@ -233,7 +246,9 @@ describe("createSession", () => {
   it("reports a transport failure without throwing", async () => {
     redisMock.eval.mockRejectedValue(new Error("upstash unreachable"));
 
-    await expect(createSession(NOW)).resolves.toMatchObject({ outcome: "failed" });
+    await expect(createSession(NOW)).resolves.toMatchObject({
+      outcome: "failed",
+    });
   });
 });
 
@@ -342,7 +357,10 @@ describe("endSession", () => {
   it("applies an end whose expected version matches", async () => {
     redisMock.eval.mockResolvedValue([1, 2]);
 
-    await expect(endSession(1, ended)).resolves.toEqual({ outcome: "applied", state: ended });
+    await expect(endSession(1, ended)).resolves.toEqual({
+      outcome: "applied",
+      state: ended,
+    });
   });
 
   it("performs the end as exactly one atomic store call", async () => {
@@ -394,7 +412,10 @@ describe("endSession", () => {
   it("reports a stale end and does not claim success", async () => {
     redisMock.eval.mockResolvedValue([0, 7]);
 
-    await expect(endSession(1, ended)).resolves.toEqual({ outcome: "stale", version: 7 });
+    await expect(endSession(1, ended)).resolves.toEqual({
+      outcome: "stale",
+      version: 7,
+    });
   });
 
   it("reports a missing session rather than creating an ended one", async () => {
@@ -446,7 +467,10 @@ describe("purgeSession", () => {
   it("reports how many keys existed", async () => {
     redisMock.eval.mockResolvedValue(1);
 
-    await expect(purgeSession()).resolves.toEqual({ outcome: "purged", keysRemoved: 1 });
+    await expect(purgeSession()).resolves.toEqual({
+      outcome: "purged",
+      keysRemoved: 1,
+    });
   });
 
   it("treats an empty namespace as a normal outcome, not a failure", async () => {
@@ -454,7 +478,10 @@ describe("purgeSession", () => {
 
     // Purging when nothing is there is what residue cleanup looks like. Reporting it
     // as an error would train a host to ignore the one verb whose errors matter.
-    await expect(purgeSession()).resolves.toEqual({ outcome: "purged", keysRemoved: 0 });
+    await expect(purgeSession()).resolves.toEqual({
+      outcome: "purged",
+      keysRemoved: 0,
+    });
   });
 
   it("reports a transport failure without throwing", async () => {
@@ -508,7 +535,12 @@ describe("claimPlayer", () => {
     await claimPlayer("anna", player, DEVICE);
 
     const [script, keys, args] = redisMock.eval.mock.calls[0]!;
-    expect(keys).toEqual([SESSION_KEY, PLAYERS_KEY, PLAYER_IDS_KEY, DEVICES_KEY]);
+    expect(keys).toEqual([
+      SESSION_KEY,
+      PLAYERS_KEY,
+      PLAYER_IDS_KEY,
+      DEVICES_KEY,
+    ]);
     expect(args[3]).toBe(String(SESSION_TTL_SECONDS));
     // Every EXPIRE in the script, not as follow-up calls that can fail on their own
     // and leave a hash of attendee names on no lifetime at all. Three since S-09 added
@@ -609,7 +641,9 @@ describe("claimPlayer", () => {
     redisMock.eval.mockResolvedValue([-1, 0, false]);
 
     // No session means no document to carry out — the only outcome without state.
-    await expect(claimPlayer("anna", player, DEVICE)).resolves.toEqual({ outcome: "no-session" });
+    await expect(claimPlayer("anna", player, DEVICE)).resolves.toEqual({
+      outcome: "no-session",
+    });
   });
 
   /**
@@ -618,7 +652,11 @@ describe("claimPlayer", () => {
    * quiz. A joiner must be able to tell "not started yet" from "already over".
    */
   it("refuses a session that has ended, distinctly from one that has not started", async () => {
-    redisMock.eval.mockResolvedValue([-2, 0, JSON.stringify({ ...lobby, phase: "ended", version: 9 })]);
+    redisMock.eval.mockResolvedValue([
+      -2,
+      0,
+      JSON.stringify({ ...lobby, phase: "ended", version: 9 }),
+    ]);
 
     const result = await claimPlayer("anna", player, DEVICE);
     expect(result).toMatchObject({ outcome: "closed" });
@@ -696,7 +734,11 @@ describe("readPlayerById", () => {
   beforeEach(configure);
 
   it("resolves an id through the reverse index in one round trip", async () => {
-    redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby), 800]);
+    redisMock.eval.mockResolvedValue([
+      JSON.stringify(player),
+      JSON.stringify(lobby),
+      800,
+    ]);
 
     await expect(readPlayerById("player-abc")).resolves.toEqual({
       outcome: "found",
@@ -709,7 +751,12 @@ describe("readPlayerById", () => {
     // reloading device needs all three, and the script has all three in hand.
     expect(redisMock.eval).toHaveBeenCalledTimes(1);
     const [, keys] = redisMock.eval.mock.calls[0]!;
-    expect(keys).toEqual([PLAYER_IDS_KEY, PLAYERS_KEY, SESSION_KEY, SCORES_KEY]);
+    expect(keys).toEqual([
+      PLAYER_IDS_KEY,
+      PLAYERS_KEY,
+      SESSION_KEY,
+      SCORES_KEY,
+    ]);
   });
 
   it("accepts an already-deserialized record", async () => {
@@ -739,7 +786,11 @@ describe("readPlayerById", () => {
    * exists rather than the coercion.
    */
   it("reads an absent total as zero, not as a failure", async () => {
-    redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby), false]);
+    redisMock.eval.mockResolvedValue([
+      JSON.stringify(player),
+      JSON.stringify(lobby),
+      false,
+    ]);
 
     await expect(readPlayerById("player-abc")).resolves.toMatchObject({
       outcome: "found",
@@ -760,7 +811,11 @@ describe("readPlayerById", () => {
    * such rendering: it is one device's own reassurance, so it degrades to `0`.
    */
   it("reads a corrupt total as zero rather than NaN", async () => {
-    redisMock.eval.mockResolvedValue([JSON.stringify(player), JSON.stringify(lobby), "not-a-number"]);
+    redisMock.eval.mockResolvedValue([
+      JSON.stringify(player),
+      JSON.stringify(lobby),
+      "not-a-number",
+    ]);
 
     await expect(readPlayerById("player-abc")).resolves.toMatchObject({
       outcome: "found",
@@ -799,7 +854,12 @@ describe("readPlayerById", () => {
 
     // The assertion that matters: `failed`, distinct from the unknown-id case above.
     // Asserting only `player: null` would pass against the lockout bug.
-    expect(result).toEqual({ outcome: "failed", player: null, state: null, total: 0 });
+    expect(result).toEqual({
+      outcome: "failed",
+      player: null,
+      state: null,
+      total: 0,
+    });
   });
 
   it("reports an unconfigured store as failed rather than as an unknown player", async () => {
@@ -865,7 +925,10 @@ describe("submitAnswer", () => {
   it("accepts a first answer and reports the new running total", async () => {
     redisMock.eval.mockResolvedValue([1, 920]);
 
-    await expect(submitAnswer(answer)).resolves.toEqual({ outcome: "accepted", total: 920 });
+    await expect(submitAnswer(answer)).resolves.toEqual({
+      outcome: "accepted",
+      total: 920,
+    });
   });
 
   /**
@@ -893,7 +956,13 @@ describe("submitAnswer", () => {
     await submitAnswer(answer);
 
     const [script, keys, args] = redisMock.eval.mock.calls[0]!;
-    expect(keys).toEqual([SESSION_KEY, ANSWERS_KEY, SCORES_KEY, PLAYER_IDS_KEY, TALLIES_KEY]);
+    expect(keys).toEqual([
+      SESSION_KEY,
+      ANSWERS_KEY,
+      SCORES_KEY,
+      PLAYER_IDS_KEY,
+      TALLIES_KEY,
+    ]);
     expect(args[5]).toBe(String(SESSION_TTL_SECONDS));
 
     // `end` re-arms only keys that exist when the host ends. Between the first answer
@@ -1011,7 +1080,9 @@ describe("submitAnswer", () => {
       const [, , args] = redisMock.eval.mock.calls[0]!;
       // `text` is the typed form and must not reach the field name — otherwise two
       // people who typed the same word in different case get two chips.
-      expect(args.slice(7)).not.toContain(wordField(wordCloudId, "Halucynacja"));
+      expect(args.slice(7)).not.toContain(
+        wordField(wordCloudId, "Halucynacja"),
+      );
     });
 
     it("bills exactly what a single-choice answer bills", async () => {
@@ -1057,7 +1128,11 @@ describe("submitAnswer", () => {
       const [, , args] = redisMock.eval.mock.calls[0]!;
       // The schema's defaults are what gets written, so what is read back matches what
       // `readOwnResult` expects rather than depending on what the caller remembered.
-      expect(JSON.parse(args[1]!)).toMatchObject({ text: null, value: null, word: null });
+      expect(JSON.parse(args[1]!)).toMatchObject({
+        text: null,
+        value: null,
+        word: null,
+      });
     });
   });
 
@@ -1088,8 +1163,16 @@ describe("submitAnswer", () => {
     // no-session, not-open, unknown-player and already-answered all return before the
     // script reaches the tallies key. Asserted positionally because the mock cannot run
     // the Lua: what it can prove is that no reachable path reaches an increment first.
-    for (const branch of ["return { -1, 0 }", "return { -2, 0 }", "return { -3, 0 }", "return { 0, 0 }"]) {
-      expect(script.indexOf(branch), `${branch} must precede the tally increments`).toBeGreaterThan(-1);
+    for (const branch of [
+      "return { -1, 0 }",
+      "return { -2, 0 }",
+      "return { -3, 0 }",
+      "return { 0, 0 }",
+    ]) {
+      expect(
+        script.indexOf(branch),
+        `${branch} must precede the tally increments`,
+      ).toBeGreaterThan(-1);
       expect(script.indexOf(branch)).toBeLessThan(firstTally);
     }
   });
@@ -1108,7 +1191,9 @@ describe("submitAnswer", () => {
   it("reports a transport failure as failed, distinct from every refusal above", async () => {
     redisMock.eval.mockRejectedValue(new Error("unreachable"));
 
-    await expect(submitAnswer(answer)).resolves.toMatchObject({ outcome: "failed" });
+    await expect(submitAnswer(answer)).resolves.toMatchObject({
+      outcome: "failed",
+    });
   });
 
   /**
@@ -1124,14 +1209,18 @@ describe("submitAnswer", () => {
   ])("reports %s as failed rather than as accepted", async (_label, reply) => {
     redisMock.eval.mockResolvedValue(reply);
 
-    await expect(submitAnswer(answer)).resolves.toMatchObject({ outcome: "failed" });
+    await expect(submitAnswer(answer)).resolves.toMatchObject({
+      outcome: "failed",
+    });
   });
 
   it("refuses to store a record that does not satisfy its own schema", async () => {
     // `readOwnResult` parses what it reads, so a malformed record comes back as `null`
     // and the result route tells a device that watched its answer land that it never
     // answered. A refusal here is visible; that is not.
-    await expect(submitAnswer({ ...answer, awarded: -5 })).resolves.toMatchObject({
+    await expect(
+      submitAnswer({ ...answer, awarded: -5 }),
+    ).resolves.toMatchObject({
       outcome: "failed",
     });
     expect(redisMock.eval).not.toHaveBeenCalled();
@@ -1141,7 +1230,9 @@ describe("submitAnswer", () => {
     vi.stubEnv("KV_REST_API_URL", "");
     vi.stubEnv("KV_REST_API_TOKEN", "");
 
-    await expect(submitAnswer(answer)).resolves.toMatchObject({ outcome: "unconfigured" });
+    await expect(submitAnswer(answer)).resolves.toMatchObject({
+      outcome: "unconfigured",
+    });
   });
 
   it("publishes nothing — the room learns nothing from a submission", async () => {
@@ -1165,7 +1256,10 @@ describe("readAnsweredCount", () => {
     redisMock.hget.mockResolvedValue(37);
 
     await expect(readAnsweredCount(questionId)).resolves.toBe(37);
-    expect(redisMock.hget).toHaveBeenCalledWith(TALLIES_KEY, answeredField(questionId));
+    expect(redisMock.hget).toHaveBeenCalledWith(
+      TALLIES_KEY,
+      answeredField(questionId),
+    );
     expect(redisMock.hget).toHaveBeenCalledTimes(1);
   });
 
@@ -1247,7 +1341,7 @@ describe("readQuestionTallies", () => {
       answeredField(questionId),
       optionField(questionId, "a"),
       optionField(questionId, "b"),
-      optionField(questionId, "c")
+      optionField(questionId, "c"),
     );
   });
 
@@ -1293,13 +1387,17 @@ describe("readQuestionTallies", () => {
   it("returns null when the store cannot answer", async () => {
     redisMock.hmget.mockRejectedValue(new Error("unreachable"));
 
-    await expect(readQuestionTallies(questionId, optionIds)).resolves.toBeNull();
+    await expect(
+      readQuestionTallies(questionId, optionIds),
+    ).resolves.toBeNull();
   });
 
   it("returns null when the store is unconfigured", async () => {
     vi.unstubAllEnvs();
 
-    await expect(readQuestionTallies(questionId, optionIds)).resolves.toBeNull();
+    await expect(
+      readQuestionTallies(questionId, optionIds),
+    ).resolves.toBeNull();
   });
 });
 
@@ -1311,7 +1409,7 @@ describe("readWordCloud", () => {
   /** Builds a tallies-hash reply, with the word family spelled through `wordField`. */
   function hash(
     counts: Record<string, number>,
-    extra: Record<string, unknown> = {}
+    extra: Record<string, unknown> = {},
   ): Record<string, unknown> {
     const fields: Record<string, unknown> = { ...extra };
     for (const [word, count] of Object.entries(counts)) {
@@ -1322,12 +1420,16 @@ describe("readWordCloud", () => {
 
   it("reads the whole hash in one command and takes the answered count from it", async () => {
     redisMock.hgetall.mockResolvedValue(
-      hash({ robot: 3 }, { [answeredField(questionId)]: 11 })
+      hash({ robot: 3 }, { [answeredField(questionId)]: 11 }),
     );
 
     const cloud = await readWordCloud(questionId);
 
-    expect(cloud).toEqual({ answered: 11, distinct: 1, words: [{ word: "robot", count: 3 }] });
+    expect(cloud).toEqual({
+      answered: 11,
+      distinct: 1,
+      words: [{ word: "robot", count: 3 }],
+    });
     // One billed command, and the numerator came out of the same reply — adding a
     // `readAnsweredCount` beside this is the change that would make the cost note wrong.
     expect(redisMock.hgetall).toHaveBeenCalledTimes(1);
@@ -1342,8 +1444,8 @@ describe("readWordCloud", () => {
           [answeredField(questionId)]: 5,
           [optionField("fixture-choice-question", "fixture-option")]: 40,
           [answeredField("fixture-choice-question")]: 60,
-        }
-      )
+        },
+      ),
     );
 
     const cloud = await readWordCloud(questionId);
@@ -1358,7 +1460,9 @@ describe("readWordCloud", () => {
       [wordField("inne-pytanie", "android")]: 9,
     });
 
-    expect((await readWordCloud(questionId))?.words).toEqual([{ word: "robot", count: 2 }]);
+    expect((await readWordCloud(questionId))?.words).toEqual([
+      { word: "robot", count: 2 },
+    ]);
   });
 
   it("keeps a word containing a colon intact", async () => {
@@ -1371,7 +1475,7 @@ describe("readWordCloud", () => {
   });
 
   it("keeps a word's Polish diacritics, because this string reaches the projector", async () => {
-    redisMock.hgetall.mockResolvedValue(hash({ "żółw": 2 }));
+    redisMock.hgetall.mockResolvedValue(hash({ żółw: 2 }));
 
     expect((await readWordCloud(questionId))?.words[0]!.word).toBe("żółw");
   });
@@ -1387,7 +1491,9 @@ describe("readWordCloud", () => {
    * could not fail).
    */
   it("orders by count descending", async () => {
-    redisMock.hgetall.mockResolvedValue(hash({ rzadkie: 1, czeste: 9, srednie: 4 }));
+    redisMock.hgetall.mockResolvedValue(
+      hash({ rzadkie: 1, czeste: 9, srednie: 4 }),
+    );
 
     expect((await readWordCloud(questionId))?.words).toEqual([
       { word: "czeste", count: 9 },
@@ -1397,13 +1503,13 @@ describe("readWordCloud", () => {
   });
 
   it("breaks a tie alphabetically, so the cloud does not reorder itself between polls", async () => {
-    redisMock.hgetall.mockResolvedValue(hash({ zebra: 2, android: 2, robot: 2 }));
+    redisMock.hgetall.mockResolvedValue(
+      hash({ zebra: 2, android: 2, robot: 2 }),
+    );
 
-    expect((await readWordCloud(questionId))?.words.map((entry) => entry.word)).toEqual([
-      "android",
-      "robot",
-      "zebra",
-    ]);
+    expect(
+      (await readWordCloud(questionId))?.words.map((entry) => entry.word),
+    ).toEqual(["android", "robot", "zebra"]);
   });
 
   it("is stable across two reads of the same hash in a different key order", async () => {
@@ -1466,9 +1572,13 @@ describe("readWordCloud", () => {
   it("reads a counter written as a decimal string", async () => {
     // `automaticDeserialization` may hand back either; depending on one silently would mean
     // every count reading as zero if it changed.
-    redisMock.hgetall.mockResolvedValue(hash({ robot: "7" as unknown as number }));
+    redisMock.hgetall.mockResolvedValue(
+      hash({ robot: "7" as unknown as number }),
+    );
 
-    expect((await readWordCloud(questionId))?.words).toEqual([{ word: "robot", count: 7 }]);
+    expect((await readWordCloud(questionId))?.words).toEqual([
+      { word: "robot", count: 7 },
+    ]);
   });
 });
 
@@ -1499,7 +1609,9 @@ describe("readOwnResult", () => {
       "920",
     ]);
 
-    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
+    await expect(
+      readOwnResult("player-abc", stored.questionId),
+    ).resolves.toEqual({
       outcome: "ok",
       state: firstQuestionOpen,
       // The pre-S-05/S-06/S-08 record, plus the fields it did not carry.
@@ -1518,7 +1630,9 @@ describe("readOwnResult", () => {
     // mean every result read failing if it ever changed.
     redisMock.eval.mockResolvedValue([firstQuestionOpen, stored, 920]);
 
-    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+    await expect(
+      readOwnResult("player-abc", stored.questionId),
+    ).resolves.toMatchObject({
       outcome: "ok",
       answer: stored,
       total: 920,
@@ -1532,9 +1646,15 @@ describe("readOwnResult", () => {
    * missed a question they watched themselves answer.
    */
   it("reports a device that did not answer as ok with a null answer", async () => {
-    redisMock.eval.mockResolvedValue([JSON.stringify(firstQuestionOpen), false, false]);
+    redisMock.eval.mockResolvedValue([
+      JSON.stringify(firstQuestionOpen),
+      false,
+      false,
+    ]);
 
-    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
+    await expect(
+      readOwnResult("player-abc", stored.questionId),
+    ).resolves.toEqual({
       outcome: "ok",
       state: firstQuestionOpen,
       answer: null,
@@ -1546,7 +1666,9 @@ describe("readOwnResult", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     redisMock.eval.mockRejectedValue(new Error("unreachable"));
 
-    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+    await expect(
+      readOwnResult("player-abc", stored.questionId),
+    ).resolves.toMatchObject({
       outcome: "failed",
     });
   });
@@ -1555,15 +1677,23 @@ describe("readOwnResult", () => {
     vi.stubEnv("KV_REST_API_URL", "");
     vi.stubEnv("KV_REST_API_TOKEN", "");
 
-    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+    await expect(
+      readOwnResult("player-abc", stored.questionId),
+    ).resolves.toMatchObject({
       outcome: "unconfigured",
     });
   });
 
   it("reads a total of zero for a player who has scored nothing", async () => {
-    redisMock.eval.mockResolvedValue([JSON.stringify(firstQuestionOpen), false, false]);
+    redisMock.eval.mockResolvedValue([
+      JSON.stringify(firstQuestionOpen),
+      false,
+      false,
+    ]);
 
-    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+    await expect(
+      readOwnResult("player-abc", stored.questionId),
+    ).resolves.toMatchObject({
       total: 0,
     });
   });
@@ -1575,7 +1705,9 @@ describe("readOwnResult", () => {
       "920",
     ]);
 
-    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toMatchObject({
+    await expect(
+      readOwnResult("player-abc", stored.questionId),
+    ).resolves.toMatchObject({
       outcome: "ok",
       answer: null,
       total: 920,
@@ -1585,7 +1717,9 @@ describe("readOwnResult", () => {
   it("survives a session document that is absent entirely", async () => {
     redisMock.eval.mockResolvedValue([false, false, false]);
 
-    await expect(readOwnResult("player-abc", stored.questionId)).resolves.toEqual({
+    await expect(
+      readOwnResult("player-abc", stored.questionId),
+    ).resolves.toEqual({
       outcome: "ok",
       state: null,
       answer: null,
@@ -1606,22 +1740,29 @@ describe("readStandings", () => {
   beforeEach(configure);
 
   const ala = { id: "id-ala", displayName: "Ala", joinedAt: NOW };
-  const bartek = { id: "id-bartek", displayName: "Bartek", joinedAt: NOW + 1_000 };
+  const bartek = {
+    id: "id-bartek",
+    displayName: "Bartek",
+    joinedAt: NOW + 1_000,
+  };
 
   function hashes(
     players: Record<string, unknown>,
-    scores: Record<string, unknown>
+    scores: Record<string, unknown>,
   ): void {
     redisMock.hgetall.mockImplementation((key: string) =>
-      Promise.resolve(key === PLAYERS_KEY ? players : scores)
+      Promise.resolve(key === PLAYERS_KEY ? players : scores),
     );
   }
 
   it("joins scores to names through the record's own id", () => {
-    hashes({ ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) }, {
-      "id-ala": 10,
-      "id-bartek": 30,
-    });
+    hashes(
+      { ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) },
+      {
+        "id-ala": 10,
+        "id-bartek": 30,
+      },
+    );
 
     // The players hash is keyed by FOLDED NAME, not by id — so a join that used the hash
     // field would find nothing in the scores hash and every total would read zero.
@@ -1643,7 +1784,10 @@ describe("readStandings", () => {
   });
 
   it("counts a player with no score entry rather than dropping them", () => {
-    hashes({ ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) }, { "id-ala": 10 });
+    hashes(
+      { ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) },
+      { "id-ala": 10 },
+    );
 
     return expect(readStandings()).resolves.toMatchObject({
       rows: [
@@ -1656,11 +1800,16 @@ describe("readStandings", () => {
 
   /** One corrupt record must not cost the room its leaderboard. */
   it("skips a record it cannot parse and keeps the rest", async () => {
-    hashes({ ala: JSON.stringify(ala), broken: "{{{ not json" }, { "id-ala": 10 });
+    hashes(
+      { ala: JSON.stringify(ala), broken: "{{{ not json" },
+      { "id-ala": 10 },
+    );
 
     const standings = await readStandings();
 
-    expect(standings?.rows).toEqual([{ rank: 1, displayName: "Ala", points: 10 }]);
+    expect(standings?.rows).toEqual([
+      { rank: 1, displayName: "Ala", points: 10 },
+    ]);
     // The dropped row is dropped from the count too — a denominator that included a
     // player with no name would leave the attendee's "position N of M" unreachable at M.
     expect(standings?.playerCount).toBe(1);
@@ -1673,10 +1822,13 @@ describe("readStandings", () => {
    * than the fix (impl review F8).
    */
   it("lists a player whose total cannot be parsed, at zero", async () => {
-    hashes({ ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) }, {
-      "id-ala": 10,
-      "id-bartek": "nonsense",
-    });
+    hashes(
+      { ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) },
+      {
+        "id-ala": 10,
+        "id-bartek": "nonsense",
+      },
+    );
 
     const standings = await readStandings();
 
@@ -1691,7 +1843,10 @@ describe("readStandings", () => {
     // has joined yet; that is a fact, not an outage.
     hashes(null as never, null as never);
 
-    return expect(readStandings()).resolves.toEqual({ rows: [], playerCount: 0 });
+    return expect(readStandings()).resolves.toEqual({
+      rows: [],
+      playerCount: 0,
+    });
   });
 
   /**
@@ -1725,9 +1880,16 @@ describe("readOwnRank", () => {
   beforeEach(configure);
 
   it("returns the caller's rank and total", () => {
-    redisMock.hgetall.mockResolvedValue({ "id-ala": 30, "id-bartek": 50, "id-cela": 10 });
+    redisMock.hgetall.mockResolvedValue({
+      "id-ala": 30,
+      "id-bartek": 50,
+      "id-cela": 10,
+    });
 
-    return expect(readOwnRank("id-ala")).resolves.toEqual({ rank: 2, total: 30 });
+    return expect(readOwnRank("id-ala")).resolves.toEqual({
+      rank: 2,
+      total: 30,
+    });
   });
 
   /**
@@ -1737,7 +1899,10 @@ describe("readOwnRank", () => {
   it("ranks an id absent from the hash at zero rather than failing", () => {
     redisMock.hgetall.mockResolvedValue({ "id-bartek": 50, "id-cela": 10 });
 
-    return expect(readOwnRank("id-nobody")).resolves.toEqual({ rank: 3, total: 0 });
+    return expect(readOwnRank("id-nobody")).resolves.toEqual({
+      rank: 3,
+      total: 0,
+    });
   });
 
   /**
@@ -1747,7 +1912,11 @@ describe("readOwnRank", () => {
    * pass against a positional rank too.
    */
   it("gives a tied caller the same rank the board shows", () => {
-    redisMock.hgetall.mockResolvedValue({ "id-ala": 50, "id-bartek": 50, "id-cela": 10 });
+    redisMock.hgetall.mockResolvedValue({
+      "id-ala": 50,
+      "id-bartek": 50,
+      "id-cela": 10,
+    });
 
     return expect(readOwnRank("id-bartek")).resolves.toMatchObject({ rank: 1 });
   });
@@ -1774,15 +1943,24 @@ describe("readOwnRank", () => {
       "id-broken": "nonsense",
     });
 
-    return expect(readOwnRank("id-ala")).resolves.toEqual({ rank: 2, total: 30 });
+    return expect(readOwnRank("id-ala")).resolves.toEqual({
+      rank: 2,
+      total: 30,
+    });
   });
 
   it("still answers a caller whose own total is corrupt, reading it as zero", () => {
-    redisMock.hgetall.mockResolvedValue({ "id-ala": "nonsense", "id-bartek": 50 });
+    redisMock.hgetall.mockResolvedValue({
+      "id-ala": "nonsense",
+      "id-bartek": 50,
+    });
 
     // Refusing to tell a device where it stands, over a value only store corruption can
     // produce, costs the attendee their line for no gain.
-    return expect(readOwnRank("id-ala")).resolves.toEqual({ rank: 2, total: 0 });
+    return expect(readOwnRank("id-ala")).resolves.toEqual({
+      rank: 2,
+      total: 0,
+    });
   });
 
   it("issues one command", async () => {

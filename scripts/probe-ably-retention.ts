@@ -132,7 +132,7 @@ type ProbeMessage = {
  */
 async function findProbeMessage(
   channel: ReturnType<Ably.Rest["channels"]["get"]>,
-  stamp: number
+  stamp: number,
 ): Promise<{ found: boolean; ageSeconds: number | null; total: number }> {
   const page = await channel.history({ limit: 100 });
   const items = page.items;
@@ -144,7 +144,9 @@ async function findProbeMessage(
 
   return {
     found: Boolean(match),
-    ageSeconds: match?.timestamp ? Math.round((Date.now() - match.timestamp) / 1000) : null,
+    ageSeconds: match?.timestamp
+      ? Math.round((Date.now() - match.timestamp) / 1000)
+      : null,
     total: items.length,
   };
 }
@@ -160,7 +162,10 @@ async function surveyLiveChannel(rest: Ably.Rest): Promise<void> {
     const items = page.items;
 
     if (items.length === 0) {
-      observe(`live channel ${LIVE_CHANNEL}`, "no retrievable history right now");
+      observe(
+        `live channel ${LIVE_CHANNEL}`,
+        "no retrievable history right now",
+      );
       return;
     }
 
@@ -171,23 +176,26 @@ async function surveyLiveChannel(rest: Ably.Rest): Promise<void> {
 
     observe(
       `live channel ${LIVE_CHANNEL}`,
-      `${items.length} message(s) retrievable, oldest ${oldestAge}s old, newest ${newestAge}s old`
+      `${items.length} message(s) retrievable, oldest ${oldestAge}s old, newest ${newestAge}s old`,
     );
     console.log(
       "\n  → Those are real published snapshots, still readable by anything holding a\n" +
         "    subscribe token. Today they carry flow only. From S-02 they carry display\n" +
-        "    names, and from S-03 answers and scores.\n"
+        "    names, and from S-03 answers and scores.\n",
     );
   } catch (err) {
     record(
       false,
       `reading history on ${LIVE_CHANNEL}`,
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
   }
 }
 
-async function probeRetention(rest: Ably.Rest, waitSeconds: number): Promise<void> {
+async function probeRetention(
+  rest: Ably.Rest,
+  waitSeconds: number,
+): Promise<void> {
   const channel = rest.channels.get(PROBE_CHANNEL);
   const stamp = Date.now();
 
@@ -201,12 +209,16 @@ async function probeRetention(rest: Ably.Rest, waitSeconds: number): Promise<voi
     // Deliberately NOT the "snapshot" event name the product publishes under, so even
     // a client subscribed to this namespace by mistake would not process it.
     await channel.publish("probe", payload);
-    record(true, "published a marked probe message", `stamp=${stamp} on ${PROBE_CHANNEL}`);
+    record(
+      true,
+      "published a marked probe message",
+      `stamp=${stamp} on ${PROBE_CHANNEL}`,
+    );
   } catch (err) {
     record(
       false,
       "publishing to the probe channel",
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
     return;
   }
@@ -219,7 +231,11 @@ async function probeRetention(rest: Ably.Rest, waitSeconds: number): Promise<voi
     const result = await findProbeMessage(channel, stamp);
     if (result.found) {
       appeared = true;
-      record(true, "message is retrievable from history after publish", `age ${result.ageSeconds}s`);
+      record(
+        true,
+        "message is retrievable from history after publish",
+        `age ${result.ageSeconds}s`,
+      );
       break;
     }
     await sleep(APPEAR_POLL_MS);
@@ -229,12 +245,12 @@ async function probeRetention(rest: Ably.Rest, waitSeconds: number): Promise<voi
     record(
       false,
       "message is retrievable from history after publish",
-      `not found within ${APPEAR_TIMEOUT_SECONDS}s — cannot measure retention from here`
+      `not found within ${APPEAR_TIMEOUT_SECONDS}s — cannot measure retention from here`,
     );
     console.log(
       "\n  → A message that never appears in history is either a publish that did not\n" +
         "    land or a channel with history fully disabled. Check the Ably dashboard\n" +
-        "    before recording this as 'retention is zero' — the two look identical here.\n"
+        "    before recording this as 'retention is zero' — the two look identical here.\n",
     );
     return;
   }
@@ -245,7 +261,7 @@ async function probeRetention(rest: Ably.Rest, waitSeconds: number): Promise<voi
   }
 
   console.log(
-    `\n  Waiting ${waitSeconds}s to see whether the message outlives the ephemeral window…\n`
+    `\n  Waiting ${waitSeconds}s to see whether the message outlives the ephemeral window…\n`,
   );
   await sleep(waitSeconds * 1_000);
 
@@ -262,11 +278,11 @@ async function probeRetention(rest: Ably.Rest, waitSeconds: number): Promise<voi
         "retention window",
         `still retrievable after ${after.ageSeconds}s — INCONCLUSIVE: the wait did not ` +
           `cross the ~${EPHEMERAL_WINDOW_SECONDS}s ephemeral window, where survival is expected ` +
-          "regardless of the persistence setting"
+          "regardless of the persistence setting",
       );
       console.log(
         `\n  → Re-run with --wait ${DEFAULT_WAIT_SECONDS} or higher to get a reading that\n` +
-          "    distinguishes the ephemeral default from real persistence.\n"
+          "    distinguishes the ephemeral default from real persistence.\n",
       );
       return;
     }
@@ -280,7 +296,7 @@ async function probeRetention(rest: Ably.Rest, waitSeconds: number): Promise<voi
       console.log(
         "\n  → Asserted ephemeral, measured persistent. Either the channel rule did not\n" +
           "    take effect, or it does not cover this namespace. Do not record the\n" +
-          "    guardrail as closed on this surface.\n"
+          "    guardrail as closed on this surface.\n",
       );
     } else {
       observe("retention window", detail);
@@ -300,12 +316,14 @@ async function probeRetention(rest: Ably.Rest, waitSeconds: number): Promise<voi
 }
 
 async function main(): Promise<void> {
-  const waitSeconds = flag("quick") ? 0 : numericArg("wait", DEFAULT_WAIT_SECONDS);
+  const waitSeconds = flag("quick")
+    ? 0
+    : numericArg("wait", DEFAULT_WAIT_SECONDS);
 
   console.log("\nProbing Ably message retention (F-03 Phase 1).\n");
   console.log(
     `  mode: ${flag("expect-ephemeral") ? "ASSERT ephemeral" : "measure"}, ` +
-      `wait: ${waitSeconds === 0 ? "skipped" : `${waitSeconds}s`}\n`
+      `wait: ${waitSeconds === 0 ? "skipped" : `${waitSeconds}s`}\n`,
   );
 
   // Refuse an assertion the wait cannot support, rather than letting it pass
@@ -316,7 +334,7 @@ async function main(): Promise<void> {
       `  --expect-ephemeral needs --wait >= ${EPHEMERAL_WINDOW_SECONDS} (got ` +
         `${waitSeconds === 0 ? "--quick" : `${waitSeconds}s`}).\n\n` +
         `  Below the ~${EPHEMERAL_WINDOW_SECONDS}s ephemeral window a message survives whether or\n` +
-        "  not persistence is on, so the assertion would pass without proving anything.\n"
+        "  not persistence is on, so the assertion would pass without proving anything.\n",
     );
     process.exit(1);
   }
@@ -326,7 +344,7 @@ async function main(): Promise<void> {
 
   if (!apiKey) {
     console.log(
-      "\n  → Pull it locally (`vercel env pull`) or export it by hand, then re-run.\n"
+      "\n  → Pull it locally (`vercel env pull`) or export it by hand, then re-run.\n",
     );
     process.exit(1);
   }
@@ -338,10 +356,14 @@ async function main(): Promise<void> {
 
   const failed = findings.filter((finding) => !finding.ok);
 
-  console.log(`\n${findings.length - failed.length}/${findings.length} checks passed.`);
+  console.log(
+    `\n${findings.length - failed.length}/${findings.length} checks passed.`,
+  );
 
   if (observations.length > 0) {
-    console.log("\nObservations (these are what the artifact is written from):");
+    console.log(
+      "\nObservations (these are what the artifact is written from):",
+    );
     for (const observation of observations) console.log(`  - ${observation}`);
   }
 
@@ -357,7 +379,7 @@ async function main(): Promise<void> {
   console.log(
     "Record the measured window in\n" +
       "context/changes/session-end-and-data-purge/ably-retention-probe.md, then configure\n" +
-      "the livequiz:* channel rule and re-run with --expect-ephemeral.\n"
+      "the livequiz:* channel rule and re-run with --expect-ephemeral.\n",
   );
 }
 

@@ -177,11 +177,20 @@ function toPublicQuestion(question: Question): PublicQuestion {
   // The only kinds with anything more to show. `text`, `number` and `word-cloud` are
   // answered into an empty field, so the prompt is the whole of what a device needs —
   // and `acceptedAnswers` / `correctValue` therefore never come near this function.
-  if (question.kind === "single-choice" || question.kind === "multiple-choice") {
-    const projected = question.options.map((option) => ({ id: option.id, text: option.text }));
+  if (
+    question.kind === "single-choice" ||
+    question.kind === "multiple-choice"
+  ) {
+    const projected = question.options.map((option) => ({
+      id: option.id,
+      text: option.text,
+    }));
     return {
       ...base,
-      options: shuffleOptions(projected, seedFrom(`${question.id}:${SHUFFLE_SALT}`)),
+      options: shuffleOptions(
+        projected,
+        seedFrom(`${question.id}:${SHUFFLE_SALT}`),
+      ),
     };
   }
 

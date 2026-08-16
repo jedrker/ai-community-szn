@@ -1,5 +1,9 @@
 import type { APIRoute } from "astro";
-import { addSubscriber, isValidEmail, normalizeEmail } from "../../lib/newsletter";
+import {
+  addSubscriber,
+  isValidEmail,
+  normalizeEmail,
+} from "../../lib/newsletter";
 import { resend } from "../../lib/resend";
 
 export const POST: APIRoute = async ({ request }) => {
@@ -9,7 +13,7 @@ export const POST: APIRoute = async ({ request }) => {
   if (!isValidEmail(email)) {
     return new Response(
       JSON.stringify({ error: "Podaj prawidłowy adres email" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
+      { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
 
@@ -22,7 +26,7 @@ export const POST: APIRoute = async ({ request }) => {
       JSON.stringify({
         error: "Nie udało się zapisać. Spróbuj ponownie za chwilę.",
       }),
-      { status: 503, headers: { "Content-Type": "application/json" } }
+      { status: 503, headers: { "Content-Type": "application/json" } },
     );
   }
 
@@ -73,6 +77,6 @@ export const POST: APIRoute = async ({ request }) => {
           ? "Zapisano! Sprawdź swoją skrzynkę."
           : "Ten email jest już zapisany.",
     }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
+    { status: 200, headers: { "Content-Type": "application/json" } },
   );
 };

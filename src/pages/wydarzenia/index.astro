@@ -9,7 +9,7 @@ import EventCard from "../../components/EventCard.astro";
 
 const allEvents = await getCollection("events");
 const sortedEvents = allEvents.sort(
-  (a, b) => b.data.date.getTime() - a.data.date.getTime()
+  (a, b) => b.data.date.getTime() - a.data.date.getTime(),
 );
 ---
 

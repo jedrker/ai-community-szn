@@ -7,3 +7,12 @@ bun.lock
 context/
 docs/
 *.md
+
+# Pinned by structural source scans (host.test.ts, index.test.ts): these files'
+# inline scripts are asserted as literal text, so re-wrapping a line does not
+# just fail a guard — it can silently disarm one. The timer guard in
+# host.test.ts went from "exactly one fetching timer" to matching nothing at
+# all when Prettier reflowed the script. Formatting is not worth a guard that
+# cannot fail (test-plan.md §2 Risk #2).
+src/pages/quiz/host.astro
+src/pages/quiz/index.astro

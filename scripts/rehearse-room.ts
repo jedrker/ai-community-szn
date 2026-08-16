@@ -176,7 +176,8 @@ function resolveConfig(): Config | null {
   const rawBase = arg("base") ?? env("LIVEQUIZ_BASE_URL");
   const hostSecret = env("LIVEQUIZ_HOST_SECRET");
   const redisUrl = env("KV_REST_API_URL") ?? env("UPSTASH_REDIS_REST_URL");
-  const redisToken = env("KV_REST_API_TOKEN") ?? env("UPSTASH_REDIS_REST_TOKEN");
+  const redisToken =
+    env("KV_REST_API_TOKEN") ?? env("UPSTASH_REDIS_REST_TOKEN");
 
   let baseUrl: string | undefined;
   if (rawBase) {
@@ -191,17 +192,22 @@ function resolveConfig(): Config | null {
   record(
     Boolean(baseUrl),
     "target base URL",
-    baseUrl ?? (rawBase ? `"${rawBase}" is not a URL` : "absent")
+    baseUrl ?? (rawBase ? `"${rawBase}" is not a URL` : "absent"),
   );
-  record(Boolean(hostSecret), "env LIVEQUIZ_HOST_SECRET", hostSecret ? "present" : "absent");
+  record(
+    Boolean(hostSecret),
+    "env LIVEQUIZ_HOST_SECRET",
+    hostSecret ? "present" : "absent",
+  );
   record(
     Boolean(redisUrl && redisToken),
     "Upstash credentials",
-    redisUrl && redisToken ? "present" : "absent"
+    redisUrl && redisToken ? "present" : "absent",
   );
 
   const rawClients = arg("clients");
-  const clients = rawClients === undefined ? DEFAULT_CLIENTS : Number(rawClients);
+  const clients =
+    rawClients === undefined ? DEFAULT_CLIENTS : Number(rawClients);
   const clientsValid = Number.isInteger(clients) && clients >= 0;
 
   record(
@@ -209,7 +215,7 @@ function resolveConfig(): Config | null {
     "simulated device count",
     clientsValid
       ? `${clients}${rawClients === undefined ? " (default)" : ""}`
-      : `"${rawClients}" is not a non-negative integer`
+      : `"${rawClients}" is not a non-negative integer`,
   );
 
   if (clientsValid && clients > 150) {
@@ -217,14 +223,16 @@ function resolveConfig(): Config | null {
       "device count",
       `${clients} — the provider's free ceiling is 200 peak connections, so this run ` +
         "leaves little headroom and will report a shortfall if anything else is holding " +
-        "connections"
+        "connections",
     );
   }
 
   const rawKill = arg("kill-after-start");
   const killAfterStart = rawKill === undefined ? 0 : Number(rawKill);
   const killValid =
-    Number.isInteger(killAfterStart) && killAfterStart >= 0 && killAfterStart <= clients;
+    Number.isInteger(killAfterStart) &&
+    killAfterStart >= 0 &&
+    killAfterStart <= clients;
 
   if (rawKill !== undefined) {
     record(
@@ -232,17 +240,24 @@ function resolveConfig(): Config | null {
       "fault injection: clients killed after start",
       killValid
         ? `${killAfterStart} of ${clients} — expect them as misses, not as a shifted p95`
-        : `"${rawKill}" is not an integer in 0..${clients}`
+        : `"${rawKill}" is not an integer in 0..${clients}`,
     );
   }
 
-  if (!baseUrl || !hostSecret || !redisUrl || !redisToken || !clientsValid || !killValid) {
+  if (
+    !baseUrl ||
+    !hostSecret ||
+    !redisUrl ||
+    !redisToken ||
+    !clientsValid ||
+    !killValid
+  ) {
     console.log(
       "\n  → Pull credentials locally (`vercel env pull`) or export them by hand, and\n" +
         "    name the target: bun scripts/rehearse-room.ts --base=https://<production-url>\n\n" +
         "    The target is production on purpose (change.md): preview URLs on this project\n" +
         "    return 302 to Vercel SSO for anonymous visitors, so simulated attendee devices\n" +
-        "    cannot reach one.\n"
+        "    cannot reach one.\n",
     );
     return null;
   }
@@ -253,11 +268,19 @@ function resolveConfig(): Config | null {
       true,
       "--purge-stale",
       "a pre-existing session will be purged rather than refused — only pass this when " +
-        "you know no real session is running"
+        "you know no real session is running",
     );
   }
 
-  return { baseUrl, hostSecret, redisUrl, redisToken, clients, killAfterStart, purgeStale };
+  return {
+    baseUrl,
+    hostSecret,
+    redisUrl,
+    redisToken,
+    clients,
+    killAfterStart,
+    purgeStale,
+  };
 }
 
 /**
@@ -276,7 +299,11 @@ async function preflight(config: Config, redis: Redis): Promise<boolean> {
   const existing = await redis.get(SESSION_KEY);
 
   if (existing === null) {
-    record(true, "no live session — safe to rehearse", `${SESSION_KEY} is absent`);
+    record(
+      true,
+      "no live session — safe to rehearse",
+      `${SESSION_KEY} is absent`,
+    );
     return true;
   }
 
@@ -299,7 +326,7 @@ async function preflight(config: Config, redis: Redis): Promise<boolean> {
     note(
       "stale session cleared",
       `--purge-stale was passed and a session in phase "${phase}" existed — purging it ` +
-        "before rehearsing. This is only correct because you know no real session is running"
+        "before rehearsing. This is only correct because you know no real session is running",
     );
     await teardown(config);
 
@@ -307,12 +334,16 @@ async function preflight(config: Config, redis: Redis): Promise<boolean> {
       console.log(
         " FAIL  --purge-stale did not clear the session\n\n" +
           "  → The purge route reported success or failure above. Clear it by hand before\n" +
-          "    rehearsing; this script will not drive a namespace it could not empty.\n"
+          "    rehearsing; this script will not drive a namespace it could not empty.\n",
       );
       return false;
     }
 
-    record(true, "stale session purged — safe to rehearse", `${SESSION_KEY} is absent`);
+    record(
+      true,
+      "stale session purged — safe to rehearse",
+      `${SESSION_KEY} is absent`,
+    );
     return true;
   }
 
@@ -324,7 +355,7 @@ async function preflight(config: Config, redis: Redis): Promise<boolean> {
       "    window.\n\n" +
       "    Wait for the TTL, or purge deliberately through the host route first.\n\n" +
       "    If this is residue from a run you interrupted — a kill cannot be caught, so an\n" +
-      "    interrupted run leaves the session behind — re-run with --purge-stale.\n"
+      "    interrupted run leaves the session behind — re-run with --purge-stale.\n",
   );
   return false;
 }
@@ -408,7 +439,7 @@ type ActionOutcome = {
 async function hostAction(
   config: Config,
   verb: HostVerb,
-  form?: FormData
+  form?: FormData,
 ): Promise<ActionOutcome> {
   const headers: Record<string, string> = {
     [HOST_SECRET_HEADER]: config.hostSecret,
@@ -485,14 +516,16 @@ async function hostAction(
     note: typeof payload.note === "string" ? payload.note : null,
     version,
     playerCount:
-      typeof payload.state?.playerCount === "number" ? payload.state.playerCount : null,
+      typeof payload.state?.playerCount === "number"
+        ? payload.state.playerCount
+        : null,
     questionId:
       typeof payload.state?.currentQuestionId === "string"
         ? payload.state.currentQuestionId
         : null,
     revealedOptionIds: Array.isArray(payload.state?.revealedOptionIds)
       ? payload.state.revealedOptionIds.filter(
-          (id): id is string => typeof id === "string"
+          (id): id is string => typeof id === "string",
         )
       : null,
     vercelId,
@@ -515,7 +548,7 @@ function describeOutcome(outcome: ActionOutcome): string {
 
 /** The session as the server reports it. Used to learn `purge`'s confirmation version. */
 async function readState(
-  config: Config
+  config: Config,
 ): Promise<{ version: number | null; error: string | null }> {
   try {
     const response = await fetch(`${config.baseUrl}/api/quiz/state`, {
@@ -524,12 +557,17 @@ async function readState(
       // production rather than merely delaying a figure.
       signal: AbortSignal.timeout(HOST_REQUEST_TIMEOUT_MS),
     });
-    const body = (await response.json()) as { state?: { version?: unknown } | null };
+    const body = (await response.json()) as {
+      state?: { version?: unknown } | null;
+    };
     const version =
       typeof body.state?.version === "number" ? body.state.version : null;
     return { version, error: null };
   } catch (err) {
-    return { version: null, error: err instanceof Error ? err.message : String(err) };
+    return {
+      version: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -560,7 +598,7 @@ async function teardown(config: Config): Promise<void> {
   const outcome = await hostAction(
     config,
     "purge",
-    state.version !== null ? form : undefined
+    state.version !== null ? form : undefined,
   );
 
   if (outcome.status === 409) {
@@ -568,7 +606,7 @@ async function teardown(config: Config): Promise<void> {
       false,
       "teardown: purge",
       `409 — the session moved during the run (${outcome.error ?? "no detail"}). ` +
-        "Nothing was deleted; re-run the purge by hand rather than retrying blind"
+        "Nothing was deleted; re-run the purge by hand rather than retrying blind",
     );
     return;
   }
@@ -577,22 +615,22 @@ async function teardown(config: Config): Promise<void> {
   // (`src/pages/api/quiz/host/purge.ts`). Failing the check on that reports residue left
   // behind when the opposite happened, and exits non-zero on a successful teardown.
   if (outcome.status === 502) {
-    record(true, "teardown: purge", `${describeOutcome(outcome)} — keys removed`);
+    record(
+      true,
+      "teardown: purge",
+      `${describeOutcome(outcome)} — keys removed`,
+    );
     note(
       "teardown broadcast",
       "the purge deleted every registered key but its closing publish failed, so a " +
         "client still holding the old snapshot will not see the session close. Harmless " +
         "for a rehearsal; on a live session it means the room's screens go stale rather " +
-        "than closing"
+        "than closing",
     );
     return;
   }
 
-  record(
-    outcome.status === 200,
-    "teardown: purge",
-    describeOutcome(outcome)
-  );
+  record(outcome.status === 200, "teardown: purge", describeOutcome(outcome));
 }
 
 /**
@@ -648,13 +686,16 @@ async function connectDevice(config: Config, index: number): Promise<Device> {
   };
 
   try {
-    const client = new Realtime({ authUrl: `${config.baseUrl}/api/quiz/token` });
+    const client = new Realtime({
+      authUrl: `${config.baseUrl}/api/quiz/token`,
+    });
     device.client = client;
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error(`did not connect within ${CONNECT_TIMEOUT_MS} ms`)),
-        CONNECT_TIMEOUT_MS
+        () =>
+          reject(new Error(`did not connect within ${CONNECT_TIMEOUT_MS} ms`)),
+        CONNECT_TIMEOUT_MS,
       );
       client.connection.once("connected", () => {
         clearTimeout(timer);
@@ -707,13 +748,18 @@ async function connectDevice(config: Config, index: number): Promise<Device> {
  */
 async function connectPool(config: Config): Promise<Device[]> {
   if (config.clients === 0) {
-    note("device pool", "0 clients — driving the session only, nothing will be measured");
+    note(
+      "device pool",
+      "0 clients — driving the session only, nothing will be measured",
+    );
     return [];
   }
 
   const startedAt = performance.now();
   const devices = await Promise.all(
-    Array.from({ length: config.clients }, (_, index) => connectDevice(config, index))
+    Array.from({ length: config.clients }, (_, index) =>
+      connectDevice(config, index),
+    ),
   );
   const elapsed = Math.round(performance.now() - startedAt);
 
@@ -721,7 +767,7 @@ async function connectPool(config: Config): Promise<Device[]> {
   record(
     connected.length === config.clients,
     "device pool connected",
-    `${connected.length}/${config.clients} in ${elapsed} ms`
+    `${connected.length}/${config.clients} in ${elapsed} ms`,
   );
 
   const failures = devices.filter((device) => !device.connected);
@@ -739,7 +785,7 @@ async function connectPool(config: Config): Promise<Device[]> {
     note(
       "where to look first",
       "if there are no provider-side errors here, suspect this machine before the " +
-        "platform — file descriptors and one network path are the plausible bottleneck"
+        "platform — file descriptors and one network path are the plausible bottleneck",
     );
   }
 
@@ -766,7 +812,9 @@ async function closePool(devices: Device[]): Promise<void> {
 function killDevices(config: Config, devices: Device[]): void {
   if (config.killAfterStart === 0) return;
 
-  const victims = devices.filter((device) => device.connected).slice(0, config.killAfterStart);
+  const victims = devices
+    .filter((device) => device.connected)
+    .slice(0, config.killAfterStart);
   for (const device of victims) {
     device.client?.close();
     device.killed = true;
@@ -775,7 +823,7 @@ function killDevices(config: Config, devices: Device[]): void {
   note(
     "fault injection",
     `killed ${victims.length} connected device(s) after the warm-up — they must appear as ` +
-      "misses below, and the p95 of the remainder must stay comparable to a clean run"
+      "misses below, and the p95 of the remainder must stay comparable to a clean run",
   );
 }
 
@@ -828,7 +876,11 @@ type JoinResult = {
  * runs, so without it every claim in the burst would fail for a reason that has nothing
  * to do with the store.
  */
-async function joinOnce(config: Config, index: number, displayName: string): Promise<JoinResult> {
+async function joinOnce(
+  config: Config,
+  index: number,
+  displayName: string,
+): Promise<JoinResult> {
   const form = new FormData();
   form.set("displayName", displayName);
 
@@ -853,7 +905,9 @@ async function joinOnce(config: Config, index: number, displayName: string): Pro
       ms,
       playerId: typeof body.player?.id === "string" ? body.player.id : null,
       displayName:
-        typeof body.player?.displayName === "string" ? body.player.displayName : null,
+        typeof body.player?.displayName === "string"
+          ? body.player.displayName
+          : null,
       error: typeof body.error === "string" ? body.error : null,
     };
   } catch (err) {
@@ -881,7 +935,7 @@ function reportDistribution(label: string, samples: number[]): void {
     `  ··    ${label} — min ${Math.round(sorted[0]!)} ms   ` +
       `median ${Math.round(percentile(sorted, 0.5))} ms   ` +
       `${tail} ${Math.round(percentile(sorted, 0.95))} ms   ` +
-      `max ${Math.round(sorted[sorted.length - 1]!)} ms   n=${sorted.length}`
+      `max ${Math.round(sorted[sorted.length - 1]!)} ms   n=${sorted.length}`,
   );
 }
 
@@ -912,7 +966,7 @@ async function auditPlayerStore(redis: Redis, accepted: number): Promise<void> {
     `${accepted} claim(s) accepted, ${playerCount} name(s) stored` +
       (playerCount === accepted
         ? ""
-        : " — a shortfall means one claim overwrote another, which is the lost race")
+        : " — a shortfall means one claim overwrote another, which is the lost race"),
   );
 
   const idsByName = new Map<string, string[]>();
@@ -921,7 +975,9 @@ async function auditPlayerStore(redis: Redis, accepted: number): Promise<void> {
     idsByName.set(key, [...(idsByName.get(key) ?? []), id]);
   }
 
-  const duplicates = [...idsByName.entries()].filter(([, ids]) => ids.length > 1);
+  const duplicates = [...idsByName.entries()].filter(
+    ([, ids]) => ids.length > 1,
+  );
 
   record(
     duplicates.length === 0,
@@ -932,7 +988,7 @@ async function auditPlayerStore(redis: Redis, accepted: number): Promise<void> {
           .map(([name, ids]) => `"${name}" held by ${ids.length} ids`)
           .join("; ") +
           " — THIS IS THE FAILURE THE CLAIM SCRIPT EXISTS TO PREVENT. Stop and read " +
-          "the Phase 5 implementation note before patching anything."
+          "the Phase 5 implementation note before patching anything.",
   );
 }
 
@@ -943,7 +999,10 @@ async function auditPlayerStore(redis: Redis, accepted: number): Promise<void> {
  * Returns the number of accepted claims, which the caller checks against the count the
  * next host action embeds in its published snapshot.
  */
-async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]> {
+async function runJoinBurst(
+  config: Config,
+  redis: Redis,
+): Promise<JoinResult[]> {
   if (config.clients === 0) {
     note("join burst", "0 clients — skipped");
     return [];
@@ -952,8 +1011,8 @@ async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]>
   const startedAt = performance.now();
   const results = await Promise.all(
     Array.from({ length: config.clients }, (_, index) =>
-      joinOnce(config, index, rehearsalName(index))
-    )
+      joinOnce(config, index, rehearsalName(index)),
+    ),
   );
   const wallClockMs = performance.now() - startedAt;
 
@@ -963,10 +1022,13 @@ async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]>
   record(
     accepted.length === config.clients,
     "join burst accepted every claim",
-    `${accepted.length}/${config.clients} in ${Math.round(wallClockMs)} ms wall clock`
+    `${accepted.length}/${config.clients} in ${Math.round(wallClockMs)} ms wall clock`,
   );
 
-  reportDistribution("join round trip", results.map((result) => result.ms));
+  reportDistribution(
+    "join round trip",
+    results.map((result) => result.ms),
+  );
 
   if (rejected.length > 0) {
     const byReason = new Map<string, number>();
@@ -974,7 +1036,8 @@ async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]>
       const reason = `${result.status} ${result.error ?? "no detail"}`;
       byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
     }
-    for (const [reason, count] of byReason) note("join rejected", `${count}× ${reason}`);
+    for (const [reason, count] of byReason)
+      note("join rejected", `${count}× ${reason}`);
   }
 
   // Every accepted claim must have come back with a distinct player id. Two devices
@@ -983,7 +1046,7 @@ async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]>
   record(
     ids.size === accepted.length && !ids.has(null),
     "every accepted claim got a distinct player id",
-    `${ids.size} distinct id(s) across ${accepted.length} acceptance(s)`
+    `${ids.size} distinct id(s) across ${accepted.length} acceptance(s)`,
   );
 
   /**
@@ -997,7 +1060,9 @@ async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]>
     const probes = await Promise.all(
       accepted
         .slice(0, probeCount)
-        .map((result) => joinOnce(config, result.index, collisionName(result.index)))
+        .map((result) =>
+          joinOnce(config, result.index, collisionName(result.index)),
+        ),
     );
 
     const allRejected = probes.every((probe) => probe.status === 409);
@@ -1008,10 +1073,12 @@ async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]>
         ? `${probes.length}/${probes.length} variants refused as taken ` +
             `(e.g. "${collisionName(accepted[0]!.index)}" vs "${rehearsalName(accepted[0]!.index)}")`
         : probes
-            .map((probe) => `${probe.status} for "${collisionName(probe.index)}"`)
+            .map(
+              (probe) => `${probe.status} for "${collisionName(probe.index)}"`,
+            )
             .join("; ") +
             " — a variant that is not refused means the fold is not being applied, and " +
-            "two people can appear on the leaderboard under the same name"
+            "two people can appear on the leaderboard under the same name",
     );
   }
 
@@ -1021,12 +1088,12 @@ async function runJoinBurst(config: Config, redis: Redis): Promise<JoinResult[]>
   record(
     wallClockMs < target,
     "join burst inside the 30 s target",
-    `${Math.round(wallClockMs)} ms against ${target} ms (PRD FR-002)`
+    `${Math.round(wallClockMs)} ms against ${target} ms (PRD FR-002)`,
   );
   note(
     "what this figure is not",
     "the claim round trip from one process on one network — not a phone painting a " +
-      "screen, and not a venue network. FR-002 is informed by this, not proven by it"
+      "screen, and not a venue network. FR-002 is informed by this, not proven by it",
   );
 
   // The accepted claims themselves, not just how many: the answer stage below submits
@@ -1059,7 +1126,7 @@ async function answerOnce(
   playerId: string,
   questionId: string,
   optionId: string,
-  elapsedMs: number
+  elapsedMs: number,
 ): Promise<AnswerResult> {
   const form = new FormData();
   form.set("playerId", playerId);
@@ -1077,7 +1144,9 @@ async function answerOnce(
       signal: AbortSignal.timeout(HOST_REQUEST_TIMEOUT_MS),
     });
     const ms = performance.now() - startedAt;
-    const body = (await response.json().catch(() => ({}))) as { error?: unknown };
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: unknown;
+    };
 
     return {
       index,
@@ -1108,12 +1177,14 @@ async function auditAnswerStore(
   redis: Redis,
   questionId: string,
   players: JoinResult[],
-  accepted: number
+  accepted: number,
 ): Promise<void> {
   const answers = (await redis.hgetall(ANSWERS_KEY)) ?? {};
   const scores = (await redis.hgetall(SCORES_KEY)) ?? {};
 
-  const forQuestion = Object.keys(answers).filter((field) => field.startsWith(`${questionId}:`));
+  const forQuestion = Object.keys(answers).filter((field) =>
+    field.startsWith(`${questionId}:`),
+  );
 
   record(
     forQuestion.length === accepted,
@@ -1121,7 +1192,7 @@ async function auditAnswerStore(
     `${accepted} accepted, ${forQuestion.length} stored for "${questionId}"` +
       (forQuestion.length === accepted
         ? ""
-        : " — a shortfall means a write was lost, which is what the single EVAL prevents")
+        : " — a shortfall means a write was lost, which is what the single EVAL prevents"),
   );
 
   // One field per player for this question, checked by construction rather than trusted:
@@ -1129,17 +1200,21 @@ async function auditAnswerStore(
   // drifted would show up here as a total miss rather than as a silent mismatch.
   const missing = players
     .filter((player) => player.playerId !== null)
-    .filter((player) => !(answerField(questionId, player.playerId!) in answers));
+    .filter(
+      (player) => !(answerField(questionId, player.playerId!) in answers),
+    );
 
   record(
     missing.length === 0 || missing.length === players.length - accepted,
     "no player answered this question twice",
     `${forQuestion.length} field(s) for ${players.length} player(s) — the field name is ` +
-      "the uniqueness key, so a second answer would have to overwrite the first"
+      "the uniqueness key, so a second answer would have to overwrite the first",
   );
 
   const totals = Object.values(scores).map((value) => Number(value));
-  const impossible = totals.filter((total) => Number.isFinite(total) && total > 1000);
+  const impossible = totals.filter(
+    (total) => Number.isFinite(total) && total > 1000,
+  );
 
   record(
     impossible.length === 0,
@@ -1147,7 +1222,7 @@ async function auditAnswerStore(
     impossible.length === 0
       ? `${totals.length} total(s), all within 0–1000 after one scored question`
       : `${impossible.length} total(s) above 1000 — a player was scored more than once ` +
-          "for a single answer"
+          "for a single answer",
   );
 
   await auditTallies(redis, questionId, answers, forQuestion);
@@ -1172,7 +1247,7 @@ async function auditTallies(
   redis: Redis,
   questionId: string,
   answers: Record<string, unknown>,
-  forQuestion: readonly string[]
+  forQuestion: readonly string[],
 ): Promise<void> {
   const tallies = (await redis.hgetall(TALLIES_KEY)) ?? {};
 
@@ -1185,7 +1260,7 @@ async function auditTallies(
       (answeredCounter === forQuestion.length
         ? ""
         : " — the counter and the answer write are one EVAL, so a disagreement means the " +
-          "increment is reachable on a path the HSETNX rejected, or vice versa")
+          "increment is reachable on a path the HSETNX rejected, or vice versa"),
   );
 
   // Built from `optionField` rather than spelled out, so the prefix cannot drift from
@@ -1200,7 +1275,9 @@ async function auditTallies(
   // questions, and the tail is what makes them need no encoding scheme.
   const selections = forQuestion.reduce((sum, field) => {
     const parsed = parseAnswerRecord(
-      typeof answers[field] === "string" ? JSON.parse(answers[field] as string) : answers[field]
+      typeof answers[field] === "string"
+        ? JSON.parse(answers[field] as string)
+        : answers[field],
     );
     return sum + (parsed?.optionIds.length ?? 0);
   }, 0);
@@ -1212,7 +1289,7 @@ async function auditTallies(
       (optionTotal === selections
         ? ""
         : " — a shortfall means the variadic ARGV tail lost entries; an excess means an " +
-          "option was counted on a path the lock rejected")
+          "option was counted on a path the lock rejected"),
   );
 }
 
@@ -1227,7 +1304,7 @@ async function runAnswerBurst(
   config: Config,
   redis: Redis,
   players: JoinResult[],
-  questionId: string | null
+  questionId: string | null,
 ): Promise<void> {
   if (players.length === 0) {
     note("answer burst", "no joined players — skipped");
@@ -1235,7 +1312,11 @@ async function runAnswerBurst(
   }
 
   if (questionId === null) {
-    record(false, "answer burst", "the published snapshot named no open question");
+    record(
+      false,
+      "answer burst",
+      "the published snapshot named no open question",
+    );
     return;
   }
 
@@ -1247,7 +1328,7 @@ async function runAnswerBurst(
       false,
       "answer burst",
       `"${questionId}" is not a choice question — the stage must run against one, or it ` +
-        "measures the refusal path"
+        "measures the refusal path",
     );
     return;
   }
@@ -1265,9 +1346,9 @@ async function runAnswerBurst(
           // Spread across the options so the run is not one option's write path repeated.
           optionIds[position % optionIds.length]!,
           // Spread across the speed window, so awards land across the 500–1000 band.
-          1_000 + ((position * 137) % 18_000)
-        )
-      )
+          1_000 + ((position * 137) % 18_000),
+        ),
+      ),
   );
   const wallClockMs = performance.now() - startedAt;
 
@@ -1278,10 +1359,13 @@ async function runAnswerBurst(
     accepted.length === results.length,
     "answer burst accepted every submission",
     `${accepted.length}/${results.length} in ${Math.round(wallClockMs)} ms wall clock ` +
-      `on "${questionId}"`
+      `on "${questionId}"`,
   );
 
-  reportDistribution("answer round trip", results.map((result) => result.ms));
+  reportDistribution(
+    "answer round trip",
+    results.map((result) => result.ms),
+  );
 
   if (rejected.length > 0) {
     const byReason = new Map<string, number>();
@@ -1289,7 +1373,8 @@ async function runAnswerBurst(
       const reason = `${result.status} ${result.error ?? "no detail"}`;
       byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
     }
-    for (const [reason, count] of byReason) note("answer rejected", `${count}× ${reason}`);
+    for (const [reason, count] of byReason)
+      note("answer rejected", `${count}× ${reason}`);
   }
 
   await auditAnswerStore(redis, questionId, players, accepted.length);
@@ -1297,7 +1382,9 @@ async function runAnswerBurst(
   // FR-004: the first answer is final. A resubmission must be refused by the store, not
   // by the view — the view is the half an attendee can bypass with one `curl`.
   const repeatable = accepted[0];
-  const repeatPlayer = players.find((player) => player.index === repeatable?.index);
+  const repeatPlayer = players.find(
+    (player) => player.index === repeatable?.index,
+  );
   if (repeatPlayer?.playerId) {
     const repeat = await answerOnce(
       config,
@@ -1305,7 +1392,7 @@ async function runAnswerBurst(
       repeatPlayer.playerId,
       questionId,
       optionIds[0]!,
-      1_500
+      1_500,
     );
 
     record(
@@ -1314,18 +1401,23 @@ async function runAnswerBurst(
       repeat.status === 409
         ? `409 — "${repeat.error ?? "no detail"}"`
         : `${repeat.status} — HSETNX is what makes the first answer final; a second ` +
-            "acceptance means the lock and the write came apart"
+            "acceptance means the lock and the write came apart",
     );
   }
 }
 
 /** Waits until every connected device holds `version`, or the timeout expires. */
-async function awaitArrivals(devices: Device[], version: number): Promise<void> {
+async function awaitArrivals(
+  devices: Device[],
+  version: number,
+): Promise<void> {
   const deadline = performance.now() + ARRIVAL_TIMEOUT_MS;
   // Killed devices are excluded from the *wait* but not from the counts below:
   // waiting on a device we deliberately closed would burn the full timeout on
   // every action and prove nothing. If one arrives anyway, it is still counted.
-  const connected = devices.filter((device) => device.connected && !device.killed);
+  const connected = devices.filter(
+    (device) => device.connected && !device.killed,
+  );
 
   while (performance.now() < deadline) {
     if (connected.every((device) => device.arrivals.has(version))) return;
@@ -1366,7 +1458,7 @@ async function measureAction(
   config: Config,
   verb: HostVerb,
   devices: Device[],
-  options: { discarded?: boolean; label?: string } = {}
+  options: { discarded?: boolean; label?: string } = {},
 ): Promise<Measurement> {
   const discarded = options.discarded ?? false;
   const label = options.label ?? verb;
@@ -1379,7 +1471,7 @@ async function measureAction(
     note(
       "function region",
       `${outcome.region} — not fra1. A figure from this deployment measures the wrong ` +
-        "region and must not be recorded as the baseline (roadmap F-04)"
+        "region and must not be recorded as the baseline (roadmap F-04)",
     );
   }
 
@@ -1418,7 +1510,7 @@ function reportMeasurement(measurement: Measurement, total: number): void {
   if (deltas.length === 0) {
     console.log(
       `${prefix}${measurement.label.padEnd(9)} ${version.padEnd(4)} ` +
-        `no arrivals — ${measurement.connected}/${total} connected, 0 received`
+        `no arrivals — ${measurement.connected}/${total} connected, 0 received`,
     );
     return;
   }
@@ -1438,7 +1530,7 @@ function reportMeasurement(measurement: Measurement, total: number): void {
       `e2e ${tailLabel} ${String(p95).padStart(5)} ms   median ${String(median).padStart(5)} ms   ` +
       `max ${String(max).padStart(5)} ms   rtt ${String(Math.round(outcome.roundTripMs)).padStart(5)} ms   ` +
       `received ${measurement.received}/${measurement.connected} connected of ${total}` +
-      `   n=${deltas.length}`
+      `   n=${deltas.length}`,
   );
 }
 
@@ -1457,7 +1549,7 @@ function reportMeasurement(measurement: Measurement, total: number): void {
 async function runRehearsal(
   config: Config,
   devices: Device[],
-  redis: Redis
+  redis: Redis,
 ): Promise<boolean> {
   const warmUp = await measureAction(config, "start", devices, {
     discarded: true,
@@ -1466,13 +1558,15 @@ async function runRehearsal(
 
   if (devices.length > 0) {
     const holding = devices.filter(
-      (device) => device.connected && warmUp.outcome.version !== null &&
-        device.arrivals.has(warmUp.outcome.version)
+      (device) =>
+        device.connected &&
+        warmUp.outcome.version !== null &&
+        device.arrivals.has(warmUp.outcome.version),
     ).length;
     record(
       holding === warmUp.connected && warmUp.connected > 0,
       "barrier: every connected device holds the lobby snapshot",
-      `${holding}/${warmUp.connected} connected device(s)`
+      `${holding}/${warmUp.connected} connected device(s)`,
     );
   }
 
@@ -1538,7 +1632,7 @@ async function runRehearsal(
       revealed === null
         ? "the published snapshot carried no revealedOptionIds — correctness never " +
             "reached the room"
-        : `${revealed.length} id(s) for "${answerable.outcome.questionId}"`
+        : `${revealed.length} id(s) for "${answerable.outcome.questionId}"`,
     );
 
     record(
@@ -1547,7 +1641,7 @@ async function runRehearsal(
       answerable.outcome.revealedOptionIds === null
         ? "null while the question was open, as the schema requires"
         : "an answer key was published WHILE THE QUESTION WAS OPEN — this is the " +
-            "previous reveal's value surviving the advance"
+            "previous reveal's value surviving the advance",
     );
   }
 
@@ -1571,15 +1665,20 @@ async function runRehearsal(
       "the published snapshot carries the real join count",
       last === undefined
         ? "no action published a count"
-        : `${last} in the last published snapshot, ${accepted} accepted claim(s)`
+        : `${last} in the last published snapshot, ${accepted} accepted claim(s)`,
     );
   }
 
-  console.log("\nPer-action figures (end to end = click → snapshot arrival, one clock):\n");
-  for (const measurement of measurements) reportMeasurement(measurement, config.clients);
+  console.log(
+    "\nPer-action figures (end to end = click → snapshot arrival, one clock):\n",
+  );
+  for (const measurement of measurements)
+    reportMeasurement(measurement, config.clients);
 
   const counted = measurements.filter((measurement) => !measurement.discarded);
-  const withArrivals = counted.filter((measurement) => measurement.deltas.length > 0);
+  const withArrivals = counted.filter(
+    (measurement) => measurement.deltas.length > 0,
+  );
 
   /**
    * An action that reached nobody must fail the run, not vanish from the statistic.
@@ -1594,23 +1693,29 @@ async function runRehearsal(
     if (measurement.deltas.length > 0) continue;
     // An action the store declined published nothing, so there was never a snapshot to
     // wait for — that is reported as a note below, not as a lost broadcast.
-    if (measurement.outcome.note !== null || measurement.outcome.applied !== true) continue;
+    if (
+      measurement.outcome.note !== null ||
+      measurement.outcome.applied !== true
+    )
+      continue;
 
     record(
       false,
       `no device received ${measurement.label}`,
       `${measurement.connected} device(s) were connected and none received the ` +
         `published version — this is a total fan-out failure for one action, and it is ` +
-        `excluded from the p95 by construction`
+        `excluded from the p95 by construction`,
     );
   }
 
-  const stale = counted.filter((measurement) => measurement.outcome.note !== null);
+  const stale = counted.filter(
+    (measurement) => measurement.outcome.note !== null,
+  );
   for (const measurement of stale) {
     note(
       `${measurement.label} was not a measured action`,
       `the store reported "${measurement.outcome.note}" — nothing was published, so it ` +
-        "contributes no figures"
+        "contributes no figures",
     );
   }
 
@@ -1628,7 +1733,9 @@ async function runRehearsal(
       const lateArrivals =
         measurement.outcome.version === null
           ? 0
-          : killed.filter((device) => device.arrivals.has(measurement.outcome.version!)).length;
+          : killed.filter((device) =>
+              device.arrivals.has(measurement.outcome.version!),
+            ).length;
 
       return {
         label: measurement.label,
@@ -1638,8 +1745,13 @@ async function runRehearsal(
       };
     });
 
-    const allAccounted = perAction.every((entry) => entry.missing >= entry.expected);
-    const totalLate = perAction.reduce((sum, entry) => sum + entry.lateArrivals, 0);
+    const allAccounted = perAction.every(
+      (entry) => entry.missing >= entry.expected,
+    );
+    const totalLate = perAction.reduce(
+      (sum, entry) => sum + entry.lateArrivals,
+      0,
+    );
 
     record(
       allAccounted,
@@ -1653,40 +1765,49 @@ async function runRehearsal(
               : "")
         : `${killed.length} killed, but some action reported fewer misses than expected — ` +
             perAction
-              .map((entry) => `${entry.label}: ${entry.missing} missing vs ${entry.expected} expected`)
+              .map(
+                (entry) =>
+                  `${entry.label}: ${entry.missing} missing vs ${entry.expected} expected`,
+              )
               .join(", ") +
-            ". They are being excluded from the denominator rather than counted as lost."
+            ". They are being excluded from the denominator rather than counted as lost.",
     );
   }
 
-  const droppedNotNewer = devices.reduce((sum, device) => sum + device.droppedNotNewer, 0);
+  const droppedNotNewer = devices.reduce(
+    (sum, device) => sum + device.droppedNotNewer,
+    0,
+  );
   if (droppedNotNewer > 0) {
     note(
       "snapshots dropped by the client rule",
       `${droppedNotNewer} — not newer than the version already held, exactly as a real ` +
-        "device drops them"
+        "device drops them",
     );
   }
 
   if (config.clients === 0) {
-    console.log("\nVerdict: not measured — the run had no simulated devices.\n");
+    console.log(
+      "\nVerdict: not measured — the run had no simulated devices.\n",
+    );
     return true;
   }
 
   if (withArrivals.length === 0) {
     console.log(
       `\nVerdict: FAILED — no measured action reached a single device. ` +
-        "Nothing here is a latency figure; find out why before reading anything else.\n"
+        "Nothing here is a latency figure; find out why before reading anything else.\n",
     );
     return false;
   }
 
   const worstP95 = Math.max(
-    ...withArrivals.map((measurement) => percentile(measurement.deltas, 0.95))
+    ...withArrivals.map((measurement) => percentile(measurement.deltas, 0.95)),
   );
   const passed = worstP95 < BUDGET_MS;
   const smallestSample = Math.min(...withArrivals.map((m) => m.deltas.length));
-  const tailName = smallestSample >= MIN_TAIL_SAMPLES ? "p95" : "slowest arrival";
+  const tailName =
+    smallestSample >= MIN_TAIL_SAMPLES ? "p95" : "slowest arrival";
 
   console.log(
     `\nVerdict: ${passed ? "PASS" : "FAIL"} — worst end-to-end ${tailName} across measured ` +
@@ -1696,7 +1817,7 @@ async function runRehearsal(
       "  venue network passes.\n\n" +
       "  ONE RUN IS NOT A BASELINE. Run-to-run spread has been measured at over 5x on\n" +
       "  this figure, so a single number recorded from a single run will be wrong within\n" +
-      "  hours. Record a range across several runs — see rehearsal-report.md.\n"
+      "  hours. Record a range across several runs — see rehearsal-report.md.\n",
   );
 
   return passed;
@@ -1731,7 +1852,9 @@ async function main(): Promise<void> {
   }
 
   const failed = findings.filter((finding) => !finding.ok);
-  console.log(`${findings.length - failed.length}/${findings.length} checks passed.\n`);
+  console.log(
+    `${findings.length - failed.length}/${findings.length} checks passed.\n`,
+  );
 
   if (failed.length > 0) {
     console.log("Failed checks:");
@@ -1749,7 +1872,7 @@ async function main(): Promise<void> {
       HOST_SECRET_HEADER +
       ': $LIVEQUIZ_HOST_SECRET" \\\n' +
       "    -F version=999999 <base-url>/api/quiz/host/purge\n\n" +
-      "  → expect 403 Cross-site POST form submissions are forbidden\n"
+      "  → expect 403 Cross-site POST form submissions are forbidden\n",
   );
 }
 

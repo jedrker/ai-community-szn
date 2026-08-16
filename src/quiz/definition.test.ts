@@ -28,7 +28,8 @@ describe("the committed quiz definition", () => {
     const result = quizSchema.safeParse(quizDefinition);
     if (!result.success) {
       throw new Error(
-        "\n" + result.error.issues.map((issue) => `  - ${issue.message}`).join("\n")
+        "\n" +
+          result.error.issues.map((issue) => `  - ${issue.message}`).join("\n"),
       );
     }
     expect(result.success).toBe(true);
@@ -81,34 +82,45 @@ describe("the committed quiz definition", () => {
    * the convention has to bend.
    */
   describe("no question id gives its own answer away", () => {
-    const flatten = (value: string) => normalizeAnswer(value).replace(/[^\p{L}\p{N}]/gu, "");
+    const flatten = (value: string) =>
+      normalizeAnswer(value).replace(/[^\p{L}\p{N}]/gu, "");
 
-    it.each(questionsOfKind("text"))("$id does not contain an accepted answer", (question) => {
-      const id = flatten(question.id);
-
-      for (const accepted of question.acceptedAnswers) {
-        expect(id, `question id "${question.id}" contains the answer "${accepted}"`).not.toContain(
-          flatten(accepted)
-        );
-      }
-    });
-
-    it.each(questionsOfKind("number"))("$id does not contain the true value", (question) => {
-      expect(flatten(question.id)).not.toContain(String(question.correctValue));
-    });
-
-    it.each([...questionsOfKind("single-choice"), ...questionsOfKind("multiple-choice")])(
-      "$id does not contain a correct option id",
+    it.each(questionsOfKind("text"))(
+      "$id does not contain an accepted answer",
       (question) => {
         const id = flatten(question.id);
 
-        for (const optionId of question.correctOptionIds) {
-          expect(id, `question id "${question.id}" contains the correct option`).not.toContain(
-            flatten(optionId)
-          );
+        for (const accepted of question.acceptedAnswers) {
+          expect(
+            id,
+            `question id "${question.id}" contains the answer "${accepted}"`,
+          ).not.toContain(flatten(accepted));
         }
-      }
+      },
     );
+
+    it.each(questionsOfKind("number"))(
+      "$id does not contain the true value",
+      (question) => {
+        expect(flatten(question.id)).not.toContain(
+          String(question.correctValue),
+        );
+      },
+    );
+
+    it.each([
+      ...questionsOfKind("single-choice"),
+      ...questionsOfKind("multiple-choice"),
+    ])("$id does not contain a correct option id", (question) => {
+      const id = flatten(question.id);
+
+      for (const optionId of question.correctOptionIds) {
+        expect(
+          id,
+          `question id "${question.id}" contains the correct option`,
+        ).not.toContain(flatten(optionId));
+      }
+    });
   });
 });
 

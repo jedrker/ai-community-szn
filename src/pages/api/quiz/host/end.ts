@@ -9,7 +9,11 @@ import {
 } from "../../../../lib/session/host";
 import { logSessionEvent } from "../../../../lib/session/log";
 import { endedSessionState } from "../../../../lib/session/state";
-import { endSession, readSession, readStandings } from "../../../../lib/session/store";
+import {
+  endSession,
+  readSession,
+  readStandings,
+} from "../../../../lib/session/store";
 
 /**
  * Ends the session (roadmap F-03).
@@ -63,14 +67,18 @@ export const POST: APIRoute = async ({ request }) => {
   if (current.outcome === "unconfigured") {
     return toResponse({
       status: 503,
-      body: { error: "Sesja nie jest skonfigurowana. Sprawdź zmienne środowiskowe." },
+      body: {
+        error: "Sesja nie jest skonfigurowana. Sprawdź zmienne środowiskowe.",
+      },
     });
   }
 
   if (current.outcome === "invalid") {
     return toResponse({
       status: 409,
-      body: { error: "Stan sesji jest nieprawidłowy. Sprawdź definicję quizu." },
+      body: {
+        error: "Stan sesji jest nieprawidłowy. Sprawdź definicję quizu.",
+      },
     });
   }
 
@@ -142,7 +150,8 @@ export const POST: APIRoute = async ({ request }) => {
         // them to do about it. The reason names the close so this line cannot be mistaken
         // for a failed `pokaż ranking` in a stream a host is grepping mid-event.
         logSessionEvent("session.standings.failed", {
-          reason: "standings read failed while ending — closing without a board",
+          reason:
+            "standings read failed while ending — closing without a board",
         });
       }
 
@@ -150,7 +159,7 @@ export const POST: APIRoute = async ({ request }) => {
     },
     Date.now(),
     endSession,
-    confirmVersion
+    confirmVersion,
   );
 
   // No `session.ended` line here, deliberately: `endSession` already emits one, and it

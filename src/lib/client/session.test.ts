@@ -43,7 +43,13 @@ import {
 /** Ably's own state names, so a typo here is a wrong test rather than a wrong string. */
 const HEALTHY = "connected";
 const OPENING = ["initialized", "connecting"] as const;
-const UNHEALTHY = ["disconnected", "suspended", "closing", "closed", "failed"] as const;
+const UNHEALTHY = [
+  "disconnected",
+  "suspended",
+  "closing",
+  "closed",
+  "failed",
+] as const;
 
 /** The four codes `ACCOUNT_LIMIT_CODES` is defined as, restated independently. */
 const ACCOUNT_LIMIT = [
@@ -77,24 +83,31 @@ describe("classifyConnection", () => {
       // Note the field's documented contract is wider than this — `channel-failed` and a
       // failed prime's error text also travel in it — so this pins the classifier's output,
       // not an invariant on the field.
-      expect(classifyConnection("suspended", undefined).info.detail).toBe("suspended");
+      expect(classifyConnection("suspended", undefined).info.detail).toBe(
+        "suspended",
+      );
     });
   });
 
   describe("account-limit codes", () => {
-    it.each(ACCOUNT_LIMIT)("classifies $code ($meaning) as account-limit", ({ code }) => {
-      const { status, info } = classifyConnection("failed", code);
-      expect(status).toBe("lost");
-      expect(info.cause).toBe("account-limit");
-      expect(info.code).toBe(code);
-    });
+    it.each(ACCOUNT_LIMIT)(
+      "classifies $code ($meaning) as account-limit",
+      ({ code }) => {
+        const { status, info } = classifyConnection("failed", code);
+        expect(status).toBe("lost");
+        expect(info.cause).toBe("account-limit");
+        expect(info.code).toBe(code);
+      },
+    );
 
     it("classifies an account-limit code on any unhealthy state, not just failed", () => {
       // Ably's docs do not commit 40111 to one connection state, which is the whole
       // reason the cause is read from the code. A state-shaped assumption here would
       // reintroduce the guess this function exists to remove.
       for (const state of UNHEALTHY) {
-        expect(classifyConnection(state, 40111).info.cause).toBe("account-limit");
+        expect(classifyConnection(state, 40111).info.cause).toBe(
+          "account-limit",
+        );
       }
     });
 
@@ -211,7 +224,10 @@ describe("createFallbackPoll", () => {
    * A poll harness whose `refresh` succeeds or fails on command, so a test can shape a
    * sequence of outcomes rather than mock the transport.
    */
-  function harness(options?: { shouldPoll?: () => boolean; deferred?: boolean }) {
+  function harness(options?: {
+    shouldPoll?: () => boolean;
+    deferred?: boolean;
+  }) {
     let succeed = true;
     /**
      * Set in deferred mode: resolves the request the loop is currently waiting on.
@@ -231,7 +247,8 @@ describe("createFallbackPoll", () => {
           : Promise.reject(new Error("state fetch returned 503"));
       }
       return new Promise<void>((resolve, reject) => {
-        settle = () => (succeed ? resolve() : reject(new Error("state fetch returned 503")));
+        settle = () =>
+          succeed ? resolve() : reject(new Error("state fetch returned 503"));
       });
     });
 
@@ -300,17 +317,20 @@ describe("createFallbackPoll", () => {
       { random: 0, expected: BASE_MS - JITTER_MS, label: "shortest" },
       { random: 1, expected: BASE_MS + JITTER_MS, label: "longest" },
       { random: 0.5, expected: BASE_MS, label: "midpoint" },
-    ])("waits $expected ms at the $label end of the jitter", async ({ random, expected }) => {
-      randomSpy.mockReturnValue(random);
-      const { poll, refresh } = harness();
+    ])(
+      "waits $expected ms at the $label end of the jitter",
+      async ({ random, expected }) => {
+        randomSpy.mockReturnValue(random);
+        const { poll, refresh } = harness();
 
-      poll.arm();
-      await vi.advanceTimersByTimeAsync(expected - 1);
-      expect(refresh).not.toHaveBeenCalled();
+        poll.arm();
+        await vi.advanceTimersByTimeAsync(expected - 1);
+        expect(refresh).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(1);
-      expect(refresh).toHaveBeenCalledTimes(1);
-    });
+        await vi.advanceTimersByTimeAsync(1);
+        expect(refresh).toHaveBeenCalledTimes(1);
+      },
+    );
   });
 
   it("reports degraded once, not on every success", async () => {
@@ -619,7 +639,11 @@ describe("shouldFallbackPoll", () => {
     // must behave like `false` rather than like "truthy enough".
     for (const fallbackPolling of [undefined, false]) {
       expect(
-        shouldFallbackPoll({ fallbackPolling, transportStatus: "lost", sessionOver: false })
+        shouldFallbackPoll({
+          fallbackPolling,
+          transportStatus: "lost",
+          sessionOver: false,
+        }),
       ).toBe(false);
     }
   });
@@ -630,28 +654,35 @@ describe("shouldFallbackPoll", () => {
         fallbackPolling: true,
         transportStatus: "connected",
         sessionOver: false,
-      })
+      }),
     ).toBe(false);
   });
 
-  it.each(["lost", "connecting"] as const)("polls while the transport is %s", (status) => {
-    // `connecting` counts deliberately: Ably passes through it on every retry, and treating
-    // it as healthy would cancel the fallback several times a minute on a device that never
-    // reconnects.
-    expect(
-      shouldFallbackPoll({
-        fallbackPolling: true,
-        transportStatus: status,
-        sessionOver: false,
-      })
-    ).toBe(true);
-  });
+  it.each(["lost", "connecting"] as const)(
+    "polls while the transport is %s",
+    (status) => {
+      // `connecting` counts deliberately: Ably passes through it on every retry, and treating
+      // it as healthy would cancel the fallback several times a minute on a device that never
+      // reconnects.
+      expect(
+        shouldFallbackPoll({
+          fallbackPolling: true,
+          transportStatus: status,
+          sessionOver: false,
+        }),
+      ).toBe(true);
+    },
+  );
 
   it("stops for good once the session is over", () => {
     // The bound that makes state.ts's command budget true. Without it a phone left open
     // after a purge polls forever under a screen reading "To już koniec".
     expect(
-      shouldFallbackPoll({ fallbackPolling: true, transportStatus: "lost", sessionOver: true })
+      shouldFallbackPoll({
+        fallbackPolling: true,
+        transportStatus: "lost",
+        sessionOver: true,
+      }),
     ).toBe(false);
   });
 });
@@ -676,7 +707,9 @@ describe("advanceLifecycle", () => {
   });
 
   it("ends on the ended phase", () => {
-    expect(advanceLifecycle(INITIAL_LIFECYCLE, snapshot("ended")).sessionOver).toBe(true);
+    expect(
+      advanceLifecycle(INITIAL_LIFECYCLE, snapshot("ended")).sessionOver,
+    ).toBe(true);
   });
 
   it("is sticky — a later live snapshot does not re-open it", () => {

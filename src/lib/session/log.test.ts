@@ -40,7 +40,9 @@ describe("logSessionEvent", () => {
     cyclic.self = cyclic;
     // The cast is the point: this is what a caller doing something unwise looks like,
     // and logging must not be able to take a host action down with it.
-    logSessionEvent("session.action.applied", { reason: cyclic as unknown as string });
+    logSessionEvent("session.action.applied", {
+      reason: cyclic as unknown as string,
+    });
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0]).toContain("fields unserializable");
@@ -60,7 +62,9 @@ describe("logSessionEvent", () => {
     // Asserted as an exact object: the token endpoint is unauthenticated and one
     // line is emitted per joining device, so this is the event most likely to be
     // "improved" later with something identifying. It has nothing to add.
-    expect(JSON.parse(spy.mock.calls[0]![0].slice(LOG_PREFIX.length + 1))).toEqual({
+    expect(
+      JSON.parse(spy.mock.calls[0]![0].slice(LOG_PREFIX.length + 1)),
+    ).toEqual({
       event: "session.token.issued",
     });
   });
@@ -85,8 +89,14 @@ describe("logSessionEvent", () => {
     const parse = (index: number): unknown =>
       JSON.parse(spy.mock.calls[index]![0].slice(LOG_PREFIX.length + 1));
 
-    expect(parse(0)).toEqual({ event: "session.player.joined", playerCount: 7 });
-    expect(parse(1)).toEqual({ event: "session.join.rejected", reason: "taken" });
+    expect(parse(0)).toEqual({
+      event: "session.player.joined",
+      playerCount: 7,
+    });
+    expect(parse(1)).toEqual({
+      event: "session.join.rejected",
+      reason: "taken",
+    });
   });
 
   /**

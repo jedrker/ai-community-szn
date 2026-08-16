@@ -94,7 +94,11 @@ const scoredNumber: NumberQuestion = {
 const MAGNITUDES = [0.5, 67, 10_000, 4_500_000] as const;
 
 function numberFixture(correctValue: number): NumberQuestion {
-  return { ...scoredNumber, id: `fixture-number-${correctValue}`, correctValue };
+  return {
+    ...scoredNumber,
+    id: `fixture-number-${correctValue}`,
+    correctValue,
+  };
 }
 
 describe("choice correctness is all-or-nothing (FR-010)", () => {
@@ -121,7 +125,10 @@ describe("choice correctness is all-or-nothing (FR-010)", () => {
   });
 
   it("refuses a subset", () => {
-    expect(scoreChoiceAnswer(scoredMulti, ["a"], 0)).toEqual({ correct: false, awarded: 0 });
+    expect(scoreChoiceAnswer(scoredMulti, ["a"], 0)).toEqual({
+      correct: false,
+      awarded: 0,
+    });
   });
 
   it("refuses an empty selection", () => {
@@ -142,7 +149,10 @@ describe("an unscored question awards nothing and claims nothing (FR-017)", () =
   it("returns correct: false and awarded: 0", () => {
     // Not `correct: true` — there is no correct answer to match, and the reveal copy
     // would have to work around the lie. The view branches on `question.scored`.
-    expect(scoreChoiceAnswer(unscored, ["a", "b"], 0)).toEqual({ correct: false, awarded: 0 });
+    expect(scoreChoiceAnswer(unscored, ["a", "b"], 0)).toEqual({
+      correct: false,
+      awarded: 0,
+    });
   });
 
   /**
@@ -190,13 +200,21 @@ describe("free-text correctness folds case, spacing, diacritics and punctuation 
   });
 
   it("collapses repeated internal whitespace", () => {
-    const phrase: TextQuestion = { ...scoredText, acceptedAnswers: ["large language model"] };
+    const phrase: TextQuestion = {
+      ...scoredText,
+      acceptedAnswers: ["large language model"],
+    };
 
-    expect(scoreTextAnswer(phrase, "large   language\tmodel", 0).correct).toBe(true);
+    expect(scoreTextAnswer(phrase, "large   language\tmodel", 0).correct).toBe(
+      true,
+    );
   });
 
   it("folds diacritics — including the stroked ł a bare NFD pass misses", () => {
-    const diacritics: TextQuestion = { ...scoredText, acceptedAnswers: ["żółć łódź"] };
+    const diacritics: TextQuestion = {
+      ...scoredText,
+      acceptedAnswers: ["żółć łódź"],
+    };
 
     expect(scoreTextAnswer(diacritics, "ZOLC LODZ", 0).correct).toBe(true);
   });
@@ -212,7 +230,10 @@ describe("free-text correctness folds case, spacing, diacritics and punctuation 
 
   it("scores an empty or whitespace-only answer as wrong, never as a match", () => {
     for (const input of ["", "   ", "..."]) {
-      expect(scoreTextAnswer(scoredText, input, 0)).toEqual({ correct: false, awarded: 0 });
+      expect(scoreTextAnswer(scoredText, input, 0)).toEqual({
+        correct: false,
+        awarded: 0,
+      });
     }
   });
 
@@ -249,7 +270,11 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
    * `relativeError` is turned into a guess on each side of the true value, so the edges
    * are asserted from above and below rather than only where the arithmetic is kind.
    */
-  const bands: ReadonlyArray<{ label: string; relativeError: number; closeness: number }> = [
+  const bands: ReadonlyArray<{
+    label: string;
+    relativeError: number;
+    closeness: number;
+  }> = [
     { label: "exact", relativeError: 0, closeness: 1 },
     { label: "inside 5%", relativeError: 0.03, closeness: 0.8 },
     { label: "exactly on the 5% edge", relativeError: 0.05, closeness: 0.8 },
@@ -269,19 +294,21 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
     for (const side of [1, -1] as const) {
       const direction = side === 1 ? "above" : "below";
 
-      it.each(bands)(`awards $closeness for $label ${direction} on ${name}`, ({
-        relativeError,
-        closeness,
-      }) => {
-        const points = question.points;
-        if (points === null) throw new Error("expected a scored question");
+      it.each(bands)(
+        `awards $closeness for $label ${direction} on ${name}`,
+        ({ relativeError, closeness }) => {
+          const points = question.points;
+          if (points === null) throw new Error("expected a scored question");
 
-        const guess = question.correctValue * (1 + side * relativeError);
+          const guess = question.correctValue * (1 + side * relativeError);
 
-        // At elapsed 0 the speed weight is exactly 1, so the award *is* the band —
-        // any other elapsed would fold two rules into one assertion.
-        expect(scoreNumberAnswer(question, guess, 0).awarded).toBe(Math.round(points * closeness));
-      });
+          // At elapsed 0 the speed weight is exactly 1, so the award *is* the band —
+          // any other elapsed would fold two rules into one assertion.
+          expect(scoreNumberAnswer(question, guess, 0).awarded).toBe(
+            Math.round(points * closeness),
+          );
+        },
+      );
     }
   }
 
@@ -304,7 +331,7 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
 
           expect(
             scoreNumberAnswer(question, guess, 0).awarded,
-            `${question.id}: ${relativeError} relative error`
+            `${question.id}: ${relativeError} relative error`,
           ).toBe(Math.round(points * closeness));
         }
       }
@@ -312,7 +339,9 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
   });
 
   it("reports an exact hit as correct with the full band", () => {
-    expect(scoreNumberAnswer(scoredNumber, scoredNumber.correctValue, 0)).toEqual({
+    expect(
+      scoreNumberAnswer(scoredNumber, scoredNumber.correctValue, 0),
+    ).toEqual({
       correct: true,
       awarded: 1000,
     });
@@ -330,17 +359,25 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
   });
 
   it("scores a guess far outside every band as nothing", () => {
-    expect(scoreNumberAnswer(scoredNumber, 50, 0)).toEqual({ correct: false, awarded: 0 });
+    expect(scoreNumberAnswer(scoredNumber, 50, 0)).toEqual({
+      correct: false,
+      awarded: 0,
+    });
   });
 
   it("scores a negative guess as wrong rather than treating the sign as distance", () => {
-    expect(scoreNumberAnswer(scoredNumber, -scoredNumber.correctValue, 0).awarded).toBe(0);
+    expect(
+      scoreNumberAnswer(scoredNumber, -scoredNumber.correctValue, 0).awarded,
+    ).toBe(0);
   });
 
   it("returns correct: false and awarded: 0 for an unscored question", () => {
     const unscoredNumber: NumberQuestion = { ...scoredNumber, points: null };
 
-    expect(scoreNumberAnswer(unscoredNumber, 67, 0)).toEqual({ correct: false, awarded: 0 });
+    expect(scoreNumberAnswer(unscoredNumber, 67, 0)).toEqual({
+      correct: false,
+      awarded: 0,
+    });
   });
 
   it("awards nothing for a zero correctValue rather than Infinity or NaN", () => {
@@ -358,8 +395,15 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
 
   it("awards nothing for a non-finite guess", () => {
     // The route parses and refuses these first; this is the floor under that.
-    for (const guess of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
-      expect(scoreNumberAnswer(scoredNumber, guess, 0)).toEqual({ correct: false, awarded: 0 });
+    for (const guess of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
+      expect(scoreNumberAnswer(scoredNumber, guess, 0)).toEqual({
+        correct: false,
+        awarded: 0,
+      });
     }
   });
 
@@ -371,7 +415,9 @@ describe("numeric closeness is banded on relative error (FR-013)", () => {
 
     expect(errors).toEqual([...errors].sort((a, b) => a - b));
     expect(closenesses).toEqual([...closenesses].sort((a, b) => b - a));
-    expect(CLOSENESS_BANDS.at(-1)?.maxRelativeError).toBe(Number.POSITIVE_INFINITY);
+    expect(CLOSENESS_BANDS.at(-1)?.maxRelativeError).toBe(
+      Number.POSITIVE_INFINITY,
+    );
     expect(CLOSENESS_BANDS.at(-1)?.closeness).toBe(0);
   });
 });
@@ -380,7 +426,13 @@ describe("the speed curve is shared, not reimplemented per kind (FR-019)", () =>
   it("awards a correct text answer exactly what a correct choice answer gets", () => {
     // **The assertion that fails if the curve is copied rather than reused.** Both
     // questions carry 1000 points, so at equal elapsed the awards must be identical.
-    for (const elapsed of [0, 3_333, SPEED_WINDOW_MS / 2, SPEED_WINDOW_MS, SPEED_WINDOW_MS * 3]) {
+    for (const elapsed of [
+      0,
+      3_333,
+      SPEED_WINDOW_MS / 2,
+      SPEED_WINDOW_MS,
+      SPEED_WINDOW_MS * 3,
+    ]) {
       const text = scoreTextAnswer(scoredText, "halucynacje", elapsed).awarded;
       const choice = scoreChoiceAnswer(scoredSingle, ["a"], elapsed).awarded;
 
@@ -391,7 +443,13 @@ describe("the speed curve is shared, not reimplemented per kind (FR-019)", () =>
   it("awards an exact numeric hit exactly what a correct choice answer gets", () => {
     // Same assertion, third kind: at closeness 1 the numeric award is the choice award,
     // and it stops being so the moment the curve is copied instead of reused.
-    for (const elapsed of [0, 3_333, SPEED_WINDOW_MS / 2, SPEED_WINDOW_MS, SPEED_WINDOW_MS * 3]) {
+    for (const elapsed of [
+      0,
+      3_333,
+      SPEED_WINDOW_MS / 2,
+      SPEED_WINDOW_MS,
+      SPEED_WINDOW_MS * 3,
+    ]) {
       const number = scoreNumberAnswer(scoredNumber, 67, elapsed).awarded;
       const choice = scoreChoiceAnswer(scoredSingle, ["a"], elapsed).awarded;
 
@@ -403,7 +461,9 @@ describe("the speed curve is shared, not reimplemented per kind (FR-019)", () =>
     // 800 of 1000 at full speed, halved at the window — the two rules multiply rather
     // than one of them shadowing the other.
     expect(scoreNumberAnswer(scoredNumber, 65, 0).awarded).toBe(800);
-    expect(scoreNumberAnswer(scoredNumber, 65, SPEED_WINDOW_MS).awarded).toBe(400);
+    expect(scoreNumberAnswer(scoredNumber, 65, SPEED_WINDOW_MS).awarded).toBe(
+      400,
+    );
   });
 
   it("gives the faster of two correct text answers strictly more", () => {
@@ -444,7 +504,7 @@ describe("the committed quiz fits the scoring rules", () => {
 
       expect(
         (question.timeLimitSeconds ?? 0) * 1_000,
-        `${question.id}: a limit below the speed window compresses the reward curve`
+        `${question.id}: a limit below the speed window compresses the reward curve`,
       ).toBeGreaterThanOrEqual(SPEED_WINDOW_MS);
     }
   });
@@ -466,7 +526,11 @@ describe("the speed weight (FR-019)", () => {
 
   it("decreases monotonically across the window", () => {
     let previous = Infinity;
-    for (let elapsed = 0; elapsed <= SPEED_WINDOW_MS; elapsed += SPEED_WINDOW_MS / 20) {
+    for (
+      let elapsed = 0;
+      elapsed <= SPEED_WINDOW_MS;
+      elapsed += SPEED_WINDOW_MS / 20
+    ) {
       const weight = speedWeight(elapsed);
       expect(weight).toBeLessThanOrEqual(previous);
       previous = weight;
@@ -474,7 +538,15 @@ describe("the speed weight (FR-019)", () => {
   });
 
   it("never leaves [0.5, 1] for any input, including nonsense", () => {
-    for (const elapsed of [-1e9, -1, 0, 1, 1e9, Number.NaN, Number.POSITIVE_INFINITY]) {
+    for (const elapsed of [
+      -1e9,
+      -1,
+      0,
+      1,
+      1e9,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ]) {
       const weight = speedWeight(elapsed);
       expect(weight).toBeGreaterThanOrEqual(0.5);
       expect(weight).toBeLessThanOrEqual(1);
@@ -546,7 +618,11 @@ describe("clampElapsed bounds what a device claims", () => {
   });
 
   it("never turns a nonsense window into a full award", () => {
-    const { awarded } = scoreChoiceAnswer(scoredSingle, ["a"], clampElapsed(0, -1));
+    const { awarded } = scoreChoiceAnswer(
+      scoredSingle,
+      ["a"],
+      clampElapsed(0, -1),
+    );
 
     expect(awarded).toBe(500);
   });

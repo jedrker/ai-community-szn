@@ -115,7 +115,7 @@ export function rankOf(total: number, totals: readonly number[]): number {
  */
 export function buildStandings(
   players: readonly PlayerRecord[],
-  scores: Readonly<Record<string, number>>
+  scores: Readonly<Record<string, number>>,
 ): Standings {
   const contenders: Contender[] = players.map((player) => ({
     ...player,
@@ -127,7 +127,10 @@ export function buildStandings(
   const totals = contenders.map((contender) => contender.points);
 
   const ordered = [...contenders].sort(
-    (a, b) => b.points - a.points || a.joinedAt - b.joinedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    (a, b) =>
+      b.points - a.points ||
+      a.joinedAt - b.joinedAt ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
 
   return {

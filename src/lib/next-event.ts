@@ -21,5 +21,5 @@ export const PLANNED_NEXT_EVENT_DATE = new Date(2026, 9, 15);
 /** The date as the homepage prints it, e.g. `15.10.2026`. */
 export const plannedNextEventLabel = PLANNED_NEXT_EVENT_DATE.toLocaleDateString(
   "pl-PL",
-  { day: "numeric", month: "numeric", year: "numeric" }
+  { day: "numeric", month: "numeric", year: "numeric" },
 );

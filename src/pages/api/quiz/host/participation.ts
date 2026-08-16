@@ -5,7 +5,10 @@ import {
   extractSecret,
   unauthorized,
 } from "../../../../lib/session/host";
-import { readAnsweredCount, readPlayerCount } from "../../../../lib/session/store";
+import {
+  readAnsweredCount,
+  readPlayerCount,
+} from "../../../../lib/session/store";
 import { getQuestionById } from "../../../../quiz/index";
 
 /**
@@ -52,7 +55,10 @@ const MESSAGES = {
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
   });
 }
 

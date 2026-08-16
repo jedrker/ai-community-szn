@@ -117,7 +117,10 @@ export type SessionClientOptions = {
   readonly snapshotEvent: string;
   /** Called for every snapshot that wins the version check, and only those. */
   readonly onSnapshot: (state: Snapshot, source: SnapshotSource) => void;
-  readonly onConnection?: (status: ConnectionStatus, info: ConnectionInfo) => void;
+  readonly onConnection?: (
+    status: ConnectionStatus,
+    info: ConnectionInfo,
+  ) => void;
   /**
    * The live join count from `/api/quiz/state`, called on every successful fetch —
    * **including one whose snapshot the version check dropped.**
@@ -176,7 +179,7 @@ export type SessionClient = {
  */
 export function classifyConnection(
   state: string,
-  code: number | undefined
+  code: number | undefined,
 ): { status: ConnectionStatus; info: ConnectionInfo } {
   const status: ConnectionStatus =
     state === "connected"
@@ -321,7 +324,7 @@ export const INITIAL_LIFECYCLE: SessionLifecycle = {
  */
 export function advanceLifecycle(
   previous: SessionLifecycle,
-  state: Snapshot
+  state: Snapshot,
 ): SessionLifecycle {
   if (state === null) {
     return {
@@ -489,7 +492,9 @@ export function createFallbackPoll(deps: {
   };
 }
 
-export function createSessionClient(options: SessionClientOptions): SessionClient {
+export function createSessionClient(
+  options: SessionClientOptions,
+): SessionClient {
   let current: Snapshot = null;
   let realtime: Ably.Realtime | null = null;
 
@@ -554,7 +559,11 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
    * distinguished from a working fallback.
    */
   let transportStatus: ConnectionStatus = "connecting";
-  let transportInfo: ConnectionInfo = { detail: "initialized", cause: null, code: null };
+  let transportInfo: ConnectionInfo = {
+    detail: "initialized",
+    cause: null,
+    code: null,
+  };
   let degraded = false;
   /**
    * Set by `close`, and checked before anything reaches the caller or the network.
@@ -581,7 +590,9 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
   const report = (): void => {
     if (closed) return;
     const status: ConnectionStatus =
-      degraded && transportStatus !== "connected" ? "degraded" : transportStatus;
+      degraded && transportStatus !== "connected"
+        ? "degraded"
+        : transportStatus;
     options.onConnection?.(status, transportInfo);
   };
 
@@ -742,7 +753,7 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
       const code = (err as { code?: unknown } | null)?.code;
       const { info } = classifyConnection(
         "failed",
-        typeof code === "number" ? code : undefined
+        typeof code === "number" ? code : undefined,
       );
       transportStatus = "lost";
       transportInfo = { ...info, detail: "channel-failed" };

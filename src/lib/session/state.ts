@@ -292,7 +292,10 @@ export const sessionStateSchema = z
     // so an unknown one means the definition changed under a live session —
     // a deploy mid-segment. Catch it at the boundary rather than broadcasting a
     // question id that no device can render.
-    if (state.currentQuestionId !== null && !getQuestionById(state.currentQuestionId)) {
+    if (
+      state.currentQuestionId !== null &&
+      !getQuestionById(state.currentQuestionId)
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["currentQuestionId"],
@@ -327,7 +330,10 @@ export const sessionStateSchema = z
     // The invariant that stops a revealed answer outliving its question. A non-null
     // value in `question-open` is the previous question's answer key, published to
     // every device in the room while that question is still being answered.
-    if (state.phase !== "question-revealed" && state.revealedOptionIds !== null) {
+    if (
+      state.phase !== "question-revealed" &&
+      state.revealedOptionIds !== null
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["revealedOptionIds"],
@@ -340,7 +346,10 @@ export const sessionStateSchema = z
     // distribution published while a question is open is a cheat sheet on the projector
     // for anyone who glances up — the leak FR-005 was revised to prevent. This clause,
     // not the comment on the field, is what makes "set only by reveal.ts" true.
-    if (state.phase !== "question-revealed" && state.revealedDistribution !== null) {
+    if (
+      state.phase !== "question-revealed" &&
+      state.revealedDistribution !== null
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["revealedDistribution"],
@@ -352,7 +361,10 @@ export const sessionStateSchema = z
     // failure should name itself. A non-null value here outside the reveal is the
     // accepted answer to a question the room is still typing into — the free-text
     // equivalent of publishing the answer key early.
-    if (state.phase !== "question-revealed" && state.revealedAnswerText !== null) {
+    if (
+      state.phase !== "question-revealed" &&
+      state.revealedAnswerText !== null
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["revealedAnswerText"],
@@ -422,12 +434,16 @@ export function initialSessionState(now: number): SessionState {
  * than an error — a host who taps advance once more at the end has not done
  * anything wrong.
  */
-export function nextQuestionId(currentQuestionId: string | null): string | null {
+export function nextQuestionId(
+  currentQuestionId: string | null,
+): string | null {
   if (currentQuestionId === null) {
     return quiz.questions[0]?.id ?? null;
   }
 
-  const index = quiz.questions.findIndex((question) => question.id === currentQuestionId);
+  const index = quiz.questions.findIndex(
+    (question) => question.id === currentQuestionId,
+  );
   if (index === -1) return null;
 
   return quiz.questions[index + 1]?.id ?? null;
@@ -453,7 +469,7 @@ export function nextQuestionId(currentQuestionId: string | null): string | null 
 export function endedSessionState(
   current: SessionState,
   now: number,
-  standings: Standings | null = null
+  standings: Standings | null = null,
 ): SessionState {
   return {
     version: current.version + 1,
@@ -489,7 +505,7 @@ export function endedSessionState(
 
 /** Parses a document read back from the store. Never throws. */
 export function parseSessionState(
-  raw: unknown
+  raw: unknown,
 ): { ok: true; state: SessionState } | { ok: false; problems: string[] } {
   const result = sessionStateSchema.safeParse(raw);
   if (result.success) return { ok: true, state: result.data };

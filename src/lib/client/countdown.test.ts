@@ -61,7 +61,11 @@ describe("arming and ticking", () => {
     advance(1_000);
     advance(1_000);
 
-    expect(painted(onPaint)).toEqual([LIMIT_MS, LIMIT_MS - 1_000, LIMIT_MS - 2_000]);
+    expect(painted(onPaint)).toEqual([
+      LIMIT_MS,
+      LIMIT_MS - 1_000,
+      LIMIT_MS - 2_000,
+    ]);
   });
 
   it("passes the limit alongside the remainder, so a caller can draw a bar", () => {

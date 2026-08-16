@@ -50,21 +50,29 @@ describe("createTokenRequest", () => {
    * host never opened.
    */
   it("grants subscribe and never publish", async () => {
-    createTokenRequestMock.mockResolvedValue({ keyName: "appid.keyid", mac: "sig" });
+    createTokenRequestMock.mockResolvedValue({
+      keyName: "appid.keyid",
+      mac: "sig",
+    });
 
     await createTokenRequest();
 
     const params = createTokenRequestMock.mock.calls[0]![0];
     expect(params.capability).toEqual({ [SESSION_CHANNEL]: ["subscribe"] });
 
-    const granted = Object.values(params.capability as Record<string, string[]>).flat();
+    const granted = Object.values(
+      params.capability as Record<string, string[]>,
+    ).flat();
     expect(granted).not.toContain("publish");
     expect(granted).not.toContain("presence");
     expect(granted).not.toContain("*");
   });
 
   it("scopes the capability to the session channel only", async () => {
-    createTokenRequestMock.mockResolvedValue({ keyName: "appid.keyid", mac: "sig" });
+    createTokenRequestMock.mockResolvedValue({
+      keyName: "appid.keyid",
+      mac: "sig",
+    });
 
     await createTokenRequest();
 
@@ -76,7 +84,10 @@ describe("createTokenRequest", () => {
     const tokenRequest = { keyName: "appid.keyid", mac: "sig", nonce: "n" };
     createTokenRequestMock.mockResolvedValue(tokenRequest);
 
-    await expect(createTokenRequest()).resolves.toEqual({ outcome: "ok", tokenRequest });
+    await expect(createTokenRequest()).resolves.toEqual({
+      outcome: "ok",
+      tokenRequest,
+    });
   });
 
   it("reports missing configuration rather than throwing", async () => {
@@ -89,7 +100,9 @@ describe("createTokenRequest", () => {
   });
 
   it("reports a vendor failure rather than throwing", async () => {
-    createTokenRequestMock.mockRejectedValue(new Error("ably rejected the key"));
+    createTokenRequestMock.mockRejectedValue(
+      new Error("ably rejected the key"),
+    );
 
     await expect(createTokenRequest()).resolves.toEqual({
       outcome: "failed",
@@ -141,7 +154,10 @@ describe("publishSnapshot", () => {
 
     await publishSnapshot(state);
 
-    const channel = channelsGetMock.mock.results[0]!.value as Record<string, unknown>;
+    const channel = channelsGetMock.mock.results[0]!.value as Record<
+      string,
+      unknown
+    >;
     expect(channel.presence).toBeUndefined();
   });
 });

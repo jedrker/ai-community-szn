@@ -18,7 +18,8 @@ import {
 
 function accepted(raw: string) {
   const result = validateDisplayName(raw);
-  if (!result.ok) throw new Error(`expected "${raw}" to be accepted, got: ${result.error}`);
+  if (!result.ok)
+    throw new Error(`expected "${raw}" to be accepted, got: ${result.error}`);
   return result;
 }
 
@@ -30,12 +31,18 @@ function rejected(raw: string) {
 
 describe("validateDisplayName — what is accepted", () => {
   it("accepts an ordinary name", () => {
-    expect(accepted("Anna")).toMatchObject({ displayName: "Anna", key: "anna" });
+    expect(accepted("Anna")).toMatchObject({
+      displayName: "Anna",
+      key: "anna",
+    });
   });
 
   it("accepts Polish diacritics and keeps them in the displayed form", () => {
     // The attendee sees what they typed; only the claim key is folded.
-    expect(accepted("Zażółć")).toMatchObject({ displayName: "Zażółć", key: "zazolc" });
+    expect(accepted("Zażółć")).toMatchObject({
+      displayName: "Zażółć",
+      key: "zazolc",
+    });
   });
 
   it("accepts digits and the permitted marks", () => {
@@ -57,7 +64,9 @@ describe("validateDisplayName — what is accepted", () => {
     // string would reject a name that displays perfectly well.
     const spacedOut = "A".repeat(12) + "     " + "B".repeat(11);
     expect(spacedOut.length).toBeGreaterThan(MAX_DISPLAY_NAME_LENGTH);
-    expect(accepted(spacedOut).displayName).toHaveLength(MAX_DISPLAY_NAME_LENGTH);
+    expect(accepted(spacedOut).displayName).toHaveLength(
+      MAX_DISPLAY_NAME_LENGTH,
+    );
   });
 });
 
@@ -69,13 +78,13 @@ describe("validateDisplayName — what is refused", () => {
 
   it("refuses a name below the minimum", () => {
     expect(rejected("A".repeat(MIN_DISPLAY_NAME_LENGTH - 1)).error).toContain(
-      String(MIN_DISPLAY_NAME_LENGTH)
+      String(MIN_DISPLAY_NAME_LENGTH),
     );
   });
 
   it("refuses a name above the maximum", () => {
     expect(rejected("A".repeat(MAX_DISPLAY_NAME_LENGTH + 1)).error).toContain(
-      String(MAX_DISPLAY_NAME_LENGTH)
+      String(MAX_DISPLAY_NAME_LENGTH),
     );
   });
 
@@ -129,9 +138,12 @@ describe("the uniqueness fold — which names are the same claim", () => {
     ["internal spacing", "Jan Kowalski", "Jan    Kowalski"],
   ];
 
-  it.each(sameClaim)("folds %s to one claim: %s === %s", (_label, left, right) => {
-    expect(accepted(left).key).toBe(accepted(right).key);
-  });
+  it.each(sameClaim)(
+    "folds %s to one claim: %s === %s",
+    (_label, left, right) => {
+      expect(accepted(left).key).toBe(accepted(right).key);
+    },
+  );
 
   /**
    * The `ł` trap. Every other Polish diacritic decomposes under NFD and is stripped by
@@ -173,7 +185,11 @@ describe("newPlayerId", () => {
 
 describe("parsePlayerRecord", () => {
   it("accepts a well-formed record", () => {
-    const record = { id: "abc", displayName: "Anna", joinedAt: 1_785_000_000_000 };
+    const record = {
+      id: "abc",
+      displayName: "Anna",
+      joinedAt: 1_785_000_000_000,
+    };
     expect(parsePlayerRecord(record)).toEqual(record);
   });
 
@@ -183,6 +199,8 @@ describe("parsePlayerRecord", () => {
     expect(parsePlayerRecord(null)).toBeNull();
     expect(parsePlayerRecord("not json")).toBeNull();
     expect(parsePlayerRecord({ id: "abc" })).toBeNull();
-    expect(parsePlayerRecord({ id: "", displayName: "Anna", joinedAt: 1 })).toBeNull();
+    expect(
+      parsePlayerRecord({ id: "", displayName: "Anna", joinedAt: 1 }),
+    ).toBeNull();
   });
 });

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { answeredField, optionField, wordField, wordFromField } from "./tallies";
+import {
+  answeredField,
+  optionField,
+  wordField,
+  wordFromField,
+} from "./tallies";
 
 /**
  * The field names the write path and the read path must agree on (roadmap S-04, extended
@@ -20,14 +25,16 @@ describe("the answered field name", () => {
   });
 
   it("round-trips: the same input always produces the same field", () => {
-    expect(answeredField("fixture-question")).toBe(answeredField("fixture-question"));
+    expect(answeredField("fixture-question")).toBe(
+      answeredField("fixture-question"),
+    );
   });
 });
 
 describe("the option field name", () => {
   it("prefixes the question id and the option id", () => {
     expect(optionField("fixture-question", "fixture-option")).toBe(
-      "opt:fixture-question:fixture-option"
+      "opt:fixture-question:fixture-option",
     );
   });
 
@@ -43,7 +50,7 @@ describe("the option field name", () => {
 describe("the word field name", () => {
   it("prefixes the question id and carries the folded word", () => {
     expect(wordField("fixture-word-cloud", "halucynacja")).toBe(
-      "word:fixture-word-cloud:halucynacja"
+      "word:fixture-word-cloud:halucynacja",
     );
   });
 
@@ -58,7 +65,9 @@ describe("the word field name", () => {
 
 describe("the word field's inverse", () => {
   it("recovers the word it was built from", () => {
-    expect(wordFromField("q", wordField("q", "halucynacja"))).toBe("halucynacja");
+    expect(wordFromField("q", wordField("q", "halucynacja"))).toBe(
+      "halucynacja",
+    );
   });
 
   it("recovers a word carrying Polish diacritics untouched", () => {

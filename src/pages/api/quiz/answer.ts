@@ -62,7 +62,10 @@ const MESSAGES = {
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -77,9 +80,11 @@ export const POST: APIRoute = async ({ request }) => {
   const playerId = form.get("playerId");
   const questionId = form.get("questionId");
   // A repeated form field, so a multiple-choice answer needs no encoding scheme.
-  const optionIds = form.getAll("optionIds").filter((value): value is string => {
-    return typeof value === "string" && value.length > 0;
-  });
+  const optionIds = form
+    .getAll("optionIds")
+    .filter((value): value is string => {
+      return typeof value === "string" && value.length > 0;
+    });
   /**
    * **`Number(null)` is `0`, not `NaN` — which is why this is not a bare `Number()`.**
    *
@@ -134,8 +139,14 @@ export const POST: APIRoute = async ({ request }) => {
     return json(409, { error: MESSAGES.notStarted });
   }
 
-  if (session.state.phase !== "question-open" || session.state.currentQuestionId !== questionId) {
-    logSessionEvent("session.answer.rejected", { rejection: "not-open", questionId });
+  if (
+    session.state.phase !== "question-open" ||
+    session.state.currentQuestionId !== questionId
+  ) {
+    logSessionEvent("session.answer.rejected", {
+      rejection: "not-open",
+      questionId,
+    });
     return json(409, { error: MESSAGES.notOpen });
   }
 
@@ -144,7 +155,10 @@ export const POST: APIRoute = async ({ request }) => {
   // this function.
   const question = getQuestionById(questionId);
   if (!question) {
-    logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+    logSessionEvent("session.answer.rejected", {
+      rejection: "invalid",
+      questionId,
+    });
     return json(409, { error: MESSAGES.notOpen });
   }
 
@@ -187,7 +201,10 @@ export const POST: APIRoute = async ({ request }) => {
    * the reason the grace never travels to a client.
    */
   if (isSubmissionExpired(now, session.state.updatedAt, question)) {
-    logSessionEvent("session.answer.rejected", { rejection: "expired", questionId });
+    logSessionEvent("session.answer.rejected", {
+      rejection: "expired",
+      questionId,
+    });
     return json(409, { error: MESSAGES.expired, refusal: "expired" });
   }
 
@@ -217,7 +234,10 @@ export const POST: APIRoute = async ({ request }) => {
     const trimmed = typeof rawText === "string" ? rawText.trim() : "";
 
     if (trimmed.length === 0) {
-      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      logSessionEvent("session.answer.rejected", {
+        rejection: "invalid",
+        questionId,
+      });
       return json(400, { error: MESSAGES.missing });
     }
 
@@ -234,7 +254,10 @@ export const POST: APIRoute = async ({ request }) => {
      * backstop; this one is what produces a message an attendee can read.
      */
     if (trimmed.length > MAX_TEXT_ANSWER_LENGTH) {
-      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      logSessionEvent("session.answer.rejected", {
+        rejection: "invalid",
+        questionId,
+      });
       return json(400, { error: MESSAGES.tooLong });
     }
 
@@ -252,7 +275,10 @@ export const POST: APIRoute = async ({ request }) => {
     const guess = parseGuess(form.get("value"));
 
     if (!Number.isFinite(guess)) {
-      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      logSessionEvent("session.answer.rejected", {
+        rejection: "invalid",
+        questionId,
+      });
       return json(400, { error: MESSAGES.notANumber });
     }
 
@@ -266,7 +292,10 @@ export const POST: APIRoute = async ({ request }) => {
      * arbitrary value out of an arithmetic path whose result is stored as an integer.
      */
     if (Math.abs(guess) > MAX_GUESS_MAGNITUDE) {
-      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      logSessionEvent("session.answer.rejected", {
+        rejection: "invalid",
+        questionId,
+      });
       return json(400, { error: MESSAGES.outOfRange });
     }
 
@@ -290,7 +319,10 @@ export const POST: APIRoute = async ({ request }) => {
     const rawWord = form.get("word");
 
     if (typeof rawWord !== "string") {
-      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      logSessionEvent("session.answer.rejected", {
+        rejection: "invalid",
+        questionId,
+      });
       return json(400, { error: MESSAGES.missing });
     }
 
@@ -303,7 +335,10 @@ export const POST: APIRoute = async ({ request }) => {
        * "one word only" has to be able to fix it and send again, which is exactly the
        * distinction `client/answer.ts` draws between `invalid` and `rejected`.
        */
-      logSessionEvent("session.answer.rejected", { rejection: "invalid", questionId });
+      logSessionEvent("session.answer.rejected", {
+        rejection: "invalid",
+        questionId,
+      });
       return json(400, { error: validated.error });
     }
 
@@ -337,9 +372,15 @@ export const POST: APIRoute = async ({ request }) => {
      * against the definition costs one pass and removes the whole class.
      */
     const knownOptionIds = new Set(question.options.map((option) => option.id));
-    selectedOptionIds = [...new Set(optionIds.filter((id) => knownOptionIds.has(id)))];
+    selectedOptionIds = [
+      ...new Set(optionIds.filter((id) => knownOptionIds.has(id))),
+    ];
 
-    ({ correct, awarded } = scoreChoiceAnswer(question, selectedOptionIds, elapsedMs));
+    ({ correct, awarded } = scoreChoiceAnswer(
+      question,
+      selectedOptionIds,
+      elapsedMs,
+    ));
   }
 
   const result = await submitAnswer({
@@ -362,14 +403,20 @@ export const POST: APIRoute = async ({ request }) => {
     // FR-004: the first answer is final. Not an error — a double tap, or a device
     // resubmitting after a reload — so the phone renders it as the confirmation it
     // would have shown anyway.
-    logSessionEvent("session.answer.rejected", { rejection: "already-answered", questionId });
+    logSessionEvent("session.answer.rejected", {
+      rejection: "already-answered",
+      questionId,
+    });
     return json(409, { error: MESSAGES.alreadyAnswered });
   }
 
   if (result.outcome === "not-open") {
     // The session advanced between this route's read and the script's. The store is
     // right and this route was a beat behind.
-    logSessionEvent("session.answer.rejected", { rejection: "not-open", questionId });
+    logSessionEvent("session.answer.rejected", {
+      rejection: "not-open",
+      questionId,
+    });
     return json(409, { error: MESSAGES.notOpen });
   }
 

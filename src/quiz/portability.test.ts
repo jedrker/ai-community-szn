@@ -26,21 +26,26 @@ describe("src/quiz stays importable outside the Astro build", () => {
     expect(sourceFiles().length).toBeGreaterThan(0);
   });
 
-  it.each(sourceFiles())("%s does not import from an astro: specifier", (name) => {
-    const source = readFileSync(join(QUIZ_DIR, name), "utf8");
-    const offending = source
-      .split("\n")
-      .map((line, index) => ({ line: line.trim(), number: index + 1 }))
-      .filter(({ line }) => ASTRO_IMPORT.test(line));
+  it.each(sourceFiles())(
+    "%s does not import from an astro: specifier",
+    (name) => {
+      const source = readFileSync(join(QUIZ_DIR, name), "utf8");
+      const offending = source
+        .split("\n")
+        .map((line, index) => ({ line: line.trim(), number: index + 1 }))
+        .filter(({ line }) => ASTRO_IMPORT.test(line));
 
-    expect(
-      offending,
-      `src/quiz/${name} imports from an "astro:" specifier:\n` +
-        offending.map(({ line, number }) => `  line ${number}: ${line}`).join("\n") +
-        "\n\nThose specifiers only resolve inside the Astro build. This module is " +
-        "imported by vitest and by serverless functions, where they fail with " +
-        '"Cannot find package". Import the underlying package directly instead ' +
-        "(e.g. `zod`, not `astro:content`). See CLAUDE.md."
-    ).toEqual([]);
-  });
+      expect(
+        offending,
+        `src/quiz/${name} imports from an "astro:" specifier:\n` +
+          offending
+            .map(({ line, number }) => `  line ${number}: ${line}`)
+            .join("\n") +
+          "\n\nThose specifiers only resolve inside the Astro build. This module is " +
+          "imported by vitest and by serverless functions, where they fail with " +
+          '"Cannot find package". Import the underlying package directly instead ' +
+          "(e.g. `zod`, not `astro:content`). See CLAUDE.md.",
+      ).toEqual([]);
+    },
+  );
 });

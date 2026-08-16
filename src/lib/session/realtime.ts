@@ -113,7 +113,9 @@ export async function createTokenRequest(): Promise<TokenResult> {
  * newer than the version they already hold. So a caller whose publish failed
  * after the store write was accepted may safely retry.
  */
-export async function publishSnapshot(state: SessionState): Promise<PublishResult> {
+export async function publishSnapshot(
+  state: SessionState,
+): Promise<PublishResult> {
   const rest = client();
   if (!rest) {
     logSessionEvent("session.unconfigured", { reason: UNCONFIGURED_REASON });
@@ -129,7 +131,10 @@ export async function publishSnapshot(state: SessionState): Promise<PublishResul
     return { outcome: "ok" };
   } catch (err) {
     const reason = describe(err);
-    logSessionEvent("session.publish.failed", { version: state.version, reason });
+    logSessionEvent("session.publish.failed", {
+      version: state.version,
+      reason,
+    });
     return { outcome: "failed", reason };
   }
 }

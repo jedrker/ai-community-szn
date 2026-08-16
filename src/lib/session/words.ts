@@ -101,8 +101,7 @@ export function foldWord(value: string): string {
 }
 
 export type ValidatedWord =
-  | { ok: true; word: string; key: string }
-  | { ok: false; error: string };
+  { ok: true; word: string; key: string } | { ok: false; error: string };
 
 /**
  * Checks one submitted word and returns both the form that is stored and the form it is
@@ -139,8 +138,10 @@ export function validateWord(raw: string): ValidatedWord {
 
   if (word.length === 0) return { ok: false, error: MESSAGES.empty };
   if (/\s/.test(word)) return { ok: false, error: MESSAGES.whitespace };
-  if (word.length > MAX_WORD_LENGTH) return { ok: false, error: MESSAGES.tooLong };
-  if (!ALLOWED_CHARACTERS.test(word)) return { ok: false, error: MESSAGES.disallowed };
+  if (word.length > MAX_WORD_LENGTH)
+    return { ok: false, error: MESSAGES.tooLong };
+  if (!ALLOWED_CHARACTERS.test(word))
+    return { ok: false, error: MESSAGES.disallowed };
 
   const key = foldWord(word);
 

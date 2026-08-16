@@ -79,7 +79,10 @@ export type ChoiceScore = {
  * Exported on its own because S-06's relative-error curve multiplies this same weight
  * against a partial-credit base.
  */
-export function speedWeight(elapsedMs: number, windowMs: number = SPEED_WINDOW_MS): number {
+export function speedWeight(
+  elapsedMs: number,
+  windowMs: number = SPEED_WINDOW_MS,
+): number {
   // A non-finite elapsed (NaN from a bad parse) would poison the award silently.
   // Treat it as the slowest possible answer rather than as zero: the floor is the
   // safe direction to fail in.
@@ -107,7 +110,7 @@ export function scoreChoiceAnswer(
   question: ChoiceQuestion,
   selectedOptionIds: readonly string[],
   elapsedMs: number,
-  windowMs: number = SPEED_WINDOW_MS
+  windowMs: number = SPEED_WINDOW_MS,
 ): ChoiceScore {
   if (question.points === null) return { correct: false, awarded: 0 };
 
@@ -115,14 +118,18 @@ export function scoreChoiceAnswer(
   const correctIds = question.correctOptionIds;
 
   const correct =
-    selected.size === correctIds.length && correctIds.every((id) => selected.has(id));
+    selected.size === correctIds.length &&
+    correctIds.every((id) => selected.has(id));
 
   if (!correct) return { correct: false, awarded: 0 };
 
   // Rounded to the nearest integer. With POINTS = 1000 this lands in 500–1000, so
   // two attendees tie only if their clocks agreed to the millisecond-ish — which is
   // what FR-019 was added for.
-  return { correct: true, awarded: Math.round(question.points * speedWeight(elapsedMs, windowMs)) };
+  return {
+    correct: true,
+    awarded: Math.round(question.points * speedWeight(elapsedMs, windowMs)),
+  };
 }
 
 /**
@@ -147,7 +154,7 @@ export function scoreTextAnswer(
   question: TextQuestion,
   answerText: string,
   elapsedMs: number,
-  windowMs: number = SPEED_WINDOW_MS
+  windowMs: number = SPEED_WINDOW_MS,
 ): ChoiceScore {
   if (question.points === null) return { correct: false, awarded: 0 };
 
@@ -158,11 +165,16 @@ export function scoreTextAnswer(
   // is the belt to that braces: whitespace is not an answer.
   if (folded.length === 0) return { correct: false, awarded: 0 };
 
-  const correct = question.acceptedAnswers.some((variant) => normalizeAnswer(variant) === folded);
+  const correct = question.acceptedAnswers.some(
+    (variant) => normalizeAnswer(variant) === folded,
+  );
 
   if (!correct) return { correct: false, awarded: 0 };
 
-  return { correct: true, awarded: Math.round(question.points * speedWeight(elapsedMs, windowMs)) };
+  return {
+    correct: true,
+    awarded: Math.round(question.points * speedWeight(elapsedMs, windowMs)),
+  };
 }
 
 /**
@@ -218,7 +230,9 @@ export function closeness(guess: number, correctValue: number): number {
   if (correctValue === 0) return 0;
 
   const relativeError = Math.abs(guess - correctValue) / Math.abs(correctValue);
-  const band = CLOSENESS_BANDS.find((row) => relativeError <= row.maxRelativeError + BAND_EPSILON);
+  const band = CLOSENESS_BANDS.find(
+    (row) => relativeError <= row.maxRelativeError + BAND_EPSILON,
+  );
 
   // The terminal row matches everything finite, so this is unreachable — but `find`
   // is typed as possibly-undefined and a fabricated `1` here would be catastrophic.
@@ -249,7 +263,7 @@ export function scoreNumberAnswer(
   question: NumberQuestion,
   guess: number,
   elapsedMs: number,
-  windowMs: number = SPEED_WINDOW_MS
+  windowMs: number = SPEED_WINDOW_MS,
 ): ChoiceScore {
   if (question.points === null) return { correct: false, awarded: 0 };
   if (!Number.isFinite(guess)) return { correct: false, awarded: 0 };
@@ -274,7 +288,9 @@ export function scoreNumberAnswer(
     // agreement, so no keypad reaches it — but the two lines disagree about "exact"
     // and this is the one saying so.
     correct: guess === question.correctValue,
-    awarded: Math.round(question.points * fraction * speedWeight(elapsedMs, windowMs)),
+    awarded: Math.round(
+      question.points * fraction * speedWeight(elapsedMs, windowMs),
+    ),
   };
 }
 
@@ -298,14 +314,18 @@ export function scoreNumberAnswer(
  * `question-open` is the moment the question opened because only host actions write
  * it. That reasoning is restated at the call site, where it can stop holding.
  */
-export function clampElapsed(clientElapsedMs: number, serverElapsedMs: number): number {
+export function clampElapsed(
+  clientElapsedMs: number,
+  serverElapsedMs: number,
+): number {
   // A nonsense window leaves no defensible range to clamp into — most plausibly clock
   // skew between the instance that handled the advance and the one handling this
   // answer. Fail to the *floor* weight, not to zero: zero is a full award, and this
   // branch and the one below it are both "the input made no sense", so they must fail
   // in the same direction. (They did not, once: this returned 0 and handed full points
   // to a negative window.)
-  if (!Number.isFinite(serverElapsedMs) || serverElapsedMs < 0) return SPEED_WINDOW_MS;
+  if (!Number.isFinite(serverElapsedMs) || serverElapsedMs < 0)
+    return SPEED_WINDOW_MS;
 
   // A claim that is not a number at all (a failed parse, an absent field) is treated
   // as the slowest answer the window allows rather than the fastest. Garbage should

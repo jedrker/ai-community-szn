@@ -9,7 +9,7 @@ import EmailSignup from "../components/EmailSignup.astro";
 
 const allEvents = await getCollection("events");
 const sortedEvents = allEvents.sort(
-  (a, b) => b.data.date.getTime() - a.data.date.getTime()
+  (a, b) => b.data.date.getTime() - a.data.date.getTime(),
 );
 
 const upcomingEvent = sortedEvents.find((e) => e.data.status === "upcoming");
@@ -22,40 +22,50 @@ const pastEvents = sortedEvents
   <Navbar slot="navbar" />
 
   <HeroSection
-    event={
-      upcomingEvent
-        ? {
-            title: upcomingEvent.data.title,
-            date: upcomingEvent.data.date,
-            time: upcomingEvent.data.time,
-            location: upcomingEvent.data.location,
-            description: upcomingEvent.data.description,
-            lumaUrl: upcomingEvent.data.lumaUrl,
-            lumaEventId: upcomingEvent.data.lumaEventId,
-          }
-        : undefined
-    }
+    event={upcomingEvent
+      ? {
+          title: upcomingEvent.data.title,
+          date: upcomingEvent.data.date,
+          time: upcomingEvent.data.time,
+          location: upcomingEvent.data.location,
+          description: upcomingEvent.data.description,
+          lumaUrl: upcomingEvent.data.lumaUrl,
+          lumaEventId: upcomingEvent.data.lumaEventId,
+        }
+      : undefined}
   />
 
   <section class="max-w-6xl mx-auto px-6 py-16">
     <h2 class="text-2xl font-bold mb-6">Dlaczego warto dołączyć?</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="bg-surface-secondary border border-surface-border rounded-lg p-6">
+      <div
+        class="bg-surface-secondary border border-surface-border rounded-lg p-6"
+      >
         <h3 class="text-lg font-semibold mb-2">Realne wdrożenia AI</h3>
         <p class="text-text-secondary text-sm leading-relaxed">
-          Żadnych slajdów z teorią. Nasi prelegenci dzielą się doświadczeniami z produkcji – od codingu z AI, przez bezpieczeństwo agentów, po wdrożenia GenAI w dużych organizacjach.
+          Żadnych slajdów z teorią. Nasi prelegenci dzielą się doświadczeniami z
+          produkcji – od codingu z AI, przez bezpieczeństwo agentów, po
+          wdrożenia GenAI w dużych organizacjach.
         </p>
       </div>
-      <div class="bg-surface-secondary border border-surface-border rounded-lg p-6">
+      <div
+        class="bg-surface-secondary border border-surface-border rounded-lg p-6"
+      >
         <h3 class="text-lg font-semibold mb-2">Otwarta społeczność</h3>
         <p class="text-text-secondary text-sm leading-relaxed">
-          Developerzy, founderzy, managerowie i entuzjaści AI ze Szczecina i okolic. Niezależnie czy wdrażasz LLM-y w produkcji, budujesz produkty z AI, czy dopiero zaczynasz – tu jest Twoje miejsce.
+          Developerzy, founderzy, managerowie i entuzjaści AI ze Szczecina i
+          okolic. Niezależnie czy wdrażasz LLM-y w produkcji, budujesz produkty
+          z AI, czy dopiero zaczynasz – tu jest Twoje miejsce.
         </p>
       </div>
-      <div class="bg-surface-secondary border border-surface-border rounded-lg p-6">
+      <div
+        class="bg-surface-secondary border border-surface-border rounded-lg p-6"
+      >
         <h3 class="text-lg font-semibold mb-2">Wiedza i networking</h3>
         <p class="text-text-secondary text-sm leading-relaxed">
-          Prezentacje z Q&A, open mic i czas na rozmowy. Spotykamy się regularnie w Szczecinie – każdy meetup to nowi prelegenci, świeże tematy i okazja do nawiązania wartościowych kontaktów.
+          Prezentacje z Q&A, open mic i czas na rozmowy. Spotykamy się
+          regularnie w Szczecinie – każdy meetup to nowi prelegenci, świeże
+          tematy i okazja do nawiązania wartościowych kontaktów.
         </p>
       </div>
     </div>
@@ -180,4 +190,5 @@ const pastEvents = sortedEvents
   <Footer slot="footer" />
 </BaseLayout>
 
-<script id="luma-checkout" src="https://embed.lu.ma/checkout-button.js"></script>
+<script id="luma-checkout" src="https://embed.lu.ma/checkout-button.js"
+></script>

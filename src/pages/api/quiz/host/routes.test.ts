@@ -23,9 +23,9 @@ const readStandingsMock = vi.fn();
 const SECRET = "a-very-long-test-secret-value";
 
 vi.mock("../../../../lib/session/host", async () => {
-  const actual = await vi.importActual<typeof import("../../../../lib/session/host")>(
-    "../../../../lib/session/host"
-  );
+  const actual = await vi.importActual<
+    typeof import("../../../../lib/session/host")
+  >("../../../../lib/session/host");
   return { ...actual, applyHostAction: applyHostActionMock };
 });
 
@@ -52,7 +52,8 @@ const { POST: purge } = await import("./purge");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
 const { initialSessionState } = await import("../../../../lib/session/state");
 const { quiz } = await import("../../../../quiz/index");
-const { questionOfKind, questionsOfKind } = await import("../../../../quiz/test-support");
+const { questionOfKind, questionsOfKind } =
+  await import("../../../../quiz/test-support");
 
 const NOW = 1_785_000_000_000;
 
@@ -108,7 +109,10 @@ const standings = {
   currentQuestionId: quiz.questions[0]!.id,
   startedAt: NOW,
   updatedAt: NOW + 1_200,
-  standings: { rows: [{ rank: 1, displayName: "Ala", points: 30 }], playerCount: 4 },
+  standings: {
+    rows: [{ rank: 1, displayName: "Ala", points: 30 }],
+    playerCount: 4,
+  },
 };
 
 /**
@@ -121,7 +125,7 @@ function call(
   {
     secret = SECRET,
     version,
-  }: { secret?: string | null; version?: number | string } = {}
+  }: { secret?: string | null; version?: number | string } = {},
 ): Promise<Response> | Response {
   const headers: Record<string, string> = { Origin: "https://example.test" };
   if (secret !== null) headers[HOST_SECRET_HEADER] = secret;
@@ -200,7 +204,10 @@ describe("start", () => {
     const response = await call(start);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ state: lobby, applied: true });
+    await expect(response.json()).resolves.toEqual({
+      state: lobby,
+      applied: true,
+    });
   });
 
   /** Idempotence surfaced to the host: not an error, not a plain success. */
@@ -229,7 +236,10 @@ describe("start", () => {
 
   it("reports a committed-but-unbroadcast state as 502, not as a failure", async () => {
     createSessionMock.mockResolvedValue({ outcome: "created", state: lobby });
-    publishSnapshotMock.mockResolvedValue({ outcome: "failed", reason: "down" });
+    publishSnapshotMock.mockResolvedValue({
+      outcome: "failed",
+      reason: "down",
+    });
 
     const response = await call(start);
 
@@ -238,7 +248,10 @@ describe("start", () => {
   });
 
   it("surfaces an unconfigured store as 503", async () => {
-    createSessionMock.mockResolvedValue({ outcome: "unconfigured", reason: "no url" });
+    createSessionMock.mockResolvedValue({
+      outcome: "unconfigured",
+      reason: "no url",
+    });
 
     const response = await call(start);
     expect(response.status).toBe(503);
@@ -275,7 +288,9 @@ describe("advance", () => {
 
     const [transition] = applyHostActionMock.mock.calls[0]!;
     const last = quiz.questions[quiz.questions.length - 1]!.id;
-    expect(transition({ ...revealed, currentQuestionId: last }, NOW)).toBeNull();
+    expect(
+      transition({ ...revealed, currentQuestionId: last }, NOW),
+    ).toBeNull();
   });
 });
 
@@ -386,7 +401,10 @@ describe("reveal", () => {
    * the publish are somebody else's tests.
    */
   it("attaches the room's answers to the revealed state", async () => {
-    readQuestionTalliesMock.mockResolvedValue({ answered: 9, options: { a: 5, b: 4 } });
+    readQuestionTalliesMock.mockResolvedValue({
+      answered: 9,
+      options: { a: 5, b: 4 },
+    });
     applyHostActionMock.mockResolvedValue({
       status: 200,
       body: { state: revealed, applied: true },
@@ -398,7 +416,9 @@ describe("reveal", () => {
     // A choice question specifically — `quiz.questions[0]` is the word-cloud opener, and
     // building this fixture from it would have exercised the skip path while looking
     // like it exercised the read.
-    const choice = quiz.questions.find((question) => question.kind === "single-choice")!;
+    const choice = quiz.questions.find(
+      (question) => question.kind === "single-choice",
+    )!;
     const open = {
       ...revealed,
       phase: "question-open" as const,
@@ -407,12 +427,15 @@ describe("reveal", () => {
     };
     const next = await transition(open, NOW);
 
-    expect(next.revealedDistribution).toEqual({ answered: 9, options: { a: 5, b: 4 } });
+    expect(next.revealedDistribution).toEqual({
+      answered: 9,
+      options: { a: 5, b: 4 },
+    });
     // Read for the question being revealed, and asked for that question's own option
     // ids — not for whatever the previous reveal happened to look at.
     expect(readQuestionTalliesMock).toHaveBeenCalledWith(
       choice.id,
-      choice.options.map((option) => option.id)
+      choice.options.map((option) => option.id),
     );
   });
 
@@ -435,7 +458,9 @@ describe("reveal", () => {
     expect(response.status).toBe(200);
 
     const [transition] = applyHostActionMock.mock.calls[0]!;
-    const choice = quiz.questions.find((question) => question.kind === "single-choice")!;
+    const choice = quiz.questions.find(
+      (question) => question.kind === "single-choice",
+    )!;
     const open = {
       ...revealed,
       phase: "question-open" as const,
@@ -458,7 +483,9 @@ describe("reveal", () => {
    */
   it("publishes a null distribution for a non-choice question, and spends no read on it", async () => {
     const nonChoice = quiz.questions.find(
-      (question) => question.kind !== "single-choice" && question.kind !== "multiple-choice"
+      (question) =>
+        question.kind !== "single-choice" &&
+        question.kind !== "multiple-choice",
     )!;
     applyHostActionMock.mockResolvedValue({
       status: 200,
@@ -544,7 +571,10 @@ describe("end", () => {
 
   it("is accepted from question-revealed", async () => {
     sessionIs(revealed);
-    applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: ended, applied: true },
+    });
 
     const response = await call(end, { version: revealed.version });
 
@@ -554,7 +584,10 @@ describe("end", () => {
 
   it("is accepted from the lobby, so a session that never ran can still be closed", async () => {
     sessionIs(lobby);
-    applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: ended, applied: true },
+    });
 
     const response = await call(end, { version: lobby.version });
 
@@ -563,7 +596,10 @@ describe("end", () => {
 
   it("commits through endSession, not the ordinary write", async () => {
     sessionIs(revealed);
-    applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: ended, applied: true },
+    });
 
     await call(end, { version: revealed.version });
 
@@ -576,7 +612,10 @@ describe("end", () => {
   it("produces a terminal state at a strictly higher version", async () => {
     sessionIs(revealed);
     readStandingsMock.mockResolvedValue(null);
-    applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: ended, applied: true },
+    });
 
     await call(end, { version: revealed.version });
 
@@ -609,7 +648,10 @@ describe("end", () => {
     it("puts a freshly-read board on the terminal state", async () => {
       sessionIs(revealed);
       readStandingsMock.mockResolvedValue(board);
-      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+      applyHostActionMock.mockResolvedValue({
+        status: 200,
+        body: { state: ended, applied: true },
+      });
 
       await call(end, { version: revealed.version });
 
@@ -629,7 +671,10 @@ describe("end", () => {
     it("spends no read until the transition actually runs", async () => {
       sessionIs(revealed);
       readStandingsMock.mockResolvedValue(board);
-      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+      applyHostActionMock.mockResolvedValue({
+        status: 200,
+        body: { state: ended, applied: true },
+      });
 
       await call(end, { version: revealed.version });
 
@@ -649,7 +694,10 @@ describe("end", () => {
     it("still ends the session when the board cannot be read, with no board rather than a refusal", async () => {
       sessionIs(revealed);
       readStandingsMock.mockResolvedValue(null);
-      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+      applyHostActionMock.mockResolvedValue({
+        status: 200,
+        body: { state: ended, applied: true },
+      });
 
       const response = await call(end, { version: revealed.version });
       expect(response.status).toBe(200);
@@ -671,7 +719,10 @@ describe("end", () => {
     it("does not carry the board the session was already showing", async () => {
       sessionIs(standings);
       readStandingsMock.mockResolvedValue(board);
-      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+      applyHostActionMock.mockResolvedValue({
+        status: 200,
+        body: { state: ended, applied: true },
+      });
 
       await call(end, { version: standings.version });
 
@@ -715,7 +766,10 @@ describe("end", () => {
      */
     it("refuses a replay of the identical request", async () => {
       sessionIs(revealed);
-      applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+      applyHostActionMock.mockResolvedValue({
+        status: 200,
+        body: { state: ended, applied: true },
+      });
 
       const first = await call(end, { version: revealed.version });
       expect(first.status).toBe(200);
@@ -743,7 +797,10 @@ describe("end", () => {
 
   it("passes the confirmed version through to the write, not the re-read one", async () => {
     sessionIs(revealed);
-    applyHostActionMock.mockResolvedValue({ status: 200, body: { state: ended, applied: true } });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: ended, applied: true },
+    });
 
     await call(end, { version: revealed.version });
 
@@ -757,7 +814,9 @@ describe("end", () => {
     const response = await call(end, { version: ended.version });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ note: "already-ended" });
+    await expect(response.json()).resolves.toMatchObject({
+      note: "already-ended",
+    });
   });
 
   it("refuses when no session has been started", async () => {
@@ -777,7 +836,10 @@ describe("purge", () => {
    */
   it("IS accepted while a question is open, unlike end", async () => {
     sessionIs(open);
-    endSessionMock.mockResolvedValue({ outcome: "applied", state: { ...ended, version: 4 } });
+    endSessionMock.mockResolvedValue({
+      outcome: "applied",
+      state: { ...ended, version: 4 },
+    });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
     purgeSessionMock.mockResolvedValue({ outcome: "purged", keysRemoved: 1 });
 
@@ -825,7 +887,10 @@ describe("purge", () => {
   it("deletes even when the broadcast fails — retention outranks the closing screen", async () => {
     sessionIs(revealed);
     endSessionMock.mockResolvedValue({ outcome: "applied", state: ended });
-    publishSnapshotMock.mockResolvedValue({ outcome: "failed", reason: "ably down" });
+    publishSnapshotMock.mockResolvedValue({
+      outcome: "failed",
+      reason: "ably down",
+    });
     purgeSessionMock.mockResolvedValue({ outcome: "purged", keysRemoved: 1 });
 
     const response = await call(purge, { version: revealed.version });
@@ -854,19 +919,28 @@ describe("purge", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toMatchObject({ purged: true, keysRemoved: 0, note: "nothing-to-purge" });
+    expect(body).toMatchObject({
+      purged: true,
+      keysRemoved: 0,
+      note: "nothing-to-purge",
+    });
     // No confirmation is demanded, because there is no version to confirm against.
     expect(endSessionMock).not.toHaveBeenCalled();
   });
 
   it("cleans up residue behind an unparseable document", async () => {
-    readSessionMock.mockResolvedValue({ outcome: "invalid", problems: ["broken"] });
+    readSessionMock.mockResolvedValue({
+      outcome: "invalid",
+      problems: ["broken"],
+    });
     purgeSessionMock.mockResolvedValue({ outcome: "purged", keysRemoved: 2 });
 
     const response = await call(purge);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ note: "residue-removed" });
+    await expect(response.json()).resolves.toMatchObject({
+      note: "residue-removed",
+    });
   });
 
   it("still demands confirmation when a readable session exists", async () => {
@@ -933,7 +1007,10 @@ describe("the reveal payload (roadmap S-03)", () => {
    * place `revealedOptionIds` is ever set, which makes it worth pinning here.
    */
   function transitionFrom(): (current: any, now: number) => any {
-    return applyHostActionMock.mock.calls[0]![0] as (current: any, now: number) => any;
+    return applyHostActionMock.mock.calls[0]![0] as (
+      current: any,
+      now: number,
+    ) => any;
   }
 
   const open = (questionId: string) => ({
@@ -978,10 +1055,11 @@ describe("the reveal payload (roadmap S-03)", () => {
 
       // Nothing to highlight, and the client must read that as a warm-up rather than
       // as an error — this is the gather beat that welcomes latecomers.
-      expect((await transitionFrom()(open(unscoredChoice!.id), NOW)).revealedOptionIds).toEqual(
-        []
-      );
-    }
+      expect(
+        (await transitionFrom()(open(unscoredChoice!.id), NOW))
+          .revealedOptionIds,
+      ).toEqual([]);
+    },
   );
 
   it("reveals an empty array for a kind with no options", async () => {
@@ -990,15 +1068,21 @@ describe("the reveal payload (roadmap S-03)", () => {
     // are still S-06/S-08.
     await call(reveal);
 
-    expect((await transitionFrom()(open(textQuestion.id), NOW)).revealedOptionIds).toEqual([]);
+    expect(
+      (await transitionFrom()(open(textQuestion.id), NOW)).revealedOptionIds,
+    ).toEqual([]);
   });
 
   it("advance clears it, so an answer key cannot outlive its question", async () => {
     await call(advance);
 
     const next = transitionFrom()(
-      { ...open(singleQuestion.id), phase: "question-revealed", revealedOptionIds: singleQuestion.correctOptionIds },
-      NOW + 9_000
+      {
+        ...open(singleQuestion.id),
+        phase: "question-revealed",
+        revealedOptionIds: singleQuestion.correctOptionIds,
+      },
+      NOW + 9_000,
     );
 
     // THE ONE THAT MATTERS. A carried value publishes the previous question's answer
@@ -1020,9 +1104,12 @@ describe("the reveal payload (roadmap S-03)", () => {
         ...open(singleQuestion.id),
         phase: "question-revealed",
         revealedOptionIds: singleQuestion.correctOptionIds,
-        revealedDistribution: { answered: 12, options: { [singleQuestion.correctOptionIds[0]!]: 12 } },
+        revealedDistribution: {
+          answered: 12,
+          options: { [singleQuestion.correctOptionIds[0]!]: 12 },
+        },
       },
-      NOW + 9_000
+      NOW + 9_000,
     );
 
     expect(next.revealedDistribution).toBeNull();
@@ -1033,7 +1120,10 @@ describe("the reveal payload (roadmap S-03)", () => {
   });
 
   it("start publishes a lobby with the distribution null", async () => {
-    createSessionMock.mockResolvedValue({ outcome: "created", state: initialSessionState(NOW) });
+    createSessionMock.mockResolvedValue({
+      outcome: "created",
+      state: initialSessionState(NOW),
+    });
     publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
     await call(start);
@@ -1075,7 +1165,8 @@ describe("the reveal payload (roadmap S-03)", () => {
       // The one remaining kind (S-08). FR-015 lets its aggregate display live
       // precisely because there is nothing correct to leak.
       expect(
-        (await transitionFrom()(open(wordCloudQuestion.id), NOW)).revealedAnswerText
+        (await transitionFrom()(open(wordCloudQuestion.id), NOW))
+          .revealedAnswerText,
       ).toBeNull();
     });
 
@@ -1088,15 +1179,20 @@ describe("the reveal payload (roadmap S-03)", () => {
      * enough to reach it.
      */
     describe("a number question's true value", () => {
-      it.each(numberQuestions)("publishes $id formatted for pl-PL", async (question) => {
-        await call(reveal);
+      it.each(numberQuestions)(
+        "publishes $id formatted for pl-PL",
+        async (question) => {
+          await call(reveal);
 
-        const next = await transitionFrom()(open(question.id), NOW + 5_000);
+          const next = await transitionFrom()(open(question.id), NOW + 5_000);
 
-        // Built from the formatter, never typed: pl-PL groups with U+00A0, and a
-        // hand-typed "10 000" fails with a diff in which both sides look identical.
-        expect(next.revealedAnswerText).toBe(formatCorrectValue(question.correctValue));
-      });
+          // Built from the formatter, never typed: pl-PL groups with U+00A0, and a
+          // hand-typed "10 000" fails with a diff in which both sides look identical.
+          expect(next.revealedAnswerText).toBe(
+            formatCorrectValue(question.correctValue),
+          );
+        },
+      );
 
       it("groups thousands with a non-breaking space, not an ordinary one", async () => {
         // The trap stated as its own assertion, so the reason the expectation above
@@ -1108,7 +1204,10 @@ describe("the reveal payload (roadmap S-03)", () => {
       it("leaves revealedOptionIds empty — a number question has none to highlight", async () => {
         await call(reveal);
 
-        const next = await transitionFrom()(open(numberQuestions[0]!.id), NOW + 5_000);
+        const next = await transitionFrom()(
+          open(numberQuestions[0]!.id),
+          NOW + 5_000,
+        );
 
         expect(next.revealedOptionIds).toEqual([]);
       });
@@ -1126,7 +1225,7 @@ describe("the reveal payload (roadmap S-03)", () => {
             phase: "question-revealed",
             revealedAnswerText: formatCorrectValue(67),
           },
-          NOW + 9_000
+          NOW + 9_000,
         );
 
         expect(next.revealedAnswerText).toBeNull();
@@ -1143,7 +1242,7 @@ describe("the reveal payload (roadmap S-03)", () => {
           phase: "question-revealed",
           revealedAnswerText: textQuestion.acceptedAnswers[0],
         },
-        NOW + 9_000
+        NOW + 9_000,
       );
 
       // Carried, it would put the previous question's accepted answer on 150 phones
@@ -1152,7 +1251,10 @@ describe("the reveal payload (roadmap S-03)", () => {
     });
 
     it("start publishes a lobby with it null", async () => {
-      createSessionMock.mockResolvedValue({ outcome: "created", state: initialSessionState(NOW) });
+      createSessionMock.mockResolvedValue({
+        outcome: "created",
+        state: initialSessionState(NOW),
+      });
       publishSnapshotMock.mockResolvedValue({ outcome: "ok" });
 
       await call(start);
@@ -1171,7 +1273,10 @@ describe("the reveal payload (roadmap S-03)", () => {
  * the publish are somebody else's tests.
  */
 describe("standings", () => {
-  const board = { rows: [{ rank: 1, displayName: "Ala", points: 30 }], playerCount: 4 };
+  const board = {
+    rows: [{ rank: 1, displayName: "Ala", points: 30 }],
+    playerCount: 4,
+  };
 
   it("rejects a missing secret with 401 before reading anything", async () => {
     const response = await call(showStandings, { secret: null });
@@ -1299,7 +1404,10 @@ describe("standings", () => {
 
   it("reports a re-broadcast that also fails as 502, not as a silent success", async () => {
     readStandingsMock.mockResolvedValue(board);
-    publishSnapshotMock.mockResolvedValue({ outcome: "failed", reason: "ably down" });
+    publishSnapshotMock.mockResolvedValue({
+      outcome: "failed",
+      reason: "ably down",
+    });
     applyHostActionMock.mockResolvedValue({
       status: 200,
       body: { state: standings, applied: false, note: "no-op" },
@@ -1344,7 +1452,11 @@ describe("standings", () => {
     readStandingsMock.mockResolvedValue(board);
     applyHostActionMock.mockResolvedValue({
       status: 200,
-      body: { state: { ...lobby, phase: "ended" as const }, applied: false, note: "no-op" },
+      body: {
+        state: { ...lobby, phase: "ended" as const },
+        applied: false,
+        note: "no-op",
+      },
     });
 
     const response = await call(showStandings);
@@ -1365,11 +1477,13 @@ describe("standings", () => {
   it("refuses the transition when the board cannot be read", async () => {
     readStandingsMock.mockResolvedValue(null);
     applyHostActionMock.mockImplementation(async (transition: never) => {
-      const next = await (transition as unknown as (s: unknown, n: number) => Promise<unknown>)(
-        revealed,
-        NOW
-      );
-      return { status: 200, body: { state: revealed, applied: next !== null, note: "no-op" } };
+      const next = await (
+        transition as unknown as (s: unknown, n: number) => Promise<unknown>
+      )(revealed, NOW);
+      return {
+        status: 200,
+        body: { state: revealed, applied: next !== null, note: "no-op" },
+      };
     });
 
     const response = await call(showStandings);

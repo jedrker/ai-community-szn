@@ -78,7 +78,10 @@ export function wordField(questionId: string, foldedWord: string): string {
  * what the word is. The same reasoning `answerField` already rests on, and the same
  * failure mode: nothing throws, one chip is quietly wrong.
  */
-export function wordFromField(questionId: string, field: string): string | null {
+export function wordFromField(
+  questionId: string,
+  field: string,
+): string | null {
   const prefix = wordPrefix(questionId);
   if (!field.startsWith(prefix)) return null;
 

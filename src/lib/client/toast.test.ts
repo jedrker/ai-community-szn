@@ -129,7 +129,7 @@ describe("createAutoHide", () => {
       vi.advanceTimersByTime(60_000);
       expect(onHide).not.toHaveBeenCalled();
       expect(hide.isRunning()).toBe(false);
-    }
+    },
   );
 
   it("drops a pending hide when a later message asks never to be hidden", () => {

@@ -79,7 +79,10 @@ const MESSAGES = {
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -103,7 +106,10 @@ export const POST: APIRoute = async ({ request }) => {
 
     if (lookup.outcome === "found" && lookup.player) {
       return json(200, {
-        player: { id: lookup.player.id, displayName: lookup.player.displayName },
+        player: {
+          id: lookup.player.id,
+          displayName: lookup.player.displayName,
+        },
         state: lookup.state,
         resumed: true,
         /**

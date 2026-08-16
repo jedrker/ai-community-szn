@@ -50,7 +50,8 @@ describe("the public projection carries no answers", () => {
    */
   it("does send every option id, including the correct one", () => {
     const choice = quiz.questions.find((q) => q.kind === "single-choice");
-    if (choice?.kind !== "single-choice") throw new Error("expected a single-choice question");
+    if (choice?.kind !== "single-choice")
+      throw new Error("expected a single-choice question");
 
     const correct = choice.correctOptionIds[0]!;
     const projected = getPublicQuestionById(choice.id);
@@ -61,7 +62,9 @@ describe("the public projection carries no answers", () => {
 
 describe("the public projection is complete enough to render", () => {
   it("projects every question, in definition order", () => {
-    expect(publicQuiz.questions.map((q) => q.id)).toEqual(quiz.questions.map((q) => q.id));
+    expect(publicQuiz.questions.map((q) => q.id)).toEqual(
+      quiz.questions.map((q) => q.id),
+    );
   });
 
   it("carries the prompt and kind for every question", () => {
@@ -75,7 +78,8 @@ describe("the public projection is complete enough to render", () => {
     for (const question of quiz.questions) {
       const projected = getPublicQuestionById(question.id);
       const isChoice =
-        question.kind === "single-choice" || question.kind === "multiple-choice";
+        question.kind === "single-choice" ||
+        question.kind === "multiple-choice";
 
       if (isChoice) {
         expect(projected?.options).toHaveLength(question.options.length);
@@ -89,12 +93,15 @@ describe("the public projection is complete enough to render", () => {
 
   it("projects the same set of options, ignoring order", () => {
     const choice = quiz.questions.find((q) => q.kind === "multiple-choice");
-    if (choice?.kind !== "multiple-choice") throw new Error("expected a multiple-choice question");
+    if (choice?.kind !== "multiple-choice")
+      throw new Error("expected a multiple-choice question");
 
     // Order is deliberately not definition order — see the shuffle tests below.
-    expect(getPublicQuestionById(choice.id)?.options?.map((o) => o.text).sort()).toEqual(
-      choice.options.map((o) => o.text).sort()
-    );
+    expect(
+      getPublicQuestionById(choice.id)
+        ?.options?.map((o) => o.text)
+        .sort(),
+    ).toEqual(choice.options.map((o) => o.text).sort());
   });
 
   it("keeps each option's id paired with its own text", () => {
@@ -105,9 +112,11 @@ describe("the public projection is complete enough to render", () => {
       if (!projected?.options) continue;
 
       for (const option of projected.options) {
-        const source = question.kind === "single-choice" || question.kind === "multiple-choice"
-          ? question.options.find((o) => o.id === option.id)
-          : undefined;
+        const source =
+          question.kind === "single-choice" ||
+          question.kind === "multiple-choice"
+            ? question.options.find((o) => o.id === option.id)
+            : undefined;
         expect(source?.text).toBe(option.text);
       }
     }
@@ -122,7 +131,9 @@ describe("the public projection is complete enough to render", () => {
    */
   it("marks whether each question is scored, matching points !== null", () => {
     for (const question of quiz.questions) {
-      expect(getPublicQuestionById(question.id)?.scored).toBe(question.points !== null);
+      expect(getPublicQuestionById(question.id)?.scored).toBe(
+        question.points !== null,
+      );
     }
   });
 
@@ -132,7 +143,9 @@ describe("the public projection is complete enough to render", () => {
     // Both branches populated, in whatever proportion the quiz authors them. This used
     // to demand exactly two unscored questions, which turned "we dropped the gather
     // beat" into a failed assertion about vacuity — a different fact, reported wrongly.
-    expect(flags.filter((scored) => scored === false).length).toBeGreaterThan(0);
+    expect(flags.filter((scored) => scored === false).length).toBeGreaterThan(
+      0,
+    );
     expect(flags.filter((scored) => scored === true).length).toBeGreaterThan(0);
   });
 
@@ -172,8 +185,12 @@ describe("the public projection is complete enough to render", () => {
   });
 
   it("covers both limit cases, so neither branch is asserted vacuously", () => {
-    const withLimit = publicQuiz.questions.filter((q) => q.timeLimitSeconds !== undefined);
-    const withoutLimit = publicQuiz.questions.filter((q) => q.timeLimitSeconds === undefined);
+    const withLimit = publicQuiz.questions.filter(
+      (q) => q.timeLimitSeconds !== undefined,
+    );
+    const withoutLimit = publicQuiz.questions.filter(
+      (q) => q.timeLimitSeconds === undefined,
+    );
 
     // The same pairing as the `scored` guard above, from the other side.
     expect(withoutLimit.length).toBeGreaterThan(0);
@@ -265,7 +282,9 @@ describe("the option shuffle, measured at scale", () => {
     const positions = new Map<number, number>();
 
     for (const question of projected) {
-      const index = question.options!.findIndex((option) => option.id === "opt-0");
+      const index = question.options!.findIndex(
+        (option) => option.id === "opt-0",
+      );
       positions.set(index, (positions.get(index) ?? 0) + 1);
     }
 
@@ -275,9 +294,10 @@ describe("the option shuffle, measured at scale", () => {
     // test of the hash, tight enough that any surviving tell fails it.
     const expected = POPULATION / OPTION_COUNT;
     for (const [index, count] of positions) {
-      expect(count, `position ${index} holds ${count} of ${POPULATION}`).toBeGreaterThan(
-        expected / 2
-      );
+      expect(
+        count,
+        `position ${index} holds ${count} of ${POPULATION}`,
+      ).toBeGreaterThan(expected / 2);
       expect(count).toBeLessThan(expected * 2);
     }
   });
@@ -285,7 +305,9 @@ describe("the option shuffle, measured at scale", () => {
   it("gives different questions different permutations", () => {
     // A seed that ignored the id would shuffle every question identically, which would
     // move the tell rather than remove it.
-    const orders = new Set(projected.map((q) => q.options!.map((o) => o.id).join(",")));
+    const orders = new Set(
+      projected.map((q) => q.options!.map((o) => o.id).join(",")),
+    );
 
     expect(orders.size).toBeGreaterThan(1);
   });
@@ -310,26 +332,35 @@ describe("the option shuffle reaches the committed quiz", () => {
       if (question.kind !== "single-choice") continue;
       const projected = getPublicQuestionById(question.id);
       const index = projected?.options?.findIndex(
-        (option) => option.id === question.correctOptionIds[0]
+        (option) => option.id === question.correctOptionIds[0],
       );
-      if (index === undefined || index < 0) throw new Error(`no correct option in ${question.id}`);
+      if (index === undefined || index < 0)
+        throw new Error(`no correct option in ${question.id}`);
       positions.set(index, (positions.get(index) ?? 0) + 1);
     }
 
     const optionCount = Math.max(
-      ...singleChoice.map((q) => (q.kind === "single-choice" ? q.options.length : 0))
+      ...singleChoice.map((q) =>
+        q.kind === "single-choice" ? q.options.length : 0,
+      ),
     );
     const worst = Math.max(...positions.values());
 
     // No position holds more than half the correct answers, and the draws are spread
     // as widely as this many questions allow.
     expect(worst).toBeLessThanOrEqual(Math.ceil(singleChoice.length / 2));
-    expect(positions.size).toBeGreaterThanOrEqual(Math.min(singleChoice.length, optionCount));
+    expect(positions.size).toBeGreaterThanOrEqual(
+      Math.min(singleChoice.length, optionCount),
+    );
   });
 
   it("actually reorders something, rather than being an expensive identity", () => {
     const moved = quiz.questions.filter((question) => {
-      if (question.kind !== "single-choice" && question.kind !== "multiple-choice") return false;
+      if (
+        question.kind !== "single-choice" &&
+        question.kind !== "multiple-choice"
+      )
+        return false;
       const projected = getPublicQuestionById(question.id);
       return (
         projected?.options?.map((o) => o.id).join(",") !==
@@ -350,9 +381,9 @@ describe("the option shuffle reaches the committed quiz", () => {
     expect(JSON.stringify(publicQuiz)).toBe(once);
 
     const question = singleChoice[0]!;
-    expect(getPublicQuestionById(question.id)?.options?.map((o) => o.id)).toEqual(
-      getPublicQuestionById(question.id)?.options?.map((o) => o.id)
-    );
+    expect(
+      getPublicQuestionById(question.id)?.options?.map((o) => o.id),
+    ).toEqual(getPublicQuestionById(question.id)?.options?.map((o) => o.id));
   });
 
   it("gives the drafted questions different permutations", () => {
@@ -360,14 +391,18 @@ describe("the option shuffle reaches the committed quiz", () => {
       singleChoice.map((question) => {
         const projected = getPublicQuestionById(question.id);
         const sourceIds =
-          question.kind === "single-choice" ? question.options.map((o) => o.id) : [];
+          question.kind === "single-choice"
+            ? question.options.map((o) => o.id)
+            : [];
         return (projected?.options ?? [])
           .map((option) => sourceIds.indexOf(option.id))
           .join(",");
-      })
+      }),
     );
 
     // Bounded by how many questions there are to differ, for the reason above.
-    expect(orders.size).toBeGreaterThanOrEqual(Math.min(2, singleChoice.length));
+    expect(orders.size).toBeGreaterThanOrEqual(
+      Math.min(2, singleChoice.length),
+    );
   });
 });

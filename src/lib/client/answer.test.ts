@@ -15,7 +15,10 @@ import {
 } from "./answer";
 
 /** The choice arm of the payload, so the call sites below stay readable. */
-const choice = (optionIds: string[]): AnswerPayload => ({ kind: "choice", optionIds });
+const choice = (optionIds: string[]): AnswerPayload => ({
+  kind: "choice",
+  optionIds,
+});
 
 /**
  * The device's half of answering (roadmap S-03).
@@ -108,7 +111,10 @@ describe("markSeen", () => {
     // The accepted residual: a device that cleared storage, and a latecomer who joined
     // after the question opened. FR-019 says the clock is the device's, and a latecomer
     // genuinely did just see the question.
-    window.localStorage.setItem(SEEN_KEY, JSON.stringify({ other: NOW - 60_000 }));
+    window.localStorage.setItem(
+      SEEN_KEY,
+      JSON.stringify({ other: NOW - 60_000 }),
+    );
 
     expect(markSeen(SEEN_KEY, "q1", NOW)).toBe(NOW);
   });
@@ -240,7 +246,10 @@ describe("submittedText", () => {
 
   it("is null for an entry written before the field existed", () => {
     // The mid-deploy shape: submitted, but with no text recorded.
-    window.localStorage.setItem(SEEN_KEY, JSON.stringify({ q1: { at: NOW, submitted: true } }));
+    window.localStorage.setItem(
+      SEEN_KEY,
+      JSON.stringify({ q1: { at: NOW, submitted: true } }),
+    );
 
     expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
     expect(submittedText(SEEN_KEY, "q1")).toBeNull();
@@ -249,7 +258,7 @@ describe("submittedText", () => {
   it("ignores a non-string text rather than returning it", () => {
     window.localStorage.setItem(
       SEEN_KEY,
-      JSON.stringify({ q1: { at: NOW, submitted: true, text: 42 } })
+      JSON.stringify({ q1: { at: NOW, submitted: true, text: 42 } }),
     );
 
     expect(submittedText(SEEN_KEY, "q1")).toBeNull();
@@ -319,7 +328,10 @@ describe("submittedOptionIds", () => {
 
   it("is null for an entry written before the field existed", () => {
     // The mid-deploy shape: submitted, with no options recorded.
-    window.localStorage.setItem(SEEN_KEY, JSON.stringify({ q1: { at: NOW, submitted: true } }));
+    window.localStorage.setItem(
+      SEEN_KEY,
+      JSON.stringify({ q1: { at: NOW, submitted: true } }),
+    );
 
     expect(hasSubmitted(SEEN_KEY, "q1")).toBe(true);
     expect(submittedOptionIds(SEEN_KEY, "q1")).toBeNull();
@@ -328,7 +340,10 @@ describe("submittedOptionIds", () => {
   it("ignores a stored value that is not an array of strings", () => {
     window.localStorage.setItem(
       SEEN_KEY,
-      JSON.stringify({ q1: { at: NOW, submitted: true, optionIds: "b" }, q2: { at: NOW, submitted: true, optionIds: ["b", 7] } })
+      JSON.stringify({
+        q1: { at: NOW, submitted: true, optionIds: "b" },
+        q2: { at: NOW, submitted: true, optionIds: ["b", 7] },
+      }),
     );
 
     expect(submittedOptionIds(SEEN_KEY, "q1")).toBeNull();
@@ -402,10 +417,18 @@ describe("submitAnswer", () => {
    * turns on it — `409` is the only final refusal — so a test that omits it is
    * asserting against a status it did not choose.
    */
-  function respond(ok: boolean, payload: unknown = {}, status = ok ? 200 : 409): void {
+  function respond(
+    ok: boolean,
+    payload: unknown = {},
+    status = ok ? 200 : 409,
+  ): void {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok, status, json: () => Promise.resolve(payload) })
+      vi.fn().mockResolvedValue({
+        ok,
+        status,
+        json: () => Promise.resolve(payload),
+      }),
     );
   }
 
@@ -416,13 +439,17 @@ describe("submitAnswer", () => {
   it("reports an accepted submission", async () => {
     respond(true, { accepted: true });
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 3_200)).resolves.toEqual({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 3_200),
+    ).resolves.toEqual({
       outcome: "accepted",
     });
   });
 
   it("sends every selected option as a repeated field", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
     await submitAnswer("p1", "q1", choice(["a", "b"]), 3_200);
@@ -433,19 +460,30 @@ describe("submitAnswer", () => {
   });
 
   it("rounds the elapsed time, because the server parses it as an integer", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
     await submitAnswer("p1", "q1", choice(["a"]), 3_200.7);
 
-    expect((fetchMock.mock.calls[0]![1].body as FormData).get("elapsedMs")).toBe("3201");
+    expect(
+      (fetchMock.mock.calls[0]![1].body as FormData).get("elapsedMs"),
+    ).toBe("3201");
   });
 
   it("sends a text answer raw, leaving the trim and the fold to the server", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
-    await submitAnswer("p1", "q1", { kind: "text", text: "  Halucynacje.  " }, 3_200);
+    await submitAnswer(
+      "p1",
+      "q1",
+      { kind: "text", text: "  Halucynacje.  " },
+      3_200,
+    );
 
     const body = fetchMock.mock.calls[0]![1].body as FormData;
     // Untouched: the server is the only parser, and a client-side trim here would be
@@ -456,12 +494,19 @@ describe("submitAnswer", () => {
   });
 
   it("sends a numeric guess raw, leaving the parse to the server", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
     // A Polish decimal comma and a grouping space — exactly what a phone keypad and a
     // paste produce. `parseGuess` is the only thing that decides what this means.
-    await submitAnswer("p1", "q1", { kind: "number", value: " 9 800,5 " }, 3_200);
+    await submitAnswer(
+      "p1",
+      "q1",
+      { kind: "number", value: " 9 800,5 " },
+      3_200,
+    );
 
     const body = fetchMock.mock.calls[0]![1].body as FormData;
     expect(body.get("value")).toBe(" 9 800,5 ");
@@ -477,10 +522,17 @@ describe("submitAnswer", () => {
    * its own field and takes no other kind's branch at the route.
    */
   it("sends a word raw, leaving the trim, the bound and the fold to the server", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
-    await submitAnswer("p1", "q1", { kind: "word", word: "  Halucynacja  " }, 3_200);
+    await submitAnswer(
+      "p1",
+      "q1",
+      { kind: "word", word: "  Halucynacja  " },
+      3_200,
+    );
 
     const body = fetchMock.mock.calls[0]![1].body as FormData;
     // Untouched. `validateWord` is the only judge, and the fold could not live here anyway —
@@ -489,7 +541,9 @@ describe("submitAnswer", () => {
   });
 
   it("sends nothing that would take another kind's branch at the route", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
     await submitAnswer("p1", "q1", { kind: "word", word: "robot" }, 3_200);
@@ -503,11 +557,18 @@ describe("submitAnswer", () => {
   });
 
   it("sends no word field on any other kind", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
     await submitAnswer("p1", "q1", choice(["a"]), 3_200);
-    await submitAnswer("p1", "q2", { kind: "text", text: "halucynacje" }, 3_200);
+    await submitAnswer(
+      "p1",
+      "q2",
+      { kind: "text", text: "halucynacje" },
+      3_200,
+    );
     await submitAnswer("p1", "q3", { kind: "number", value: "67" }, 3_200);
 
     for (const call of fetchMock.mock.calls) {
@@ -523,10 +584,14 @@ describe("submitAnswer", () => {
    * them unable to answer a question they never answered.
    */
   it("reports a 400 on a word as invalid, so the field is kept", async () => {
-    respond(false, { error: "Słowo może zawierać tylko litery, cyfry i znaki . _ - '" }, 400);
+    respond(
+      false,
+      { error: "Słowo może zawierać tylko litery, cyfry i znaki . _ - '" },
+      400,
+    );
 
     await expect(
-      submitAnswer("p1", "q1", { kind: "word", word: "🤖" }, 1_000)
+      submitAnswer("p1", "q1", { kind: "word", word: "🤖" }, 1_000),
     ).resolves.toEqual({
       outcome: "invalid",
       error: "Słowo może zawierać tylko litery, cyfry i znaki . _ - '",
@@ -537,19 +602,33 @@ describe("submitAnswer", () => {
     respond(false, { error: "Odpowiedź została już zapisana." }, 409);
 
     await expect(
-      submitAnswer("p1", "q1", { kind: "word", word: "robot" }, 1_000)
-    ).resolves.toEqual({ outcome: "rejected", error: "Odpowiedź została już zapisana." });
+      submitAnswer("p1", "q1", { kind: "word", word: "robot" }, 1_000),
+    ).resolves.toEqual({
+      outcome: "rejected",
+      error: "Odpowiedź została już zapisana.",
+    });
   });
 
   it("sends no value field on a choice or text answer", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
     await submitAnswer("p1", "q1", choice(["a"]), 3_200);
-    await submitAnswer("p1", "q2", { kind: "text", text: "halucynacje" }, 3_200);
+    await submitAnswer(
+      "p1",
+      "q2",
+      { kind: "text", text: "halucynacje" },
+      3_200,
+    );
 
-    expect((fetchMock.mock.calls[0]![1].body as FormData).get("value")).toBeNull();
-    expect((fetchMock.mock.calls[1]![1].body as FormData).get("value")).toBeNull();
+    expect(
+      (fetchMock.mock.calls[0]![1].body as FormData).get("value"),
+    ).toBeNull();
+    expect(
+      (fetchMock.mock.calls[1]![1].body as FormData).get("value"),
+    ).toBeNull();
   });
 
   it("treats a 5xx on a numeric guess as failed, never as a refusal", async () => {
@@ -560,12 +639,13 @@ describe("submitAnswer", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 503,
-        json: () => Promise.resolve({ error: "Nie udało się zapisać odpowiedzi." }),
-      })
+        json: () =>
+          Promise.resolve({ error: "Nie udało się zapisać odpowiedzi." }),
+      }),
     );
 
     await expect(
-      submitAnswer("p1", "q1", { kind: "number", value: "9800" }, 1_000)
+      submitAnswer("p1", "q1", { kind: "number", value: "9800" }, 1_000),
     ).resolves.toEqual({ outcome: "failed" });
   });
 
@@ -580,7 +660,7 @@ describe("submitAnswer", () => {
     respond(false, { error: "Wpisz liczbę." }, 400);
 
     await expect(
-      submitAnswer("p1", "q1", { kind: "number", value: "50-60" }, 1_000)
+      submitAnswer("p1", "q1", { kind: "number", value: "50-60" }, 1_000),
     ).resolves.toEqual({ outcome: "invalid", error: "Wpisz liczbę." });
   });
 
@@ -590,8 +670,11 @@ describe("submitAnswer", () => {
     respond(false, { error: "Odpowiedź została już zapisana." }, 409);
 
     await expect(
-      submitAnswer("p1", "q1", { kind: "number", value: "9800" }, 1_000)
-    ).resolves.toEqual({ outcome: "rejected", error: "Odpowiedź została już zapisana." });
+      submitAnswer("p1", "q1", { kind: "number", value: "9800" }, 1_000),
+    ).resolves.toEqual({
+      outcome: "rejected",
+      error: "Odpowiedź została już zapisana.",
+    });
   });
 
   /**
@@ -603,9 +686,15 @@ describe("submitAnswer", () => {
    * "Odpowiedź zapisana", for an answer the store has never seen.
    */
   it("reports an expired submission as its own outcome, not as rejected", async () => {
-    respond(false, { error: "Czas na odpowiedź minął.", refusal: "expired" }, 409);
+    respond(
+      false,
+      { error: "Czas na odpowiedź minął.", refusal: "expired" },
+      409,
+    );
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 26_000)).resolves.toEqual({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 26_000),
+    ).resolves.toEqual({
       outcome: "expired",
       error: "Czas na odpowiedź minął.",
     });
@@ -616,7 +705,9 @@ describe("submitAnswer", () => {
     // behaving exactly as it did.
     respond(false, { error: "Odpowiedź została już zapisana." }, 409);
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toMatchObject({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toMatchObject({
       outcome: "rejected",
     });
   });
@@ -626,7 +717,9 @@ describe("submitAnswer", () => {
     // copy edit a behaviour change.
     respond(false, { error: "Cokolwiek innego.", refusal: "expired" }, 409);
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toMatchObject({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toMatchObject({
       outcome: "expired",
     });
   });
@@ -635,7 +728,9 @@ describe("submitAnswer", () => {
     // Nothing was written on a 400, so the control must stay live whatever the body says.
     respond(false, { error: "Brak odpowiedzi.", refusal: "expired" }, 400);
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toMatchObject({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toMatchObject({
       outcome: "invalid",
     });
   });
@@ -644,21 +739,31 @@ describe("submitAnswer", () => {
     // A 404 is not final in the sense that matters here: it cannot be fixed by
     // retrying, but claiming the answer was saved is still a lie, and the attendee
     // needs the message rather than a disabled field.
-    respond(false, { error: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie." }, 404);
+    respond(
+      false,
+      { error: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie." },
+      404,
+    );
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toEqual({
       outcome: "invalid",
       error: "Nie rozpoznajemy tego urządzenia. Dołącz ponownie.",
     });
   });
 
   it("sends no text field on a choice answer", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
     await submitAnswer("p1", "q1", choice(["a"]), 3_200);
 
-    expect((fetchMock.mock.calls[0]![1].body as FormData).get("text")).toBeNull();
+    expect(
+      (fetchMock.mock.calls[0]![1].body as FormData).get("text"),
+    ).toBeNull();
   });
 
   it("treats a 5xx on a text answer as failed, never as a refusal", async () => {
@@ -669,19 +774,22 @@ describe("submitAnswer", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 503,
-        json: () => Promise.resolve({ error: "Sesja nie jest skonfigurowana." }),
-      })
+        json: () =>
+          Promise.resolve({ error: "Sesja nie jest skonfigurowana." }),
+      }),
     );
 
     await expect(
-      submitAnswer("p1", "q1", { kind: "text", text: "halucynacje" }, 1_000)
+      submitAnswer("p1", "q1", { kind: "text", text: "halucynacje" }, 1_000),
     ).resolves.toEqual({ outcome: "failed" });
   });
 
   it("carries the server's own message through on a refusal", async () => {
     respond(false, { error: "Odpowiedź została już zapisana." });
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toEqual({
       outcome: "rejected",
       error: "Odpowiedź została już zapisana.",
     });
@@ -698,11 +806,14 @@ describe("submitAnswer", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 503,
-        json: () => Promise.resolve({ error: "Nie udało się zapisać odpowiedzi." }),
-      })
+        json: () =>
+          Promise.resolve({ error: "Nie udało się zapisać odpowiedzi." }),
+      }),
     );
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({ outcome: "failed" });
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toEqual({ outcome: "failed" });
   });
 
   it("still reports a 409 as a refusal, with the server's message", async () => {
@@ -713,11 +824,14 @@ describe("submitAnswer", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 409,
-        json: () => Promise.resolve({ error: "Odpowiedź została już zapisana." }),
-      })
+        json: () =>
+          Promise.resolve({ error: "Odpowiedź została już zapisana." }),
+      }),
     );
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toEqual({
       outcome: "rejected",
       error: "Odpowiedź została już zapisana.",
     });
@@ -733,7 +847,11 @@ describe("submitAnswer", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockReturnValue(pending.then(() => ({ ok: true, json: () => Promise.resolve({}) })))
+      vi
+        .fn()
+        .mockReturnValue(
+          pending.then(() => ({ ok: true, json: () => Promise.resolve({}) })),
+        ),
     );
 
     const first = submitAnswer("p1", "q1", choice(["a"]), 1_000);
@@ -757,13 +875,17 @@ describe("submitAnswer", () => {
     });
     const fetchMock = vi
       .fn()
-      .mockReturnValueOnce(pending.then(() => ({ ok: true, json: () => Promise.resolve({}) })))
+      .mockReturnValueOnce(
+        pending.then(() => ({ ok: true, json: () => Promise.resolve({}) })),
+      )
       .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     vi.stubGlobal("fetch", fetchMock);
 
     const stuck = submitAnswer("p1", "q1", choice(["a"]), 1_000);
 
-    await expect(submitAnswer("p1", "q2", choice(["b"]), 1_000)).resolves.toEqual({
+    await expect(
+      submitAnswer("p1", "q2", choice(["b"]), 1_000),
+    ).resolves.toEqual({
       outcome: "accepted",
     });
 
@@ -777,7 +899,9 @@ describe("submitAnswer", () => {
     await submitAnswer("p1", "q1", choice(["a"]), 1_000);
 
     // Otherwise a failed first attempt would lock the attendee out of retrying.
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toEqual({
       outcome: "accepted",
     });
   });
@@ -787,7 +911,9 @@ describe("submitAnswer", () => {
     // answer, a failure is "we do not know" and is worth retrying.
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
-    await expect(submitAnswer("p1", "q1", choice(["a"]), 1_000)).resolves.toEqual({ outcome: "failed" });
+    await expect(
+      submitAnswer("p1", "q1", choice(["a"]), 1_000),
+    ).resolves.toEqual({ outcome: "failed" });
   });
 });
 
@@ -797,10 +923,17 @@ describe("fetchResult", () => {
   });
 
   it("returns the payload for a revealed question", async () => {
-    const payload = { answered: true, correct: true, awarded: 900, total: 2_700 };
+    const payload = {
+      answered: true,
+      correct: true,
+      awarded: 900,
+      total: 2_700,
+    };
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(payload) })
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, json: () => Promise.resolve(payload) }),
     );
 
     await expect(fetchResult("p1", "q1")).resolves.toEqual(payload);
@@ -812,9 +945,18 @@ describe("fetchResult", () => {
    * is the reason the design puts the ids in the snapshot at all.
    */
   it.each([
-    ["a refused request", { ok: false, json: () => Promise.resolve({ error: "nie" }) }],
-    ["a malformed payload", { ok: true, json: () => Promise.resolve({ nonsense: true }) }],
-    ["an unparseable body", { ok: true, json: () => Promise.reject(new Error("bad")) }],
+    [
+      "a refused request",
+      { ok: false, json: () => Promise.resolve({ error: "nie" }) },
+    ],
+    [
+      "a malformed payload",
+      { ok: true, json: () => Promise.resolve({ nonsense: true }) },
+    ],
+    [
+      "an unparseable body",
+      { ok: true, json: () => Promise.reject(new Error("bad")) },
+    ],
   ])("returns null for %s", async (_label, response) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
 

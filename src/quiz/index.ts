@@ -27,7 +27,7 @@ export class InvalidQuizDefinitionError extends Error {
       [
         "Definicja quizu jest nieprawidłowa (src/quiz/definition.ts):",
         ...problems.map((problem) => `  - ${problem}`),
-      ].join("\n")
+      ].join("\n"),
     );
     this.name = "InvalidQuizDefinitionError";
   }
@@ -36,7 +36,9 @@ export class InvalidQuizDefinitionError extends Error {
 function parseOrThrow(raw: unknown): Quiz {
   const result = quizSchema.safeParse(raw);
   if (!result.success) {
-    throw new InvalidQuizDefinitionError(result.error.issues.map((issue) => issue.message));
+    throw new InvalidQuizDefinitionError(
+      result.error.issues.map((issue) => issue.message),
+    );
   }
   return result.data;
 }

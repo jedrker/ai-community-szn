@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { type PlayerRecord } from "./players";
-import { STANDINGS_SIZE, buildStandings, rankOf, standingsSchema } from "./standings";
+import {
+  STANDINGS_SIZE,
+  buildStandings,
+  rankOf,
+  standingsSchema,
+} from "./standings";
 
 const NOW = 1_785_000_000_000;
 
@@ -12,7 +17,11 @@ const NOW = 1_785_000_000_000;
  * somewhere other than the test that names it (`lessons.md`, "Prove the fixture reaches
  * the branch the test names").
  */
-function player(id: string, displayName: string, joinedAt: number): PlayerRecord {
+function player(
+  id: string,
+  displayName: string,
+  joinedAt: number,
+): PlayerRecord {
   return { id, displayName, joinedAt };
 }
 
@@ -50,11 +59,19 @@ describe("rankOf", () => {
 describe("buildStandings", () => {
   it("orders by points, highest first", () => {
     const standings = buildStandings(
-      [player("a", "Ala", NOW), player("b", "Bartek", NOW), player("c", "Celina", NOW)],
-      { a: 10, b: 30, c: 20 }
+      [
+        player("a", "Ala", NOW),
+        player("b", "Bartek", NOW),
+        player("c", "Celina", NOW),
+      ],
+      { a: 10, b: 30, c: 20 },
     );
 
-    expect(standings.rows.map((row) => row.displayName)).toEqual(["Bartek", "Celina", "Ala"]);
+    expect(standings.rows.map((row) => row.displayName)).toEqual([
+      "Bartek",
+      "Celina",
+      "Ala",
+    ]);
     expect(standings.rows.map((row) => row.rank)).toEqual([1, 2, 3]);
   });
 
@@ -68,10 +85,13 @@ describe("buildStandings", () => {
   it("breaks a points tie in favour of whoever joined earlier", () => {
     const standings = buildStandings(
       [player("late", "Późna", NOW + 5_000), player("early", "Wczesna", NOW)],
-      { late: 50, early: 50 }
+      { late: 50, early: 50 },
     );
 
-    expect(standings.rows.map((row) => row.displayName)).toEqual(["Wczesna", "Późna"]);
+    expect(standings.rows.map((row) => row.displayName)).toEqual([
+      "Wczesna",
+      "Późna",
+    ]);
     expect(standings.rows.map((row) => row.rank)).toEqual([1, 1]);
   });
 
@@ -82,34 +102,50 @@ describe("buildStandings", () => {
    * divergence the guardrail forbids, invisible on any single screen.
    */
   it("breaks a joinedAt tie by id, so the order is total", () => {
-    const forward = buildStandings([player("zzz", "Zofia", NOW), player("aaa", "Adam", NOW)], {
-      zzz: 50,
-      aaa: 50,
-    });
-    const reversed = buildStandings([player("aaa", "Adam", NOW), player("zzz", "Zofia", NOW)], {
-      zzz: 50,
-      aaa: 50,
-    });
+    const forward = buildStandings(
+      [player("zzz", "Zofia", NOW), player("aaa", "Adam", NOW)],
+      {
+        zzz: 50,
+        aaa: 50,
+      },
+    );
+    const reversed = buildStandings(
+      [player("aaa", "Adam", NOW), player("zzz", "Zofia", NOW)],
+      {
+        zzz: 50,
+        aaa: 50,
+      },
+    );
 
-    expect(forward.rows.map((row) => row.displayName)).toEqual(["Adam", "Zofia"]);
+    expect(forward.rows.map((row) => row.displayName)).toEqual([
+      "Adam",
+      "Zofia",
+    ]);
     // The same two players in the opposite input order produce the same board. That
     // property, not the alphabetical result, is the point of the third sort key.
-    expect(reversed.rows.map((row) => row.displayName)).toEqual(["Adam", "Zofia"]);
+    expect(reversed.rows.map((row) => row.displayName)).toEqual([
+      "Adam",
+      "Zofia",
+    ]);
   });
 
   it("ranks a player with no score entry at zero rather than dropping them", () => {
     const standings = buildStandings(
       [player("a", "Ala", NOW), player("silent", "Cichy", NOW + 1_000)],
-      { a: 10 }
+      { a: 10 },
     );
 
     expect(standings.rows).toHaveLength(2);
-    expect(standings.rows[1]).toEqual({ rank: 2, displayName: "Cichy", points: 0 });
+    expect(standings.rows[1]).toEqual({
+      rank: 2,
+      displayName: "Cichy",
+      points: 0,
+    });
   });
 
   it("counts everyone who joined, not everyone on the board", () => {
     const players = Array.from({ length: 9 }, (_, index) =>
-      player(`p${index}`, `Gracz ${index}`, NOW + index)
+      player(`p${index}`, `Gracz ${index}`, NOW + index),
     );
 
     const standings = buildStandings(players, { p0: 10 });
@@ -121,10 +157,13 @@ describe("buildStandings", () => {
   });
 
   it("returns a short board for a room smaller than the bound, without padding", () => {
-    const standings = buildStandings([player("a", "Ala", NOW), player("b", "Bartek", NOW + 1)], {
-      a: 5,
-      b: 3,
-    });
+    const standings = buildStandings(
+      [player("a", "Ala", NOW), player("b", "Bartek", NOW + 1)],
+      {
+        a: 5,
+        b: 3,
+      },
+    );
 
     expect(standings.rows).toHaveLength(2);
   });
@@ -137,7 +176,7 @@ describe("buildStandings", () => {
 
   it("produces a board that satisfies the published schema", () => {
     const players = Array.from({ length: 20 }, (_, index) =>
-      player(`p${index}`, `Gracz ${index}`, NOW + index)
+      player(`p${index}`, `Gracz ${index}`, NOW + index),
     );
 
     const standings = buildStandings(players, { p3: 100, p7: 50 });
@@ -157,11 +196,15 @@ describe("buildStandings", () => {
       points: 100 - index,
     }));
 
-    expect(standingsSchema.safeParse({ rows, playerCount: 50 }).success).toBe(false);
+    expect(standingsSchema.safeParse({ rows, playerCount: 50 }).success).toBe(
+      false,
+    );
   });
 
   it("does not put a player id on a published row", () => {
-    const standings = buildStandings([player("secret-id", "Ala", NOW)], { "secret-id": 10 });
+    const standings = buildStandings([player("secret-id", "Ala", NOW)], {
+      "secret-id": 10,
+    });
 
     // Not cosmetic: a row carrying an id publishes the credential the five most
     // impersonation-worthy attendees answer with. See the module note.

@@ -59,7 +59,10 @@ const MESSAGES = {
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -185,7 +188,10 @@ export const POST: APIRoute = async ({ request }) => {
 
   // THE GATE. Both halves matter: the phase, and that it is *this* question being
   // revealed. Asking about question 3 while question 7 is revealed must not answer.
-  if (state?.phase !== "question-revealed" || state.currentQuestionId !== questionId) {
+  if (
+    state?.phase !== "question-revealed" ||
+    state.currentQuestionId !== questionId
+  ) {
     return json(409, { error: MESSAGES.notRevealed });
   }
 

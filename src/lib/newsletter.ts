@@ -35,7 +35,7 @@ export async function addSubscriber(email: string): Promise<SubscribeResult> {
 
   if (!import.meta.env.RESEND_API_KEY || !audienceId) {
     throw new NewsletterUnavailableError(
-      "RESEND_API_KEY and RESEND_AUDIENCE_ID must both be set to accept signups"
+      "RESEND_API_KEY and RESEND_AUDIENCE_ID must both be set to accept signups",
     );
   }
 
@@ -46,9 +46,7 @@ export async function addSubscriber(email: string): Promise<SubscribeResult> {
 
   const created = await resend.contacts.create({ email, audienceId });
   if (created.error) {
-    throw new Error(
-      `Resend contacts.create failed: ${created.error.message}`
-    );
+    throw new Error(`Resend contacts.create failed: ${created.error.message}`);
   }
 
   return "subscribed";

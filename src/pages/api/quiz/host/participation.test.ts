@@ -41,7 +41,10 @@ const QUESTION_ID = quiz.questions[0]!.id;
 function call({
   secret = SECRET,
   questionId = QUESTION_ID,
-}: { secret?: string | null; questionId?: string | null } = {}): Promise<Response> {
+}: {
+  secret?: string | null;
+  questionId?: string | null;
+} = {}): Promise<Response> {
   const headers: Record<string, string> = {};
   if (secret !== null) headers[HOST_SECRET_HEADER] = secret;
 
@@ -97,7 +100,9 @@ describe("GET /api/quiz/host/participation", () => {
   it("echoes the requested questionId back", async () => {
     const second = quiz.questions[1]!.id;
 
-    const body = (await (await call({ questionId: second })).json()) as { questionId: string };
+    const body = (await (await call({ questionId: second })).json()) as {
+      questionId: string;
+    };
 
     expect(body.questionId).toBe(second);
   });
@@ -111,7 +116,11 @@ describe("GET /api/quiz/host/participation", () => {
   it("returns exactly questionId, answered and playerCount", async () => {
     const body = (await (await call()).json()) as Record<string, unknown>;
 
-    expect(Object.keys(body).sort()).toEqual(["answered", "playerCount", "questionId"]);
+    expect(Object.keys(body).sort()).toEqual([
+      "answered",
+      "playerCount",
+      "questionId",
+    ]);
   });
 
   it("is never cached", async () => {
@@ -124,7 +133,9 @@ describe("GET /api/quiz/host/participation", () => {
   it("returns null rather than zero when the join count cannot be read", async () => {
     readPlayerCountMock.mockResolvedValue(null);
 
-    const body = (await (await call()).json()) as { playerCount: number | null };
+    const body = (await (await call()).json()) as {
+      playerCount: number | null;
+    };
 
     expect(body.playerCount).toBeNull();
   });
@@ -197,7 +208,10 @@ describe("the route's shape", () => {
    * raw source would force the file to choose between explaining itself and passing.
    * What these gates are about is what the code can *call*, which lives in the code.
    */
-  const source = readFileSync(fileURLToPath(new URL("./participation.ts", import.meta.url)), "utf8")
+  const source = readFileSync(
+    fileURLToPath(new URL("./participation.ts", import.meta.url)),
+    "utf8",
+  )
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/.*$/gm, "");
 
@@ -215,10 +229,16 @@ describe("the route's shape", () => {
      * the question opened and bounds the speed clamp. A write from a polled host-side
      * route moves it forward and inflates every award after it, silently.
      */
-    for (const forbidden of ["writeSession", "endSession", "applyHostAction", "createSession"]) {
-      expect(source, `participation.ts must not reference ${forbidden} — it is a read`).not.toContain(
-        forbidden
-      );
+    for (const forbidden of [
+      "writeSession",
+      "endSession",
+      "applyHostAction",
+      "createSession",
+    ]) {
+      expect(
+        source,
+        `participation.ts must not reference ${forbidden} — it is a read`,
+      ).not.toContain(forbidden);
     }
   });
 

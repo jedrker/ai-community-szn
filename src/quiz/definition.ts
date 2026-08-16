@@ -81,10 +81,16 @@ export const quizDefinition = {
     {
       kind: "text",
       id: "zmyslanie-faktow",
-      prompt: "Jak nazywa się zjawisko, gdy AI z pełnym przekonaniem zmyśla fakty?",
+      prompt:
+        "Jak nazywa się zjawisko, gdy AI z pełnym przekonaniem zmyśla fakty?",
       points: POINTS,
       timeLimitSeconds: TYPE_SECONDS,
-      acceptedAnswers: ["halucynacje", "halucynacja", "hallucinations", "hallucination"],
+      acceptedAnswers: [
+        "halucynacje",
+        "halucynacja",
+        "hallucinations",
+        "hallucination",
+      ],
     },
 
     {
@@ -152,7 +158,8 @@ export const quizDefinition = {
     {
       kind: "single-choice",
       id: "hackathon-brave",
-      prompt: "Jak nazywa się hackathon BRAVE, na który rozgrzewką był Summer Tour?",
+      prompt:
+        "Jak nazywa się hackathon BRAVE, na który rozgrzewką był Summer Tour?",
       points: POINTS,
       timeLimitSeconds: TAP_SECONDS,
       options: [

@@ -56,7 +56,10 @@ describe("GET /api/quiz/state", () => {
     readPlayerCountMock.mockResolvedValue(7);
 
     const response = await call();
-    const body = (await response.json()) as { state: unknown; playerCount: number | null };
+    const body = (await response.json()) as {
+      state: unknown;
+      playerCount: number | null;
+    };
 
     expect(response.status).toBe(200);
     // The live figure, NOT the document's frozen 0. An assertion that only checked the
@@ -70,7 +73,9 @@ describe("GET /api/quiz/state", () => {
   it("reports null rather than zero when the count cannot be read", async () => {
     readPlayerCountMock.mockResolvedValue(null);
 
-    const body = (await (await call()).json()) as { playerCount: number | null };
+    const body = (await (await call()).json()) as {
+      playerCount: number | null;
+    };
 
     // Distinct from 0 on purpose — the host keeps the number already on screen rather
     // than rendering an empty room to a room that is not empty.
@@ -94,12 +99,15 @@ describe("GET /api/quiz/state", () => {
     ["unconfigured", { outcome: "unconfigured" as const }, 503],
     ["failed", { outcome: "failed" as const, reason: "boom" }, 503],
     ["invalid", { outcome: "invalid" as const, problems: ["bad"] }, 409],
-  ])("maps a %s read to %i without reading the count", async (_label, result, status) => {
-    readSessionMock.mockResolvedValue(result);
+  ])(
+    "maps a %s read to %i without reading the count",
+    async (_label, result, status) => {
+      readSessionMock.mockResolvedValue(result);
 
-    const response = await call();
+      const response = await call();
 
-    expect(response.status).toBe(status);
-    expect(readPlayerCountMock).not.toHaveBeenCalled();
-  });
+      expect(response.status).toBe(status);
+      expect(readPlayerCountMock).not.toHaveBeenCalled();
+    },
+  );
 });
