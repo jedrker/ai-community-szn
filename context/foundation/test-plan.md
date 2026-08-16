@@ -132,6 +132,8 @@ means the gate is enforced once that rollout phase lands; before that, the gate 
 | quiz definition validity | build (config load) → deploy | required — already enforced | A malformed quiz reaching a live room; the previous good quiz stays live instead |
 | lint + format (single edited file) | agent `PostToolUse` hook, `.claude/hooks/per-edit-check.sh` | required — enforced 2026-08-16 | Formatting drift and simple lint errors, while the agent can still fix them itself; exit 2 returns the message as `additionalContext` |
 | lint + format (staged files) | pre-commit, `lefthook.yml` | required — enforced 2026-08-16 | The same, on edits the agent hook never saw: manual edits and a teammate's commit |
+| scoped tests (risk areas only) | agent `PostToolUse` hook → `scripts/scoped-tests.sh` | required — enforced 2026-08-16 | A regression in a §2 hot-spot, while the agent is still holding the edit that caused it |
+| scoped tests (staged files) | pre-commit, `lefthook.yml` → the same script | required — enforced 2026-08-16 | The same, unrestricted by risk area, on edits the agent hook never saw |
 | typecheck | pre-commit, `lefthook.yml` (`astro check`) | required — enforced 2026-08-16 locally; §3 Phase 4 moves it to CI | Type drift; strict-config violations |
 | unit + integration | pre-push, `lefthook.yml` (`bun run test`) | required — enforced 2026-08-16 locally; §3 Phase 4 moves it to CI | Logic regressions across session, scoring, client and route layers |
 | guard verification (break-and-restore) | local, per test authored | required after §3 Phase 1 | Guards that cannot fail — the failure mode that produced Risk #2 |
@@ -166,6 +168,20 @@ against a page with no timer. They are listed in `.prettierignore` rather than r
 five assertions were left alone rather than rewritten to fit the new line wrapping. Do not remove
 those two entries without first re-verifying every scan in `host.test.ts` and `index.test.ts` by
 breaking the behaviour each one covers.
+
+**`vitest related` alone is green on the top of the risk map, and that is why the resolver exists.**
+`host.test.ts` and `index.test.ts` read their `.astro` pages with `readFileSync`, so those pages are
+in no module graph: `vitest related src/pages/quiz/host.astro` prints "No test files found" and exits
+0. A hook wired straight to `related` would therefore report success on precisely the file Risk #1 is
+about. `scripts/scoped-tests.sh` maps an `.astro` page to its sibling suite by name, and both the
+per-edit hook and the pre-commit job call that one script rather than each spelling the rule — the
+same single-reader discipline `CONTROL_RULES` and the key registry follow. Verified by deleting one
+of `host.astro`'s `syncControls()` call sites: the per-edit hook exits 2 and the commit is refused.
+
+The per-edit layer runs tests **only** for the four §2 hot-spots (`src/pages/quiz/`, `src/pages/api/`,
+`src/lib/session/`, `src/lib/client/`); a helper or config edit costs ~1.2s for lint and format alone
+against ~1.8–2.4s when a suite runs. The pre-commit layer drops the risk filter, because at commit
+time the wider net is still under a second.
 
 The baseline was made green by targeted ESLint rule overrides rather than by rewriting product code:
 `no-var` off inside `<script is:inline>` blocks (hand-written ES5 on purpose), `no-explicit-any` off

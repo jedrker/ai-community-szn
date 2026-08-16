@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Resolve a list of changed files to the tests that cover them, and run those.
+#
+# One reader, two callers: the per-edit agent hook (.claude/hooks/per-edit-check.sh,
+# one file, risk areas only) and lefthook's pre-commit job (all staged files).
+# The resolution lives here rather than in both, because the interesting half of
+# it is a trap that a second copy would eventually lose:
+#
+#   `vitest related` walks the module graph, and this project's highest-risk
+#   files are not in it. host.test.ts and index.test.ts read their .astro pages
+#   with readFileSync, so `vitest related src/pages/quiz/host.astro` prints
+#   "No test files found" and exits 0 — green, on the file test-plan.md §2 puts
+#   at the top of the risk map. An .astro page is therefore mapped to its
+#   sibling suite by name.
+#
+# Usage: scripts/scoped-tests.sh <file> [<file> ...]
+# Exit:  0 = nothing to run, or everything passed. Non-zero = tests failed.
+
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 0
+
+VITEST="$ROOT/node_modules/.bin/vitest"
+[ -x "$VITEST" ] || exit 0
+
+# Compact reporter output for an agent's context window (Vitest 4.1+).
+export AI_AGENT=1
+
+explicit=() # test files named directly
+related=()  # sources handed to the module-graph walk
+
+for file in "$@"; do
+  [ -f "$file" ] || continue
+  case "$file" in
+    *.test.ts | *.test.tsx)
+      explicit+=("$file")
+      ;;
+    *.astro)
+      sibling="${file%.astro}.test.ts"
+      [ -f "$sibling" ] && explicit+=("$sibling")
+      ;;
+    *.ts | *.tsx | *.js | *.mjs)
+      related+=("$file")
+      ;;
+  esac
+done
+
+status=0
+
+if [ ${#explicit[@]} -gt 0 ]; then
+  "$VITEST" run "${explicit[@]}" || status=1
+fi
+
+if [ ${#related[@]} -gt 0 ]; then
+  "$VITEST" related "${related[@]}" --run || status=1
+fi
+
+exit "$status"

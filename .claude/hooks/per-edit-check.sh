@@ -49,4 +49,35 @@ if [ "$STATUS" -ne 0 ]; then
   exit 2
 fi
 
+# ---------------------------------------------------------------------------
+# Scoped tests — risk areas only.
+#
+# The areas are the four §2 risk map hot-spots in test-plan.md, and no others:
+# a helper or a config edit does not earn a test run. Risk #1 (the host panel
+# offering a verb the phase refuses) is the top row, which is why the .astro
+# branch below exists at all.
+# ---------------------------------------------------------------------------
+
+REL="${FILE#"$ROOT"/}"
+case "$REL" in
+  src/pages/quiz/* | src/pages/api/* | src/lib/session/* | src/lib/client/*) ;;
+  *) exit 0 ;;
+esac
+
+# Which tests cover this file is resolved by scripts/scoped-tests.sh, shared
+# with lefthook's pre-commit job — one reader, so the two layers cannot come
+# apart on the `.astro` case documented there.
+RUNNER="$ROOT/scripts/scoped-tests.sh"
+[ -x "$RUNNER" ] || exit 0
+
+TEST_OUTPUT="$("$RUNNER" "$REL" 2>&1)"
+TEST_STATUS=$?
+
+if [ "$TEST_STATUS" -ne 0 ]; then
+  echo "Tests related to $REL are failing:"
+  echo ""
+  echo "$TEST_OUTPUT" | head -c 8000
+  exit 2
+fi
+
 exit 0

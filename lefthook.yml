@@ -18,6 +18,15 @@ pre-commit:
 
     # `--minimumSeverity warning` hides the 57 pre-existing `is:inline` hints so a
     # real type error is legible; the failure threshold is unchanged (errors only).
+    # Same resolver the agent hook uses, so the two layers cannot disagree about
+    # which suite covers an .astro page. Unlike the per-edit hook this is not
+    # restricted to risk areas: at commit time a wider net is still cheap.
+    - name: scoped-tests
+      glob: "*.{ts,tsx,js,mjs,astro}"
+      run: ./scripts/scoped-tests.sh {staged_files}
+
+    # `--minimumSeverity warning` hides the 57 pre-existing `is:inline` hints so a
+    # real type error is legible; the failure threshold is unchanged (errors only).
     - name: type-check
       run: bunx astro check --minimumSeverity warning
 
