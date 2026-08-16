@@ -55,6 +55,7 @@ const {
   TALLIES_KEY,
 } = await import("./keys");
 const { answeredField, optionField, wordField } = await import("./tallies");
+const { answerField } = await import("./answers");
 const { WORD_CLOUD_SIZE } = await import("./words");
 const { quiz } = await import("../../quiz/index");
 const { MAX_PLAYERS_PER_DEVICE } = await import("./players");
@@ -1873,6 +1874,194 @@ describe("readStandings", () => {
 
     expect(redisMock.hgetall).toHaveBeenCalledTimes(2);
     expect(redisMock.eval).not.toHaveBeenCalled();
+  });
+
+  /**
+   * THE RANK BASELINE (this change).
+   *
+   * These reconstruct where the room stood *before* a question by subtracting that
+   * question's award from each running total — so every fixture here has to state both
+   * halves, the scores hash and the answer records, and the interesting cases are the ones
+   * where they disagree about what a player did.
+   */
+  describe("the rank baseline", () => {
+    const celina = {
+      id: "id-celina",
+      displayName: "Celina",
+      joinedAt: NOW + 2_000,
+    };
+
+    const QUESTION = "q-capitals";
+
+    /** A stored answer, complete enough for `answerRecordSchema` to accept it. */
+    function answer(playerId: string, awarded: number): string {
+      return JSON.stringify({
+        playerId,
+        questionId: QUESTION,
+        optionIds: ["a"],
+        elapsedMs: 1_200,
+        correct: awarded > 0,
+        awarded,
+        answeredAt: NOW + 3_000,
+      });
+    }
+
+    function awards(fields: Record<string, unknown>): void {
+      redisMock.hmget.mockResolvedValue(fields);
+    }
+
+    /**
+     * The whole feature in one read: Celina's 30-point answer is subtracted back out, which
+     * puts her last a question ago and first now.
+     *
+     * The two she passed keep their positions in the scores hash and still move, because a
+     * rank is a statement about everyone — asserting only Celina's `+2` would pass against
+     * an implementation that never looked at the other two.
+     */
+    it("measures movement by subtracting the question's award from each total", async () => {
+      hashes(
+        {
+          ala: JSON.stringify(ala),
+          bartek: JSON.stringify(bartek),
+          celina: JSON.stringify(celina),
+        },
+        { "id-ala": 30, "id-bartek": 20, "id-celina": 40 },
+      );
+      awards({
+        [answerField(QUESTION, "id-celina")]: answer("id-celina", 30),
+      });
+
+      const standings = await readStandings(QUESTION);
+
+      expect(
+        standings?.rows.map((row) => [row.displayName, row.delta]),
+      ).toEqual([
+        ["Celina", 2],
+        ["Ala", -1],
+        ["Bartek", -1],
+      ]);
+    });
+
+    /**
+     * An absent answer field is "gained nothing", not "unknown" — the reading `HINCRBY`
+     * forces, since a player who never answered never touched the scores hash for this
+     * question.
+     *
+     * Bartek is the fixture's proof: he did not answer, holds 20 either way, and therefore
+     * *led* a question ago. An implementation that read his missing field as anything but
+     * zero would put him somewhere else entirely.
+     */
+    it("reads a player who did not answer as having gained nothing", async () => {
+      hashes(
+        { ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) },
+        { "id-ala": 30, "id-bartek": 20 },
+      );
+      awards({ [answerField(QUESTION, "id-ala")]: answer("id-ala", 25) });
+
+      const standings = await readStandings(QUESTION);
+
+      expect(
+        standings?.rows.map((row) => [row.displayName, row.delta]),
+      ).toEqual([
+        ["Ala", 1],
+        ["Bartek", -1],
+      ]);
+    });
+
+    /**
+     * Corruption reads as no award, which shows that player no movement rather than a
+     * fabricated one. The conservative end, per `lessons.md`: an unparseable record is not
+     * evidence of a climb.
+     */
+    it("reads an unparseable answer record as no award", async () => {
+      hashes({ ala: JSON.stringify(ala) }, { "id-ala": 30 });
+      awards({ [answerField(QUESTION, "id-ala")]: "{{{ not json" });
+
+      const standings = await readStandings(QUESTION);
+
+      // Unchanged total, one player, so nothing moved — and crucially not `null`, which
+      // would mean the baseline was never read at all.
+      expect(standings?.rows[0]?.delta).toBe(0);
+    });
+
+    /**
+     * **The degradation, and the half that makes it a decision rather than a swallow.** The
+     * awards read failing costs the board its arrows; the board itself still reaches the
+     * room. The next test is its other half.
+     */
+    it("still publishes a board when the awards read fails, without arrows", async () => {
+      hashes(
+        { ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) },
+        { "id-ala": 30, "id-bartek": 20 },
+      );
+      redisMock.hmget.mockRejectedValue(new Error("upstash unreachable"));
+
+      const standings = await readStandings(QUESTION);
+
+      expect(standings?.rows.map((row) => row.displayName)).toEqual([
+        "Ala",
+        "Bartek",
+      ]);
+      expect(standings?.rows.map((row) => row.delta)).toEqual([null, null]);
+    });
+
+    /**
+     * The other half: a players-or-scores failure still refuses, even now that a question
+     * id is being passed. Without this the new argument could quietly turn the one read
+     * whose failure must stop the beat into one that degrades — and the projector would go
+     * blank instead of the host seeing a 503.
+     */
+    it("still returns null when the players or scores read fails", () => {
+      redisMock.hgetall.mockRejectedValue(new Error("upstash unreachable"));
+
+      return expect(readStandings(QUESTION)).resolves.toBeNull();
+    });
+
+    /**
+     * `HMGET` with no fields is an error rather than an empty reply, so an empty room must
+     * not reach it — otherwise a lobby that nobody has joined would read as a failed
+     * baseline.
+     */
+    it("issues no awards read for an empty room", async () => {
+      hashes(null as never, null as never);
+
+      const standings = await readStandings(QUESTION);
+
+      expect(redisMock.hmget).not.toHaveBeenCalled();
+      expect(standings).toEqual({ rows: [], playerCount: 0 });
+    });
+
+    /**
+     * No question, no third command and no arrows — which is exactly what `end.ts` calls,
+     * and the whole of how the closing board stays out of this feature without a
+     * conditional of its own.
+     */
+    it("issues no awards read when no question is given", async () => {
+      hashes({ ala: JSON.stringify(ala) }, { "id-ala": 10 });
+
+      const standings = await readStandings();
+
+      expect(redisMock.hmget).not.toHaveBeenCalled();
+      expect(standings?.rows[0]?.delta).toBeNull();
+    });
+
+    /** One field per player, against the answers hash, in `answerField`'s format. */
+    it("asks for one answer field per player", async () => {
+      hashes(
+        { ala: JSON.stringify(ala), bartek: JSON.stringify(bartek) },
+        { "id-ala": 30, "id-bartek": 20 },
+      );
+      awards({});
+
+      await readStandings(QUESTION);
+
+      expect(redisMock.hmget).toHaveBeenCalledTimes(1);
+      expect(redisMock.hmget).toHaveBeenCalledWith(
+        ANSWERS_KEY,
+        answerField(QUESTION, "id-ala"),
+        answerField(QUESTION, "id-bartek"),
+      );
+    });
   });
 });
 

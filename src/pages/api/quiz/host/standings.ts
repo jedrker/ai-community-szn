@@ -61,7 +61,20 @@ export const POST: APIRoute = async ({ request }) => {
   const outcome = await applyHostAction(async (current, now) => {
     if (current.phase !== "question-revealed") return null;
 
-    const standings = await readStandings();
+    /**
+     * The question the room has just been through, which is what the rank arrows are
+     * measured against (this change).
+     *
+     * Non-null by the guard above: `question-revealed` is the only phase this transition
+     * is reachable from, and every phase but the lobby carries a question id. Passing the
+     * *current* id rather than remembering the last board is the whole of the baseline —
+     * `readStandings` reconstructs each player's previous total by subtracting this
+     * question's award, so nothing has to be stored between beats.
+     *
+     * A re-tap cannot change what the arrows say: the branch below re-broadcasts the
+     * document already in the store rather than reaching this transition at all.
+     */
+    const standings = await readStandings(current.currentQuestionId);
 
     if (standings === null) {
       readFailed = true;

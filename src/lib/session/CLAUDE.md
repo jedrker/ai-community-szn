@@ -73,6 +73,35 @@ Read, in order, before changing any of this:
 `context/archive/2026-08-11-leaderboard-beat/leaderboard-contract.md`,
 `context/archive/2026-08-14-final-winner-reveal/winner-reveal-contract.md`.
 
+## The rank delta's baseline is derived, and that is what keeps it out of the retention story
+
+Each published row carries `delta` — how many places that player moved since before the last
+question, **positive for a climb**. The sign is the one thing here a reader cannot recover from the
+output: rank numbers shrink as you climb, so the arithmetic is `previousRank - rank`, and inverted it
+renders as a board where everyone who gained points fell.
+
+**There is no "previous standings" key, and adding one would be a retention change rather than a
+refactor.** `SUBMIT_ANSWER` increments the scores hash by exactly `AnswerRecord.awarded`, so
+`previousTotal = total - awarded(<question>, <player>)` is exact arithmetic — `readStandings` rebuilds
+the baseline with one `HMGET` over the answers hash instead of storing anything between beats. A hash
+of player id → previous rank would be attendee data by the same reasoning `livequiz:scores` is, and it
+would need a registry entry, a TTL re-arm and a purge. It buys nothing the subtraction does not.
+
+**Two reads, two opposite failure postures, and the asymmetry is the decision.** A failed players or
+scores read returns `null` and the route refuses the transition; a failed awards read returns a board
+with every `delta` at `null` and logs `session.standings.degraded`. The arrows decorate the beat, the
+board *is* it — refusing a leaderboard over an ornament puts a blank projector in front of the room.
+Do not "tidy" the awards read into the outer `try`/`catch`.
+
+**A player whose previous total was 0 gets no delta at all.** Before question 1 the whole room ties at
+position 1, so without the rule the first board would show its top five all falling. It is a rule about
+zero rather than a special case for the opening: arriving on the board from nothing is an appearance,
+not a climb of forty places.
+
+`end.ts` calls `readStandings()` with **no argument**, which is the whole of how the closing board stays
+arrow-free — no conditional, no phase test. Passing it an id "for consistency" is how that decision gets
+undone.
+
 ## SessionState: one decoration field, four transition fields
 
 `playerCount` is decoration: `applyHostAction` overwrites it on every action and a stale value costs

@@ -134,6 +134,24 @@ export const SESSION_EVENTS = [
    * beat that a host can do something about.
    */
   "session.standings.failed",
+  /**
+   * The board reached the room, but without its rank arrows (this change).
+   *
+   * **Distinct from `session.standings.failed` because the outcomes are opposite.** That
+   * one means the beat did not happen; this one means it did, and lost an ornament on the
+   * way. Folding them together would put the room's most visible failure and its least
+   * visible one behind the same string, and a host grepping mid-segment would have to read
+   * the reason to tell "the projector did not move" from "the projector moved fine".
+   *
+   * It is also the only evidence this degradation leaves. The board looks entirely correct
+   * without arrows — a session's first board legitimately has none — so nothing on any
+   * screen distinguishes a baseline that could not be read from one that had nothing to
+   * say.
+   *
+   * Carries `reason` and nothing else: the arrows are about positions, and there is no
+   * count here that would not be a fact about who was on the board.
+   */
+  "session.standings.degraded",
 ] as const;
 
 export type SessionEvent = (typeof SESSION_EVENTS)[number];

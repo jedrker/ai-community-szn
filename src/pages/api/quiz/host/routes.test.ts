@@ -1309,6 +1309,30 @@ describe("standings", () => {
   });
 
   /**
+   * THE BASELINE THE ARROWS ARE MEASURED AGAINST (this change).
+   *
+   * The board is read against the question the room has just been through, so movement is
+   * "since before this question" rather than since some remembered earlier board. Asserted
+   * as the *value* of the argument rather than as "it was called with something", because
+   * `readStandings()` with no argument is a legal call that silently produces no arrows —
+   * the shape this route must not degrade into.
+   */
+  it("reads the board against the question just revealed", async () => {
+    readStandingsMock.mockResolvedValue(board);
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: true },
+    });
+
+    await call(showStandings);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    await transition(revealed, NOW);
+
+    expect(readStandingsMock).toHaveBeenCalledWith(revealed.currentQuestionId);
+  });
+
+  /**
    * Reachable only from a reveal. `question-open` is the one that matters most: a board
    * on the projector while the room is still answering shows a contest mid-move, and it
    * moves again while they watch.

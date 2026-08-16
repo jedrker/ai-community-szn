@@ -1424,6 +1424,25 @@ export async function readOwnResult(
  * and `readQuestionTallies`' reason, sharpened: an empty leaderboard on a projector is the
  * claim that nobody in the room has scored, at the moment the room is looking at it. The
  * caller refuses the transition rather than publishing one.
+ *
+ * ## `questionId` — the baseline the rank delta is measured against (this change)
+ *
+ * Passed by the standings route, which measures movement against the question the room has
+ * just been through. **Omitted, this function behaves exactly as it did before** — no third
+ * command, no deltas — which is the whole of how `end.ts` keeps the closing board out of the
+ * feature without a conditional of its own.
+ *
+ * **The baseline is reconstructed, not stored.** `SUBMIT_ANSWER` increments the scores hash
+ * by exactly `AnswerRecord.awarded`, so subtracting that award from the running total is
+ * exact arithmetic rather than an estimate — and it is what lets this change add no key,
+ * and therefore nothing new for `end` and `purge` to reach.
+ *
+ * **The awards read degrades where the two reads above refuse, and that asymmetry is the
+ * decision.** It sits in its own `try`/`catch` (see `readPreviousScores`): a failure there
+ * costs the board its arrows, while a failure in the players or scores read still returns
+ * `null` and still refuses the transition. The arrows decorate the beat; the board *is* it,
+ * so refusing a leaderboard over an ornament would leave a blank projector in front of the
+ * room — the same trade `reveal.ts` makes for a bar chart it could not build.
  */
 /**
  * A total read back from the scores hash — explicitly, not by bare coercion.
@@ -1442,7 +1461,9 @@ function storedTotal(raw: unknown): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-export async function readStandings(): Promise<Standings | null> {
+export async function readStandings(
+  questionId?: string | null,
+): Promise<Standings | null> {
   const redis = client();
   if (!redis) return null;
 
@@ -1476,7 +1497,76 @@ export async function readStandings(): Promise<Standings | null> {
     if (total !== null) scores[id] = total;
   }
 
-  return buildStandings(players, scores);
+  /**
+   * No question to measure against, or nobody to measure — either way there is no third
+   * command and no baseline. The empty-room guard is not an optimisation: `HMGET` with no
+   * fields is an error rather than an empty reply, so issuing it would turn a room that
+   * has not filled yet into a failed read.
+   */
+  const previousScores =
+    questionId === undefined || questionId === null || players.length === 0
+      ? null
+      : await readPreviousScores(redis, questionId, players, scores);
+
+  return buildStandings(players, scores, previousScores);
+}
+
+/**
+ * Every player's running total as it stood **before** the given question (this change).
+ *
+ * One billed `HMGET`, one field per player, against the answers hash — whose field format
+ * `answerField` owns, so this read and `submitAnswer`'s write cannot disagree about the
+ * separator. A second round trip rather than a third parallel call, because the player ids
+ * it addresses come out of the first one.
+ *
+ * **Returns `null` for "could not say", and that is the only thing this failure costs.**
+ * The caller publishes the board regardless; `buildStandings` renders a `null` baseline as
+ * no movement at all. See the asymmetry note on `readStandings`.
+ *
+ * Three readings of a missing award, all deliberate and all the same value:
+ * - **absent** — the attendee did not answer this question, so their total did not move;
+ * - **unparseable** — corruption, and the conservative reading is that nothing was awarded,
+ *   which shows that player no movement rather than a fabricated climb;
+ * - **`HMGET` answered `null` for the whole reply** — the answers hash does not exist yet,
+ *   i.e. nobody has ever answered, which is the same fact for every player at once.
+ *
+ * The clamp at zero can only fire on store corruption — an award larger than the total it
+ * was added to — and exists because a negative previous total would rank below players who
+ * genuinely have nothing, inventing a fall out of a bad byte.
+ */
+async function readPreviousScores(
+  redis: Redis,
+  questionId: string,
+  players: readonly PlayerRecord[],
+  scores: Readonly<Record<string, number>>,
+): Promise<Record<string, number> | null> {
+  const fields = players.map((player) => answerField(questionId, player.id));
+
+  let raw: Record<string, unknown> | null;
+  try {
+    raw = await redis.hmget<Record<string, unknown>>(ANSWERS_KEY, ...fields);
+  } catch (error) {
+    // Logged here rather than left to the caller: this is the only place that knows the
+    // difference between "no baseline was asked for" and "the baseline could not be read",
+    // and the two are the same `null` by the time the route sees them.
+    logSessionEvent("session.standings.degraded", {
+      reason: `awards read failed: ${String(error)}`,
+    });
+    return null;
+  }
+
+  const values = raw ?? {};
+
+  const previous: Record<string, number> = {};
+  players.forEach((player, index) => {
+    const record = parseAnswerRecord(asDocument(values[fields[index]!]));
+    previous[player.id] = Math.max(
+      0,
+      (scores[player.id] ?? 0) - (record?.awarded ?? 0),
+    );
+  });
+
+  return previous;
 }
 
 /**

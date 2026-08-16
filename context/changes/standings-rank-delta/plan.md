@@ -431,28 +431,24 @@ the one after — no host action 409s.
 
 > Convention: `- [ ]` pending, `- [x]` done. Append ` — <commit sha>` when a step lands. Do not rename step titles. See `references/progress-format.md`.
 
-- [x] 1.1 Unit tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 Linting passes: `bun run lint`
-- [x] 1.4 Sign convention pinned in its own named test
-- [x] 1.5 Zero previous total yields `delta: null`, including the whole-room case
-- [x] 1.6 Ties produce no phantom movement
-- [x] 1.7 Omitting `previousScores` leaves every row at `delta: null`
-- [x] 1.8 A row parsed without `delta` still validates
+- [x] 1.1 Unit tests pass: `bun run test` — bdf2833
+- [x] 1.2 Type checking passes: `bun run type-check` — bdf2833
+- [x] 1.3 Linting passes: `bun run lint` — bdf2833
+- [x] 1.4 Sign convention pinned in its own named test — bdf2833
+- [x] 1.5 Zero previous total yields `delta: null`, including the whole-room case — bdf2833
+- [x] 1.6 Ties produce no phantom movement — bdf2833
+- [x] 1.7 Omitting `previousScores` leaves every row at `delta: null` — bdf2833
+- [x] 1.8 A row parsed without `delta` still validates — bdf2833
 
-### Phase 2: Reconstructing the baseline in the store
-
-#### Automated
-
-- [ ] 2.1 Unit tests pass: `bun run test`
-- [ ] 2.2 Type checking passes: `bun run type-check`
-- [ ] 2.3 `readStandings()` with no argument issues no awards read
-- [ ] 2.4 A player who did not answer shows no movement
-- [ ] 2.5 A throwing awards read still returns a board, deltas `null`
-- [ ] 2.6 A throwing players-or-scores read still returns `null`
-- [ ] 2.7 An empty room issues no `HMGET`
-- [ ] 2.8 The key registry test still passes
-- [ ] 2.9 The route passes the current question id
+- [x] 2.1 Unit tests pass: `bun run test`
+- [x] 2.2 Type checking passes: `bun run type-check`
+- [x] 2.3 `readStandings()` with no argument issues no awards read
+- [x] 2.4 A player who did not answer shows no movement
+- [x] 2.5 A throwing awards read still returns a board, deltas `null`
+- [x] 2.6 A throwing players-or-scores read still returns `null`
+- [x] 2.7 An empty room issues no `HMGET`
+- [x] 2.8 The key registry test still passes
+- [x] 2.9 The route passes the current question id
 
 #### Manual
 
