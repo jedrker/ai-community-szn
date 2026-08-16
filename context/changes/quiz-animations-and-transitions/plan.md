@@ -535,12 +535,12 @@ None. No stored data, no schema, no wire format. Reverting is deleting the modul
 
 #### Automated
 
-- [x] 4.1 Type checking passes: `bun run type-check`
-- [x] 4.2 Linting passes: `bun run lint`
-- [x] 4.3 Formatting passes: `bun run format`
-- [x] 4.4 Full suite passes: `bun run test`
+- [x] 4.1 Type checking passes: `bun run type-check` — 7e79275
+- [x] 4.2 Linting passes: `bun run lint` — 7e79275
+- [x] 4.3 Formatting passes: `bun run format` — 7e79275
+- [x] 4.4 Full suite passes: `bun run test` — 7e79275
 
 #### Manual
 
-- [x] 4.5 `motion-contract.md` names every deferred item
-- [x] 4.6 No sentence in CLAUDE.md's rendering, client-interactivity or polling sections is left false
+- [x] 4.5 `motion-contract.md` names every deferred item — 7e79275
+- [x] 4.6 No sentence in CLAUDE.md's rendering, client-interactivity or polling sections is left false — 7e79275
