@@ -6,6 +6,7 @@ import {
   countdownText,
   renderCountdown,
   renderDistribution,
+  renderFigureCountUp,
   renderQuestion,
   renderStandings,
   renderWordCloud,
@@ -1501,6 +1502,131 @@ describe("entrance motion", () => {
         [rows[0]!, { rank: 2, displayName: "Bartek", points: 25 }],
         { animate: true, motionKey: "standings" },
       );
+
+      expect(frames).toHaveLength(1);
+    });
+  });
+  describe("the attendee's option rows", () => {
+    const draw = (motionKey?: string): void => {
+      renderQuestion(container, single, {
+        mode: "answerable",
+        animate: true,
+        motionKey,
+      });
+    };
+
+    it("lands the rows and leaves the prompt final", () => {
+      draw();
+
+      expect(frames).toHaveLength(1);
+      // The prompt is what the reader needs first, and the clock is already running.
+      expect((container.querySelector("p") as HTMLElement).style.opacity).toBe(
+        "",
+      );
+      expect(
+        Array.from(container.querySelectorAll("li")).map(
+          (row) => (row as HTMLElement).style.opacity,
+        ),
+      ).toEqual(["0", "0", "0"]);
+    });
+
+    it("staggers the rows rather than moving them together", () => {
+      draw();
+      frames.pop()!(0);
+      frames.pop()!(60);
+
+      const opacities = Array.from(container.querySelectorAll("li")).map(
+        (row) => Number((row as HTMLElement).style.opacity || "1"),
+      );
+      // Later rows are behind earlier ones mid-flight; a group that moved as one fails this.
+      expect(opacities[0]!).toBeGreaterThan(opacities[2]!);
+    });
+
+    it("stands still when the same question is re-rendered", () => {
+      draw();
+      frames = [];
+
+      draw();
+
+      expect(frames).toHaveLength(0);
+    });
+
+    it("stands still when the reader taps an option", () => {
+      draw();
+      frames = [];
+
+      // The tap re-renders the whole block with a selection. This is the fixture that
+      // actually reaches the branch: re-rendering with no selection would look identical
+      // to the test above and would pass against a key that moved with the selection.
+      renderQuestion(container, single, {
+        mode: "answerable",
+        animate: true,
+        selectedOptionIds: [single.options![0]!.id],
+      });
+
+      // Restarting the list under the reader's thumb is the failure this guards.
+      expect(frames).toHaveLength(0);
+      expect(
+        Array.from(container.querySelectorAll("li")).map(
+          (row) => (row as HTMLElement).style.opacity,
+        ),
+      ).toEqual(["", "", ""]);
+    });
+
+    it("queues nothing when the caller has not opted in", () => {
+      renderQuestion(container, single, { mode: "answerable" });
+
+      expect(frames).toHaveLength(0);
+    });
+  });
+
+  describe("a counted figure", () => {
+    it("counts to the true value and lands on it exactly", () => {
+      const node = document.createElement("span");
+
+      renderFigureCountUp(node, 800, "q1|800", (value) => `+${value} pkt`);
+      expect(node.textContent).toBe("+0 pkt");
+
+      frames.pop()!(0);
+      frames.pop()!(9_999);
+      expect(node.textContent).toBe("+800 pkt");
+    });
+
+    it("lands on a fractional value exactly, not on a rounded one", () => {
+      const node = document.createElement("span");
+
+      // An award is `points × closeness × speedWeight`, so it is not guaranteed integral.
+      // Rounding the final frame would put a figure on screen that the server did not
+      // award — at the moment an attendee might compare it with the person beside them.
+      renderFigureCountUp(node, 812.5, "q1|812.5", (value) => `+${value} pkt`);
+      frames.pop()!(0);
+      frames.pop()!(9_999);
+
+      expect(node.textContent).toBe("+812.5 pkt");
+    });
+
+    it("stands still when the same figure is painted again", () => {
+      const node = document.createElement("span");
+
+      renderFigureCountUp(node, 800, "q1|800", (value) => `+${value} pkt`);
+      frames.pop()!(0);
+      frames.pop()!(9_999);
+      frames = [];
+
+      renderFigureCountUp(node, 800, "q1|800", (value) => `+${value} pkt`);
+
+      // A re-render of the same result — a tab refocus, a replayed snapshot.
+      expect(frames).toHaveLength(0);
+      expect(node.textContent).toBe("+800 pkt");
+    });
+
+    it("counts again when a late result changes the figure", () => {
+      const node = document.createElement("span");
+
+      renderFigureCountUp(node, 0, "q1|0", (value) => `+${value} pkt`);
+      frames = [];
+
+      renderFigureCountUp(node, 800, "q1|800", (value) => `+${value} pkt`);
 
       expect(frames).toHaveLength(1);
     });

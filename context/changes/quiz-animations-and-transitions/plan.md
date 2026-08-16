@@ -498,38 +498,38 @@ None. No stored data, no schema, no wire format. Reverting is deleting the modul
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 `host.test.ts` passes with no assertion changed
-- [x] 2.3 Type checking passes: `bun run type-check`
-- [x] 2.4 Linting passes: `bun run lint`
-- [x] 2.5 New render options covered for the two rules that matter
+- [x] 2.1 Unit tests pass: `bun run test` — 594d4df
+- [x] 2.2 `host.test.ts` passes with no assertion changed — 594d4df
+- [x] 2.3 Type checking passes: `bun run type-check` — 594d4df
+- [x] 2.4 Linting passes: `bun run lint` — 594d4df
+- [x] 2.5 New render options covered for the two rules that matter — 594d4df
 
 #### Manual
 
-- [x] 2.6 Only new word-cloud chips move across polls
-- [x] 2.7 Reveal: bars count up, accepted answer arrives once
-- [x] 2.8 Standings and close: board arrives once per phase, no row reorder, no flow-row reflow
-- [x] 2.9 Nothing replays on a repeated snapshot
-- [x] 2.10 The rail appears and disappears exactly as today
+- [x] 2.6 Only new word-cloud chips move across polls — 594d4df
+- [x] 2.7 Reveal: bars count up, accepted answer arrives once — 594d4df
+- [x] 2.8 Standings and close: board arrives once per phase, no row reorder, no flow-row reflow — 594d4df
+- [x] 2.9 Nothing replays on a repeated snapshot — 594d4df
+- [x] 2.10 The rail appears and disappears exactly as today — 594d4df
 
 ### Phase 3: Attendee entrance beats
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `bun run test`
-- [ ] 3.2 `index.test.ts` passes with no assertion changed
-- [ ] 3.3 Type checking passes: `bun run type-check`
-- [ ] 3.4 Linting passes: `bun run lint`
-- [ ] 3.5 Boundary gate passes for the page's `<script>`
+- [x] 3.1 Unit tests pass: `bun run test`
+- [x] 3.2 `index.test.ts` passes with no assertion changed
+- [x] 3.3 Type checking passes: `bun run type-check`
+- [x] 3.4 Linting passes: `bun run lint`
+- [x] 3.5 Boundary gate passes for the page's `<script>`
 
 #### Manual
 
-- [ ] 3.6 Prompt readable immediately; options land within ~400ms
-- [ ] 3.7 Acknowledgement lands on submit, and repeats on a later question
-- [ ] 3.8 Result panel arrives once and the award counts up; no replay on tab refocus
-- [ ] 3.9 A partial numeric award still reads as a positive result
-- [ ] 3.10 With reduced motion enabled, every beat appears final immediately
-- [ ] 3.11 The board arrives on the phone at the close
+- [x] 3.6 Prompt readable immediately; options land within ~400ms
+- [x] 3.7 Acknowledgement lands on submit, and repeats on a later question
+- [x] 3.8 Result panel arrives once and the award counts up; no replay on tab refocus
+- [x] 3.9 A partial numeric award still reads as a positive result
+- [x] 3.10 With reduced motion enabled, every beat appears final immediately
+- [x] 3.11 The board arrives on the phone at the close
 
 ### Phase 4: Docs and the reversal
 

@@ -1,4 +1,9 @@
-import { cancelMotion, forgetMotion, runMotion } from "./motion";
+import {
+  cancelMotion,
+  forgetMotion,
+  runMotion,
+  staggeredProgress,
+} from "./motion";
 import type { StandingsRow } from "../session/standings";
 import type { PublicQuestion } from "../../quiz/public";
 
@@ -63,6 +68,16 @@ export const ENTER_MS = 240;
 const ENTER_RISE_PX = 12;
 
 /**
+ * How much of an option list's arrival is spent offsetting one row against the next.
+ *
+ * A fraction of `ENTER_MS` rather than a per-row delay, so the list finishes when the
+ * animation does however many options a question has — four rows and eight rows both land
+ * inside the same budget, and the slowest row is readable within it either way. Two
+ * questions with different option counts must not feel like different amounts of waiting.
+ */
+const OPTION_SPREAD = 0.55;
+
+/**
  * Writes one arriving element at `progress`, where 1 is landed.
  *
  * **At 1 the inline properties are removed rather than set to their final values.** An
@@ -103,6 +118,35 @@ export function renderEntrance(
     durationMs: options.durationMs ?? ENTER_MS,
     enabled: options.enabled,
     paint: (progress) => paintEntrance(node, progress),
+  });
+}
+
+/**
+ * Counts one figure up to its true value when that value changes (this change).
+ *
+ * The reveal's bars have done this since S-04; this is the same idea for a single number,
+ * and it exists so the attendee's award lands rather than appears. **The figure is written
+ * through `format` at every step**, so there is no second code path that could render the
+ * animated and final states differently — `paintBars`' rule.
+ *
+ * The true value is always written exactly at the end, and a device without the animation
+ * gets it immediately: an award is data the room may be about to discuss, and the count is
+ * decoration over it.
+ */
+export function renderFigureCountUp(
+  node: HTMLElement,
+  value: number,
+  signature: string,
+  format: (value: number) => string,
+): void {
+  runMotion(node, {
+    signature,
+    durationMs: COUNT_UP_MS,
+    paint: (progress) => {
+      node.textContent = format(
+        progress >= 1 ? value : Math.round(value * progress),
+      );
+    },
   });
 }
 
@@ -166,6 +210,32 @@ export type RenderQuestionOptions = QuestionClassNames & {
    * out-of-order snapshot harmless.
    */
   readonly onSelect?: (selectedOptionIds: string[]) => void;
+  /**
+   * Land the option rows when the question arrives (this change).
+   *
+   * **The prompt is never animated — only the rows are.** The attendee's clock is already
+   * running when this paints, and FR-002 budgets one second for a device to reflect what
+   * the host did; a prompt that fades up spends that budget on the one element the reader
+   * needs first. The rows carry the arrival instead, staggered by
+   * `staggeredProgress` so they read as landing rather than blinking.
+   *
+   * **Rows are all present from the first frame** — only `opacity` and `transform` move.
+   * The option letters come from a CSS counter, so a stagger that added rows progressively
+   * would re-letter the list as it played.
+   *
+   * `runMotion` is called **only** when this is true, rather than called with `enabled:
+   * false`: the host animates the same container through `renderEntrance`, and two writers
+   * on one element would overwrite each other's signature and re-arm on every snapshot.
+   */
+  readonly animate?: boolean;
+  /**
+   * What the rows' arrival is keyed on. Defaults to the question's id.
+   *
+   * The default is what makes tapping an option silent: selecting re-renders the whole
+   * question, and a key that moved with the selection would restart the list under the
+   * reader's thumb.
+   */
+  readonly motionKey?: string;
 };
 
 /** Single-choice replaces the selection; multiple-choice toggles within it. */
@@ -271,8 +341,11 @@ export function renderQuestion(
   const list = document.createElement("ul");
   if (options.list) list.className = options.list;
 
+  const arriving: HTMLElement[] = [];
+
   for (const option of question.options) {
     const item = document.createElement("li");
+    arriving.push(item);
     const isSelected = selected.includes(option.id);
     const isCorrect = correct !== null && correct.includes(option.id);
 
@@ -325,6 +398,24 @@ export function renderQuestion(
     }
 
     list.append(item);
+  }
+
+  // Only when the caller asked. See `RenderQuestionOptions.animate` for why this is not a
+  // `runMotion` with `enabled: false` — the host writes this same container through
+  // `renderEntrance`, and a second writer would re-arm it on every snapshot.
+  if (options.animate === true) {
+    runMotion(container, {
+      signature: options.motionKey ?? question.id,
+      durationMs: ENTER_MS,
+      paint: (progress) => {
+        arriving.forEach((row, index) =>
+          paintEntrance(
+            row,
+            staggeredProgress(progress, index, arriving.length, OPTION_SPREAD),
+          ),
+        );
+      },
+    });
   }
 
   container.append(list);

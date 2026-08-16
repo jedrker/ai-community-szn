@@ -487,6 +487,8 @@ import { publicQuiz } from "../../quiz/public";
       import {
         el,
         renderCountdown,
+        renderEntrance,
+        renderFigureCountUp,
         renderQuestion,
         renderStandings,
         setHidden,
@@ -1011,6 +1013,11 @@ import { publicQuiz } from "../../quiz/public";
           // server returned, so exact equality is enough and no fold is needed. See
           // `renderStandings`.
           ownDisplayName: player?.displayName ?? null,
+          animate: true,
+          // The same key the projector uses, for the same reason: the standings beat and
+          // the close publish the same rows, and without it the close would inherit the
+          // earlier signature and arrive silently.
+          motionKey: closing ? "ended" : "standings",
           // The winner set apart at the close, as a first-child variant rather than a new
           // `renderStandings` option: it is presentation, and the renderer's job is the
           // published order. `[&>li:first-child>span]` reaches the spans a row is built from.
@@ -1229,6 +1236,25 @@ import { publicQuiz } from "../../quiz/public";
       }
 
       /**
+       * THE ONLY WRITER OF THE NOTE UNDER THE FIELD (this change).
+       *
+       * It was ten bare `textContent` assignments, and the arrival is why they became one
+       * function rather than eleven: an acknowledgement that lands is worth nothing if
+       * nine of the ten sentences still blink into place, and `say()` on the host view is
+       * the same shape for the same reason.
+       *
+       * **Keyed by the sentence itself**, so the note moves when what it says changes and
+       * stands still otherwise. That is what keeps it quiet during typing: `render()` runs
+       * on every snapshot while a field is being filled in, and the word field's own
+       * handler rewrites this note on each keystroke — both re-write the same string, and
+       * an unchanged string is not an arrival.
+       */
+      function noteSays(text: string): void {
+        answerNote.textContent = text;
+        renderEntrance(answerNote, text, { enabled: true });
+      }
+
+      /**
        * `question-open` — the answering beat.
        *
        * The paint time is recorded first and read back if this device has seen the
@@ -1323,6 +1349,16 @@ import { publicQuiz } from "../../quiz/public";
           option: OPTION_CLASS,
           mode: locked ? "static" : "answerable",
           selectedOptionIds: selected,
+          /**
+           * The rows land when the question arrives; the prompt is painted final, because
+           * it is the thing the reader needs first and the clock is already running.
+           *
+           * Keyed by the question's id alone — deliberately not by the mode or the
+           * selection, both of which change under the reader's thumb: tapping an option
+           * re-renders this whole block, and a key that moved with it would restart the
+           * list mid-tap.
+           */
+          animate: true,
           onSelect: (next) => {
             selections.set(question.id, next);
             render();
@@ -1332,18 +1368,20 @@ import { publicQuiz } from "../../quiz/public";
         setHidden(answerNote, false);
         if (locked) {
           // Confirmed, and nothing about correctness — that waits for the host.
-          answerNote.textContent = "Odpowiedź zapisana. Czekamy na prowadzącego…";
+          noteSays("Odpowiedź zapisana. Czekamy na prowadzącego…");
           setHidden(answerSubmit, true);
           return;
         }
 
         // FR-017: say up front that a warm-up is a warm-up. Driven by `scored` from the
         // projection, never inferred from a zero award — the payloads are identical.
-        answerNote.textContent = question.scored
+        noteSays(
+          question.scored
           ? question.kind === "multiple-choice"
             ? "Możesz wybrać kilka odpowiedzi. Liczy się też czas."
             : "Liczy się też czas — im szybciej, tym więcej punktów."
-          : "To pytanie na rozgrzewkę — bez punktów.";
+          : "To pytanie na rozgrzewkę — bez punktów.",
+        );
 
         setHidden(answerSubmit, false);
         answerSubmit.disabled = selected.length === 0;
@@ -1372,7 +1410,7 @@ import { publicQuiz } from "../../quiz/public";
 
         hideAnswerControls();
         setHidden(answerNote, false);
-        answerNote.textContent = "Czas minął. Czekamy na prowadzącego…";
+        noteSays("Czas minął. Czekamy na prowadzącego…");
       }
 
       /**
@@ -1424,16 +1462,18 @@ import { publicQuiz } from "../../quiz/public";
 
         setHidden(answerNote, false);
         if (locked) {
-          answerNote.textContent = "Odpowiedź zapisana. Czekamy na prowadzącego…";
+          noteSays("Odpowiedź zapisana. Czekamy na prowadzącego…");
           setHidden(answerSubmit, true);
           return;
         }
 
         // FR-017, same rule as the choice path: driven by `scored`, never inferred from
         // a zero award.
-        answerNote.textContent = question.scored
+        noteSays(
+          question.scored
           ? "Wpisz odpowiedź. Liczy się też czas — im szybciej, tym więcej punktów."
-          : "To pytanie na rozgrzewkę — bez punktów.";
+          : "To pytanie na rozgrzewkę — bez punktów.",
+        );
 
         setHidden(answerSubmit, false);
         answerSubmit.disabled = !hasTypedAnswer();
@@ -1475,7 +1515,7 @@ import { publicQuiz } from "../../quiz/public";
 
         setHidden(answerNote, false);
         if (locked) {
-          answerNote.textContent = "Odpowiedź zapisana. Czekamy na prowadzącego…";
+          noteSays("Odpowiedź zapisana. Czekamy na prowadzącego…");
           setHidden(answerSubmit, true);
           return;
         }
@@ -1486,9 +1526,11 @@ import { publicQuiz } from "../../quiz/public";
          * to the attendee, because a number on screen is something to argue with at the
          * busiest moment of the beat.
          */
-        answerNote.textContent = question.scored
+        noteSays(
+          question.scored
           ? "Nie musisz trafić idealnie — im bliżej, tym więcej punktów. Liczy się też czas."
-          : "To pytanie na rozgrzewkę — bez punktów.";
+          : "To pytanie na rozgrzewkę — bez punktów.",
+        );
 
         setHidden(answerSubmit, false);
         answerSubmit.disabled = !hasTypedGuess();
@@ -1539,14 +1581,14 @@ import { publicQuiz } from "../../quiz/public";
 
         setHidden(answerNote, false);
         if (locked) {
-          answerNote.textContent = "Słowo wysłane! Zobacz duży ekran.";
+          noteSays("Słowo wysłane! Zobacz duży ekran.");
           setHidden(answerSubmit, true);
           return;
         }
 
         // No `scored` branch, unlike every other kind: the build gate refuses a scored
         // word-cloud question, so there is no second case to write copy for.
-        answerNote.textContent = wordNoteText();
+        noteSays(wordNoteText());
 
         setHidden(answerSubmit, false);
         answerSubmit.disabled = !hasTypedWord();
@@ -1658,7 +1700,7 @@ import { publicQuiz } from "../../quiz/public";
         answerSubmit.disabled = answerWord.disabled || !hasTypedWord();
         // The note is part of the gate, so it has to move with the button rather than waiting
         // for a render that deliberately never comes while a field is being typed into.
-        answerNote.textContent = wordNoteText();
+        noteSays(wordNoteText());
       });
 
       /**
@@ -1820,6 +1862,29 @@ import { publicQuiz } from "../../quiz/public";
       }
 
       /**
+       * The award, counted up to what was actually earned (this change).
+       *
+       * The `figure` shape only — a sentence has no number to count. **The true figure is
+       * always written exactly at the end and reaches a device with no animation
+       * immediately**: this is the number an attendee may be about to compare with the
+       * person beside them, so the count is decoration over data that must not be in doubt.
+       *
+       * Keyed by the question *and* the figure, so a result that arrives late — the panel
+       * painted from a fetch that resolved after the first render — counts up when it
+       * lands rather than being treated as the same beat.
+       */
+      function awardCountUp(points: number, questionId: string): void {
+        const node = el("result-award");
+        node.className = AWARD_SHAPES.figure;
+        renderFigureCountUp(
+          node,
+          points,
+          `${questionId}|${points}`,
+          (value) => `+${value} pkt`
+        );
+      }
+
+      /**
        * THE VERDICT AND ITS COLOUR (signage redesign, step 9).
        *
        * Three readings the room's palette already has words for, and the middle one is why
@@ -1871,6 +1936,10 @@ import { publicQuiz } from "../../quiz/public";
 
       function showResult(own: OwnResult, question: PublicQuestion): void {
         setHidden(resultPanel, false);
+        // The panel arrives once per question. After the unhide, so a panel that is not on
+        // screen this render never animates — the entrance stays out of the visibility
+        // rule's way, which is the projector's rule too.
+        renderEntrance(resultPanel, question.id, { enabled: true });
 
         /**
          * **`answered: false` is not a wrong answer**, and the two must not share a
@@ -1902,12 +1971,12 @@ import { publicQuiz } from "../../quiz/public";
          * every other kind is still binary and reads correctly through the branch below.
          */
         if (question.kind === "number") {
-          showNumberResult(own);
+          showNumberResult(own, question.id);
           return;
         }
 
         verdict(own.correct ? "Dobrze!" : "Tym razem nie.", own.correct ? "landed" : "miss");
-        award(own.correct ? `+${own.awarded ?? 0} pkt` : "+0 pkt", "figure");
+        awardCountUp(own.correct ? (own.awarded ?? 0) : 0, question.id);
         /**
          * The echo, for a free-text answer only — `null` on every other kind.
          *
@@ -1936,14 +2005,16 @@ import { publicQuiz } from "../../quiz/public";
        * The correct value itself is not repeated here — it is already on screen above,
        * from the snapshot, where it reaches a device whose fetch failed too.
        */
-      function showNumberResult(own: OwnResult): void {
+      function showNumberResult(own: OwnResult, questionId: string): void {
         const awarded = own.awarded ?? 0;
 
         verdict(
           own.correct ? "Dokładnie!" : awarded > 0 ? "Blisko!" : "Tym razem daleko.",
           own.correct ? "landed" : awarded > 0 ? "partial" : "miss"
         );
-        award(`+${awarded} pkt`, "figure");
+        // Counted rather than stated: this is the kind that carries partial credit, so the
+        // figure is the whole answer to "how close was I".
+        awardCountUp(awarded, questionId);
         /**
          * The guess from the server, not from the field — a reload empties the field
          * and the attendee should still see what they sent. `null` only if the record
