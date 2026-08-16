@@ -468,25 +468,25 @@ reversible by a single revert.
 
 #### Automated
 
-- [x] 2.1 Full suite passes: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 Verified both ways: removing `end` from `standings` fails the independence test
-- [x] 2.4 Verified both ways: adding `reveal` to `ended` fails the no-refused-verb test
-- [x] 2.5 Verified both ways: deleting a `MATERIAL_WITHHOLDINGS` entry fails the exception test
-- [x] 2.6 Verified: a synthetic phase in the union fails `type-check` on the route table
+- [x] 2.1 Full suite passes: `bun run test` — 06b583c
+- [x] 2.2 Type checking passes: `bun run type-check` — 06b583c
+- [x] 2.3 Verified both ways: removing `end` from `standings` fails the independence test — 06b583c
+- [x] 2.4 Verified both ways: adding `reveal` to `ended` fails the no-refused-verb test — 06b583c
+- [x] 2.5 Verified both ways: deleting a `MATERIAL_WITHHOLDINGS` entry fails the exception test — 06b583c
+- [x] 2.6 Verified: a synthetic phase in the union fails `type-check` on the route table — 06b583c
 
 #### Manual
 
-- [x] 2.7 A deliberately broken run names the phase and action in its failure output
+- [x] 2.7 A deliberately broken run names the phase and action in its failure output — 06b583c
 
 ### Phase 3: Repair the `-1` inversion class and the dead gates
 
 #### Automated
 
-- [ ] 3.1 Full suite passes: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 All six repaired assertions verified by deleting the guarded statement
-- [ ] 3.4 Both portability fixtures verified by breaking the detector regex
+- [x] 3.1 Full suite passes: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 All six repaired assertions verified by deleting the guarded statement
+- [x] 3.4 Both portability fixtures verified by breaking the detector regex
 
 ### Phase 4: Documentation
 

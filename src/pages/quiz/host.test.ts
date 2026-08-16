@@ -42,6 +42,34 @@ function occurrences(needle: string): number {
   return CODE.split(needle).length - 1;
 }
 
+/**
+ * "`first` appears before `second`", asserted so that an absent needle cannot satisfy it.
+ *
+ * `indexOf(a) < indexOf(b)` is **vacuously true when `a` is missing** — `-1` is less than
+ * everything — so on its own it certifies the deletion of the very statement it guards. Every
+ * ordering assertion in this file already carried a separate `toContain` above it and so did
+ * catch that; what it did not carry was any reason the two lines have to stay together. This
+ * fuses them, because the second line reads redundant next to the third and the tidy-looking
+ * edit is to remove it.
+ *
+ * The failure names the missing needle. An order failure that reports only `-1 < 400` sends
+ * the reader to the wrong half of the problem.
+ */
+function expectOrder(haystack: string, first: string, second: string): void {
+  expect(
+    haystack,
+    `missing, so the order below cannot mean anything: ${first}`,
+  ).toContain(first);
+  expect(
+    haystack,
+    `missing, so the order below cannot mean anything: ${second}`,
+  ).toContain(second);
+  expect(
+    haystack.indexOf(first),
+    `expected "${first}" to come before "${second}"`,
+  ).toBeLessThan(haystack.indexOf(second));
+}
+
 describe("the scan can see the code it is checking", () => {
   /**
    * The closing button's half of the non-vacuity check (roadmap S-10). Its guards are
@@ -217,14 +245,15 @@ describe("the countdown cannot outlive its question", () => {
    */
   it("clears at the top of render, ahead of every branch", () => {
     const renderAt = CODE.indexOf("function render(): void");
-    expect(renderAt).toBeGreaterThan(-1);
+    expect(renderAt, "render() itself is missing").toBeGreaterThan(-1);
 
-    const clearAt = CODE.indexOf("stopCountdown();", renderAt);
-    const firstBranch = CODE.indexOf("if (state === null)", renderAt);
-
-    expect(clearAt).toBeGreaterThan(renderAt);
-    expect(firstBranch).toBeGreaterThan(-1);
-    expect(clearAt).toBeLessThan(firstBranch);
+    // Scoped to what follows `render`'s opening, so a `stopCountdown()` somewhere earlier
+    // in the file cannot stand in for the one this is about.
+    expectOrder(
+      CODE.slice(renderAt),
+      "stopCountdown();",
+      "if (state === null)",
+    );
   });
 
   it("arms from the panel renderer without clearing there, so the two cannot drift", () => {
@@ -708,9 +737,10 @@ describe("flow verbs are offered only where they apply", () => {
       /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
 
     expect(fireBody.length).toBeGreaterThan(0);
-    expect(fireBody).toContain('payload.note === "republished"');
-    expect(fireBody.indexOf('payload.note === "republished"')).toBeLessThan(
-      fireBody.indexOf('payload.note === "no-op"'),
+    expectOrder(
+      fireBody,
+      'payload.note === "republished"',
+      'payload.note === "no-op"',
     );
   });
 
@@ -836,10 +866,7 @@ describe("the reveal cannot cut the room off by accident", () => {
    * first tap closes the question, which is the state this guard exists to make deliberate.
    */
   it("returns after arming rather than firing on the first tap", () => {
-    expect(handler).toContain("revealArmed = true");
-    expect(handler.indexOf("revealArmed = true")).toBeLessThan(
-      handler.indexOf("void fire(action)"),
-    );
+    expectOrder(handler, "revealArmed = true", "void fire(action)");
   });
 
   /**
@@ -906,10 +933,7 @@ describe("the reveal cannot cut the room off by accident", () => {
    * the state the host confirmed against, so it has to be meant a second time.
    */
   it("disarms ahead of the request", () => {
-    expect(handler).toContain("disarmReveal();");
-    expect(handler.indexOf("disarmReveal();")).toBeLessThan(
-      handler.indexOf("void fire(action)"),
-    );
+    expectOrder(handler, "disarmReveal();", "void fire(action)");
   });
 
   /**
@@ -975,10 +999,7 @@ describe("the closing button cannot fire by accident", () => {
    * whole mechanism; without it the first tap ends the session.
    */
   it("returns after arming rather than firing on the first tap", () => {
-    expect(handler).toContain("if (!endArmed)");
-    expect(handler.indexOf("if (!endArmed)")).toBeLessThan(
-      handler.indexOf('fire("end"'),
-    );
+    expectOrder(handler, "if (!endArmed)", 'fire("end"');
   });
 
   /**
@@ -1041,9 +1062,7 @@ describe("the closing button cannot fire by accident", () => {
 
     // Authored inside the menu's slot: the bar's slot is the empty one, and the script is
     // what fills it. Source order is the only reading a scan has of "which slot holds it".
-    expect(CODE.indexOf('id="end-slot-menu"')).toBeLessThan(
-      CODE.indexOf('id="end"'),
-    );
+    expectOrder(CODE, 'id="end-slot-menu"', 'id="end"');
     expect(CODE).toContain('<div id="end-slot-bar" class="contents"></div>');
   });
 

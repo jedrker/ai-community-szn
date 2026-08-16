@@ -39,6 +39,33 @@ function occurrences(needle: string): number {
   return CODE.split(needle).length - 1;
 }
 
+/**
+ * "`first` appears before `second`", asserted so that an absent needle cannot satisfy it.
+ *
+ * `indexOf(a) < indexOf(b)` is **vacuously true when `a` is missing** — `-1` is less than
+ * everything. The ordering assertion below already had a presence guard beside it, so it did
+ * catch a deletion; what it lacked was any reason the two lines have to stay together, and
+ * the tidy-looking edit is to drop the one that reads redundant.
+ *
+ * **Duplicated from `host.test.ts` rather than shared.** These two files import nothing from
+ * each other today, and a `src/pages/quiz/test-helpers.ts` existing only for ten lines would
+ * be the larger cost — the same reasoning `normalize.ts` records for its two folds.
+ */
+function expectOrder(haystack: string, first: string, second: string): void {
+  expect(
+    haystack,
+    `missing, so the order below cannot mean anything: ${first}`,
+  ).toContain(first);
+  expect(
+    haystack,
+    `missing, so the order below cannot mean anything: ${second}`,
+  ).toContain(second);
+  expect(
+    haystack.indexOf(first),
+    `expected "${first}" to come before "${second}"`,
+  ).toBeLessThan(haystack.indexOf(second));
+}
+
 describe("the scan can see the code it is checking", () => {
   /**
    * Without this, a stripper that over-matched would empty the source and turn every
@@ -111,13 +138,16 @@ describe("the countdown cannot outlive its question", () => {
 
   it("clears before the state machine branches", () => {
     const renderAt = CODE.indexOf("function render()");
-    const clearAt = CODE.indexOf("stopCountdown();", renderAt);
-    const firstBranchAt = CODE.indexOf('connection === "lost"', renderAt);
+    expect(renderAt, "render() itself is missing").toBeGreaterThan(-1);
 
-    expect(renderAt).toBeGreaterThan(-1);
-    expect(clearAt).toBeGreaterThan(renderAt);
-    // Ahead of the first branch, so no early return can skip it.
-    expect(clearAt).toBeLessThan(firstBranchAt);
+    // Ahead of the first branch, so no early return can skip it. Scoped to what follows
+    // `render`'s opening, so a `stopCountdown()` earlier in the file cannot stand in for it —
+    // and the clear's *absence* is what this is really about: S-11's F1 shipped without it.
+    expectOrder(
+      CODE.slice(renderAt),
+      "stopCountdown();",
+      'connection === "lost"',
+    );
   });
 
   it("arms the clock from the open-question path only", () => {
