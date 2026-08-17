@@ -20,10 +20,10 @@ on it loading by accident.
 
 | Directory | What its `CLAUDE.md` covers |
 | --- | --- |
-| `src/quiz/` | the quiz definition (not a content collection), the three Polish text folds, the schema invariants enforced at the build gate |
+| `src/quiz/` | the quiz **registry** (not a content collection), the three Polish text folds, the per-quiz and cross-quiz invariants enforced at the build gate |
 | `src/lib/session/` | Redis keys and the retention guardrail, `SessionState`'s transition fields, scoring and the derived deadline |
 | `src/lib/client/` | the server/client boundary, motion, `localStorage`, testing with `happy-dom` |
-| `src/pages/quiz/` | the host panel's verbs, the projector rail, the two polling loops |
+| `src/pages/quiz/` | the host panel's verbs, the projector rail, the two polling loops, the slug-bearing routes |
 | `src/lib/` | server module conventions (Resend, Slack, newsletter) |
 
 ## Commands
@@ -83,8 +83,8 @@ that arrangement exists to avoid. `scripts/scoped-tests.sh` skips `e2e/` for the
   `vercel.json`.
 - `happy-dom` is a devDependency and a **test environment only**.
 - `qrcode` (with `@types/qrcode`) carries no version constraint. It is **server-side only**:
-  `/quiz/host` calls it in frontmatter to render the join QR as inline SVG, so nothing ships to the
-  phones.
+  `/quiz/host/<slug>` calls it in frontmatter to render the join QR as inline SVG, so nothing ships
+  to the phones.
 - The `@tsparticles/*` packages are the closing screen's confetti and are **loaded dynamically, never
   statically** — see `src/lib/client/CLAUDE.md` before touching them.
 
@@ -99,7 +99,9 @@ back into static generation per route. Both halves are deliberate:
 | `/prelegenci`, `/prelegenci/[...slug]` | prerendered (`export const prerender = true`) |
 | `/` | on-demand — the homepage resolves the next upcoming event per request |
 | `/zglos-sie` | on-demand |
-| `/quiz`, `/quiz/host` | on-demand — the LiveQuiz attendee and host views |
+| `/quiz/<slug>`, `/quiz/host/<slug>` | on-demand — the LiveQuiz attendee and host views, one address per quiz |
+| `/quiz`, `/quiz/host` | on-demand — the entry pages that replaced those addresses: `/quiz` redirects to the quiz being run, `/quiz/host` is the host's picker |
+| `/q/<code>` | on-demand — the four-digit short address; redirects to `/quiz/<slug>` |
 | `/api/*` | on-demand (POST handlers) |
 
 Do **not** flip `output` to `"static"`, and do not add or remove a `prerender` export to "make it
@@ -168,9 +170,12 @@ especially the rule that a route with no database may not report success it cann
 no CI, no staging environment, and no monitoring — essentially nothing runs between a commit and
 production. Node floor is 22.12.0 (`.nvmrc`, `engines.node`).
 
-The one exception is the **quiz definition gate**: `astro.config.ts` calls `assertQuizValid()` at top
+The one exception is the **quiz registry gate**: `astro.config.ts` calls `assertQuizValid()` at top
 level. Config load runs before anything else, so a malformed quiz fails `astro build` and therefore
-fails the deploy — the previous good quiz stays live. It is *not* an `astro:build:start` integration:
+fails the deploy — the previous good registry stays live. It checks each quiz against the schema
+**and the registry against itself**: a duplicate slug, a duplicate join code, the same question id in
+two quizzes, or an empty registry all fail the build. The cross-quiz question-id rule is the
+load-bearing one; `src/quiz/CLAUDE.md` says what it buys. It is *not* an `astro:build:start` integration:
 Astro closes its Vite module runner before that hook fires, so a project file cannot be imported
 there. Config load is also wider — `bun run dev`, `bun run type-check` and `bun run test` all fail on
 a bad definition too. Do not move this into a `prebuild` script (the platform's build command is

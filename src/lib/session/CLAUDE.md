@@ -102,7 +102,31 @@ not a climb of forty places.
 arrow-free — no conditional, no phase test. Passing it an id "for consistency" is how that decision gets
 undone.
 
-## SessionState: one decoration field, four transition fields
+## SessionState: one identity field, one decoration field, four transition fields
+
+**`quizId` is the identity field, and it is a third category rather than a variant of the other two**
+(multiple-quizzes). Decoration is overwritten on every action; a transition field is set by one
+constructor and nulled by every other. This is neither: it is written **once**, by `createSession`, and
+copied unchanged by every constructor thereafter. Nothing overwrites it and nothing nulls it — a
+session that changed quiz mid-flight would re-scope every question id the room had already answered.
+
+Two halves of it are easy to get wrong in opposite directions. It carries `.default(...)` for the
+reason its siblings do — a document written before it shipped must still parse, or the host's next
+action 409s mid-segment — but **the default is a sentinel (`PRE_IDENTITY_QUIZ_ID`), never a real quiz
+id.** Defaulting to "the quiz we run" would make an in-flight document *assert* an identity it never
+had, which is the silent mis-scoring the whole change exists to prevent. The sentinel carries an
+underscore, which `QUESTION_ID` refuses, so no committed quiz can ever collide with it.
+
+Its own `superRefine` clause requires the id to resolve in the registry **and** `currentQuestionId`,
+when non-null, to belong to *that* quiz. The second half is what makes the registry-wide
+`getQuestionById` safe: a stored question id always resolves *somewhere*, so only this clause stops it
+resolving into a quiz the session is not running. The sentinel is exempt from the first half and only
+from that — an old session can still advance, reveal and close; what it cannot do is `start` a quiz,
+and `bun run quiz:reset` is the documented way out.
+
+`quizId` is publicly readable, through the deliberately open `GET /api/quiz/state` and both join
+success paths. That is within the retention contract and it is said here rather than inherited: a slug
+is authored quiz content, printed on the projector, and says nothing about who played.
 
 `playerCount` is decoration: `applyHostAction` overwrites it on every action and a stale value costs
 nothing. `revealedOptionIds`, `revealedDistribution`, `revealedAnswerText` and `standings` are *part

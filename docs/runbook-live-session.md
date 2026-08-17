@@ -151,12 +151,18 @@ of the top row, not just its age:
 vercel ls          # look at the state column: ● Ready vs ● Error
 ```
 
-The quiz definition is gated at build time (`quiz-definition-gate` in `astro.config.ts`), so a
-malformed question **fails the build and never deploys**. That is the safe outcome — the previous
-good quiz stays live — but it is also a silent one: there is no CI and no alerting, so nothing tells
-you your fix did not ship. A last-minute edit that failed the gate leaves you on stage running the
-*old* question while believing you fixed it. If the top row is `Error`, run `bun run build` locally;
-the failure message names the offending question by id.
+The quiz registry is gated at build time (`assertQuizValid` in `astro.config.ts`), so a malformed
+question **fails the build and never deploys**. That is the safe outcome — the previous good registry
+stays live — but it is also a silent one: there is no CI and no alerting, so nothing tells you your fix
+did not ship. A last-minute edit that failed the gate leaves you on stage running the *old* question
+while believing you fixed it. If the top row is `Error`, run `bun run build` locally; the failure
+message names the offending quiz and the offending question by id.
+
+**And confirm the quiz you mean to run is actually committed.** "Which quiz is live" is no longer
+answered by "which commit is deployed": several quizzes ship together, and the host chooses one at
+`/quiz/host` (step 5). So the deploy check answers *whether your edit shipped*, not *which questions
+the room will see*. If you added or renamed a quiz today, open `/quiz/host` now and confirm it is in
+the list under the title you expect.
 
 **2. Open a live log stream and leave it running.**
 
@@ -497,7 +503,7 @@ raise it before the event rather than after.
   | `session.auth.rejected` | someone tried a host action with a wrong or missing secret | **if it was not you mis-clicking, someone else has the control URL.** One line is noise; a stream of them during a session means stop and rotate `LIVEQUIZ_HOST_SECRET` |
   | `session.publish.failed` | state is committed but did **not** reach devices | repeat the action; it re-broadcasts and is safe to retry |
   | `session.unconfigured` | an environment variable is missing | the session cannot run; check `vercel env ls` |
-  | `session.read.invalid` | stored state does not match the quiz definition | a deploy changed the quiz mid-session — roll back |
+  | `session.read.invalid` | stored state does not match the quiz registry — an unknown question id, or a `quizId` that is no longer committed | a deploy changed or removed the quiz mid-session — roll back |
   | `session.ended` | the segment is closed; every key is now on the ~10-minute lifetime. `rowCount` is how many rows the closing board carried | nothing, if you meant it. **A `rowCount` of 0 means the winner screen did not appear** — the close was still correct. **If you did not mean to end, act within ten minutes** — after that the session is gone and cannot be resumed |
   | `session.purged` | every key was deleted | nothing, if you meant it. This one is not recoverable at all — there is no undo and `vercel rollback` does not reach it |
 

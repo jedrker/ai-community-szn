@@ -1,27 +1,42 @@
 # src/quiz/ — the LiveQuiz question set
 
-The quiz definition, its schema and its Polish text folds. Server-and-test only: no client module
+The quiz definitions, their schema and the Polish text folds. Server-and-test only: no client module
 may *value*-import from here (see `src/lib/client/CLAUDE.md`).
 
 Layout: `schema.ts` (discriminated union over five question kinds plus the domain invariants),
-`normalize.ts` (FR-011 answer folding), `definition.ts` (the questions), `index.ts` (the accessors
-downstream slices import — never import `definition.ts` directly), `public.ts` (the projection that
-strips answers before anything reaches a phone), `test-support.ts` (test-only, see below).
+`normalize.ts` (FR-011 answer folding), `definitions/` (**one file per quiz**, collected by
+`definitions/index.ts`), `index.ts` (the accessors downstream slices import — never import a
+definition file directly), `public.ts` (the projection that strips answers before anything reaches a
+phone), `test-support.ts` (test-only, see below).
+
+**There are several quizzes, and `index.ts` is the only front door.** It exports `quizzes` (parsed, in
+registry order — which is the order `/quiz/host` lists them in), `getQuizById`, `getQuizByCode`,
+`getQuizByQuestionId`, and `getQuestionById`. That last one searches the **whole registry** and is
+quiz-agnostic on purpose: question ids are globally unique, enforced at the build gate, and that is
+what keeps the two polled routes from having to read the session to learn which quiz a question
+belongs to — two billed Upstash commands per poll rather than three, every ~2.5 s for a whole session.
+Do not "simplify" a question lookup to take a quiz id read from the store.
+
+Adding a quiz is a file in `definitions/` and a line in `definitions/index.ts`. Rearranging the host's
+list means rearranging that array, not the page.
 
 ## This is NOT a content collection
 
-The question set lives at `definition.ts` as a typed TypeScript literal validated by a Zod schema —
+The question sets live in `definitions/` as typed TypeScript literals validated by a Zod schema —
 deliberately *not* a third content collection, even though it is content and the root `CLAUDE.md`
 says collections are the CMS. Do not "fix" this by moving it. Two reasons, both load-bearing:
 
 - **Audience.** Events and speakers are organizer-edited Markdown. The quiz is developer-authored
   source (PRD FR-001 — avoiding a builder interface is the reason LiveQuiz is built rather than
-  rented), and `satisfies Quiz` on the literal means an authoring mistake is a red squiggle in the
-  editor rather than a runtime surprise.
+  rented), and `satisfies Quiz` on each literal means an authoring mistake is a red squiggle in the
+  editor rather than a runtime surprise. **The picker at `/quiz/host` only *selects* among committed
+  definitions, which is not a builder interface** — FR-001 is unaffected by it.
 - **Portability.** `astro:content` does not resolve outside the Astro build — a bare `vitest run`
   fails with `Cannot find package 'astro:content'`. This module is imported by tests and by
   serverless functions, so it imports `zod` directly instead. `portability.test.ts` fails the suite
-  if anything under `src/quiz/` ever imports an `astro:` specifier.
+  if anything under `src/quiz/` ever imports an `astro:` specifier — and its scan is **recursive**, so
+  it reaches `definitions/`. A test asserts that it descends there, because a scan whose pattern stops
+  matching passes forever and reads as compliance.
 
 ## No test may name a question id, an option id, an accepted answer or a true value
 
@@ -42,11 +57,14 @@ every one of them reporting only "the quiz changed". Three rules, in order of pr
   contains — `definition.test.ts` asserts that no id gives away its own answer and that the opener
   scores nothing; it counts nothing and quotes nothing.
 
-Two consequences worth knowing. `definition.test.ts` still requires the quiz to **exercise every
-question kind**, because the route tests derive fixtures by kind and a dropped kind silently drops
-its coverage — that one constraint is deliberate and documented at the assertion. And an *unscored
-choice* question is treated as optional: the two tests needing one `skipIf` it away, so retiring the
-gather beat is an editorial decision rather than a red build.
+Two consequences worth knowing. `definition.test.ts` still requires **every question kind to be
+exercised** — the route tests derive fixtures by kind and a dropped kind silently drops its coverage,
+so that one constraint is deliberate and documented at the assertion. **It is a rule over the *union*
+of the registry, not over each quiz**, and that asymmetry is the decision: a short single-event quiz
+asking two choice questions must stay legal to commit, while `test-support.ts` draws its fixtures from
+the union — so the union is what has to be complete. And an *unscored choice* question is treated as
+optional: the two tests needing one `skipIf` it away, so retiring the gather beat is an editorial
+decision rather than a red build.
 
 Properties that need a population — the option shuffle's lack of a positional tell is the one — are
 measured over generated questions via `projectQuiz(source)` in `public.ts`, with the real quiz kept
@@ -98,6 +116,32 @@ as the accepted answer to every phone and the projector. Order there is not arbi
 
 `astro.config.ts` calls `assertQuizValid()` at top level, so all of these fail `astro build`,
 `bun run dev`, `bun run type-check` and `bun run test` alike.
+
+**Every quiz carries an identity**, and all three fields are checked in `quizSchema`'s top-level
+`superRefine` rather than with `.regex()` on the field — a field-level failure reports against a path,
+and a path names neither the quiz nor the fix, which is the same reason `correctValue` defers its
+finiteness check to `checkQuestion`:
+
+- **`id`** is the URL slug (`/quiz/<id>`) and takes the same shape as a question id — it reuses
+  `QUESTION_ID` rather than declaring a second, nearly-identical rule.
+- **`title`** must be non-empty. It is what the host picks from and what a phone on the wrong quiz is
+  pointed at, so an empty one leaves both surfaces with nothing to render.
+- **`code`** is exactly four digits, and it is a **string** so leading zeros survive — `0042` and `42`
+  are different codes and a number would fold them together. Authored content, not generated state:
+  it is printed on the projector, so it is not a secret and there is no per-session PIN.
+
+**Four rules span the registry**, checked after every quiz parses individually, each naming both
+quizzes and the colliding value in Polish:
+
+- a duplicate quiz **`id`** — it reaches a URL, so it must resolve to one quiz;
+- a duplicate join **`code`** — `/q/<code>` would not know where it leads;
+- an **empty registry**;
+- the same **question id in two quizzes**, which is the load-bearing one. It is what lets
+  `getQuestionById` stay quiz-agnostic, and therefore what buys the polled routes' two-command
+  saving. Without it a session would resolve a question against the wrong quiz, silently,
+  mid-segment — and every screen would look correct. `definition.test.ts` trips each of the four with
+  a fixture *and* confirms the committed registry passes, because a gate checked in one direction only
+  has been checked, not verified.
 
 - A number question's **`correctValue` may not be zero** (nor non-finite). The closeness rule
   divides by the true value, and there is no reading of "within 5% of zero".

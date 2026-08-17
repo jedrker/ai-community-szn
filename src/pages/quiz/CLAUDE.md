@@ -1,9 +1,33 @@
 # src/pages/quiz/ — the host panel and the attendee view
 
-`host.astro` is the projector-and-host view, `index.astro` the attendee's phone. Both are on-demand
-routes whose inline `<script>` blocks are bound by the client boundary (see
-`src/lib/client/CLAUDE.md`) and guarded only by structural source scans — an Astro inline script has
-no harness, so anything worth testing gets extracted into `src/lib/client/` instead.
+`host/[slug].astro` is the projector-and-host view, `[slug].astro` the attendee's phone — **one
+address per quiz** (multiple-quizzes). Both are on-demand routes whose inline `<script>` blocks are
+bound by the client boundary (see `src/lib/client/CLAUDE.md`) and guarded only by structural source
+scans — an Astro inline script has no harness, so anything worth testing gets extracted into
+`src/lib/client/` instead.
+
+**Both are pinned in `.prettierignore`, and the pin is part of the guard.** Those scans assert the
+inline scripts as literal text, so re-wrapping a line does not merely fail an assertion — it can
+silently disarm one. When these files moved, the stale entries un-pinned them long enough for a reflow
+to break eight of them. The entries escape the brackets (`\[slug\]`), because `.prettierignore` reads
+gitignore glob syntax where a bare `[slug]` is a character class. Move a page, move its entry, and
+check with `npx prettier --check` on the new path.
+
+Three more routes sit around them, and none carries an inline script:
+
+| Route | What it is |
+| --- | --- |
+| `/quiz/host` (`host/index.astro`) | the host's picker — every committed quiz by title, with its join code. No session read, no secret. `host` is a **static** path segment, so no quiz slug can collide with it: no reserved words, no dependence on route priority |
+| `/quiz` (`index.astro`) | reads the session and redirects to `/quiz/<slug>` of the quiz being run; renders "not started yet" when there is none, because arriving early is normal. Keeps old QR codes and bookmarks working |
+| `/q/<code>` (`src/pages/q/[code].astro`) | the four-digit short address. Redirects to `/quiz/<slug>`; an unknown code gets a Polish page with a link to `/quiz`, not the framework's blank 404 |
+
+An unknown slug on either quiz view is a **404**, never a fallback to whichever quiz is first — a host
+who mistyped has to find out in the lobby, not by starting the wrong questions. Neither exports
+`getStaticPaths`: it is required for a *prerendered* dynamic route and meaningless on an on-demand one.
+
+`/q/<code>` deliberately does **not** check which quiz is running. That message belongs on the attendee
+view, once, where a phone arriving by an old QR meets it too — see `quizMismatch` in
+`src/lib/client/render.ts`. Two copies of one error is two places for it to drift.
 
 ## The panel offers only the action the phase accepts
 
@@ -54,7 +78,7 @@ answer to show but still needs closing (`answer.ts` accepts only in `question-op
 `pollTargetFor`, the single kind predicate — never on a fresh `kind === "word-cloud"` test, and never
 "fixed" by dropping `reveal` from the row, which would leave the cloud with no way to close.
 
-**The verbs' geometry is stated once**, as `FLOW_PILL` in this page's frontmatter, and its sizes are
+**The verbs' geometry is stated once**, as `FLOW_PILL` in the host page's frontmatter, and its sizes are
 `clamp` rather than fixed. The row was measured for a 1920 projector (`text-[40px] px-8`), which is
 not the window the host drives it from: at 1440 the four verbs need more width than the bar has and
 `flex-wrap` stacks them mid-session. Each figure keeps its projector value as the maximum — `2.08vw`
@@ -65,7 +89,7 @@ stay the same size or the row reflows when a step becomes the next one.
 `syncControls` must be called from **all four sites** — `render`'s ordinary path, `render`'s
 sessionless early return, `fire`'s `finally` (which re-enables every button unconditionally), and the
 reveal's arming tap, which changes the button's label and so must repaint the bar through the same
-function rather than writing `textContent` itself. `host.test.ts` asserts the count.
+function rather than writing `textContent` itself. `host/[slug].test.ts` asserts the count.
 
 ## `zakończ sesję i pokaż wyniki` — one element, two homes
 
@@ -114,7 +138,7 @@ state, so it is one rule rather than a fourth copy of predicates that already ex
 **Never key the rail on the phase.** A `phase === "question-revealed"` condition looks equivalent and
 is wrong: `pollTargetFor` keeps returning a words target through the reveal so the host can talk over
 a frozen cloud, so a phase list takes the rail away from the one reveal that still has something in
-it. `host.test.ts` fails the suite on a second `setHidden(railBox` or a missing call site — the rule
+it. `host/[slug].test.ts` fails the suite on a second `setHidden(railBox` or a missing call site — the rule
 must reach both `render`'s ordinary path and its sessionless early return, each after the panel
 renderers it reads. The rail's *absence* is what hands the distribution bars and the leaderboard the
 full width; `#stage` is `flex-1` and widens on its own.
@@ -126,7 +150,7 @@ incident.** There are exactly two loops that *fetch*:
 
 | Loop | Where | Bounded by |
 | --- | --- | --- |
-| The host panel poll | `host.astro` | one device; the lobby or a question kind; ~2.5 s (~3 s in the lobby) with exponential backoff; tab visibility |
+| The host panel poll | `host/[slug].astro` | one device; the lobby or a question kind; ~2.5 s (~3 s in the lobby) with exponential backoff; tab visibility |
 | The connection fallback | `src/lib/client/session.ts` | the channel outage; tab visibility; the session ending |
 
 **There are also timers that fetch nothing** — the countdowns in both pages and the host toast's
@@ -136,7 +160,7 @@ backoff. The countdown's is cleared on every render, armed only while a question
 open, stopped at both lifecycle exits; the toast's is one pending hide, re-armed by whatever was said
 last. Both live in `src/lib/client/` rather than inline, because a scan cannot execute a timer.
 
-**Do not count timers and do not merge the rules.** `host.test.ts`'s guard asserts a *property* —
+**Do not count timers and do not merge the rules.** `host/[slug].test.ts`'s guard asserts a *property* —
 exactly one timer whose callback can reach a `fetch` — not a `setTimeout` occurrence count, which
 would have to be weakened every time a countdown lands and would then protect nothing. `motion.ts`
 holds no timer at all (rAF only), which is what lets it exist without weakening either guard.
@@ -181,7 +205,7 @@ figure each question. Each instance's `shown` is written by the format callback,
 even when a tick cancels a count that was still climbing. Hence one factory rather than three
 closures, and hence `reset()`, which must **cancel and forget** the motion as well as clear `shown`:
 it is both the sessionless dash and the between-questions dash, and a counter that remembered the
-previous question's figure would count the first reply up from it. `host.test.ts` fails on a
+previous question's figure would count the first reply up from it. `host/[slug].test.ts` fails on a
 `setText` to any of the three ids. `#word-cloud-count` is not one of them — it is a sentence, not a
 figure.
 
@@ -191,7 +215,7 @@ holds (`renderEntrance`'s `enabled`).
 **One loop, not three**, and that is load-bearing: the `polling` flag exists because a tick armed
 from `render` while a fetch was open held several requests at once, worst exactly when the venue
 network was worst. Two loops would mean two backoffs, two in-flight flags and two chances to leave a
-timer running for a panel that is off screen. `host.test.ts` fails if a second timer, a second fetch
+timer running for a panel that is off screen. `host/[slug].test.ts` fails if a second timer, a second fetch
 site or a second copy of the predicate appears.
 
 The word-cloud target is the only one that runs in `question-revealed`, so the host keeps a complete

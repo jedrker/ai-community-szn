@@ -507,8 +507,16 @@ are introduced for the existing site's users.
   risk that only a developer can correct a question.
 - **No accounts, no result history, no post-session analytics, reports, or exports.** Consistent with
   the guardrail that nothing about who played survives the session.
-- **No parallel sessions and no multiple quizzes.** One session, one quiz, one room at a time. This
-  removes session management from the change entirely.
+- **No parallel sessions.** One session, one room at a time. This removes session management from the
+  change entirely.
+
+  **The multiple-quizzes change overturned half of this**, and the position it replaced is quoted
+  rather than deleted: *"No parallel sessions and no multiple quizzes. One session, one quiz, one room
+  at a time."* Several quizzes now live in a registry, each with its own slug, title and four-digit
+  join code, and the session records which one it is running. Parallel *sessions* remain out of
+  scope — and that is what keeps the `livequiz:` key registry untouched, since with one session there
+  is nothing for a key name to disambiguate. **FR-001 is unaffected:** selecting among committed,
+  developer-authored definitions is not a builder interface.
 - **No multimedia in questions.** Questions are text only.
 
 **Non-functional non-goals**

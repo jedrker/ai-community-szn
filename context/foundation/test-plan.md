@@ -220,23 +220,34 @@ incremental mode (~7.5s), so a per-edit typecheck would block the agent loop on 
 belongs at commit. The per-edit hook stays at roughly a second by lint and format alone, and it is
 the only layer that can hand its output back to the agent mid-session.
 
-**Two files are excluded from the formatter, and the reason is Risk #2 itself.** `src/pages/quiz/host.astro`
-and `index.astro` are pinned by structural source scans that assert their inline scripts as literal
-text. Reformatting them broke five assertions in `host.test.ts` — one of which was the poll-loop
-timer guard, whose regex stopped matching anything at all and would therefore have gone on passing
-against a page with no timer. They are listed in `.prettierignore` rather than reformatted, and the
-five assertions were left alone rather than rewritten to fit the new line wrapping. Do not remove
-those two entries without first re-verifying every scan in `host.test.ts` and `index.test.ts` by
-breaking the behaviour each one covers.
+**Two files are excluded from the formatter, and the reason is Risk #2 itself.**
+`src/pages/quiz/host/[slug].astro` and `[slug].astro` are pinned by structural source scans that
+assert their inline scripts as literal text. Reformatting them broke five assertions in the host
+page's suite — one of which was the poll-loop timer guard, whose regex stopped matching anything at
+all and would therefore have gone on passing against a page with no timer. They are listed in
+`.prettierignore` rather than reformatted, and the assertions were left alone rather than rewritten to
+fit the new line wrapping. Do not remove those two entries without first re-verifying every scan in
+both suites by breaking the behaviour each one covers.
+
+**It happened a second time, and the mechanism was the *pin* rather than the formatter.** The
+multiple-quizzes change moved both pages under dynamic segments, and `.prettierignore` still named the
+old paths — so the pages were un-pinned, a reflow landed, and eight assertions in the host suite went
+red at once. **Move a page, move its entry**, and note that the entries escape the brackets
+(`\[slug\]`) because `.prettierignore` reads gitignore glob syntax, where a bare `[slug]` is a
+character class matching one of `s l u g`. Verify positively rather than by absence of complaint: an
+identical copy at an unignored path must be *flagged* by `npx prettier --check` while the real one is
+skipped.
 
 **`vitest related` alone is green on the top of the risk map, and that is why the resolver exists.**
-`host.test.ts` and `index.test.ts` read their `.astro` pages with `readFileSync`, so those pages are
-in no module graph: `vitest related src/pages/quiz/host.astro` prints "No test files found" and exits
-0. A hook wired straight to `related` would therefore report success on precisely the file Risk #1 is
+Both page suites read their `.astro` pages with `readFileSync`, so those pages are in no module graph:
+`vitest related src/pages/quiz/host/[slug].astro` prints "No test files found" and exits 0. A hook wired straight to `related` would therefore report success on precisely the file Risk #1 is
 about. `scripts/scoped-tests.sh` maps an `.astro` page to its sibling suite by name, and both the
 per-edit hook and the pre-commit job call that one script rather than each spelling the rule — the
-same single-reader discipline `CONTROL_RULES` and the key registry follow. Verified by deleting one
-of `host.astro`'s `syncControls()` call sites: the per-edit hook exits 2 and the commit is refused.
+same single-reader discipline `verbsFor` and the key registry follow. Verified by deleting one
+of the host page's `syncControls()` call sites: the per-edit hook exits 2 and the commit is refused.
+**Re-verified after the pages moved** (multiple-quizzes): the mapping is by stem, so
+`host/[slug].astro` resolves to its sibling `host/[slug].test.ts`, confirmed in both directions by
+breaking one assertion in each suite and watching the gate fail.
 
 The per-edit layer runs tests **only** for the four §2 hot-spots (`src/pages/quiz/`, `src/pages/api/`,
 `src/lib/session/`, `src/lib/client/`); a helper or config edit costs ~1.2s for lint and format alone

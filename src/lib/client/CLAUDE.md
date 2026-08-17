@@ -85,8 +85,8 @@ done**: it needs row identity across a `replaceChildren()`, which is exactly whe
 hardest.
 
 The option stagger is a per-element offset *inside one rAF loop*, never one `setTimeout` per row —
-that is what keeps the motion layer out of the page-level timer guards (`host.test.ts` allows exactly
-one timer that can reach a `fetch`; `index.test.ts` requires the attendee page to hold **zero**
+that is what keeps the motion layer out of the page-level timer guards (`host/[slug].test.ts` allows
+exactly one timer that can reach a `fetch`; `[slug].test.ts` requires the attendee page to hold **zero**
 timers).
 
 Read `context/changes/quiz-animations-and-transitions/motion-contract.md` before animating anything

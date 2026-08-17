@@ -111,10 +111,12 @@ and do NOT re-scaffold them.
   `fra1` once the region key reaches `main`. No `.github/`, so still no CI and no pre-deploy gate.
 - **Testing:** present — `vitest` with a `test` script, `astro check` for types, one existing suite
   (`src/lib/newsletter.test.ts`). No test-infrastructure foundation is needed.
-- **Quiz definition:** present as of S-01 — the 14-question quiz lives at `src/quiz/definition.ts` as
-  a typed literal validated by a Zod schema (`src/quiz/schema.ts`), with domain invariants enforced as
-  refinements. **S-02 through S-08 read it through `src/quiz/index.ts`** (`quiz`, `getQuestionById`,
-  and the exported types) and must not import `definition.ts` directly or re-parse. Deliberately not a
+- **Quiz definitions:** present as of S-01 — the quizzes live in `src/quiz/definitions/`, one file
+  each, as typed literals validated by a Zod schema (`src/quiz/schema.ts`), with domain invariants
+  enforced as refinements. **S-02 onward read them through `src/quiz/index.ts`** (`quizzes`,
+  `getQuizById`, `getQuestionById`, and the exported types) and must not import a definition file
+  directly or re-parse. It was one file, `definition.ts`, until the multiple-quizzes change turned it
+  into a registry; the gate now also checks the cross-quiz rules. Deliberately not a
   content collection — `astro:content` does not resolve in vitest or in a serverless function; see
   CLAUDE.md. `points: null` marks an unscored question (FR-017); scoring rules themselves are S-03's
   and S-06's. A malformed definition fails `astro build` via the `quiz-definition-gate` integration,
@@ -655,8 +657,11 @@ and do NOT re-scaffold them.
   avoiding the builder is the reason this is built rather than rented.
 - **Accounts, result history, post-session analytics, reports, exports** — Why parked: PRD §Non-Goals;
   consistent with the retention guardrail F-03 enforces.
-- **Parallel sessions and multiple quizzes** — Why parked: PRD §Non-Goals. One session, one quiz, one
-  room; this removes session management from the change entirely.
+- **Parallel sessions** — Why parked: PRD §Non-Goals. One session, one room; this removes session
+  management from the change entirely. **Multiple quizzes left this list** with the
+  multiple-quizzes change, which overturned the *"one session, one quiz, one room"* half: quizzes now
+  live in a registry and the session names the one it runs. Parallel sessions are what stayed parked,
+  and what keeps the key registry untouched.
 - **Host override of a question's time budget** — Why parked: PRD §Non-Goals, added with S-11. An
   extend or pause button is a write to the session document while a question is open, which moves
   the timestamp the speed clamp measures every award against. Reopening it means first finding a

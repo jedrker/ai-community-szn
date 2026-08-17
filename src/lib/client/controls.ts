@@ -3,7 +3,8 @@
  * (test-plan rollout phase 1, Risks #1 and #2).
  *
  * **This module exists for the reason `countdown.ts` does.** The rule it owns lived inline
- * in `src/pages/quiz/host.astro`'s `<script>` block, and an Astro inline script has no
+ * in the host page's `<script>` block (`src/pages/quiz/host/[slug].astro`), and an Astro
+ * inline script has no
  * harness — so the only guard available over "which button is live in which phase" was a
  * source-text scan of the table's own literal. A scan for an expression that exists today
  * certifies whatever is there, defects included (`lessons.md`), and the property that

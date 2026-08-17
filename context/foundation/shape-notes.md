@@ -434,8 +434,14 @@ are introduced for the existing site's users.
   recorded risk that only a developer can correct a question.
 - **No accounts, no result history, no post-session analytics, reports, or exports.** Consistent with
   the retention requirement that nothing about who played survives the session.
-- **No parallel sessions and no multiple quizzes.** One session, one quiz, one room at a time. This
-  removes session management from the change entirely.
+- **No parallel sessions.** One session, one room at a time. This removes session management from the
+  change entirely.
+
+  **The multiple-quizzes change overturned half of this**, and the position it replaced is quoted
+  rather than deleted: *"No parallel sessions and no multiple quizzes. One session, one quiz, one room
+  at a time."* Several quizzes now live in a registry and the session records which one it is running;
+  parallel *sessions* stay out of scope, which is what leaves the key registry alone. FR-001 is
+  unaffected — picking among committed definitions is not a builder.
 - **No multimedia in questions.** Questions are text only.
 
 **Non-functional non-goals**

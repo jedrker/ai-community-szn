@@ -797,27 +797,27 @@ mid-session deploy cannot make an old document claim a current quiz — it fails
 
 #### Automated
 
-- [x] 5.1 Unit tests pass: `bun run test`
-- [x] 5.2 Type checking passes: `bun run type-check`
-- [x] 5.3 Linting passes: `bun run lint`
-- [x] 5.4 The mismatch branch is covered by a fixture proven to reach it
-- [x] 5.5 Break-the-guard: removing the comparison fails the named test
-- [x] 5.6 `boundary.test.ts` still passes
+- [x] 5.1 Unit tests pass: `bun run test` — 5723da8
+- [x] 5.2 Type checking passes: `bun run type-check` — 5723da8
+- [x] 5.3 Linting passes: `bun run lint` — 5723da8
+- [x] 5.4 The mismatch branch is covered by a fixture proven to reach it — 5723da8
+- [x] 5.5 Break-the-guard: removing the comparison fails the named test — 5723da8
+- [x] 5.6 `boundary.test.ts` still passes — 5723da8
 
 #### Manual
 
-- [x] 5.7 A phone left on the wrong quiz shows the message, and its link joins the running session
-- [x] 5.8 The message never appears during a normal session
+- [x] 5.7 A phone left on the wrong quiz shows the message, and its link joins the running session — 5723da8
+- [x] 5.8 The message never appears during a normal session — 5723da8
 
 ### Phase 6: The documents that now assert something false
 
 #### Automated
 
-- [ ] 6.1 Linting passes: `bun run lint`
-- [ ] 6.2 Formatting passes: `bun run format`
-- [ ] 6.3 The non-goal appears only as amended, quoted history
+- [x] 6.1 Linting passes: `bun run lint`
+- [x] 6.2 Formatting passes: `bun run format`
+- [x] 6.3 The non-goal appears only as amended, quoted history
 
 #### Manual
 
-- [ ] 6.4 A reader can author a second quiz and run a session from the documents alone
-- [ ] 6.5 No `CLAUDE.md` still asserts an invariant the code stopped holding
+- [x] 6.4 A reader can author a second quiz and run a session from the documents alone
+- [x] 6.5 No `CLAUDE.md` still asserts an invariant the code stopped holding

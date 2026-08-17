@@ -22,7 +22,7 @@ credentials; without them those routes answer with a service error rather than c
 | Command | What it does |
 | --- | --- |
 | `bun run dev` | Astro dev server |
-| `bun run build` | Production build — also runs the quiz definition gate |
+| `bun run build` | Production build — also runs the quiz registry gate |
 | `bun run preview` | Serve the production build locally |
 | `bun run test` | Vitest, once (`--dir src`) |
 | `bun run test:watch` | Vitest, watch mode |
@@ -104,9 +104,10 @@ ESLint, Prettier and the test suite are wired into three layers: a per-edit agen
 `astro check`) and `pre-push` (the full suite). There is no CI — Vercel builds and deploys on push
 to `main`.
 
-The one gate that stands between a commit and production is the **quiz definition gate**:
-`astro.config.ts` calls `assertQuizValid()` at top level, so a malformed quiz fails the build and
-therefore fails the deploy, leaving the previous good quiz live. A failed deploy is otherwise silent;
+The one gate that stands between a commit and production is the **quiz registry gate**:
+`astro.config.ts` calls `assertQuizValid()` at top level, so a malformed quiz — or a registry with a
+duplicate slug, a duplicate join code, or the same question id in two quizzes — fails the build and
+therefore fails the deploy, leaving the previous good registry live. A failed deploy is otherwise silent;
 `docs/runbook-live-session.md` carries the pre-session check that closes that gap.
 
 ## Documentation
