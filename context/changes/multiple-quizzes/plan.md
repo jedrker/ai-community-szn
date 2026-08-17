@@ -763,35 +763,35 @@ mid-session deploy cannot make an old document claim a current quiz — it fails
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `bun run test`
-- [x] 3.2 Type checking passes: `bun run type-check`
-- [x] 3.3 Linting passes: `bun run lint`
-- [x] 3.4 Build succeeds: `bun run build`
-- [x] 3.5 E2E passes: `bun run e2e`
-- [x] 3.6 Editing each moved page runs its sibling suite via the per-edit hook
-- [x] 3.7 An unknown slug returns 404 on both quiz routes
+- [x] 3.1 Unit tests pass: `bun run test` — 331f6d3
+- [x] 3.2 Type checking passes: `bun run type-check` — 331f6d3
+- [x] 3.3 Linting passes: `bun run lint` — 331f6d3
+- [x] 3.4 Build succeeds: `bun run build` — 331f6d3
+- [x] 3.5 E2E passes: `bun run e2e` — 331f6d3
+- [x] 3.6 Editing each moved page runs its sibling suite via the per-edit hook — 331f6d3
+- [x] 3.7 An unknown slug returns 404 on both quiz routes — 331f6d3
 
 #### Manual
 
-- [x] 3.8 `/quiz/host` lists the quizzes and each link opens the right panel
-- [x] 3.9 The projector QR resolves to `/quiz/<slug>` and a phone joins through it
-- [x] 3.10 `/quiz` redirects with a session and shows `brak sesji` without one
-- [x] 3.11 A full session runs end to end on two devices through the new addresses
+- [x] 3.8 `/quiz/host` lists the quizzes and each link opens the right panel — 331f6d3
+- [x] 3.9 The projector QR resolves to `/quiz/<slug>` and a phone joins through it — 331f6d3
+- [x] 3.10 `/quiz` redirects with a session and shows `brak sesji` without one — 331f6d3
+- [x] 3.11 A full session runs end to end on two devices through the new addresses — 331f6d3
 
 ### Phase 4: The short join code
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `bun run test`
-- [ ] 4.2 Type checking passes: `bun run type-check`
-- [ ] 4.3 Linting passes: `bun run lint`
-- [ ] 4.4 Build succeeds: `bun run build`
-- [ ] 4.5 A known code redirects; an unknown code renders the fallback page
+- [x] 4.1 Unit tests pass: `bun run test`
+- [x] 4.2 Type checking passes: `bun run type-check`
+- [x] 4.3 Linting passes: `bun run lint`
+- [x] 4.4 Build succeeds: `bun run build`
+- [x] 4.5 A known code redirects; an unknown code renders the fallback page
 
 #### Manual
 
-- [ ] 4.6 Typing `/q/<code>` on a phone reaches the quiz in one step
-- [ ] 4.7 The code is legible from the back of the room
+- [x] 4.6 Typing `/q/<code>` on a phone reaches the quiz in one step
+- [x] 4.7 The code is legible from the back of the room
 
 ### Phase 5: Mismatch is visible on the attendee's phone
 

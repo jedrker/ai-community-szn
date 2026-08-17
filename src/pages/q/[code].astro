@@ -1,0 +1,85 @@
+---
+import "../../styles/global.css";
+
+import { getQuizByCode } from "../../quiz/index";
+
+/**
+ * `/q/<code>` — the address a phone that cannot scan gets typed into it
+ * (multiple-quizzes).
+ *
+ * Four digits, read off the projector, resolved through the registry and redirected to
+ * `/quiz/<slug>`. It exists because `/quiz/summer-tour-szczecin` is fine to *scan* and
+ * miserable to *type* in a dark room, on a phone, while the host waits — and FR-002
+ * gives the whole join thirty seconds.
+ *
+ * **Deliberately outside `/quiz/`.** Every character counts on a typed address, and this
+ * is the one URL in the project whose length is a feature.
+ *
+ * **A code whose quiz is not the one being run still redirects.** It would be easy to
+ * check the session here and say "wrong quiz" — and wrong to: that message belongs on
+ * the attendee view, once, where a phone that arrived by QR meets it too. Two copies of
+ * one error is two places for it to drift, and the phone that typed a code is in exactly
+ * the same position as the phone that scanned an old QR.
+ *
+ * **On demand — no `prerender` export and no `getStaticPaths`.** The latter is required
+ * for a *prerendered* dynamic route and meaningless here; the codes are committed source,
+ * so prerendering would be defensible, but this route sits with the rest of LiveQuiz and
+ * the registry is parsed once at module scope either way.
+ */
+const code = Astro.params.code;
+const quiz = code === undefined ? undefined : getQuizByCode(code);
+
+if (quiz !== undefined) {
+  return Astro.redirect(`/quiz/${quiz.id}`);
+}
+
+/**
+ * An unknown code gets a page, not the framework's blank 404 — a mistyped digit is the
+ * most likely thing that lands here, and the answer to it is "check the screen, or go to
+ * /quiz", which a bare 404 cannot say.
+ *
+ * The **status stays 404**, because the code genuinely does not exist; what changes is
+ * that the body is useful. `/quiz` is the link rather than a quiz slug: this page has no
+ * idea which quiz was meant, and `/quiz` does — it redirects to whatever is running.
+ */
+Astro.response.status = 404;
+---
+
+<html lang="pl" class="bg-quiz-ink">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>LiveQuiz — nie znamy tego kodu</title>
+  </head>
+  <body
+    class="flex min-h-dvh flex-col bg-quiz-ink px-7 pb-8 pt-6 font-archivo
+           text-quiz-signwhite antialiased"
+  >
+    <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-6">
+      <h1
+        class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc"
+      >
+        LiveQuiz
+      </h1>
+
+      <!--
+        The status block sits in the growing column so it lands in the thumb zone — the
+        same arrangement `/quiz`'s waiting screen and the attendee view both use.
+      -->
+      <div class="flex flex-1 flex-col justify-center gap-4">
+        <p class="text-[32px] font-bold leading-tight">Nie znamy tego kodu.</p>
+        <p class="text-[24px] leading-relaxed text-quiz-zinc">
+          Sprawdź cztery cyfry na ekranie i wpisz je jeszcze raz.
+        </p>
+        <a
+          href="/quiz"
+          class="rounded-2xl border border-quiz-chrome px-6 py-4 text-center text-[24px]
+                 font-semibold text-quiz-signwhite"
+        >
+          Albo przejdź do trwającego quizu
+        </a>
+      </div>
+    </main>
+  </body>
+</html>

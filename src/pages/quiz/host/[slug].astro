@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 
 import { HOST_SECRET_HEADER } from "../../../lib/session/host";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../../lib/session/realtime";
+import { getQuizById } from "../../../quiz/index";
 import { getPublicQuizById } from "../../../quiz/public";
 
 /**
@@ -79,7 +80,18 @@ import { getPublicQuizById } from "../../../quiz/public";
 const slug = Astro.params.slug;
 const quiz = slug === undefined ? undefined : getPublicQuizById(slug);
 
-if (quiz === undefined) {
+/**
+ * The four-digit join code, read from the *source* quiz rather than the projection.
+ *
+ * `PublicQuiz` deliberately omits `code` — it is a routing concern, and nothing on a
+ * phone needs it once the phone has arrived. This page is the one surface that does: the
+ * code exists to be read off the projector out loud. Two lookups over a registry parsed
+ * once at module scope, which narrows both without a `!` and without a can't-happen
+ * fallback standing in for the 404 below.
+ */
+const joinCode = slug === undefined ? undefined : getQuizById(slug)?.code;
+
+if (quiz === undefined || joinCode === undefined) {
   return new Response("Nie ma takiego quizu.", { status: 404 });
 }
 
@@ -98,6 +110,19 @@ const attendeeUrl = new URL(`/quiz/${quiz.id}`, Astro.url);
  * a scan resolves; a phone that types the shortened form is redirected by the host.
  */
 const joinDisplayUrl = `${attendeeUrl.host.replace(/^www\./, "")}${attendeeUrl.pathname}`;
+
+/**
+ * The short address, for anyone whose phone will not scan (multiple-quizzes).
+ *
+ * The same host as the QR with `/q/<code>` after it, so the room can type four digits
+ * instead of a slug. The **QR keeps pointing at `/quiz/<slug>`** — it is scanned, not
+ * typed, so it loses nothing by being long, and the canonical URL is what a scan should
+ * resolve to.
+ *
+ * Frontmatter only: no new client state, no change to `define:vars`. Nothing about this
+ * value moves during a session.
+ */
+const shortJoinUrl = `${attendeeUrl.host.replace(/^www\./, "")}/q/${joinCode}`;
 
 /**
  * How many questions the segment has, for the top strip's counter.
@@ -498,6 +523,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             class="text-[56px] font-extrabold leading-none tracking-[-0.02em] text-quiz-chrome"
           >
             {joinDisplayUrl}
+          </p>
+        </div>
+
+        <!-- The typed route, beside the scanned one. Set below the address above rather
+             than beside it: a phone that could scan has already gone, so this line is
+             read only by someone who is looking for it, and the address is what the host
+             says out loud first. -->
+        <div class="flex flex-col gap-3">
+          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+            Albo krócej
+          </p>
+          <p
+            class="text-[56px] font-extrabold leading-none tracking-[-0.02em] text-quiz-chrome"
+          >
+            {shortJoinUrl}
           </p>
         </div>
 

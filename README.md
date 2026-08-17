@@ -65,6 +65,7 @@ actually injects.
 | `/quiz/<slug>` | on-demand | LiveQuiz — the attendee's phone, one address per quiz |
 | `/quiz/host` | on-demand | LiveQuiz — the host's picker: every committed quiz, with its join code |
 | `/quiz/host/<slug>` | on-demand | LiveQuiz — the host panel and projector rail for one quiz |
+| `/q/<code>` | on-demand | LiveQuiz — four-digit short address; redirects to `/quiz/<slug>` |
 | `/api/*` | on-demand | POST handlers; read `formData()`, reply JSON, Polish error strings |
 
 `astro.config.ts` sets `output: "server"` and content routes opt back into static generation with

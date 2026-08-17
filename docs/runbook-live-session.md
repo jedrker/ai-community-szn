@@ -280,7 +280,12 @@ step exists to prevent.
 Then point the room at **`/quiz`** — or at `/quiz/<slug>` directly, which is what the projector's QR
 encodes. `/quiz` reads the running session and redirects there, so the short address on the old QR
 codes and in people's history still lands in the right room; before you press `start` it says the
-quiz has not started rather than 404ing. You do not need a second screen for it. **In the lobby the
+quiz has not started rather than 404ing. You do not need a second screen for it.
+
+**For a phone that will not scan, read out `/q/<kod>`** — the four digits are on the picker in step 5
+and on the lobby screen under **Albo krócej**, beside the QR. It redirects to the same place the QR
+does. An unknown code says so and offers `/quiz`, so a mistyped digit is one tap from recovery rather
+than a dead end. **In the lobby the
 projector is the join screen**: a white plate carrying a QR big enough to scan from the back row,
 and beside it the address in yellow and the number of people who have arrived. Once a question is
 open the same two move into the top strip, small but never gone, for whoever walks in at question
