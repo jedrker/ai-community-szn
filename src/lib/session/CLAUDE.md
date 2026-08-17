@@ -121,8 +121,18 @@ Its own `superRefine` clause requires the id to resolve in the registry **and** 
 when non-null, to belong to *that* quiz. The second half is what makes the registry-wide
 `getQuestionById` safe: a stored question id always resolves *somewhere*, so only this clause stops it
 resolving into a quiz the session is not running. The sentinel is exempt from the first half and only
-from that — an old session can still advance, reveal and close; what it cannot do is `start` a quiz,
-and `bun run quiz:reset` is the documented way out.
+from that; what it cannot do is `start` a quiz, and `bun run quiz:reset` is the documented way out.
+
+**Parsing is not the same as playable, and this paragraph used to conflate them.** It said an old
+session "can still advance, reveal and close" — false for `advance`, because the sentinel resolves to
+no quiz, so `dalej` was a permanent no-op mid-segment whose only exit destroys the scores the default
+exists to protect. `nextQuestionId` now resolves a sentinel session's quiz **from its open question**
+(unambiguous because question ids are globally unique) and reports it back, and `advance` writes that
+resolved id — the one sanctioned exception to `quizId` being write-once, and a repair rather than a
+change of quiz. A sentinel session still in the *lobby* is deliberately not rescued: there is no
+question to resolve from, guessing is the failure the sentinel exists to prevent, and a lobby holds no
+answers to lose. `state.test.ts` advances a sentinel document; `routes.test.ts` asserts the healed
+field. Both were absent when the claim was written, which is how it survived.
 
 `quizId` is publicly readable, through the deliberately open `GET /api/quiz/state` and both join
 success paths. That is within the retention contract and it is said here rather than inherited: a slug

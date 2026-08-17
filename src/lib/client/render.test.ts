@@ -97,7 +97,7 @@ describe("static mode", () => {
   it("keeps the option id hook on every item", () => {
     renderQuestion(container, single);
 
-    // The order is shuffled per question by `publicQuiz`, so anything mapping a
+    // The order is shuffled per question by the public projection, so anything mapping a
     // selection back must go through ids and never through indices.
     expect(options().map((item) => item.dataset.optionId)).toEqual([
       "a",
@@ -1266,6 +1266,26 @@ describe("quizMismatch", () => {
     expect(result?.message).not.toContain("quiz-drugi");
     expect(result?.href).toBe("/quiz/quiz-drugi");
     expect(result?.linkText).toContain("Drugi quiz");
+  });
+
+  /**
+   * The host panel reuses this function rather than growing its own copy (impl-review F2),
+   * and it needs a *panel* address. Asserted because the two screens must agree about which
+   * quiz is running, and a second href template is how they would stop agreeing.
+   */
+  it("builds the link from the caller's base, so the panel can point at a panel", () => {
+    const host = quizMismatch(
+      "quiz-pierwszy",
+      "quiz-drugi",
+      TITLES,
+      "/quiz/host",
+    );
+
+    expect(host?.href).toBe("/quiz/host/quiz-drugi");
+    // The message is the same sentence on both surfaces — only the destination differs.
+    expect(host?.message).toBe(
+      quizMismatch("quiz-pierwszy", "quiz-drugi", TITLES)?.message,
+    );
   });
 
   it("reports nothing when the phone is on the quiz that is running", () => {

@@ -491,7 +491,7 @@ describe("the committed quiz fits the scoring rules", () => {
   });
 
   /**
-   * The authoring convention `definition.ts` states and the schema deliberately does not
+   * The authoring convention the quiz definitions states and the schema deliberately does not
    * enforce: a limit shorter than the speed window is legal, but it compresses the reward
    * curve, because nobody can answer slowly enough to reach the 0.5 floor. Asserted here
    * rather than in the schema, since it is a fact about *scoring* — and asserted as a

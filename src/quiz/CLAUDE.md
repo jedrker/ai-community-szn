@@ -56,6 +56,17 @@ every one of them reporting only "the quiz changed". Three rules, in order of pr
 - **Need to assert something about the committed quiz?** Say it as a rule over whatever the quiz
   contains — `definition.test.ts` asserts that no id gives away its own answer and that the opener
   scores nothing; it counts nothing and quotes nothing.
+- **Need a question id only as an opaque session key?** Take it from `someQuestionId()` /
+  `anotherQuestionId()`, and the quiz from `fixtureQuiz()`. Most session and route fixtures are this
+  case: the store never resolves an id and `parseSessionState` only needs one that exists, so *which*
+  question is not what any assertion in those files is about. Written as `quizzes[0]!.questions[0]!.id`
+  it read like a claim about kind or position, and it was repeated in ten files — so a registry
+  rearrangement was ten edits (impl-review F3). **These are not an escape hatch from
+  `questionOfKind`:** a branch that depends on a question's *kind* must still take it by kind.
+
+  The one file that legitimately keeps positional reads is `src/lib/session/state.test.ts`, because
+  `nextQuestionId`'s job *is* the running order — "the first", "the next", "the last" are the
+  properties under test there rather than incidental choices.
 
 Two consequences worth knowing. `definition.test.ts` still requires **every question kind to be
 exercised** — the route tests derive fixtures by kind and a dropped kind silently drops its coverage,
@@ -130,10 +141,18 @@ finiteness check to `checkQuestion`:
   are different codes and a number would fold them together. Authored content, not generated state:
   it is printed on the projector, so it is not a secret and there is no per-session PIN.
 
-**Four rules span the registry**, checked after every quiz parses individually, each naming both
+**Six rules span the registry**, checked after every quiz parses individually, each naming both
 quizzes and the colliding value in Polish:
 
 - a duplicate quiz **`id`** — it reaches a URL, so it must resolve to one quiz;
+- a duplicate **`title`** — the title is the whole of what the picker shows and what a phone on the
+  wrong quiz is told, so two quizzes sharing one are ambiguous on both surfaces the field exists for;
+- a slug in **`RESERVED_QUIZ_SLUGS`** (`host`, `spine-check`) — a static route already owns that
+  address, so such a quiz parses, reaches the picker, gets a code, and has **no reachable attendee
+  view**. Keeping `host` a static segment protects the *panel*; this protects the other direction.
+  The set is a literal because this module must import inside a serverless function and a bare
+  `vitest run`, and `definition.test.ts` reads `src/pages/quiz/` and asserts the two still match, in
+  both directions — so a new static page there cannot silently start shadowing a legal slug;
 - a duplicate join **`code`** — `/q/<code>` would not know where it leads;
 - an **empty registry**;
 - the same **question id in two quizzes**, which is the load-bearing one. It is what lets

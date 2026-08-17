@@ -1,7 +1,7 @@
 ---
 change_id: multiple-quizzes
 title: Support several independent quizzes
-status: implemented
+status: impl_reviewed
 created: 2026-08-16
 updated: 2026-08-17
 archived_at: null

@@ -17,13 +17,21 @@ Three more routes sit around them, and none carries an inline script:
 
 | Route | What it is |
 | --- | --- |
-| `/quiz/host` (`host/index.astro`) | the host's picker — every committed quiz by title, with its join code. No session read, no secret. `host` is a **static** path segment, so no quiz slug can collide with it: no reserved words, no dependence on route priority |
+| `/quiz/host` (`host/index.astro`) | the host's picker — every committed quiz by title, with its join code. No session read, no secret. `host` is a **static** path segment, so no quiz slug can collide with the *panel* — no dependence on route priority |
 | `/quiz` (`index.astro`) | reads the session and redirects to `/quiz/<slug>` of the quiz being run; renders "not started yet" when there is none, because arriving early is normal. Keeps old QR codes and bookmarks working |
 | `/q/<code>` (`src/pages/q/[code].astro`) | the four-digit short address. Redirects to `/quiz/<slug>`; an unknown code gets a Polish page with a link to `/quiz`, not the framework's blank 404 |
 
 An unknown slug on either quiz view is a **404**, never a fallback to whichever quiz is first — a host
 who mistyped has to find out in the lobby, not by starting the wrong questions. Neither exports
 `getStaticPaths`: it is required for a *prerendered* dynamic route and meaningless on an on-demand one.
+
+**The static routes above do reserve their slugs, in the other direction** (impl-review F7). This
+paragraph used to claim "no reserved words"; that is true of the panel and false of the attendee view,
+because `/quiz/host` and `/quiz/spine-check` win route priority over `[slug].astro` — so a quiz with
+`id: "host"` would be listed in the picker and unreachable by the room, and one called `spine-check`
+would work in preview and 404 in production. `RESERVED_QUIZ_SLUGS` in `src/quiz/index.ts` refuses
+both at the build gate, and `definition.test.ts` reads this directory to keep that set in step with
+the files here. **Add a static page under `src/pages/quiz/` and that test tells you to reserve it.**
 
 `/q/<code>` deliberately does **not** check which quiz is running. That message belongs on the attendee
 view, once, where a phone arriving by an old QR meets it too — see `quizMismatch` in
@@ -86,10 +94,27 @@ is exactly 40px at 1920 — and floors at 26px, the host's own copy size on the 
 not re-fix them, and do not let `data-[next=true]` set geometry: the filled and outlined states must
 stay the same size or the row reflows when a step becomes the next one.
 
-`syncControls` must be called from **all four sites** — `render`'s ordinary path, `render`'s
-sessionless early return, `fire`'s `finally` (which re-enables every button unconditionally), and the
-reveal's arming tap, which changes the button's label and so must repaint the bar through the same
-function rather than writing `textContent` itself. `host/[slug].test.ts` asserts the count.
+`syncControls` must be called from **all five sites** — `render`'s ordinary path, its sessionless
+early return, its wrong-quiz early return, `fire`'s `finally` (which re-enables every button
+unconditionally), and the reveal's arming tap, which changes the button's label and so must repaint
+the bar through the same function rather than writing `textContent` itself. `host/[slug].test.ts`
+asserts the count. It was four until the wrong-quiz branch landed; an early return that skips this
+call leaves the previous state's buttons live.
+
+**The panel withholds every verb while the session belongs to another quiz** (impl-review F2), and
+that is a **precondition on the whole bar rather than a row in `verbsFor`'s table**. The distinction
+is load-bearing: the session's phase is perfectly real, it just belongs to a quiz this panel did not
+render, so there is no route-legality row a pseudo-phase could be checked against — which is the
+premise `controls.test.ts` runs on. The table still decides what a phase allows; `wrongQuiz` decides
+whether this panel may act on it at all.
+
+`wrongQuiz` is the **single reader** of that comparison — `syncControls`, `syncEndButton` and
+`render` all call it — and it delegates to `quizMismatch` in `src/lib/client/render.ts`, the same
+tested function the attendee view uses, passing `/quiz/host` as the link base so the way out points
+at a *panel*. Do not write a second `state.quizId !== config.quizId` test anywhere: the bar, the
+closing button and the stage disagreeing about which quiz is running is the failure this shape
+prevents. `start` is withheld too — the route would answer its own 409, and the panel's principle is
+to pre-empt a refusal rather than provoke one.
 
 ## `zakończ sesję i pokaż wyniki` — one element, two homes
 

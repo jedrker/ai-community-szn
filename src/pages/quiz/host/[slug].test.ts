@@ -662,18 +662,49 @@ describe("flow verbs are offered only where they apply", () => {
   });
 
   /**
-   * **Applied at all three sites.** `render`'s ordinary path, `render`'s sessionless early
-   * return, and `fire`'s `finally` — which re-enables every button unconditionally, so
-   * missing it there hands back a panel that offers actions the phase refuses. Missing it in
-   * the early return leaves the previous session's buttons live after a purge or an expiry.
+   * **Applied at every site where a button could come back wrongly enabled.** `render`'s
+   * ordinary path, `render`'s sessionless early return, `fire`'s `finally` — which
+   * re-enables every button unconditionally, so missing it there hands back a panel that
+   * offers actions the phase refuses — and the reveal's arming tap. Missing it in an early
+   * return leaves the previous state's buttons live.
+   *
+   * **Five since impl-review F2**, which added a fifth early return: the panel showing a
+   * session that belongs to another quiz, where every verb must be dark because the routes
+   * would apply them to that other quiz's live session. A branch that returned without
+   * calling this would leave the bar live on exactly the screen that must not act.
    */
+  /**
+   * **The panel refuses to act on another quiz's session** (impl-review F2).
+   *
+   * The positive half, without which every assertion below is satisfied by a panel that
+   * dropped the precondition: the bar must read the comparison, and it must read the
+   * *shared* one rather than growing a second copy of the rule the attendee view already
+   * owns and tests.
+   *
+   * Structural only, like the rest of this file — the behaviour itself is covered by a
+   * browser run, because an Astro inline script has no harness.
+   */
+  it("withholds every verb while the session belongs to another quiz", () => {
+    // The comparison comes from the tested module, not from a local id test.
+    expect(CODE).toContain("quizMismatch,");
+    expect(CODE).toContain('"/quiz/host"');
+    expect(CODE).not.toContain("state.quizId !== config.quizId");
+
+    // One reader, so the bar, the closing button and the stage cannot disagree.
+    expect(occurrences("function wrongQuiz(")).toBe(1);
+    expect(occurrences("wrongQuiz(state)")).toBe(3);
+
+    // Every verb dark, including `start` — the panel pre-empts the route's 409 rather than
+    // provoking it. `allowed` is the single gate the enablement and the ring both read.
+    expect(sync).toContain(
+      "const allowed = !wrong && rule.allow.includes(action)",
+    );
+    expect(sync).toContain("wrong");
+  });
+
   it("re-applies the rule everywhere a button could come back wrongly enabled", () => {
-    // The trailing semicolon is what separates the calls from the declaration. Three of the
-    // four are the sites above; the fourth is the reveal's arming tap, which changes the
-    // button's label and so must repaint the bar through the same function rather than
-    // writing `textContent` itself — a second writer of that label is how the armed state
-    // and the word-cloud rename come apart.
-    expect(occurrences("syncControls();")).toBe(4);
+    // The trailing semicolon is what separates the calls from the declaration.
+    expect(occurrences("syncControls();")).toBe(5);
 
     const fireBody =
       /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
@@ -815,11 +846,17 @@ describe("flow verbs are offered only where they apply", () => {
       /function syncEndButton[\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(endSync.length).toBeGreaterThan(0);
 
-    expect(endSync).toContain(
-      'endButton.dataset.next = String(rule.next === "end")',
-    );
+    // The **property**, not the expression: the ring is read off `rule.next`, and it is not
+    // recomputed from anything else. Pinning the whole assignment made this fail on correct
+    // code the moment impl-review F2 added the wrong-quiz precondition to it — a scan for an
+    // expression that exists today certifies whatever is there (`lessons.md`), and it also
+    // breaks on a change that leaves the property intact.
+    expect(endSync).toContain('rule.next === "end"');
+    expect(endSync).toContain("endButton.dataset.next = String(");
     // Read off the decision, never recomputed from the disabled flag beside it.
     expect(endSync).not.toContain("!endButton.disabled &&");
+    // And the ring cannot survive a panel that is entitled to act on nothing.
+    expect(endSync).toContain("!wrong &&");
   });
 });
 
@@ -847,16 +884,19 @@ describe("the rail follows its contents", () => {
   });
 
   /**
-   * **Applied at all three sites.** `render`'s ordinary tail and its sessionless early return,
-   * each after the panels they read have settled — and `stopCountdown`, which is the one place
-   * a rail block is hidden without passing through `render` (`visibilitychange` and `pagehide`
-   * both call it directly). Missing it in the early return leaves an empty rail beside "brak
-   * sesji" after a purge or a TTL expiry; missing it in `stopCountdown` leaves one behind a
-   * backgrounded tab.
+   * **Applied everywhere a block could go dark without a render.** `render`'s ordinary tail
+   * and its early returns, each after the panels they read have settled — and
+   * `stopCountdown`, which is the one place a rail block is hidden without passing through
+   * `render` (`visibilitychange` and `pagehide` both call it directly). Missing it in an
+   * early return leaves an empty rail beside the stage; missing it in `stopCountdown` leaves
+   * one behind a backgrounded tab.
+   *
+   * **Four since impl-review F2**, which added the wrong-quiz early return — a branch that
+   * hides all three rail blocks and would otherwise leave the empty column beside them.
    */
   it("re-applies the rule everywhere a block could go dark without a render", () => {
     // The trailing semicolon separates the calls from the declaration, as above.
-    expect(occurrences("syncRail();")).toBe(3);
+    expect(occurrences("syncRail();")).toBe(4);
 
     const stopBody =
       /function stopCountdown\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
@@ -1535,7 +1575,16 @@ describe("the phase chip names the kind while a question is open", () => {
   it("swaps in exactly one phase, and writes the chip from one place", () => {
     expect(CODE).toContain('state.phase === "question-open" && question');
     expect(occurrences('setText(\n          "phase"')).toBe(1);
-    expect(occurrences('setText("phase"')).toBe(1); // the sessionless "brak sesji" branch
+    /**
+     * Two literal writes, and both are early returns that never reach the table above:
+     * "brak sesji" for no session at all, and "inny quiz" for a session running a quiz this
+     * panel is not (impl-review F2). Neither is a phase, which is exactly why neither can
+     * come from `PHASE_LABELS` — and the count is what stops a third appearing inside a
+     * branch that *does* have a phase to name.
+     */
+    expect(occurrences('setText("phase"')).toBe(2);
+    expect(CODE).toContain('setText("phase", "brak sesji")');
+    expect(CODE).toContain('setText("phase", "inny quiz")');
     expect(phases).toContain('"question-revealed": "odpowiedź ujawniona"');
   });
 });

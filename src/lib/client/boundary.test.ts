@@ -218,7 +218,7 @@ describe("client modules stay on the client side of the boundary", () => {
       'import type { SessionState } from "../session/state";',
       'import type { PublicQuestion } from "../../quiz/public";',
       'import { SESSION_CHANNEL } from "../session/keys";',
-      'import { publicQuiz } from "../../quiz/public";',
+      'import { publicQuizzes } from "../../quiz/public";',
       'import * as Ably from "ably";',
     ].join("\n");
 

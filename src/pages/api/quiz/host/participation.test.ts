@@ -23,12 +23,11 @@ vi.mock("../../../../lib/session/store", () => ({
 
 const { GET: participation } = await import("./participation");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
-const { quizzes } = await import("../../../../quiz/index");
-// One quiz to run a session against — which one is not what anything here asserts.
-const quiz = quizzes[0]!;
+const { anotherQuestionId, someQuestionId } =
+  await import("../../../../quiz/test-support");
 
 const SECRET = "a-very-long-test-secret-value";
-const QUESTION_ID = quiz.questions[0]!.id;
+const QUESTION_ID = someQuestionId();
 
 /**
  * Astro hands the handler a full `APIContext`; this route reads `request` and `url`.
@@ -100,7 +99,7 @@ describe("GET /api/quiz/host/participation", () => {
    * prompt, and the number would look entirely plausible.
    */
   it("echoes the requested questionId back", async () => {
-    const second = quiz.questions[1]!.id;
+    const second = anotherQuestionId();
 
     const body = (await (await call({ questionId: second })).json()) as {
       questionId: string;

@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
  * `[slug].astro`'s `<script>` block is not importable — nothing in the project loads it, and
  * an Astro page's inline script has no harness. So the countdown's *behaviour* is verified
  * manually, per the plan's Phase 3 manual rows, and what can be protected here is the
- * **structure that behaviour depends on**. `host.test.ts` says the same thing about the same
+ * **structure that behaviour depends on**. `host/[slug].test.ts` says the same thing about the same
  * limitation, and this file follows its shape deliberately: the phone now carries a timer of
  * its own, and the property that timer needs is the one the host page has been guarding since
  * S-04.
@@ -21,7 +21,7 @@ import { describe, expect, it } from "vitest";
  * that there is exactly one timer, that it is cleared from exactly one place, and that the
  * clearing sits where every branch passes through it.
  *
- * Comments are stripped first, for the reason `host.test.ts` and `participation.test.ts` give:
+ * Comments are stripped first, for the reason `host/[slug].test.ts` and `participation.test.ts` give:
  * a rule whose reason is not written next to it is a rule someone deletes, and a scan over raw
  * source would force the page to choose between explaining itself and passing.
  */
@@ -47,7 +47,7 @@ function occurrences(needle: string): number {
  * catch a deletion; what it lacked was any reason the two lines have to stay together, and
  * the tidy-looking edit is to drop the one that reads redundant.
  *
- * **Duplicated from `host.test.ts` rather than shared.** These two files import nothing from
+ * **Duplicated from `host/[slug].test.ts` rather than shared.** These two files import nothing from
  * each other today, and a `src/pages/quiz/test-helpers.ts` existing only for ten lines would
  * be the larger cost — the same reasoning `normalize.ts` records for its two folds.
  */

@@ -164,6 +164,15 @@ answered by "which commit is deployed": several quizzes ship together, and the h
 the room will see*. If you added or renamed a quiz today, open `/quiz/host` now and confirm it is in
 the list under the title you expect.
 
+**Never rename or remove a quiz's `id` while a session exists.** A session records which quiz it is
+running, and the store refuses a document naming a quiz that is no longer in the registry — so a
+deploy that renames a slug mid-segment makes every host action and every device's state fetch answer
+409, with no way forward but `bun run quiz:reset`, which takes the scores with it. Editing a
+*question* inside a quiz is safe; changing the quiz's identity underneath a live session is not.
+Reset first, deploy, then start. Renaming between events costs nothing — but note that the QR codes
+and the `/q/<code>` address printed for the old slug stop working, which is why `/quiz/<slug>` answers
+a real page rather than a blank 404 (see step 5).
+
 **2. Open a live log stream and leave it running.**
 
 ```bash

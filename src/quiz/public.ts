@@ -132,7 +132,7 @@ function seedFrom(text: string): number {
  * **Why this exists.** The drafted quiz has its correct answer first in six of eight
  * single-choice questions, and at indices 0 and 1 in the only scored multi-answer one.
  * An attendee who always tapped the first option would score most of the segment. That
- * bias is invisible when reading `definition.ts` — nobody spots positional correlation
+ * bias is invisible when reading the quiz definitions — nobody spots positional correlation
  * in a list of four — so fixing the instance by hand would just be waiting for the next
  * question set to reintroduce it. Shuffling here fixes the class: any quiz authored the
  * same way is safe automatically, and the author owes no ordering discipline.

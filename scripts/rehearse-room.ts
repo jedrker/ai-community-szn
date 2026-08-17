@@ -1659,7 +1659,7 @@ async function runRehearsal(
   /**
    * The count the room actually received, against the count the store actually holds.
    *
-   * This is the only place §5's injection is tested against reality. `host.test.ts`
+   * This is the only place §5's injection is tested against reality. `host/[slug].test.ts`
    * pins that the published count differs from the one on `current`, but a mock cannot
    * show that the number reaching 150 devices is the number in the hash — and the
    * failure mode there is silent: the type system cannot see a count that is read fresh

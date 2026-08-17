@@ -16,7 +16,7 @@ import {
 /**
  * THE HOST PANEL'S PHASE RULES, RUN RATHER THAN READ (test-plan rollout phase 1).
  *
- * `host.test.ts` guarded this decision for four slices by scanning the table's own literal,
+ * `host/[slug].test.ts` guarded this decision for four slices by scanning the table's own literal,
  * and that shape of guard cannot answer the question Risk #1 actually asks. *Does the panel
  * offer a verb the route refuses?* is a statement about `src/pages/api/quiz/host/*`, and no
  * reading of the panel's source can check it — a scan for an expression that exists today
@@ -265,7 +265,7 @@ function label(phase: ControlPhase, atLast: boolean): string {
 
 describe("the decision covers every state the panel can be in", () => {
   it("asks about twelve decisions, nine of them reachable", () => {
-    // Non-vacuity, the same guard `host.test.ts` puts over its own extractions: a `PHASES`
+    // Non-vacuity, the same guard `host/[slug].test.ts` puts over its own extractions: a `PHASES`
     // that fell to zero would make every `for` loop below pass by never running.
     expect(everyDecision()).toHaveLength(12);
     expect(reachableDecisions()).toHaveLength(9);

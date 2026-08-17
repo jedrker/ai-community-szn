@@ -6,7 +6,7 @@
  * and for a second one that is specific to that page.** An Astro page's inline `<script>`
  * has no harness, so the only guard available there is a source-text scan, and a scan cannot
  * execute a timer. That is how a clock once outlived a purged session with a green suite over
- * it. The second reason is mechanical: `host.test.ts` pins that page to exactly one timer
+ * it. The second reason is mechanical: `host/[slug].test.ts` pins that page to exactly one timer
  * handle and exactly one `clearTimeout`, both belonging to the poll — so a dismissal timer
  * written inline would either fail that guard or force it to be weakened into something that
  * protects nothing.

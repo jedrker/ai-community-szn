@@ -10,6 +10,7 @@ import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
 import { MAX_GUESS_INPUT_LENGTH } from "../../lib/session/guess";
 import { MAX_TEXT_ANSWER_LENGTH } from "../../lib/session/scoring";
 import { MAX_WORD_LENGTH } from "../../lib/session/words";
+import QuizNotice from "../../components/QuizNotice.astro";
 import { getPublicQuizById, publicQuizzes } from "../../quiz/public";
 
 /**
@@ -55,8 +56,19 @@ import { getPublicQuizById, publicQuizzes } from "../../quiz/public";
 const slug = Astro.params.slug;
 const quiz = slug === undefined ? undefined : getPublicQuizById(slug);
 
+/**
+ * An unknown slug is a **404 with a page on it**, not a bare text body (impl-review F6).
+ *
+ * This is the address the projector's QR encodes, so a card printed for one event and a slug
+ * renamed before the next turns every phone in the room onto this response. It has to say
+ * what happened and offer `/quiz`, which redirects to whatever is running — the same argument
+ * `/q/<code>` makes for a mistyped digit, and the reason both share `QuizNotice`.
+ *
+ * Rendered rather than returned, because a `Response` cannot carry a component. The status is
+ * set here; the template below picks the notice or the view.
+ */
 if (quiz === undefined) {
-  return new Response("Nie ma takiego quizu.", { status: 404 });
+  Astro.response.status = 404;
 }
 
 /**
@@ -82,6 +94,15 @@ const quizTitles = Object.fromEntries(
 );
 ---
 
+{
+  quiz === undefined ? (
+    <QuizNotice
+      title="LiveQuiz — nie ma takiego quizu"
+      heading="Nie ma takiego quizu."
+      body="Sprawdź adres na ekranie albo zeskanuj kod QR jeszcze raz."
+      link={{ href: "/quiz", label: "Albo przejdź do trwającego quizu" }}
+    />
+  ) : (
 <html lang="pl" class="bg-quiz-ink">
   <head>
     <meta charset="utf-8" />
@@ -768,7 +789,7 @@ const quizTitles = Object.fromEntries(
        * then the text. Same letters as the big screen, from the same mechanism — a CSS counter
        * on the list, because `renderQuestion` writes an option's text with `textContent` and
        * leaves no child to put a letter in. The letters follow the rendered order, which is
-       * what `publicQuiz` shuffles and what both screens show.
+       * what the public projection shuffles and what both screens show.
        *
        * **Selection travels by attribute, and by two different ones.** In `answerable` mode
        * the renderer builds a button and marks it `aria-pressed`; in `static` mode it marks
@@ -2545,3 +2566,5 @@ const quizTitles = Object.fromEntries(
     </script>
   </body>
 </html>
+  )
+}

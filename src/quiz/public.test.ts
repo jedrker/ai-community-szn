@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { quizzes } from "./index";
+import { fixtureQuiz } from "./test-support";
 import type { Quiz } from "./schema";
 import {
   FORBIDDEN_KEYS,
@@ -26,10 +27,14 @@ import {
  */
 const serialized = JSON.stringify(publicQuizzes);
 
-// One quiz for the per-question assertions below, paired with its own projection. Which
-// one is not what any of them is about.
-const quiz = quizzes[0]!;
-const publicQuiz = publicQuizzes[0]!;
+/**
+ * One quiz for the per-question assertions below, paired with its own projection. Which one
+ * is not what any of them is about — hence the named accessor rather than an index, and the
+ * projection looked up *by that quiz's id* rather than by the same index, so the pair cannot
+ * come apart if registry order ever changes.
+ */
+const quiz = fixtureQuiz();
+const publicQuiz = getPublicQuizById(quiz.id)!;
 
 describe("the public projection carries no answers", () => {
   it.each(FORBIDDEN_KEYS)("has no %s key anywhere", (key) => {
@@ -329,7 +334,7 @@ describe("the option shuffle, measured at scale", () => {
 
   /**
    * THE REASON THE SHUFFLE EXISTS: an attendee who always tapped the first option
-   * scored most of the segment. Nobody spots that by reading `definition.ts` —
+   * scored most of the segment. Nobody spots that by reading a definition file —
    * positional correlation is invisible in a list of four.
    *
    * Asserts the whole distribution, not just index 0. The first version checked only

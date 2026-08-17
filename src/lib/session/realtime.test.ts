@@ -15,15 +15,16 @@ vi.mock("ably", () => ({
 
 const { createTokenRequest, publishSnapshot, SESSION_CHANNEL, SNAPSHOT_EVENT } =
   await import("./realtime");
-const { quizzes } = await import("../../quiz/index");
-// One quiz to run a session against — which one is not what anything here asserts.
-const quiz = quizzes[0]!;
+const { fixtureQuiz, someQuestionId } = await import("../../quiz/test-support");
+// A quiz to run a session against; which one is not what anything here asserts. See
+// `fixtureQuiz` for why this is a named accessor rather than `quizzes[0]`.
+const quiz = fixtureQuiz();
 
 const state = {
   version: 3,
   phase: "question-open" as const,
   quizId: quiz.id,
-  currentQuestionId: quiz.questions[0]!.id,
+  currentQuestionId: someQuestionId(),
   startedAt: 1_785_000_000_000,
   updatedAt: 1_785_000_001_000,
   playerCount: 12,

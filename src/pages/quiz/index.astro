@@ -1,6 +1,5 @@
 ---
-import "../../styles/global.css";
-
+import QuizNotice from "../../components/QuizNotice.astro";
 import { readSession } from "../../lib/session/store";
 import { getQuizById } from "../../quiz/index";
 
@@ -46,37 +45,8 @@ if (running !== undefined) {
 }
 ---
 
-<html lang="pl" class="bg-quiz-ink">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex" />
-    <title>LiveQuiz — dołącz</title>
-  </head>
-  <body
-    class="flex min-h-dvh flex-col bg-quiz-ink px-7 pb-8 pt-6 font-archivo
-           text-quiz-signwhite antialiased"
-  >
-    <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-6">
-      <h1
-        class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc"
-      >
-        LiveQuiz
-      </h1>
-
-      <!--
-        The status line sits in the growing column so it lands in the thumb zone, the
-        same arrangement the attendee view's waiting screens use.
-      -->
-      <div class="flex flex-1 flex-col justify-center gap-4">
-        <p class="text-[32px] font-bold leading-tight">
-          Quiz jeszcze nie wystartował.
-        </p>
-        <p class="text-[24px] leading-relaxed text-quiz-zinc">
-          Poczekaj na prowadzącego i odśwież tę stronę — albo zeskanuj kod QR z
-          ekranu.
-        </p>
-      </div>
-    </main>
-  </body>
-</html>
+<QuizNotice
+  title="LiveQuiz — dołącz"
+  heading="Quiz jeszcze nie wystartował."
+  body="Poczekaj na prowadzącego i odśwież tę stronę — albo zeskanuj kod QR z ekranu."
+/>

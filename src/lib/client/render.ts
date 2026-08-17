@@ -1177,6 +1177,12 @@ export function wordEchoText(word: string | null): string {
  * sanctioned hand-off, since a `<script>` may not value-import from `src/quiz/`. It
  * carries quiz titles and slugs only: authored content already printed on the projector
  * and listed unauthenticated on `/quiz/host`, and it says nothing about who played.
+ *
+ * **`linkBase` is what lets one function serve both surfaces** (impl-review F2). The phone
+ * wants `/quiz/<slug>`; the host panel wants `/quiz/host/<slug>`. Passing the base rather
+ * than letting each caller build its own href keeps the address rule in one place — the
+ * alternative is two string templates that are free to drift, on the two screens that have
+ * to agree about which quiz is running.
  */
 export type QuizMismatch = {
   /** Polish, naming the quiz that IS running — a slug is not something to read aloud. */
@@ -1190,6 +1196,7 @@ export function quizMismatch(
   rendered: string,
   running: string | null,
   titles: Readonly<Record<string, string>>,
+  linkBase = "/quiz",
 ): QuizMismatch | null {
   if (running === null || running === rendered) return null;
 
@@ -1198,7 +1205,7 @@ export function quizMismatch(
 
   return {
     message: `Ten quiz nie jest teraz prowadzony. W tej sali trwa „${title}”.`,
-    href: `/quiz/${running}`,
+    href: `${linkBase}/${running}`,
     linkText: `Przejdź do „${title}”`,
   };
 }

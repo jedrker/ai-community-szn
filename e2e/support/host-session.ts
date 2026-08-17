@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 /**
  * Session helpers shared by every host-side spec.
@@ -36,8 +36,58 @@ export const QUIZ_SLUG = "summer-tour-szczecin";
 /** Where a host panel lives, assembled once from the slug above. */
 export const HOST_PANEL_PATH = `/quiz/host/${QUIZ_SLUG}`;
 
+/** Where the room lands — the address the projector's QR encodes. */
+export const ATTENDEE_PATH = `/quiz/${QUIZ_SLUG}`;
+
+/**
+ * That quiz's four-digit join code, mirrored for the same reason `QUIZ_SLUG` is: a spec may
+ * not value-import from `src/quiz/`. Drift shows up as `/q/<code>` rendering the "nie znamy
+ * tego kodu" page instead of redirecting, which the code-route spec asserts against.
+ */
+export const QUIZ_CODE = "1001";
+
+/** The short address, assembled once from the code above. */
+export const SHORT_JOIN_PATH = `/q/${QUIZ_CODE}`;
+
+/**
+ * A **second** committed quiz, for the specs about two quizzes at once (impl-review F2/F10).
+ *
+ * The wrong-quiz refusals — the panel that will not drive another quiz's session, and `start`'s
+ * 409 — are unreachable with one quiz in the registry, so they are the half of this change that
+ * had no browser coverage until a second quiz shipped. Mirrored like the constants above.
+ */
+export const OTHER_QUIZ_SLUG = "jesienny-meetup-ai";
+export const OTHER_QUIZ_TITLE = "Jesienny meetup: AI w praktyce";
+export const OTHER_HOST_PANEL_PATH = `/quiz/host/${OTHER_QUIZ_SLUG}`;
+
 /** `bun` loads `.env`; `npx` does not. See `playwright.config.ts`. */
 export const hostSecret = process.env.LIVEQUIZ_HOST_SECRET ?? "";
+
+/**
+ * Waits until the host panel's inline script has attached, before the first click.
+ *
+ * **Why a click can otherwise be dropped, deterministically** (impl-review F11). The flow
+ * verbs are rendered by the server with **no `disabled` attribute**, so
+ * `expect(start).toBeEnabled()` is satisfied by static HTML — before the inline script exists
+ * and before it has attached a single listener. Playwright then clicks a button that nothing is
+ * listening to, the click is lost, and the spec fails five seconds later on a state that never
+ * changed. It reads exactly like a broken app.
+ *
+ * That window is normally microseconds. It becomes seconds whenever Vite re-optimizes the dep
+ * graph — a fresh clone, a `bun install`, a deleted `node_modules/.vite`, an added import, or an
+ * interleaved `bun run build` — because the panel's module import 504s once and retries. So the
+ * first spec to run against a fresh dev server is the one that loses.
+ *
+ * The condition is the connection status: the server renders `połączenie: —` and only the
+ * script replaces it. Waiting on that is waiting for **state**, per `E2E-RULES.md` rule 6 —
+ * never a `waitForTimeout`, which would trade a real wait for a guessed one.
+ */
+export async function waitForHostPanelReady(page: Page): Promise<void> {
+  await expect(page.getByText("połączenie:", { exact: false })).not.toHaveText(
+    /połączenie:\s*—/,
+    { timeout: 15_000 },
+  );
+}
 
 export type SessionSnapshot = {
   state: { phase: string; version: number } | null;

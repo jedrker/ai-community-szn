@@ -786,7 +786,7 @@ mid-session deploy cannot make an old document claim a current quiz — it fails
 - [x] 4.2 Type checking passes: `bun run type-check` — e310c1d
 - [x] 4.3 Linting passes: `bun run lint` — e310c1d
 - [x] 4.4 Build succeeds: `bun run build` — e310c1d
-- [x] 4.5 A known code redirects; an unknown code renders the fallback page — e310c1d
+- [x] 4.5 A known code redirects; an unknown code renders the fallback page (status 404, per §1's "not a *bare* 404" — wording settled at impl review) — e310c1d
 
 #### Manual
 

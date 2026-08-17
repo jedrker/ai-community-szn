@@ -92,11 +92,16 @@ const { POST: purge } = await import("./purge");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
 const { initialSessionState, PRE_IDENTITY_QUIZ_ID } =
   await import("../../../../lib/session/state");
-const { quizzes } = await import("../../../../quiz/index");
-// One quiz to run a session against — which one is not what anything here asserts.
-const quiz = quizzes[0]!;
-const { questionOfKind, questionsOfKind } =
-  await import("../../../../quiz/test-support");
+const {
+  anotherQuestionId,
+  fixtureQuiz,
+  questionOfKind,
+  questionsOfKind,
+  someQuestionId,
+} = await import("../../../../quiz/test-support");
+// A quiz to run a session against; which one is not what anything here asserts. See
+// `fixtureQuiz` for why this is a named accessor rather than `quizzes[0]`.
+const quiz = fixtureQuiz();
 
 const NOW = 1_785_000_000_000;
 
@@ -105,7 +110,7 @@ const NOW = 1_785_000_000_000;
  *
  * `reveal` reads the open question out of the definition through `getQuestionById`, so
  * these have to be real — but naming them made a file about transition-building fail
- * whenever the quiz was edited, which is the one thing `definition.ts` is meant to allow.
+ * whenever the quiz was edited, which is the one thing the quiz definitions is meant to allow.
  * Which question of each kind is irrelevant to every assertion below; that it is of that
  * kind is the whole point.
  */
@@ -138,7 +143,7 @@ const revealed = {
   version: 4,
   phase: "question-revealed" as const,
   quizId: quiz.id,
-  currentQuestionId: quiz.questions[0]!.id,
+  currentQuestionId: someQuestionId(),
   startedAt: NOW,
   updatedAt: NOW + 900,
 };
@@ -152,7 +157,7 @@ const standings = {
   version: 5,
   phase: "standings" as const,
   quizId: quiz.id,
-  currentQuestionId: quiz.questions[0]!.id,
+  currentQuestionId: someQuestionId(),
   startedAt: NOW,
   updatedAt: NOW + 1_200,
   standings: {
@@ -448,8 +453,36 @@ describe("advance", () => {
     expect(next).toMatchObject({
       version: 2,
       phase: "question-open",
-      currentQuestionId: quiz.questions[0]!.id,
+      currentQuestionId: someQuestionId(),
     });
+  });
+
+  /**
+   * The route half of impl-review F1. `nextQuestionId` reporting the resolved quiz buys
+   * nothing unless the transition actually *writes* it, and the transition's other
+   * fifteen fields would look identical either way — so this asserts the healed value,
+   * not merely that a state came back.
+   */
+  it("heals a pre-identity session's quizId instead of carrying the sentinel forward", async () => {
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: revealed, applied: true },
+    });
+
+    await call(advance);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    const next = transition(
+      { ...revealed, phase: "question-open", quizId: PRE_IDENTITY_QUIZ_ID },
+      NOW,
+    );
+
+    expect(next).toMatchObject({
+      phase: "question-open",
+      quizId: quiz.id,
+      currentQuestionId: anotherQuestionId(),
+    });
+    expect(next.quizId).not.toBe(PRE_IDENTITY_QUIZ_ID);
   });
 
   it("returns null past the last question so the route is a no-op, not an error", async () => {
@@ -587,12 +620,13 @@ describe("reveal", () => {
     await call(reveal);
 
     const [transition] = applyHostActionMock.mock.calls[0]!;
-    // A choice question specifically — `quiz.questions[0]` is the word-cloud opener, and
-    // building this fixture from it would have exercised the skip path while looking
-    // like it exercised the read.
-    const choice = quiz.questions.find(
-      (question) => question.kind === "single-choice",
-    )!;
+    // A choice question specifically: a fixture taken by position could land on the
+    // unscored opener and exercise the *skip* path while reading as though it exercised
+    // the tally read. `singleQuestion` is already resolved by kind at the top of this
+    // file — this used to re-find it with a `.find()` and a comment naming what the
+    // opener happens to be, which is the transcript `definition.test.ts` was rewritten
+    // to stop carrying (impl-review F3).
+    const choice = singleQuestion;
     const open = {
       ...revealed,
       phase: "question-open" as const,
@@ -692,7 +726,7 @@ describe("reveal", () => {
 const open = {
   version: 3,
   phase: "question-open" as const,
-  currentQuestionId: quiz.questions[0]!.id,
+  currentQuestionId: someQuestionId(),
   startedAt: NOW,
   updatedAt: NOW + 700,
 };

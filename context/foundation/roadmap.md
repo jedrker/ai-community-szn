@@ -115,7 +115,7 @@ and do NOT re-scaffold them.
   each, as typed literals validated by a Zod schema (`src/quiz/schema.ts`), with domain invariants
   enforced as refinements. **S-02 onward read them through `src/quiz/index.ts`** (`quizzes`,
   `getQuizById`, `getQuestionById`, and the exported types) and must not import a definition file
-  directly or re-parse. It was one file, `definition.ts`, until the multiple-quizzes change turned it
+  directly or re-parse. It was one file, the quiz definitions, until the multiple-quizzes change turned it
   into a registry; the gate now also checks the cross-quiz rules. Deliberately not a
   content collection — `astro:content` does not resolve in vitest or in a serverless function; see
   CLAUDE.md. `points: null` marks an unscored question (FR-017); scoring rules themselves are S-03's
@@ -527,7 +527,7 @@ and do NOT re-scaffold them.
 
   **One limit stated rather than left to be found:** the redis client is mocked in the suite, so the
   Lua cap never executes in any test. Its two orderings are pinned as structural properties of the
-  script text — `host.test.ts`'s position — and the behaviour rests on the runbook's live two-device
+  script text — `host/[slug].test.ts`'s position — and the behaviour rests on the runbook's live two-device
   check. Following the boundary S-07 and S-08 drew, no room-scale rehearsal was re-run: both halves
   are per-device properties rather than concurrency ones.
 
@@ -831,7 +831,9 @@ when a change whose `Change ID` matches a roadmap item is archived.)
   because the config's static import parses at module scope, and CLAUDE.md, the commit message and a
   docstring all described the hook. It surfaced only by breaking an invariant and reading the real
   failure output, not by re-reading the reasoning. S-02 onward: `src/quiz/index.ts` is the import site
-  (`quiz`, `getQuestionById`, `normalizePolish`, the types) — never `definition.ts`.
+  (`quizzes`, `getQuizById`, `getQuestionById`, `normalizePolish`, the types) — never a file under
+  `definitions/`. It read `quiz` and the quiz definitions until the multiple-quizzes change replaced the
+  singleton with a registry.
 
 - **S-03: Attendee can answer a single- or multiple-choice question on their phone and, when the host
   reveals it, see whether they were right and how many points they earned — including the speed

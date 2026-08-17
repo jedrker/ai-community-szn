@@ -595,6 +595,32 @@ export async function createSession(
 
   const initial = initialSessionState(now, quizId);
 
+  /**
+   * Validated **before** the write, matching `writeSession` and `endSession` (impl-review
+   * F4). Create was the one path that parsed only the value the script handed back, and it
+   * is also the one whose input originates in a request body — `start.ts` reads `quizId`
+   * from the form.
+   *
+   * Reversed, the failure is not a rejected write but a **bricked session**: the poisoned
+   * lobby document lands under `SESSION_KEY` on the four-hour lifetime and is only *then*
+   * reported invalid, after which every host verb 409s, `GET /api/quiz/state` 409s, and
+   * `start` cannot recover because create-if-absent keeps returning the broken document.
+   * `bun run quiz:reset` is the only way out.
+   *
+   * `start.ts` refuses an absent or unknown slug, so this is unreachable through the route
+   * today — which is exactly the argument for having it here as well rather than instead:
+   * the next caller (a script, a "reset and restart" verb) inherits the guard rather than
+   * having to remember it, and gets a 503 it can report instead of a session nobody can
+   * finish.
+   */
+  const validated = parseSessionState(initial);
+  if (!validated.ok) {
+    logSessionEvent("session.read.invalid", {
+      reason: validated.problems.join("; "),
+    });
+    return { outcome: "invalid", problems: validated.problems };
+  }
+
   let result: [number, unknown] | null;
   try {
     result = await redis.eval<[string, string], [number, unknown]>(

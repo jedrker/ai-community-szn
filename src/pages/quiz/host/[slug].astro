@@ -6,7 +6,7 @@ import QRCode from "qrcode";
 import { HOST_SECRET_HEADER } from "../../../lib/session/host";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../../lib/session/realtime";
 import { getQuizById } from "../../../quiz/index";
-import { getPublicQuizById } from "../../../quiz/public";
+import { getPublicQuizById, publicQuizzes } from "../../../quiz/public";
 
 /**
  * The host view (roadmap S-02).
@@ -91,9 +91,52 @@ const quiz = slug === undefined ? undefined : getPublicQuizById(slug);
  */
 const joinCode = slug === undefined ? undefined : getQuizById(slug)?.code;
 
+/**
+ * An unknown slug is a 404 **with something on it** (impl-review F6). A host mistypes a panel
+ * address off a phone or a chat message minutes before a session, and a bare text body tells
+ * them nothing about where the list of quizzes is.
+ *
+ * **Deliberately not the shared `QuizNotice` component**, which is what `/q/<code>`, `/quiz`
+ * and the attendee route use. Rendering a component means the template below has to become
+ * conditional, and this page's frontmatter derives `attendeeUrl`, `questionTotal` and the QR
+ * from a *definite* quiz — so without the early return every one of them needs a placeholder
+ * that is never rendered, which is a nonsense value living in the file permanently. The
+ * alternative, extracting the panel into a component, would move the inline script out of the
+ * file `host/[slug].test.ts` scans by path and silently disarm ninety assertions. Six lines of
+ * duplicated shell is the cheaper of the three.
+ *
+ * If this copy and `QuizNotice`'s drift, the component is the canonical one.
+ */
 if (quiz === undefined || joinCode === undefined) {
-  return new Response("Nie ma takiego quizu.", { status: 404 });
+  return new Response(
+    `<!doctype html><html lang="pl"><head><meta charset="utf-8">` +
+      `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+      `<meta name="robots" content="noindex"><title>LiveQuiz — nie ma takiego quizu</title>` +
+      `</head><body style="margin:0;padding:2rem;background:#12121c;color:#e8e8f0;` +
+      `font-family:system-ui,sans-serif">` +
+      `<p style="font-size:1.75rem;font-weight:700">Nie ma takiego quizu.</p>` +
+      `<p style="font-size:1.25rem;color:#9ca3af">Sprawdź adres panelu.</p>` +
+      `<p><a href="/quiz/host" style="font-size:1.25rem;color:#e8e8f0">Wybierz quiz</a></p>` +
+      `</body></html>`,
+    { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
 }
+
+/**
+ * Every quiz's title, keyed by slug (impl-review F2).
+ *
+ * The panel compares the snapshot's `quizId` with the quiz it rendered, and a mismatch has
+ * to be sayable: a host looking at the wrong panel needs the *name* of the session that is
+ * running, not its slug. Only the server knows that mapping, so it travels through
+ * `define:vars` — the sanctioned hand-off, since a `<script>` may not value-import from
+ * `src/quiz/`.
+ *
+ * Titles and slugs only, exactly as on the attendee page: authored content already listed
+ * unauthenticated on `/quiz/host`, saying nothing about who played. `code` stays out.
+ */
+const quizTitles = Object.fromEntries(
+  publicQuizzes.map((entry) => [entry.id, entry.title]),
+);
 
 /**
  * Where the room goes. Built from the request so preview and production agree, and
@@ -574,6 +617,24 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       >
         <div class="flex min-h-0 flex-col gap-[24px]">
           <section id="question" class="flex flex-col gap-[24px]"></section>
+
+          <!-- The way out of the wrong panel (impl-review F2).
+
+               A link, never a redirect: the host is mid-session on *some* quiz and a panel
+               that navigated itself would move a screen somebody is reading. Static markup
+               beside the stage rather than something `renderQuestion` emits, for the reason
+               the answer fields on the attendee page are: `render()` runs on every applied
+               snapshot and `replaceChildren()` would destroy anything living inside
+               `#question`.
+
+               Hidden by `render()` on every other path, so it cannot outlive the one branch
+               that shows it; `href` and text are written there, never here. -->
+          <a
+            id="quiz-mismatch-link"
+            hidden
+            href="/quiz/host"
+            class="self-start rounded-[16px] border-2 border-quiz-chrome px-8 py-5
+                   text-[40px] font-semibold text-quiz-signwhite"></a>
 
           <!--
             The multiple-choice sentence used to be a `<p>` here, and is now emitted by
@@ -1072,10 +1133,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         snapshotEvent: SNAPSHOT_EVENT,
         secretHeader: HOST_SECRET_HEADER,
         quizId: quiz.id,
+        quizTitles,
         questions: quiz.questions,
       }}
     >
-      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, questions };
+      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, quizTitles, questions };
     </script>
 
     <script>
@@ -1097,6 +1159,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       } from "../../../lib/client/controls";
       import {
         el,
+        quizMismatch,
         renderCountdown,
         renderDistribution,
         renderEntrance,
@@ -1122,6 +1185,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * `boundary.test.ts` fails the suite if one does.
          */
         quizId: string;
+        /** Slug to title, for naming the session that IS running. See the frontmatter. */
+        quizTitles: Record<string, string>;
         questions: PublicQuestion[];
       };
 
@@ -1145,6 +1210,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const secretField = el("secret") as HTMLInputElement;
       const hostMenu = el("host-menu") as HTMLDialogElement;
       const questionBox = el("question");
+      const mismatchLink = el("quiz-mismatch-link") as HTMLAnchorElement;
       const refresh = el("refresh") as HTMLButtonElement;
       const participationBox = el("participation");
       const countBox = el("participation-count-box");
@@ -1469,7 +1535,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * element with `textContent` — there is no child to put a letter in. Rather than
        * change the renderer for a presentational detail, the slab is a `::before` fed by a
        * counter on the list. The letters therefore follow the *rendered* order, which is what
-       * the room reads and what `publicQuiz` deliberately shuffles; nothing derives them from
+       * the room reads and what the public projection deliberately shuffles; nothing derives them from
        * the definition's order, so the two cannot disagree.
        *
        * The distribution rows use the same counter over the same options in the same order,
@@ -1617,7 +1683,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * `question-revealed` is about the beat rather than the kind.
        *
        * A table rather than a chain of `kind === …` tests, deliberately: `pollTargetFor` is
-       * this file's single *predicate* over kinds and `host.test.ts` fails a second one. A
+       * this file's single *predicate* over kinds and `host/[slug].test.ts` fails a second one. A
        * lookup decides nothing — it only spells five nouns — so it cannot drift from the rule
        * that decides which panel is on screen.
        *
@@ -1900,6 +1966,42 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       const CLOUD_ALREADY_CLOSED = "Pytanie jest już zamknięte — przejdź do następnego pytania.";
 
       /**
+       * What every flow verb says while this panel is not the running quiz's (impl-review F2).
+       *
+       * One string, because the whole bar carries the same reason: none of these verbs is
+       * refused by its *phase* — the routes would happily apply them — they are withheld
+       * because they would apply to a **different quiz's live session** than the one on this
+       * screen.
+       */
+      const WRONG_QUIZ_REASON =
+        "Ta sesja prowadzi inny quiz — otwórz jego panel, aby nim sterować.";
+
+      /** The stage's copy in the same state. The link beneath it carries the destination. */
+      const WRONG_QUIZ_PROMPT = "Ta sesja prowadzi inny quiz.";
+
+      /**
+       * Whether this panel is looking at a session running some other quiz.
+       *
+       * **One reader, for the reason the phase table has one:** `syncControls`,
+       * `syncEndButton` and `render` all need the answer, and three copies of a comparison is
+       * three chances for the bar to disagree with the stage. Reuses the attendee view's
+       * tested `quizMismatch` rather than re-deriving it, passing `/quiz/host` so the link
+       * points at a *panel* — see that function on why the base is a parameter.
+       *
+       * Returns `null` for no session, for this panel's own quiz, and for a running quiz with
+       * no known title (a document that predates quiz identity) — all three fall through to
+       * the ordinary rendering path, which is what those states had before.
+       */
+      function wrongQuiz(state: ReturnType<typeof client.current>) {
+        return quizMismatch(
+          config.quizId,
+          state?.quizId ?? null,
+          config.quizTitles,
+          "/quiz/host"
+        );
+      }
+
+      /**
        * REVEALING WHILE THE CLOCK IS STILL RUNNING TAKES TWO TAPS.
        *
        * The reveal is the flow verb with something to lose: `answer.ts` accepts only in
@@ -1984,6 +2086,23 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           phase,
           atLastQuestion(config.questions, state?.currentQuestionId ?? null)
         );
+        /**
+         * **A precondition on the whole bar, deliberately NOT a row in the phase table**
+         * (impl-review F2).
+         *
+         * `verbsFor`'s two dimensions are the phase and the position, and a mismatch is
+         * neither — the session's phase is perfectly real, it just belongs to another quiz.
+         * Adding a pseudo-phase for it would put a state into `CONTROL_RULES` that no route
+         * legality row could be written against, which is the premise `controls.test.ts`
+         * runs on. So the table still decides what this phase allows, and this decides
+         * whether this panel is entitled to act on it at all.
+         *
+         * Every verb, including `start`: `start` would answer its own 409, which is a
+         * refusal the panel is supposed to pre-empt rather than provoke ("disabled elsewhere
+         * rather than relying on the route's 409").
+         */
+        const wrong = wrongQuiz(state) !== null;
+
         // The current question has no answer to reveal — only submissions to close.
         const revealCloses = pollTargetFor(config.questions, state)?.kind === "words";
 
@@ -2000,9 +2119,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           // and a typo there is a button no row of the table answers — which `verbsFor`
           // already handles by leaving it dark with no reason, exactly as it should.
           const action = (button.dataset.action ?? "") as FlowAction;
-          const allowed = rule.allow.includes(action);
-          const reason =
-            revealCloses && action === "reveal" && phase === "question-revealed"
+          const allowed = !wrong && rule.allow.includes(action);
+          const reason = wrong
+            ? WRONG_QUIZ_REASON
+            : revealCloses && action === "reveal" && phase === "question-revealed"
               ? CLOUD_ALREADY_CLOSED
               : rule.why[action];
           /**
@@ -2109,13 +2229,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const phase = state === null ? NO_SESSION : state.phase;
         const last = atLastQuestion(config.questions, state?.currentQuestionId ?? null);
         const rule = verbsFor(phase, last);
+        // The same precondition the bar applies, and it has to be read here too: this is the
+        // one control with no undo, and it would otherwise stay live on a panel entitled to
+        // act on nothing. See `syncControls`.
+        const wrong = wrongQuiz(state) !== null;
 
         if (endArmed && state?.version !== endArmedVersion) {
           endArmed = false;
           endArmedVersion = null;
         }
 
-        endButton.disabled = !rule.allow.includes("end");
+        endButton.disabled = wrong || !rule.allow.includes("end");
         // Disarmed by the disable too: a button that went out of reach must not come back
         // still holding a tap the host made before the room moved.
         if (endButton.disabled && endArmed) {
@@ -2165,7 +2289,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * be written to. `last` is still what places the button, so the ring can only ever be
          * lit on the bar.
          */
-        endButton.dataset.next = String(rule.next === "end");
+        endButton.dataset.next = String(!wrong && rule.next === "end");
 
         // "…i pokaż wyniki" because that is what the tap does (S-10): the closing document
         // carries the final board, so this verb is the winner reveal, not just a shutdown.
@@ -2313,10 +2437,67 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           // holding no arm from a session that is gone — while the flow verbs must fall
           // back to offering `start` alone, which is the only one a sessionless view can
           // honour.
+          setHidden(mismatchLink, true);
           syncControls();
           syncEndButton();
           return;
         }
+
+        /**
+         * This panel is not the running quiz's (impl-review F2).
+         *
+         * **Before every branch that reads the session's own shape**, because none of them
+         * is about this quiz: the counter would be blank, `questionFor` would resolve nothing
+         * and the stage would paint "Za chwilę pojawi się kolejne pytanie." — promising a
+         * room a question that is never coming, on the one screen 150 people are looking at.
+         *
+         * Keyed on the id comparison, never on a phase list: a mismatch is true in every
+         * phase of the other quiz.
+         */
+        const mismatch = wrongQuiz(state);
+
+        if (mismatch !== null) {
+          setText("phase", "inny quiz");
+          setHidden(questionCounter, true);
+          setText("player-count", "—");
+          lobbyCount.reset();
+          setText("version", state.version);
+          applyShell(NO_SESSION);
+          liveCount = null;
+          setHidden(participationBox, true);
+          setHidden(distributionPanel, true);
+          setHidden(acceptedAnswerBox, true);
+          setHidden(standingsBox, true);
+          setHidden(wordCloudBox, true);
+          setHidden(wordCloudPanel, true);
+          // Nothing on this panel is polling for a question that belongs to another quiz —
+          // `pollTargetFor` already answers `null` for a foreign id, but stopping explicitly
+          // is what makes that a decision rather than a coincidence.
+          stopPolling();
+          resetPanels(null);
+          cloudFinalReadFor = null;
+
+          renderQuestion(questionBox, undefined, {
+            prompt: promptClass(undefined),
+            // The one thing the room must not read here is the default placeholder.
+            missingText: WRONG_QUIZ_PROMPT,
+          });
+          syncRail();
+
+          mismatchLink.href = mismatch.href;
+          // `textContent`, never `innerHTML` — `render.ts`'s escaping rule, and a quiz title
+          // is authored content that still travels through a DOM write.
+          mismatchLink.textContent = mismatch.linkText;
+          setHidden(mismatchLink, false);
+
+          // The bar and the closing button read the same comparison, so both go dark here;
+          // called before the early return for the reason the sessionless branch calls them.
+          syncControls();
+          syncEndButton();
+          return;
+        }
+
+        setHidden(mismatchLink, true);
 
         setText("player-count", liveCount ?? state.playerCount);
         const joined = liveCount ?? state.playerCount;
@@ -2676,7 +2857,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        *
        * It is **not** a second poll loop and cannot become one: it fetches nothing, so it
        * spends no commands and cannot appear in the runbook's tripwire. Same standing as the
-       * countdown, and `host.test.ts` classifies timers by what their callback can reach.
+       * countdown, and `host/[slug].test.ts` classifies timers by what their callback can reach.
        */
       const messageHide = createAutoHide({
         defaultMs: MESSAGE_HIDE_MS.ok,
@@ -2819,7 +3000,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         /**
          * **The lobby ticks on a floor, not on its own interval.**
          *
-         * `pollDelay` stays the loop's single delay — `host.test.ts` pins that, and for the
+         * `pollDelay` stays the loop's single delay — `host/[slug].test.ts` pins that, and for the
          * reason it states: a second delay variable is a second backoff, which is most of what
          * a second loop is. So the target raises the floor instead of replacing the schedule,
          * and `Math.max` keeps the backoff on top of it: a lobby whose ticks are failing still
@@ -2842,7 +3023,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       /**
        * THE COUNTDOWN, AND WHY IT IS NOT A SECOND POLL LOOP (roadmap S-11, FR-020).
        *
-       * `host.test.ts` guards this page against a second *polling* loop, for a specific
+       * `host/[slug].test.ts` guards this page against a second *polling* loop, for a specific
        * reason: two loops mean two backoffs, two in-flight flags, and two chances to leave
        * a timer fetching for a panel that is off screen. **This clock fetches nothing.** No
        * endpoint, no backoff, no failure mode beyond a stale number — so it costs no

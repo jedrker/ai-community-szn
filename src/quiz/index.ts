@@ -73,7 +73,26 @@ function parseAll(): Quiz[] {
 }
 
 /**
- * The four things that are invisible to a per-quiz schema and dangerous at runtime.
+ * Slugs a quiz may not take, because a **static route already owns that address**
+ * (impl-review F7).
+ *
+ * Keeping `host` a static path segment means no slug can collide with the *panel* — that
+ * much `src/pages/quiz/CLAUDE.md` says correctly. What it missed is the other direction: a
+ * quiz with `id: "host"` still parses, still appears in the picker, and still gets a join
+ * code, but its **attendee** view is unreachable, because `src/pages/quiz/host/index.astro`
+ * wins route priority over `[slug].astro`. `spine-check` is worse — that route 404s in
+ * production, so the quiz would work in preview and vanish at the event.
+ *
+ * A literal set rather than a directory read, because this module has to import inside a
+ * serverless function and a bare `vitest run`, where `node:fs` is either absent or the wrong
+ * answer (the same constraint that keeps `astro:content` out — see CLAUDE.md).
+ * `definition.test.ts` reads the routes and asserts this set still matches them, so the two
+ * cannot drift.
+ */
+export const RESERVED_QUIZ_SLUGS: readonly string[] = ["host", "spine-check"];
+
+/**
+ * The six things that are invisible to a per-quiz schema and dangerous at runtime.
  *
  * **Cross-quiz question-id uniqueness is the load-bearing one.** It is what lets
  * `getQuestionById` stay quiz-agnostic — and therefore what keeps the polled routes
@@ -84,6 +103,11 @@ function parseAll(): Quiz[] {
  *
  * Every message names both quizzes and the colliding value, in the same register as
  * `checkQuestion`'s: the reader is an organizer minutes before showtime.
+ *
+ * Two arrived at impl review (F7) and are the ones a per-quiz schema is furthest from
+ * seeing: a **duplicate title**, which is ambiguous on the two surfaces the title exists
+ * for (the picker and the wrong-quiz message), and a slug that a **static route already
+ * owns**, which leaves a committed quiz with no reachable attendee view at all.
  *
  * **Exported so the gate can be shown to fire.** A build gate whose only input is the
  * committed registry can only ever be observed passing, and a rule that has never been
@@ -104,6 +128,26 @@ export function registryProblems(parsed: readonly Quiz[]): string[] {
   for (const id of findDuplicates(parsed.map((quiz) => quiz.id))) {
     problems.push(
       `Dwa quizy mają to samo id "${id}" — id trafia do adresu /quiz/<id>, więc musi być unikalne.`,
+    );
+  }
+
+  for (const title of findDuplicates(parsed.map((quiz) => quiz.title))) {
+    const sharing = parsed
+      .filter((quiz) => quiz.title === title)
+      .map((quiz) => `"${quiz.id}"`)
+      .join(" i ");
+    problems.push(
+      `Dwa quizy mają ten sam tytuł "${title}" (${sharing}) — tytuł jest tym, co host wybiera ` +
+        "z listy i co widzi uczestnik na złym quizie, więc musi je rozróżniać.",
+    );
+  }
+
+  for (const reserved of parsed.filter((quiz) =>
+    RESERVED_QUIZ_SLUGS.includes(quiz.id),
+  )) {
+    problems.push(
+      `Quiz "${reserved.id}" używa id zarezerwowanego przez inną stronę — /quiz/${reserved.id} ` +
+        "prowadzi do niej, a nie do widoku uczestnika, więc ten quiz byłby nieosiągalny dla sali.",
     );
   }
 

@@ -23,9 +23,10 @@ vi.mock("../../../../lib/session/store", () => ({
 
 const { GET: words } = await import("./words");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
-const { quizzes } = await import("../../../../quiz/index");
-// One quiz to run a session against — which one is not what anything here asserts.
-const quiz = quizzes[0]!;
+const { fixtureQuiz } = await import("../../../../quiz/test-support");
+// A quiz to run a session against; which one is not what anything here asserts. See
+// `fixtureQuiz` for why this is a named accessor rather than `quizzes[0]`.
+const quiz = fixtureQuiz();
 
 const SECRET = "a-very-long-test-secret-value";
 

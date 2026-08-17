@@ -17,9 +17,10 @@ vi.mock("./realtime", () => ({
 
 const { applyHostAction, authorizeHost, extractSecret, HOST_SECRET_HEADER } =
   await import("./host");
-const { quizzes } = await import("../../quiz/index");
-// One quiz to run a session against — which one is not what anything here asserts.
-const quiz = quizzes[0]!;
+const { fixtureQuiz, someQuestionId } = await import("../../quiz/test-support");
+// A quiz to run a session against; which one is not what anything here asserts. See
+// `fixtureQuiz` for why this is a named accessor rather than `quizzes[0]`.
+const quiz = fixtureQuiz();
 type SessionState = import("./state").SessionState;
 
 const NOW = 1_785_000_000_000;
@@ -47,7 +48,7 @@ function opened(version: number, playerCount = COUNT) {
     version,
     phase: "question-open" as const,
     quizId: quiz.id,
-    currentQuestionId: quiz.questions[0]!.id,
+    currentQuestionId: someQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 100,
     playerCount,

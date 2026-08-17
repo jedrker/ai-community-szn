@@ -6,6 +6,7 @@ import {
   hostSecret,
   purgeSession,
   readSessionState,
+  waitForHostPanelReady,
 } from "./support/host-session";
 
 /**
@@ -13,7 +14,7 @@ import {
  *        verb the current phase refuses, or withholds the one it accepts — the host
  *        presses a dead button in front of a live room."
  * Half:  the **rendered** half, in the phase the seed stops short of. §7 records it as
- *        covered by nothing: `host.test.ts` scans the page's source text, so it certifies
+ *        covered by nothing: `host/[slug].test.ts` scans the page's source text, so it certifies
  *        that `CONTROL_RULES["question-open"]` is *written* with `allow: ["advance",
  *        "reveal"]`, never that the browser ends up with those two live and the other two
  *        dark. The Response Guidance for this risk asks for a one-way implication — no
@@ -81,6 +82,9 @@ test("host panel offers 'dalej' and the closing verb while the first question is
   // Setup — authenticate out of band, never through `#host-menu`.
   await authenticateHostWithoutUI(page, hostSecret);
   await page.goto(HOST_PANEL_PATH);
+  // The verbs are enabled in the server-rendered markup, so a click before the inline
+  // script attaches is silently lost. See `waitForHostPanelReady`.
+  await waitForHostPanelReady(page);
 
   const start = page.getByRole("button", { name: "start", exact: true });
   const advance = page.getByRole("button", { name: "dalej", exact: true });

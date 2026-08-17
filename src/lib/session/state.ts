@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { getQuestionById, getQuizById } from "../../quiz/index";
+import {
+  getQuestionById,
+  getQuizById,
+  getQuizByQuestionId,
+} from "../../quiz/index";
 import { standingsSchema, type Standings } from "./standings";
 
 /**
@@ -98,10 +102,29 @@ const BOARD_PHASES: readonly SessionPhase[] = ["standings", "ended"];
  * merely unlikely.
  *
  * The `superRefine` clause below exempts it from the must-resolve rule and only from
- * that: a session running across the deploy still parses, so the host can advance,
- * reveal and close normally. What it cannot do is *start* a quiz — `start.ts` refuses,
- * and `bun run quiz:reset` is the documented way out (runbook step 4). That is failure
- * toward the conservative end, which is the posture `lessons.md` asks for.
+ * that, so a session running across the deploy still parses. What it cannot do is
+ * *start* a quiz — `start.ts` refuses, and `bun run quiz:reset` is the documented way
+ * out (runbook step 4). That is failure toward the conservative end, which is the
+ * posture `lessons.md` asks for.
+ *
+ * The clause below has a second consequence the runbook's **step 1** now carries: renaming
+ * or removing a quiz's `id` while a session exists makes every later read `invalid`, so a
+ * mid-segment deploy that changes a slug costs the scores. Editing a question inside a quiz
+ * is safe; changing the quiz's identity underneath a live session is not.
+ *
+ * **Parsing was not enough, and this docblock used to claim it was.** It said the host
+ * "can advance, reveal and close normally", which was false for `advance`: the sentinel
+ * resolves to no quiz, so `nextQuestionId` could not say where to go and the verb became
+ * a permanent no-op mid-segment — a silent stall whose only exit destroys the scores the
+ * default exists to protect. `nextQuestionId` now **resolves a sentinel session's quiz
+ * from its open question** and reports it back so `advance` can heal the field. See
+ * there; the correction is recorded here rather than deleted, because a reader checking
+ * the back-compat story should meet the reversal where the old claim was.
+ *
+ * A sentinel session still in the **lobby** is deliberately not rescued: it has no open
+ * question to resolve from, and guessing a quiz is the mis-scoring this whole sentinel
+ * exists to prevent. Nothing is at stake there — no answers, no scores — so
+ * `quiz:reset` costs a lobby and not a segment.
  */
 export const PRE_IDENTITY_QUIZ_ID = "__pre_identity__";
 
@@ -126,6 +149,12 @@ export const sessionStateSchema = z
      * copied unchanged by every constructor thereafter. Nothing may overwrite it and
      * nothing may null it; a session that changed quiz mid-flight would re-scope every
      * question id the room has already answered.
+     *
+     * **One narrow exception, and it is a repair rather than a change:** `advance` writes
+     * the id `nextQuestionId` resolved when the stored value is `PRE_IDENTITY_QUIZ_ID`.
+     * That moves a document from "no identity" to the identity its open question already
+     * implied — it never moves one real quiz id to another, which is the thing the rule
+     * forbids.
      *
      * **Defaulted rather than required, for the reason `playerCount`'s note states** — a
      * document written before this shipped must still parse, or the host's next action
@@ -542,11 +571,17 @@ export function initialSessionState(now: number, quizId: string): SessionState {
  * the host taps again, and nothing anywhere says the document and the registry disagree.
  *
  * The `quizId` clause in `sessionStateSchema` above is what makes `unresolved`
- * unreachable through a parsed document. This function does not absorb it as well:
- * a guard and the state it guards against should not both be invisible.
+ * unreachable through a parsed document *except* via the sentinel, which the clause
+ * exempts. This function does not absorb it as well: a guard and the state it guards
+ * against should not both be invisible.
+ *
+ * **`next` carries the quiz it resolved**, so `advance` writes that rather than assuming
+ * the stored value. In every ordinary case it is byte-identical to `state.quizId`; the
+ * one case where it differs is the sentinel below, and reporting it is what lets the
+ * caller heal the document instead of carrying "no identity" forward forever.
  */
 export type NextQuestion =
-  | { outcome: "next"; questionId: string }
+  | { outcome: "next"; questionId: string; quizId: string }
   | { outcome: "end-of-quiz" }
   | { outcome: "unresolved"; reason: string };
 
@@ -554,11 +589,32 @@ export function nextQuestionId(
   quizId: string,
   currentQuestionId: string | null,
 ): NextQuestion {
-  const quiz = getQuizById(quizId);
+  /**
+   * A session written before quizzes had identity: resolve its quiz from the question it
+   * already has open (multiple-quizzes).
+   *
+   * Unambiguous for the same reason `getQuestionById` may be quiz-agnostic — the build
+   * gate makes question ids globally unique — so this reads an identity the document
+   * already implies rather than choosing one for it.
+   *
+   * From the **lobby** there is no question to read, and the fallback would have to be a
+   * guess. It stays `unresolved`: a lobby holds no answers and no scores, so the reset is
+   * cheap there, and guessing is the failure the sentinel exists to prevent.
+   */
+  const quiz =
+    quizId === PRE_IDENTITY_QUIZ_ID
+      ? currentQuestionId === null
+        ? undefined
+        : getQuizByQuestionId(currentQuestionId)
+      : getQuizById(quizId);
+
   if (quiz === undefined) {
     return {
       outcome: "unresolved",
-      reason: `quiz "${quizId}" is not in the registry`,
+      reason:
+        quizId === PRE_IDENTITY_QUIZ_ID
+          ? `session predates quiz identity and has no open question to resolve a quiz from`
+          : `quiz "${quizId}" is not in the registry`,
     };
   }
 
@@ -569,7 +625,7 @@ export function nextQuestionId(
     const first = quiz.questions[0];
     return first === undefined
       ? { outcome: "end-of-quiz" }
-      : { outcome: "next", questionId: first.id };
+      : { outcome: "next", questionId: first.id, quizId: quiz.id };
   }
 
   const index = quiz.questions.findIndex(
@@ -585,7 +641,7 @@ export function nextQuestionId(
   const next = quiz.questions[index + 1];
   return next === undefined
     ? { outcome: "end-of-quiz" }
-    : { outcome: "next", questionId: next.id };
+    : { outcome: "next", questionId: next.id, quizId: quiz.id };
 }
 
 /**

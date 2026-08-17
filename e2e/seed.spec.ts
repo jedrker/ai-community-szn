@@ -6,6 +6,7 @@ import {
   hostSecret,
   purgeSession,
   readSessionState,
+  waitForHostPanelReady,
 } from "./support/host-session";
 
 /**
@@ -14,7 +15,7 @@ import {
  * Risk:  `context/foundation/test-plan.md` §2 Risk #1 — "the host panel offers a flow
  *        verb the current phase refuses, or withholds the one it accepts — the host
  *        presses a dead button in front of a live room."
- * Half:  the **rendered** half. §7 records it as covered by nothing: `host.test.ts`
+ * Half:  the **rendered** half. §7 records it as covered by nothing: `host/[slug].test.ts`
  *        scans the page's source text, so it certifies that `CONTROL_RULES` is
  *        *written*, never that the browser ends up with the right button enabled.
  * Rules: `e2e/E2E-RULES.md`. Anything this file demonstrates, generated specs inherit.
@@ -88,6 +89,9 @@ test("host panel offers only 'start' before a session, and only 'dalej' once the
   // Setup — authenticate out of band, never through `#host-menu`.
   await authenticateHostWithoutUI(page, hostSecret);
   await page.goto(HOST_PANEL_PATH);
+  // The verbs are enabled in the server-rendered markup, so a click before the inline
+  // script attaches is silently lost. See `waitForHostPanelReady`.
+  await waitForHostPanelReady(page);
 
   const start = page.getByRole("button", { name: "start", exact: true });
   const advance = page.getByRole("button", { name: "dalej", exact: true });

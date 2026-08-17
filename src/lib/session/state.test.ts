@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { getQuizById, quizzes } from "../../quiz/index";
 import {
+  anotherQuestionId,
+  fixtureQuiz,
+  someQuestionId,
+} from "../../quiz/test-support";
+import {
   endedSessionState,
   initialSessionState,
   nextQuestionId,
@@ -10,10 +15,16 @@ import {
   sessionStateSchema,
 } from "./state";
 
-// One quiz to run a session against — which one is not what anything here asserts, and
-// it is the same one `nextQuestionId` opens from the lobby while the session has no
-// quiz identity of its own.
-const quiz = quizzes[0]!;
+/**
+ * The quiz these fixtures run against. Named rather than indexed — see `fixtureQuiz`.
+ *
+ * This file is the one that legitimately keeps **positional** reads of `quiz.questions`:
+ * `nextQuestionId`'s whole job is the running order, so "the first", "the one after the
+ * first" and "the last" are the properties under test rather than incidental choices.
+ * Everywhere a question id is only an opaque session key, it comes from
+ * `someQuestionId()` / `anotherQuestionId()` instead.
+ */
+const quiz = fixtureQuiz();
 
 const NOW = 1_785_000_000_000;
 
@@ -93,7 +104,7 @@ describe("quizId", () => {
   const beforeQuizIdentity = {
     version: 4,
     phase: "question-open" as const,
-    currentQuestionId: quiz.questions[0]!.id,
+    currentQuestionId: someQuestionId(),
     startedAt: NOW,
     updatedAt: NOW,
   };
@@ -149,13 +160,15 @@ describe("quizId", () => {
    */
   it("rejects an open question belonging to a different quiz than the session runs", () => {
     const otherQuiz = quizzes.find((candidate) => candidate.id !== quiz.id);
-    if (otherQuiz === undefined) {
-      // One quiz committed: there is no second quiz to borrow a question from, so the
-      // clause has nothing to be pointed at. Said out loud rather than skipped
-      // silently — a vacuous pass here would read as coverage.
-      expect(quizzes).toHaveLength(1);
-      return;
-    }
+    // A second committed quiz is what makes this clause reachable at all (impl-review F10).
+    // It used to early-return with `expect(quizzes).toHaveLength(1)` — honest, but coverage
+    // of nothing. Asserted rather than assumed so the day the registry drops back to one
+    // quiz, this says so instead of quietly passing.
+    expect(
+      otherQuiz,
+      "the registry needs a second quiz to reach this clause",
+    ).toBeDefined();
+    if (otherQuiz === undefined) return;
 
     const result = parseSessionState({
       ...beforeQuizIdentity,
@@ -175,6 +188,7 @@ describe("nextQuestionId", () => {
     expect(nextQuestionId(quiz.id, null)).toEqual({
       outcome: "next",
       questionId: quiz.questions[0]!.id,
+      quizId: quiz.id,
     });
   });
 
@@ -182,6 +196,7 @@ describe("nextQuestionId", () => {
     expect(nextQuestionId(quiz.id, quiz.questions[0]!.id)).toEqual({
       outcome: "next",
       questionId: quiz.questions[1]!.id,
+      quizId: quiz.id,
     });
   });
 
@@ -205,6 +220,46 @@ describe("nextQuestionId", () => {
     expect(result).not.toEqual({ outcome: "end-of-quiz" });
   });
 
+  /**
+   * THE MID-DEPLOY TEST FOR THE VERB, not just for the parse (impl-review F1).
+   *
+   * `quizId`'s default makes a pre-deploy document *parse*; it does not by itself make the
+   * session *playable*. Advancing one resolved to `unresolved`, so `dalej` was a permanent
+   * no-op mid-segment while `state.ts` and `src/lib/session/CLAUDE.md` both promised it
+   * worked — and the host's only exit destroyed the scores the default exists to protect.
+   * Two tests asserted the parse and the sentinel's unforgeability; neither advanced one.
+   *
+   * So this asserts the *outcome*, and the resolved quiz with it: parsing is not the
+   * property that matters here.
+   */
+  it("advances a session written before quizId existed, resolving its quiz from the open question", () => {
+    const open = quiz.questions[0]!.id;
+
+    const result = nextQuestionId(PRE_IDENTITY_QUIZ_ID, open);
+
+    expect(result).toEqual({
+      outcome: "next",
+      questionId: quiz.questions[1]!.id,
+      // Reported so `advance` can heal the document rather than carrying "no identity"
+      // forward forever.
+      quizId: quiz.id,
+    });
+  });
+
+  /**
+   * The one dead end left, and it is deliberate rather than an oversight: a lobby has no
+   * open question to resolve an identity from, and guessing one is the mis-scoring the
+   * sentinel exists to prevent. Nothing is at stake in a lobby, so the reset is cheap.
+   */
+  it("still refuses a pre-identity session with no open question, rather than guessing", () => {
+    const result = nextQuestionId(PRE_IDENTITY_QUIZ_ID, null);
+
+    expect(result.outcome).toBe("unresolved");
+    if (result.outcome === "unresolved") {
+      expect(result.reason).toContain("no open question");
+    }
+  });
+
   it("reports a quiz that is not in the registry as unresolved", () => {
     const result = nextQuestionId("nie-ma-takiego-quizu", null);
 
@@ -218,7 +273,7 @@ describe("parseSessionState", () => {
     version: 2,
     phase: "question-open" as const,
     quizId: quiz.id,
-    currentQuestionId: quiz.questions[0]!.id,
+    currentQuestionId: someQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1000,
   };
@@ -284,7 +339,7 @@ describe("endedSessionState", () => {
     version: 7,
     phase: "question-revealed" as const,
     quizId: quiz.id,
-    currentQuestionId: quiz.questions[0]!.id,
+    currentQuestionId: someQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 5_000,
     playerCount: 9,
@@ -357,7 +412,7 @@ describe("the ended phase invariant", () => {
     const result = parseSessionState({
       ...ended,
       quizId: quiz.id,
-      currentQuestionId: quiz.questions[0]!.id,
+      currentQuestionId: someQuestionId(),
     });
 
     expect(result.ok).toBe(false);
@@ -396,7 +451,7 @@ describe("the standings phase invariant", () => {
     version: 6,
     phase: "standings" as const,
     quizId: quiz.id,
-    currentQuestionId: quiz.questions[0]!.id,
+    currentQuestionId: someQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 7_000,
     playerCount: 4,
@@ -429,7 +484,7 @@ describe("revealedOptionIds", () => {
     version: 3,
     phase: "question-open" as const,
     quizId: quiz.id,
-    currentQuestionId: quiz.questions[1]!.id,
+    currentQuestionId: anotherQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1_000,
     playerCount: 5,
@@ -530,7 +585,7 @@ describe("revealedDistribution", () => {
     version: 3,
     phase: "question-open" as const,
     quizId: quiz.id,
-    currentQuestionId: quiz.questions[1]!.id,
+    currentQuestionId: anotherQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1_000,
     playerCount: 5,
@@ -644,7 +699,7 @@ describe("revealedAnswerText", () => {
     version: 3,
     phase: "question-open" as const,
     quizId: quiz.id,
-    currentQuestionId: quiz.questions[1]!.id,
+    currentQuestionId: anotherQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1_000,
     playerCount: 5,
@@ -735,7 +790,7 @@ describe("standings", () => {
     version: 3,
     phase: "question-open" as const,
     quizId: quiz.id,
-    currentQuestionId: quiz.questions[1]!.id,
+    currentQuestionId: anotherQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1_000,
     playerCount: 5,

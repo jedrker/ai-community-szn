@@ -16,9 +16,8 @@ vi.mock("../../../lib/session/store", () => ({
 }));
 
 const { POST: result } = await import("./result");
-const { quizzes } = await import("../../../quiz/index");
-// One quiz to run a session against — which one is not what anything here asserts.
-const quiz = quizzes[0]!;
+const { anotherQuestionId, someQuestionId } =
+  await import("../../../quiz/test-support");
 
 const NOW = 1_785_000_000_000;
 /**
@@ -28,8 +27,8 @@ const NOW = 1_785_000_000_000;
  * position rather than named: which two is irrelevant, and naming them made an edit to
  * the quiz fail a test about phases.
  */
-const QUESTION = quiz.questions[0]!.id;
-const OTHER = quiz.questions[1]!.id;
+const QUESTION = someQuestionId();
+const OTHER = anotherQuestionId();
 
 function state(
   phase:

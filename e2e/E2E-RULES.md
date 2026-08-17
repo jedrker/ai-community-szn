@@ -37,7 +37,7 @@ test in this project. The seed is the exemplar; this file is the constraint set.
 ## 8. Project specifics
 
 - **Scope.** This layer exists for the rendered half of §2 Risk #1 only — the half
-  test-plan §7 records as uncovered because `host.test.ts` and `index.test.ts` scan
+  test-plan §7 records as uncovered because `host/[slug].test.ts` and `[slug].test.ts` scan
   source text. Everything else stays with Vitest. Do not add a spec per page; add one
   per named risk, and say which risk in the file header.
 - **The store is real.** Specs drive the Upstash namespace from `.env`. Every spec that
@@ -57,6 +57,23 @@ test in this project. The seed is the exemplar; this file is the constraint set.
   `src/lib/client/boundary.test.ts`'s reasoning: `import type` is fine, a value import
   is not. Wire constants (header names, storage keys) are mirrored in
   `e2e/support/host-session.ts` and fail loudly when they drift.
+- **`toBeEnabled()` on a host verb does NOT mean the panel is listening.** The flow verbs are
+  rendered by the server with no `disabled` attribute, so a web-first assertion on their enabled
+  state is satisfied by **static HTML** — before the inline script exists and before it has
+  attached a listener. A click in that window is silently dropped and the spec fails five seconds
+  later on a state that never changed, reading exactly like a broken app.
+
+  Normally that window is microseconds. It becomes seconds whenever Vite re-optimizes the dep
+  graph — a fresh clone, a `bun install`, a deleted `node_modules/.vite`, an added import, or an
+  interleaved `bun run build` — because the panel's module import answers **504 Outdated Optimize
+  Dep** once and retries. So the first spec to run against a fresh dev server is the one that
+  loses, deterministically. Diagnosed during the multiple-quizzes impl review (F11), where it was
+  mistaken for a regression twice and cost two false bisects; the tell is a `pageerror` reading
+  "Failed to fetch dynamically imported module" with none of your assertions in the stack.
+
+  **So call `waitForHostPanelReady(page)` after `goto` and before the first click.** It waits for
+  the connection status the script writes over the server's `połączenie: —` — state, not a
+  timeout. Verified by removing it and watching the first spec fail on a cold cache.
 - **Run it.** `bun run e2e` (bun loads `.env`; `npx playwright test` does not, and the
   specs then skip themselves into a green run that tested nothing). Single spec:
   `bun run e2e e2e/seed.spec.ts`.

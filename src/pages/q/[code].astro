@@ -1,6 +1,5 @@
 ---
-import "../../styles/global.css";
-
+import QuizNotice from "../../components/QuizNotice.astro";
 import { getQuizByCode } from "../../quiz/index";
 
 /**
@@ -41,45 +40,16 @@ if (quiz !== undefined) {
  * The **status stays 404**, because the code genuinely does not exist; what changes is
  * that the body is useful. `/quiz` is the link rather than a quiz slug: this page has no
  * idea which quiz was meant, and `/quiz` does — it redirects to whatever is running.
+ *
+ * The shell is `QuizNotice` — shared with the attendee route and with `/quiz`'s waiting
+ * screen, so this argument is made once rather than per route (impl-review F6).
  */
 Astro.response.status = 404;
 ---
 
-<html lang="pl" class="bg-quiz-ink">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex" />
-    <title>LiveQuiz — nie znamy tego kodu</title>
-  </head>
-  <body
-    class="flex min-h-dvh flex-col bg-quiz-ink px-7 pb-8 pt-6 font-archivo
-           text-quiz-signwhite antialiased"
-  >
-    <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-6">
-      <h1
-        class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc"
-      >
-        LiveQuiz
-      </h1>
-
-      <!--
-        The status block sits in the growing column so it lands in the thumb zone — the
-        same arrangement `/quiz`'s waiting screen and the attendee view both use.
-      -->
-      <div class="flex flex-1 flex-col justify-center gap-4">
-        <p class="text-[32px] font-bold leading-tight">Nie znamy tego kodu.</p>
-        <p class="text-[24px] leading-relaxed text-quiz-zinc">
-          Sprawdź cztery cyfry na ekranie i wpisz je jeszcze raz.
-        </p>
-        <a
-          href="/quiz"
-          class="rounded-2xl border border-quiz-chrome px-6 py-4 text-center text-[24px]
-                 font-semibold text-quiz-signwhite"
-        >
-          Albo przejdź do trwającego quizu
-        </a>
-      </div>
-    </main>
-  </body>
-</html>
+<QuizNotice
+  title="LiveQuiz — nie znamy tego kodu"
+  heading="Nie znamy tego kodu."
+  body="Sprawdź cztery cyfry na ekranie i wpisz je jeszcze raz."
+  link={{ href: "/quiz", label: "Albo przejdź do trwającego quizu" }}
+/>

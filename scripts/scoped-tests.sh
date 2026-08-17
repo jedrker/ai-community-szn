@@ -7,8 +7,8 @@
 # it is a trap that a second copy would eventually lose:
 #
 #   `vitest related` walks the module graph, and this project's highest-risk
-#   files are not in it. host.test.ts and index.test.ts read their .astro pages
-#   with readFileSync, so `vitest related src/pages/quiz/host.astro` prints
+#   files are not in it. The two page suites read their .astro pages
+#   with readFileSync, so `vitest related 'src/pages/quiz/host/[slug].astro'` prints
 #   "No test files found" and exits 0 — green, on the file test-plan.md §2 puts
 #   at the top of the risk map. An .astro page is therefore mapped to its
 #   sibling suite by name.

@@ -57,9 +57,10 @@ const {
 const { answeredField, optionField, wordField } = await import("./tallies");
 const { answerField } = await import("./answers");
 const { WORD_CLOUD_SIZE } = await import("./words");
-const { quizzes } = await import("../../quiz/index");
-// One quiz to run a session against — which one is not what anything here asserts.
-const quiz = quizzes[0]!;
+const { fixtureQuiz, someQuestionId } = await import("../../quiz/test-support");
+// A quiz to run a session against; which one is not what anything here asserts. See
+// `fixtureQuiz` for why this is a named accessor rather than `quizzes[0]`.
+const quiz = fixtureQuiz();
 const { MAX_PLAYERS_PER_DEVICE } = await import("./players");
 
 const NOW = 1_785_000_000_000;
@@ -88,7 +89,7 @@ const firstQuestionOpen = {
    * synthetic one would come back as an unreadable session. Everything else in this file
    * is a synthetic fixture, because the store itself never resolves an id.
    */
-  currentQuestionId: quiz.questions[0]!.id,
+  currentQuestionId: someQuestionId(),
   startedAt: NOW,
   updatedAt: NOW + 500,
   playerCount: 0,
@@ -254,6 +255,34 @@ describe("createSession", () => {
     await expect(createSession(NOW, quiz.id)).resolves.toMatchObject({
       outcome: "failed",
     });
+  });
+
+  /**
+   * **Refused before the write, not after it** (impl-review F4).
+   *
+   * `quizId` reaches here from a request body, and create is the one write whose failure
+   * mode is a *persisted* bad document rather than a rejected one: written first, it sits on
+   * the four-hour lifetime and every later read reports `invalid`, which no host verb can
+   * recover from. So the assertion that matters is `eval` never being called — "it returned
+   * invalid" would also hold for a version that wrote first and complained afterwards.
+   *
+   * `start.ts` refuses an unknown slug, so this is unreachable through the route; the guard
+   * is here so the next caller inherits it. That is why the fixture calls the store directly.
+   */
+  it("refuses an unresolvable quiz without writing anything", async () => {
+    const result = await createSession(NOW, "nie-ma-takiego-quizu");
+
+    expect(result.outcome).toBe("invalid");
+    // THE ONE THAT MATTERS: nothing reached the store.
+    expect(redisMock.eval).not.toHaveBeenCalled();
+  });
+
+  it("still writes for a quiz that does resolve, so the guard is not refusing everything", async () => {
+    redisMock.eval.mockResolvedValue([1, JSON.stringify(lobby)]);
+
+    await createSession(NOW, quiz.id);
+
+    expect(redisMock.eval).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -598,7 +627,7 @@ describe("claimPlayer", () => {
    *
    * The redis client is mocked, so the Lua never executes here — nothing in this suite
    * can watch a fourth claim actually be refused. What is checkable is the script's
-   * *structure*, and that is exactly what `host.test.ts` does for the Astro inline
+   * *structure*, and that is exactly what `host/[slug].test.ts` does for the Astro inline
    * script and for the same reason: the thing under test has no harness.
    *
    * Two orderings carry the whole behaviour and both are silent when wrong:
@@ -1600,7 +1629,7 @@ describe("readOwnResult", () => {
    */
   const stored = {
     playerId: "player-abc",
-    questionId: quiz.questions[0]!.id,
+    questionId: someQuestionId(),
     optionIds: ["a"],
     elapsedMs: 3_200,
     correct: true,

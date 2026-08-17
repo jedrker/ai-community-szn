@@ -58,7 +58,7 @@ const wordCloud = questionOfKind("word-cloud");
  *
  * Same reasoning as the fixtures themselves: one live question's correct option id was
  * typed out at thirty-five call sites in this file. Renaming that option — an edit to a
- * few characters of `definition.ts` — turned every scoring assertion here red at once,
+ * few characters of the quiz definitions — turned every scoring assertion here red at once,
  * in a file about form parsing.
  */
 const singleCorrect = single.correctOptionIds[0]!;

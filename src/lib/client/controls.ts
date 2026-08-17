@@ -12,7 +12,7 @@
  * That is a statement about the routes, and it cannot be checked by reading this file's
  * source. It can be checked by running this function, which is what `controls.test.ts` does.
  *
- * **The table is private on purpose.** `host.test.ts` used to assert that `CONTROL_RULES`
+ * **The table is private on purpose.** `host/[slug].test.ts` used to assert that `CONTROL_RULES`
  * was read from exactly one place; exporting a function instead of the table makes a second
  * reader unrepresentable rather than merely forbidden, which is why that guard is retired
  * here rather than re-expressed.

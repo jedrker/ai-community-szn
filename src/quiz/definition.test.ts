@@ -1,3 +1,6 @@
+import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { quizDefinitions } from "./definitions";
@@ -9,6 +12,7 @@ import {
   normalizeAnswer,
   quizzes,
   registryProblems,
+  RESERVED_QUIZ_SLUGS,
 } from "./index";
 import type { Quiz } from "./schema";
 import { quizSchema } from "./schema";
@@ -162,6 +166,35 @@ describe("the cross-quiz gate refuses what a per-quiz schema cannot see", () => 
     expect(problems).toContain("to samo id");
   });
 
+  /**
+   * Titles are checked because the title is the whole of what two surfaces show
+   * (impl-review F7): the host picks from it at `/quiz/host`, and a phone on the wrong quiz
+   * is told "W tej sali trwa «X»". Two quizzes sharing one make both ambiguous on exactly
+   * the screens the field exists for, while every id- and code-level rule still passes.
+   */
+  it("refuses two quizzes with the same title", () => {
+    const problems = registryProblems([a, { ...b, title: a.title }]).join(
+      " | ",
+    );
+
+    expect(problems).toContain(a.title);
+    expect(problems).toContain(a.id);
+    expect(problems).toContain(b.id);
+  });
+
+  /**
+   * A slug a static route already owns (impl-review F7). The quiz parses, reaches the picker
+   * and gets a join code — and its *attendee* view is unreachable, because the static route
+   * wins. `spine-check` is the sharper one: it 404s in production, so such a quiz would work
+   * in preview and vanish at the event.
+   */
+  it.each(RESERVED_QUIZ_SLUGS)("refuses a quiz whose id is %s", (reserved) => {
+    const problems = registryProblems([{ ...a, id: reserved }]).join(" | ");
+
+    expect(problems).toContain(reserved);
+    expect(problems).toContain("nieosiągalny");
+  });
+
   it("refuses two quizzes with the same join code", () => {
     const problems = registryProblems([a, { ...b, code: a.code }]).join(" | ");
     expect(problems).toContain(a.code);
@@ -194,6 +227,45 @@ describe("the cross-quiz gate refuses what a per-quiz schema cannot see", () => 
 
     expect(registryProblems([withDuplicate])).toEqual([]);
     expect(quizSchema.safeParse(withDuplicate).success).toBe(false);
+  });
+});
+
+/**
+ * **The reserved set, kept in step with the routes that cause it** (impl-review F7).
+ *
+ * `RESERVED_QUIZ_SLUGS` is a literal because `src/quiz/index.ts` must import inside a
+ * serverless function and a bare `vitest run`, where reading the filesystem is the wrong
+ * answer. A literal drifts, though — someone adds a static page under `src/pages/quiz/` and
+ * a quiz can silently take its address. A *test* may read the filesystem, so the sync is
+ * checked here rather than hoped for.
+ *
+ * Compared as an equality in both directions: a missing entry is the drift this exists to
+ * catch, and a stale extra entry needlessly forbids a slug an author could legitimately want.
+ */
+describe("the reserved slugs match the routes that reserve them", () => {
+  const QUIZ_PAGES = fileURLToPath(new URL("../pages/quiz/", import.meta.url));
+
+  /** Every address directly under `/quiz/` that a static file, not `[slug].astro`, owns. */
+  function staticSiblingSlugs(): string[] {
+    return (
+      readdirSync(QUIZ_PAGES, { withFileTypes: true })
+        .filter((entry) => !entry.name.startsWith("["))
+        .filter((entry) => entry.isDirectory() || entry.name.endsWith(".astro"))
+        .map((entry) => entry.name.replace(/\.astro$/, ""))
+        // `index` is `/quiz` itself, which no slug can collide with.
+        .filter((name) => name !== "index")
+    );
+  }
+
+  it("finds the routes to compare against", () => {
+    // Non-vacuity: an empty read would make the equality below pass by comparing nothing.
+    expect(staticSiblingSlugs().length).toBeGreaterThan(0);
+  });
+
+  it("reserves exactly the slugs a static route would shadow", () => {
+    expect([...RESERVED_QUIZ_SLUGS].sort()).toEqual(
+      staticSiblingSlugs().sort(),
+    );
   });
 });
 

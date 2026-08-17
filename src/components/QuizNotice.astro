@@ -1,0 +1,79 @@
+---
+import "../styles/global.css";
+
+/**
+ * A one-sentence LiveQuiz page: a heading, a line under it, and optionally a way on
+ * (impl-review F6).
+ *
+ * **Why this is a component rather than three copies.** Four LiveQuiz routes have to answer
+ * with a sentence instead of a view — `/q/<code>` on an unknown code, `/quiz/<slug>` and
+ * `/quiz/host/<slug>` on an unknown slug, and `/quiz` before the host has started. Two of
+ * them were answering with `new Response("Nie ma takiego quizu.", { status: 404 })`: an
+ * unstyled text body with no link and no `Content-Type`, on the routes the **printed QR codes
+ * encode**. So a slug renamed between events turned every card in the room into a blank page
+ * with no way forward — while `/q/<code>` three files away argued at length that exactly that
+ * must not happen.
+ *
+ * The shared shell is what keeps that argument from having to be re-won per route. It carries
+ * no script, no session read and no state; the *status* stays with the caller, because only
+ * the caller knows whether its case is a 404 (this slug does not exist) or a 200 (the quiz
+ * exists and has not started).
+ *
+ * The palette and the thumb-zone layout are the attendee view's, so a phone that lands here
+ * from a QR is not visibly on a different site.
+ */
+interface Props {
+  /** Browser tab title. */
+  title: string;
+  /** The one line that says what happened. Set large; keep it a sentence. */
+  heading: string;
+  /** What to do about it. */
+  body: string;
+  /** Optional way on. Omit for a dead end that genuinely has no next step. */
+  link?: { href: string; label: string };
+}
+
+const { title, heading, body, link } = Astro.props;
+---
+
+<html lang="pl" class="bg-quiz-ink">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{title}</title>
+  </head>
+  <body
+    class="flex min-h-dvh flex-col bg-quiz-ink px-7 pb-8 pt-6 font-archivo
+           text-quiz-signwhite antialiased"
+  >
+    <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-6">
+      <h1
+        class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc"
+      >
+        LiveQuiz
+      </h1>
+
+      <!--
+        The block sits in the growing column so it lands in the thumb zone — the same
+        arrangement the attendee view's waiting screens use, for the same reason: this is a
+        screen with nothing to do on it, held low.
+      -->
+      <div class="flex flex-1 flex-col justify-center gap-4">
+        <p class="text-[32px] font-bold leading-tight">{heading}</p>
+        <p class="text-[24px] leading-relaxed text-quiz-zinc">{body}</p>
+        {
+          link !== undefined && (
+            <a
+              href={link.href}
+              class="rounded-2xl border border-quiz-chrome px-6 py-4 text-center
+                     text-[24px] font-semibold text-quiz-signwhite"
+            >
+              {link.label}
+            </a>
+          )
+        }
+      </div>
+    </main>
+  </body>
+</html>

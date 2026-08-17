@@ -209,7 +209,7 @@ export function runMotion(container: HTMLElement, spec: MotionSpec): void {
  *
  * **Offsets inside one animation, never one timer per element.** A stagger built from
  * `setTimeout` would be a second timer on a page whose structural guards pin the number of
- * them — `index.test.ts` allows the attendee page exactly zero, and `host.test.ts` allows
+ * them — `[slug].test.ts` allows the attendee page exactly zero, and `host/[slug].test.ts` allows
  * one — and it would need its own cancellation to stay honest with `cancelMotion`. Here
  * the whole group is one rAF loop and the arithmetic is what separates the elements.
  *

@@ -33,9 +33,11 @@ export const POST: APIRoute = async ({ request }) => {
 
     /**
      * The session document and the quiz registry disagree — the session names a quiz
-     * that is gone, or an open question belonging to another quiz. The `quizId` clause
-     * in `sessionStateSchema` makes this unreachable through a parsed document, so
-     * reaching it means that guard has been weakened.
+     * that is gone, or an open question belonging to another quiz, or it predates quiz
+     * identity *and* sits in the lobby with no question to resolve from. The `quizId`
+     * clause in `sessionStateSchema` makes the first two unreachable through a parsed
+     * document; the third is the sentinel's one remaining dead end, and it is deliberate
+     * (see `PRE_IDENTITY_QUIZ_ID`).
      *
      * Still a no-op on stage, because an error here would read as a fault in front of
      * the room and the host's way out is the same either way (`bun run quiz:reset`).
@@ -52,9 +54,17 @@ export const POST: APIRoute = async ({ request }) => {
     return {
       version: current.version + 1,
       phase: "question-open",
-      // Copied unchanged, like every other constructor — advancing moves within a quiz,
-      // never between quizzes. See the field's note in `state.ts`.
-      quizId: current.quizId,
+      /**
+       * The quiz `nextQuestionId` resolved, not the stored value — and in every ordinary
+       * case those are the same string. They differ in exactly one: a session written
+       * before quizzes had identity carries the sentinel, and advancing it **heals** the
+       * field to the identity its open question already implied.
+       *
+       * That is a repair, not a change of quiz: it only ever moves "no identity" to an
+       * identity, never one real quiz to another. Advancing still moves *within* a quiz.
+       * See the field's note in `state.ts`.
+       */
+      quizId: next.quizId,
       currentQuestionId: next.questionId,
       startedAt: current.startedAt,
       updatedAt: now,

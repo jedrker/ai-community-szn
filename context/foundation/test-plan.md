@@ -347,7 +347,7 @@ certifies whatever is there, defects included (§1, rule four). Reference implem
    `SessionState`, `SessionPhase` and `PublicQuestion` arrive as `import type` — a value import fails
    `boundary.test.ts`.
 3. **Keep the lookup table private and export a function over it.** This is the part worth copying.
-   `host.test.ts` used to assert `CONTROL_RULES` had exactly one reader; exporting `verbsFor` with
+   `host/[slug].test.ts` used to assert `CONTROL_RULES` had exactly one reader; exporting `verbsFor` with
    the table private makes a second reader *unrepresentable*, which retires that guard rather than
    re-expressing it. A guard you can delete is better than a guard you have to maintain.
 4. **Type the table as a `Record` over a union**, so adding a phase or a question kind is a
@@ -385,7 +385,7 @@ placed on a projector. That is out of scope for the whole rollout; see §7.
 - What *was* real: the presence check and the ordering check were two separable statements, and the
   second reads redundant beside the third. Reverting one site to the bare idiom and deleting the
   guarded statement leaves the suite green. `expectOrder(haystack, first, second)` in
-  `host.test.ts` and `index.test.ts` fuses them. Duplicated rather than shared — the two files
+  `host/[slug].test.ts` and `[slug].test.ts` fuses them. Duplicated rather than shared — the two files
   import nothing from each other, and a helpers module for ten lines is the larger cost.
 - **Two portability gates had never been shown to fire.** Replacing `ASTRO_IMPORT` in
   `src/quiz/portability.test.ts` or `src/lib/session/portability.test.ts` with a regex that can
