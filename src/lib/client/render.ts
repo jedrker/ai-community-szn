@@ -1137,6 +1137,73 @@ export function wordEchoText(word: string | null): string {
 }
 
 /**
+ * Whether this phone is looking at a quiz the host is not running, and what to say about
+ * it (multiple-quizzes).
+ *
+ * ## Why this exists
+ *
+ * Before this, a phone on quiz A while the host ran quiz B painted a neutral placeholder:
+ * every question id in the snapshot resolved to nothing in *this* page's question list, so
+ * the view took its `!question` path and waited, silently, forever. Nothing on screen said
+ * the phone was in the wrong room and nothing invited a reload. The attendee's conclusion
+ * is that LiveQuiz is broken.
+ *
+ * ## The comparison, and the two cases that are deliberately NOT a mismatch
+ *
+ * A function rather than a condition inline in the page, for the reason
+ * `standingsPositionText` is one: the branches are worth a test and an Astro `<script>`
+ * has no harness to reach them from.
+ *
+ * - **No session (`running === null`)** is not a mismatch. It is the lobby, a purge, or a
+ *   session that has not started, and the view already has honest copy for each. Saying
+ *   "wrong quiz" to a phone that arrived early would be the wrong sentence at the one
+ *   moment the right one is reassuring.
+ * - **A running quiz this page has never heard of** is not a mismatch either, and this is
+ *   the case worth reading twice. A session document written before quizzes had identity
+ *   carries a sentinel (`PRE_IDENTITY_QUIZ_ID`), which resolves to no title and no
+ *   address — so a message about it could name nothing and link nowhere. Claiming a
+ *   mismatch there would tell 150 phones they are in the wrong room and give them no way
+ *   out, on the strength of a session that predates the whole feature. Falling through to
+ *   the ordinary rendering path is exactly the behaviour those devices had yesterday.
+ *
+ * ## No automatic navigation
+ *
+ * A link, never a redirect. 150 phones must not move on their own: a device whose snapshot
+ * arrives a beat late during a legitimate quiz switch would navigate away from a screen
+ * its owner was reading, and a redirect loop across two devices' clocks is not something
+ * anyone can debug from the stage. The attendee taps, or does not.
+ *
+ * `titles` is an id-to-title map handed down by the server through `define:vars` — the
+ * sanctioned hand-off, since a `<script>` may not value-import from `src/quiz/`. It
+ * carries quiz titles and slugs only: authored content already printed on the projector
+ * and listed unauthenticated on `/quiz/host`, and it says nothing about who played.
+ */
+export type QuizMismatch = {
+  /** Polish, naming the quiz that IS running — a slug is not something to read aloud. */
+  readonly message: string;
+  /** Where the attendee lands if they tap. Always a slug this page could resolve. */
+  readonly href: string;
+  readonly linkText: string;
+};
+
+export function quizMismatch(
+  rendered: string,
+  running: string | null,
+  titles: Readonly<Record<string, string>>,
+): QuizMismatch | null {
+  if (running === null || running === rendered) return null;
+
+  const title = titles[running];
+  if (title === undefined || title.length === 0) return null;
+
+  return {
+    message: `Ten quiz nie jest teraz prowadzony. W tej sali trwa „${title}”.`,
+    href: `/quiz/${running}`,
+    linkText: `Przejdź do „${title}”`,
+  };
+}
+
+/**
  * How much time is left, as the room reads it (roadmap S-11, FR-020).
  *
  * **Whole seconds, rounded UP, and floored at zero.** Up because a bar reading "0 s"

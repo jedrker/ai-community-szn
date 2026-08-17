@@ -782,32 +782,32 @@ mid-session deploy cannot make an old document claim a current quiz — it fails
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `bun run test`
-- [x] 4.2 Type checking passes: `bun run type-check`
-- [x] 4.3 Linting passes: `bun run lint`
-- [x] 4.4 Build succeeds: `bun run build`
-- [x] 4.5 A known code redirects; an unknown code renders the fallback page
+- [x] 4.1 Unit tests pass: `bun run test` — e310c1d
+- [x] 4.2 Type checking passes: `bun run type-check` — e310c1d
+- [x] 4.3 Linting passes: `bun run lint` — e310c1d
+- [x] 4.4 Build succeeds: `bun run build` — e310c1d
+- [x] 4.5 A known code redirects; an unknown code renders the fallback page — e310c1d
 
 #### Manual
 
-- [x] 4.6 Typing `/q/<code>` on a phone reaches the quiz in one step
-- [x] 4.7 The code is legible from the back of the room
+- [x] 4.6 Typing `/q/<code>` on a phone reaches the quiz in one step — e310c1d
+- [x] 4.7 The code is legible from the back of the room — e310c1d
 
 ### Phase 5: Mismatch is visible on the attendee's phone
 
 #### Automated
 
-- [ ] 5.1 Unit tests pass: `bun run test`
-- [ ] 5.2 Type checking passes: `bun run type-check`
-- [ ] 5.3 Linting passes: `bun run lint`
-- [ ] 5.4 The mismatch branch is covered by a fixture proven to reach it
-- [ ] 5.5 Break-the-guard: removing the comparison fails the named test
-- [ ] 5.6 `boundary.test.ts` still passes
+- [x] 5.1 Unit tests pass: `bun run test`
+- [x] 5.2 Type checking passes: `bun run type-check`
+- [x] 5.3 Linting passes: `bun run lint`
+- [x] 5.4 The mismatch branch is covered by a fixture proven to reach it
+- [x] 5.5 Break-the-guard: removing the comparison fails the named test
+- [x] 5.6 `boundary.test.ts` still passes
 
 #### Manual
 
-- [ ] 5.7 A phone left on the wrong quiz shows the message, and its link joins the running session
-- [ ] 5.8 The message never appears during a normal session
+- [x] 5.7 A phone left on the wrong quiz shows the message, and its link joins the running session
+- [x] 5.8 The message never appears during a normal session
 
 ### Phase 6: The documents that now assert something false
 

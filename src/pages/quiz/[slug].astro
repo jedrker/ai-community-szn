@@ -10,7 +10,7 @@ import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../lib/session/realtime";
 import { MAX_GUESS_INPUT_LENGTH } from "../../lib/session/guess";
 import { MAX_TEXT_ANSWER_LENGTH } from "../../lib/session/scoring";
 import { MAX_WORD_LENGTH } from "../../lib/session/words";
-import { getPublicQuizById } from "../../quiz/public";
+import { getPublicQuizById, publicQuizzes } from "../../quiz/public";
 
 /**
  * The attendee view (roadmap S-02, PRD FR-002/FR-007/FR-008).
@@ -58,6 +58,28 @@ const quiz = slug === undefined ? undefined : getPublicQuizById(slug);
 if (quiz === undefined) {
   return new Response("Nie ma takiego quizu.", { status: 404 });
 }
+
+/**
+ * Every quiz's title, keyed by slug (multiple-quizzes).
+ *
+ * The phone compares the snapshot's `quizId` with the quiz *this* page rendered, and a
+ * mismatch has to be sayable: a slug is not something to read on a phone in a dark room,
+ * and the message names the running quiz's title. Only the server knows that mapping, so
+ * it travels through `define:vars` — the sanctioned hand-off, since a `<script>` may not
+ * value-import from `src/quiz/`.
+ *
+ * **Titles and slugs only, and that exposure is stated rather than inherited.** These are
+ * authored content: already printed on the projector and already listed unauthenticated on
+ * `/quiz/host`. Nothing here says anything about who played, so the retention contract is
+ * untouched. `code` is deliberately absent — it is how an attendee *arrives*, and this
+ * page is past that.
+ *
+ * The whole registry rather than only the running quiz, because the page is rendered
+ * before any snapshot has arrived: which quiz is running is not knowable here.
+ */
+const quizTitles = Object.fromEntries(
+  publicQuizzes.map((entry) => [entry.id, entry.title]),
+);
 ---
 
 <html lang="pl" class="bg-quiz-ink">
@@ -199,6 +221,24 @@ if (quiz === undefined) {
              a headline on the waiting screens, a label above a question, an alarm when the
              connection is gone. Never styled here, or the two would disagree. -->
         <p id="follow-status"></p>
+
+        <!-- The way out of the wrong room (multiple-quizzes).
+
+             A link, never a redirect — `quizMismatch` in `render.ts` says why: 150 phones
+             must not move on their own. Static markup beside the status line, for the same
+             reason `#degraded-note` is: `render()` runs on every applied snapshot and the
+             question container's `replaceChildren()` would destroy anything living inside
+             it.
+
+             Hidden once in `render()`'s common path, like `#standings`, so it cannot outlive
+             the branch that shows it. `href` and text are written by the branch, never
+             here. -->
+        <a
+          id="quiz-mismatch-link"
+          hidden
+          href="/quiz"
+          class="rounded-[16px] border-2 border-quiz-chrome px-5 py-4 text-center
+                 text-[24px] font-semibold text-quiz-signwhite"></a>
 
         <!-- The backup-mode banner. Shown only while the channel is unavailable *and*
              polling is working, so it is never on screen at the same time as the red
@@ -468,6 +508,8 @@ if (quiz === undefined) {
         storageKey: PLAYER_STORAGE_KEY,
         seenStorageKey: QUESTION_SEEN_STORAGE_KEY,
         deviceStorageKey: DEVICE_STORAGE_KEY,
+        quizId: quiz.id,
+        quizTitles,
         questions: quiz.questions,
       }}
     >
@@ -477,6 +519,8 @@ if (quiz === undefined) {
         storageKey,
         seenStorageKey,
         deviceStorageKey,
+        quizId,
+        quizTitles,
         questions,
       };
     </script>
@@ -506,6 +550,7 @@ if (quiz === undefined) {
       import { createCountdown } from "../../lib/client/countdown";
       import {
         el,
+        quizMismatch,
         renderCountdown,
         renderEntrance,
         renderFigureCountUp,
@@ -524,6 +569,10 @@ if (quiz === undefined) {
         storageKey: string;
         seenStorageKey: string;
         deviceStorageKey: string;
+        /** The quiz this page rendered — what the snapshot's `quizId` is compared against. */
+        quizId: string;
+        /** Slug to title, for naming the quiz that IS running. See the frontmatter. */
+        quizTitles: Record<string, string>;
         questions: PublicQuestion[];
       };
 
@@ -558,6 +607,7 @@ if (quiz === undefined) {
       const standingsBoard = el("standings-board");
       const answerAccepted = el("answer-accepted");
       const degradedNote = el("degraded-note");
+      const mismatchLink = el("quiz-mismatch-link") as HTMLAnchorElement;
       const resultPanel = el("result");
       const countdownBox = el("countdown");
       const joinErrorBubble = el("join-error-bubble");
@@ -842,6 +892,7 @@ if (quiz === undefined) {
            */
           showQuestion(false);
           setHidden(standingsBox, true);
+          setHidden(mismatchLink, true);
           return;
         }
 
@@ -874,6 +925,47 @@ if (quiz === undefined) {
          * rule the host view uses, for the same reason.
          */
         setHidden(standingsBox, state === null || state.standings === null);
+
+        /**
+         * This phone is on a quiz the host is not running (multiple-quizzes).
+         *
+         * **Keyed on the id comparison, never on a phase list** — the mismatch is true in
+         * every phase of the other quiz, and a phase list here would be a rule that falls
+         * behind the moment a phase is added.
+         *
+         * **Before the ended/lobby branches, deliberately.** Those read the *session*, and
+         * this phone is not in it: "To już koniec. Dzięki za grę!" on a device that never
+         * played is the same silent lie as the neutral placeholder this branch replaces.
+         * `quizMismatch` returns `null` for a purged session and for a pre-identity one, so
+         * neither is reached from here.
+         *
+         * Answer controls hidden and the question taken off screen, exactly as the
+         * `!question` branch does — plus the board, which the line above has already
+         * *unhidden* if the other quiz happens to be on its standings beat.
+         */
+        const mismatch = quizMismatch(
+          config.quizId,
+          state?.quizId ?? null,
+          config.quizTitles,
+        );
+
+        if (mismatch !== null) {
+          status(mismatch.message, "alarm");
+          setHidden(degradedNote, true);
+          hideAnswerControls();
+          showQuestion(false);
+          setHidden(standingsBox, true);
+          stopCountdown();
+
+          mismatchLink.href = mismatch.href;
+          // `textContent`, never `innerHTML` — `render.ts`'s escaping rule, and a quiz
+          // title is authored content that still travels through a DOM write.
+          mismatchLink.textContent = mismatch.linkText;
+          setHidden(mismatchLink, false);
+          return;
+        }
+
+        setHidden(mismatchLink, true);
 
         /**
          * The session is over — either closed by the host (`ended`) or gone (`null`, which

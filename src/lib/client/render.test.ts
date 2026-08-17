@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   countdownText,
+  quizMismatch,
   renderCountdown,
   renderDistribution,
   renderFigureCountUp,
@@ -1242,6 +1243,72 @@ describe("wordCloudCountText", () => {
  * Extracted from the page for the reason `standingsPositionText` was: the absent branch is
  * what the function exists for, and the page has no harness.
  */
+/**
+ * The mismatch a phone on the wrong quiz used to be told nothing about (multiple-quizzes).
+ *
+ * Every test below asserts the **outcome** rather than truthiness, because the two
+ * not-a-mismatch branches are the ones worth protecting and both return `null` for
+ * different reasons. A test written as `expect(...).toBeFalsy()` would pass against a
+ * function that returned `null` unconditionally.
+ */
+describe("quizMismatch", () => {
+  const TITLES = {
+    "quiz-pierwszy": "Pierwszy quiz",
+    "quiz-drugi": "Drugi quiz",
+  } as const;
+
+  it("names the running quiz by title and links to its slug", () => {
+    const result = quizMismatch("quiz-pierwszy", "quiz-drugi", TITLES);
+
+    expect(result).not.toBeNull();
+    // The title, not the slug: this sentence is read on a phone in a dark room.
+    expect(result?.message).toContain("Drugi quiz");
+    expect(result?.message).not.toContain("quiz-drugi");
+    expect(result?.href).toBe("/quiz/quiz-drugi");
+    expect(result?.linkText).toContain("Drugi quiz");
+  });
+
+  it("reports nothing when the phone is on the quiz that is running", () => {
+    expect(quizMismatch("quiz-pierwszy", "quiz-pierwszy", TITLES)).toBeNull();
+  });
+
+  /**
+   * THE FIRST NOT-A-MISMATCH BRANCH. No session is the lobby, a purge, or a host who has
+   * not pressed start — and the view has honest copy for each. "Wrong quiz" to a phone
+   * that arrived early is the wrong sentence at the one moment the right one reassures.
+   */
+  it("reports nothing when no session is running", () => {
+    expect(quizMismatch("quiz-pierwszy", null, TITLES)).toBeNull();
+  });
+
+  /**
+   * THE SECOND, AND THE ONE WORTH READING TWICE. A session document written before
+   * quizzes had identity carries a sentinel, which resolves to no title and no address —
+   * so a message about it could name nothing and link nowhere. Falling through is exactly
+   * the behaviour those devices had before this shipped.
+   *
+   * The fixture is a slug **absent from `TITLES`**, which is what makes it reach this
+   * branch rather than the equality check above: it differs from the rendered quiz, so
+   * only the unknown-title guard can return `null` here.
+   */
+  it("reports nothing for a running quiz it has no title for", () => {
+    const sentinel = "__pre_identity__";
+
+    expect(sentinel in TITLES).toBe(false);
+    expect(sentinel).not.toBe("quiz-pierwszy");
+    expect(quizMismatch("quiz-pierwszy", sentinel, TITLES)).toBeNull();
+  });
+
+  it("reports nothing for a title that is present but empty", () => {
+    // A quiz cannot ship an empty title (the build gate refuses one), so this is
+    // unreachable through the app — and handled anyway, because the alternative is a
+    // sentence with a hole in it and a link labelled with nothing.
+    expect(
+      quizMismatch("quiz-pierwszy", "quiz-puste", { "quiz-puste": "" }),
+    ).toBeNull();
+  });
+});
+
 describe("wordEchoText", () => {
   it("echoes the word this device sent", () => {
     expect(wordEchoText("Halucynacja")).toBe("Twoje słowo: Halucynacja");
