@@ -100,7 +100,7 @@ back into static generation per route. Both halves are deliberate:
 | `/` | on-demand — the homepage resolves the next upcoming event per request |
 | `/zglos-sie` | on-demand |
 | `/quiz/<slug>`, `/quiz/host/<slug>` | on-demand — the LiveQuiz attendee and host views, one address per quiz |
-| `/quiz`, `/quiz/host` | on-demand — the entry pages that replaced those addresses: `/quiz` redirects to the quiz being run, `/quiz/host` is the host's picker |
+| `/quiz`, `/quiz/host` | on-demand — the entry pages that replaced those addresses: `/quiz` asks for the four-digit code and redirects to that quiz, `/quiz/host` is the host's picker |
 | `/q/<code>` | on-demand — the four-digit short address; redirects to `/quiz/<slug>` |
 | `/api/*` | on-demand (POST handlers) |
 

@@ -1,52 +1,145 @@
 ---
 import QuizNotice from "../../components/QuizNotice.astro";
-import { readSession } from "../../lib/session/store";
-import { getQuizById } from "../../quiz/index";
+import { getQuizByCode } from "../../quiz/index";
 
 /**
- * `/quiz` — the address that keeps working (multiple-quizzes).
+ * `/quiz` — where an attendee types the four-digit code (join-by-code).
  *
- * The attendee view moved to `/quiz/<slug>`, and this page replaces the address it
+ * The attendee view lives at `/quiz/<slug>`, and this page replaces the address it
  * vacated. That address is on QR codes already printed, in the runbook, and in the
  * browser history of everyone who has played before, so it may not 404 — and it is also
  * the honest answer to "just go to /quiz", which is what a host says out loud when a
  * phone cannot scan.
  *
- * **It redirects to whatever is running**, read from the session document rather than
- * guessed from the registry. With no session it renders the copy below instead of a 404:
- * arriving before the host presses start is normal, not an error, and this is the one
- * page in LiveQuiz an attendee is likely to reach *early*.
+ * **It asks which quiz, rather than guessing.** It used to read the session and redirect
+ * to whatever was running, which is wrong in the two cases that matter: the room where a
+ * second quiz is about to start on the same evening, and the phone that arrives before
+ * the host has pressed start — the latter met a "not started yet" screen whose only
+ * remedy was reloading until the host acted. A code has neither problem: it names a quiz
+ * that exists in committed source, so it resolves in the lobby, mid-session, and between
+ * two quizzes alike, and it is the same four digits the projector is already showing for
+ * `/q/<code>`.
  *
- * **On demand — no `prerender` export.** The running quiz is a request-time fact.
+ * **The lookup is server-side, through the registry, on a plain `GET` form** — the same
+ * resolution `/q/<code>` does, one module deeper rather than one copy wider. So the page
+ * carries no `<script>` at all and works on a phone with JS blocked: submitting lands on
+ * `/quiz?code=1992`, and the redirect below turns that into `/quiz/<slug>`.
  *
- * One store read, in frontmatter, on a page a phone opens once. It is not on any polled
- * path, so it adds nothing to the per-session command budget the two polled routes
- * document.
+ * **No session read.** This page no longer has a question for the store, which also takes
+ * it off the per-session command budget entirely.
+ *
+ * **On demand — no `prerender` export.** The submitted code is a request-time fact.
  */
-const session = await readSession();
+const submitted = Astro.url.searchParams.get("code");
+const code = (submitted ?? "").trim();
+const quiz = code === "" ? undefined : getQuizByCode(code);
+
+if (quiz !== undefined) {
+  return Astro.redirect(`/quiz/${quiz.id}`);
+}
 
 /**
- * The quiz to send the phone to, or `undefined` for "nothing to send it to".
+ * What went wrong, or `null` for a first visit.
  *
- * Three states collapse into that `undefined`, deliberately: no session at all, a store
- * that could not answer, and a session whose `quizId` does not resolve — which is what a
- * document written before quizzes had identity looks like (`PRE_IDENTITY_QUIZ_ID`). A
- * phone can act on none of them differently, and the honest thing to show is the same
- * "not started yet" screen with a reload. The host's own panel is where a store outage
- * is diagnosable; this page has no business guessing.
+ * Two messages rather than one, because the two mistakes have different remedies: an empty
+ * field means the code was never typed, an unknown one means it was typed wrong. Neither is
+ * a 404 — the page asked a question and the answer was not usable, which is the same status
+ * as asking it the first time.
+ *
+ * The rejected digits are **not echoed back**: the field still holds them (`value` below),
+ * so repeating them in the sentence only competes with the instruction to look at the
+ * screen.
  */
-const running =
-  session.outcome === "ok" && session.state !== null
-    ? getQuizById(session.state.quizId)
-    : undefined;
-
-if (running !== undefined) {
-  return Astro.redirect(`/quiz/${running.id}`);
-}
+const error =
+  submitted === null
+    ? null
+    : code === ""
+      ? "Wpisz cztery cyfry z ekranu."
+      : "Nie znamy tego kodu. Sprawdź cztery cyfry na ekranie.";
 ---
 
 <QuizNotice
   title="LiveQuiz — dołącz"
-  heading="Quiz jeszcze nie wystartował."
-  body="Poczekaj na prowadzącego i odśwież tę stronę — albo zeskanuj kod QR z ekranu."
-/>
+  heading="Wpisz kod quizu."
+  body="Cztery cyfry, które prowadzący pokazuje na ekranie."
+>
+  <!--
+    A `GET` form to this same address, so the code round-trips through the URL and the
+    browser needs no script to send it. `method` is spelled out rather than left to
+    default, because the default being `GET` is exactly the load-bearing part.
+  -->
+  <form method="get" action="/quiz" class="flex flex-col gap-4">
+    <label
+      for="join-code"
+      class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc"
+    >
+      Kod quizu
+    </label>
+
+    <!--
+      `type="text"` with `inputmode="numeric"`, for the reason the attendee view's numeric
+      field states at length: `type="number"` reports an empty string for anything it
+      considers invalid and drags spinners and locale-dependent parsing along with it. The
+      keypad is what a code needs from it, and `inputmode` gets that on its own.
+
+      `maxlength` is four because the schema says a code is exactly four digits — it stops a
+      phone typing past the code, and the registry lookup above is the real check.
+
+      `autofocus` is deliberate on this one page: it exists to be typed into, there is nothing
+      else on it, and the join has thirty seconds (FR-002).
+    -->
+    <input
+      id="join-code"
+      name="code"
+      type="text"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      autocomplete="off"
+      autocapitalize="off"
+      autocorrect="off"
+      spellcheck="false"
+      maxlength="4"
+      autofocus
+      value={code}
+      aria-describedby={error === null ? undefined : "join-code-error"}
+      class="w-full rounded-[18px] border-2 border-quiz-field-border bg-quiz-asphalt
+             px-4 py-4 text-center text-[40px] font-bold leading-[48px]
+             tracking-[0.3em] text-quiz-signwhite placeholder:tracking-[0.3em]
+             placeholder:text-quiz-zinc focus:border-quiz-chrome focus:outline-none"
+      placeholder="1992"
+    />
+
+    <button
+      type="submit"
+      class="w-full rounded-[18px] bg-quiz-chrome px-4 py-4 text-[32px] font-bold
+             text-quiz-ink"
+    >
+      Dołącz
+    </button>
+
+    <!--
+      The refusal, in the attendee view's register: a marker bar carrying the register, then
+      the sentence. Rendered only when there is one, so a first visit does not reserve a band
+      of empty asphalt under the button.
+
+      `role="alert"` rather than a polite live region — this element only exists on the render
+      that answers a submission, so there is nothing for a screen reader to interrupt.
+    -->
+    {
+      error !== null && (
+        <div
+          id="join-code-error"
+          role="alert"
+          class="flex items-stretch gap-3 rounded-[16px] border-2 border-quiz-field-border
+                 bg-quiz-asphalt px-4 py-4"
+        >
+          <span
+            class="w-2 shrink-0 rounded-full bg-quiz-chrome"
+            aria-hidden="true"
+          />
+          <p class="text-[20px] font-semibold leading-[26px]">{error}</p>
+        </div>
+      )
+    }
+  </form>
+</QuizNotice>

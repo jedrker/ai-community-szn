@@ -7,7 +7,8 @@ import "../styles/global.css";
  *
  * **Why this is a component rather than three copies.** Four LiveQuiz routes have to answer
  * with a sentence instead of a view — `/q/<code>` on an unknown code, `/quiz/<slug>` and
- * `/quiz/host/<slug>` on an unknown slug, and `/quiz` before the host has started. Two of
+ * `/quiz/host/<slug>` on an unknown slug, and `/quiz`, which says the sentence *and* offers
+ * the code field through the slot below. Two of
  * them were answering with `new Response("Nie ma takiego quizu.", { status: 404 })`: an
  * unstyled text body with no link and no `Content-Type`, on the routes the **printed QR codes
  * encode**. So a slug renamed between events turned every card in the room into a blank page
@@ -62,6 +63,16 @@ const { title, heading, body, link } = Astro.props;
       <div class="flex flex-1 flex-col justify-center gap-4">
         <p class="text-[32px] font-bold leading-tight">{heading}</p>
         <p class="text-[24px] leading-relaxed text-quiz-zinc">{body}</p>
+        <!--
+          The optional something-to-do (join-by-code).
+
+          `/quiz` is the one route reaching this shell that is *not* a dead end: it asks for
+          the four-digit code, so it needs a form inside the sentence rather than beside it.
+          The slot is how that arrives without a second copy of the shell — the palette, the
+          `noindex`, and the thumb-zone argument above are still made once. It renders
+          nothing for the four routes that pass no children, so they are unchanged.
+        -->
+        <slot />
         {
           link !== undefined && (
             <a

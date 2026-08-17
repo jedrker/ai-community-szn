@@ -293,14 +293,16 @@ Polish message, *Brak uprawnień hosta*. Finding that out at the front of a room
 step exists to prevent.
 
 Then point the room at **`/quiz`** — or at `/quiz/<slug>` directly, which is what the projector's QR
-encodes. `/quiz` reads the running session and redirects there, so the short address on the old QR
-codes and in people's history still lands in the right room; before you press `start` it says the
-quiz has not started rather than 404ing. You do not need a second screen for it.
+encodes. `/quiz` asks for the four-digit code and sends the phone to that quiz, so the short address
+on the old QR codes and in people's history still lands in the right room — and it works before you
+press `start`, because the code names a quiz rather than a running session. You do not need a second
+screen for it. **Say the code out loud when you say the address**, since `/quiz` cannot guess it.
 
 **For a phone that will not scan, read out `/q/<kod>`** — the four digits are on the picker in step 5
 and are **the address the lobby leads with**, in yellow under **Wejdź na**, beside the QR. It
-redirects to the same place the QR does. An unknown code says so and offers `/quiz`, so a mistyped
-digit is one tap from recovery rather than a dead end. The full `/quiz/<slug>` address is on the
+redirects to the same place the QR does. An unknown code says so and offers `/quiz`, where the same
+digits can be retyped in a field, so a mistyped digit is one tap from recovery rather than a dead
+end. The full `/quiz/<slug>` address is on the
 same plate under **Pełny adres**, set small and grey: it is what the QR encodes and what a link in
 the chat will carry, but it is not what anybody should be typing off a projector — say the short one
 out loud. **In the lobby the projector is the join screen**: a white plate carrying a QR big enough

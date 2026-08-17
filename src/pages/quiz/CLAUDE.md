@@ -18,7 +18,7 @@ Three more routes sit around them, and none carries an inline script:
 | Route | What it is |
 | --- | --- |
 | `/quiz/host` (`host/index.astro`) | the host's picker — every committed quiz by title, with its join code. No session read, no secret. `host` is a **static** path segment, so no quiz slug can collide with the *panel* — no dependence on route priority |
-| `/quiz` (`index.astro`) | reads the session and redirects to `/quiz/<slug>` of the quiz being run; renders "not started yet" when there is none, because arriving early is normal. Keeps old QR codes and bookmarks working |
+| `/quiz` (`index.astro`) | the code field: a plain `GET` form whose four digits are resolved through the registry in frontmatter and redirected to `/quiz/<slug>`. **Reads no session** — it used to redirect to whatever was running, which guessed wrong on an evening with two quizzes and stranded anyone arriving before `start` on a reload-until-it-works screen. Keeps old QR codes and bookmarks working |
 | `/q/<code>` (`src/pages/q/[code].astro`) | the four-digit short address. Redirects to `/quiz/<slug>`; an unknown code gets a Polish page with a link to `/quiz`, not the framework's blank 404 |
 
 An unknown slug on either quiz view is a **404**, never a fallback to whichever quiz is first — a host

@@ -52,6 +52,6 @@ test("an unknown code says so and offers a way on, rather than a blank 404", asy
   await expect(page.getByText(/Nie znamy tego kodu/)).toBeVisible();
   // The recovery path, which is the whole reason this is a page and not the framework's 404.
   await expect(
-    page.getByRole("link", { name: /trwającego quizu/ }),
+    page.getByRole("link", { name: /wpisz kod quizu/i }),
   ).toHaveAttribute("href", "/quiz");
 });
