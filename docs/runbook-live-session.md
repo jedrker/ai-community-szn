@@ -298,13 +298,15 @@ codes and in people's history still lands in the right room; before you press `s
 quiz has not started rather than 404ing. You do not need a second screen for it.
 
 **For a phone that will not scan, read out `/q/<kod>`** — the four digits are on the picker in step 5
-and on the lobby screen under **Albo krócej**, beside the QR. It redirects to the same place the QR
-does. An unknown code says so and offers `/quiz`, so a mistyped digit is one tap from recovery rather
-than a dead end. **In the lobby the
-projector is the join screen**: a white plate carrying a QR big enough to scan from the back row,
-and beside it the address in yellow and the number of people who have arrived. Once a question is
-open the same two move into the top strip, small but never gone, for whoever walks in at question
-four.
+and are **the address the lobby leads with**, in yellow under **Wejdź na**, beside the QR. It
+redirects to the same place the QR does. An unknown code says so and offers `/quiz`, so a mistyped
+digit is one tap from recovery rather than a dead end. The full `/quiz/<slug>` address is on the
+same plate under **Pełny adres**, set small and grey: it is what the QR encodes and what a link in
+the chat will carry, but it is not what anybody should be typing off a projector — say the short one
+out loud. **In the lobby the projector is the join screen**: a white plate carrying a QR big enough
+to scan from the back row, and beside it those two addresses and the number of people who have
+arrived. Once a question is open the QR and the short address move into the top strip, small but
+never gone, for whoever walks in at question four.
 
 **6. Reload the second device, and try to trip the cap. (S-09 — two minutes.)**
 

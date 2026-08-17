@@ -177,29 +177,28 @@ const shortJoinUrl = `${attendeeUrl.host.replace(/^www\./, "")}/q/${joinCode}`;
 const questionTotal = quiz.questions.length;
 
 /**
- * THE FLOW VERBS' PILL, WRITTEN ONCE AND SIZED TO THE SCREEN IT IS ON.
+ * THE FLOW VERBS' PILL, WRITTEN ONCE AND SIZED TO THE ARTBOARD.
  *
  * Stated here rather than four times in the markup for the reason `verbsFor` states it
  * once: four copies of a geometry are four chances for one of them to drift, and the row is
  * read as a row — a pill a step out of scale reads as a different kind of control.
  *
- * **The sizes are `clamp`, not fixed.** They were `text-[40px] px-8 py-2`, measured for a
- * 1920-wide projector, where the four verbs come to ~1120px and clear the `faza / w sali`
- * block beside them. The host does not drive this page from a 1920 window: at 1440 the same
- * row needs ~1570px, `flex-wrap` does what it is told, and the bar the room has learnt the
- * shape of becomes two or three stacked lines mid-session.
+ * **The sizes are fixed px, and they went back to fixed px on purpose.** They were `clamp`ed
+ * against `vw` — `text-[clamp(26px,2.08vw,40px)]` and friends — because the four verbs come to
+ * ~1120px at 1920 and to ~1570px at 1440, so on the host's own window `flex-wrap` did what it
+ * was told and the bar the room had learnt the shape of became two stacked lines mid-session.
  *
- * So each figure keeps its projector value as the **maximum** and scales below it with the
- * viewport — `2.08vw` is exactly 40px at 1920, so nothing changes on the screen this was
- * measured for. The floor is 26px because that is the host's own copy size everywhere else on
- * this bar (the phase, the count, the toast, the closing button): the verbs may shrink to the
- * scale of the host's own reading, and no further.
+ * The canvas in `<head>` removed the premise: the bar is laid out on a 1920-wide artboard on
+ * every screen, so there is no window in which this row has 1440px to fit into. Worse, a `vw`
+ * inside the canvas resolves against the *real* viewport and is then scaled a second time — at
+ * a 1794px window `2.08vw` is 37px and paints at 32px, where the artboard called for 40px
+ * painting at 34px. A clamp here is now a way to be wrong, not a way to fit.
  *
  * `data-[next=true]` still sets no geometry — the filled and outlined states must stay the
  * same size, or the row reflows when a step becomes the next one.
  */
 const FLOW_PILL = `rounded-full border-2 border-quiz-pill-border
-  px-[clamp(20px,1.67vw,32px)] py-[clamp(6px,0.42vw,8px)] text-[clamp(26px,2.08vw,40px)]
+  px-8 py-2 text-[40px]
   font-semibold tracking-[-0.01em] text-quiz-signwhite
   data-[next=true]:border-quiz-chrome data-[next=true]:bg-quiz-chrome
   data-[next=true]:font-bold data-[next=true]:text-quiz-ink
@@ -235,6 +234,70 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>LiveQuiz — prowadzący</title>
+
+    <!--
+      THE CANVAS: the artboard is 1920x1080, so the page is 1920x1080 and the window scales it.
+
+      Every figure below this line — the 96px counter, the lobby's 264px tally, the bands'
+      `min-h-[92px]`, the rail's `w-[440px]` — was measured against that artboard, and the shell
+      was `h-dvh`, which is the host's window and not the artboard. At the 1794x919 the panel is
+      actually driven from, 1080px of design had 919px to live in: the lobby column overflowed
+      *upwards* across the top strip, and the option list lost its last band under the control bar.
+      Neither was a fact about the content.
+
+      So `<body>` is the artboard at its true size and `<html>` is the window, centring it and
+      scaling it down to fit. Nothing inside changes — that is the whole point of doing it here
+      rather than by converting two hundred fixed figures to relative units, which would have
+      rewritten every class string on a page whose guards read them as literal text.
+
+      **`tan(atan2(A, B))` is how you divide two lengths in CSS.** `scale()` takes a number, and
+      `calc(100dvw / 1920)` is a length; the trig functions are the only route to a unitless ratio
+      without JavaScript. Baseline: Chrome 111+, Safari 15.4+, Firefox 108+.
+
+      **The bare `--fit: 1` above it is a deliberate fallback, not a leftover.** On an engine
+      without `atan2()` the second declaration is invalid at computed-value time and dropped, the
+      ratio stays 1, and the page renders exactly as it did before this change — the degradation
+      is to the old behaviour, never to something worse.
+
+      **`position: fixed` on the artboard, rather than centring it in flow.** A 1920x1080 box
+      in normal flow inside a smaller window is scrollable overflow even with `overflow: hidden`
+      on the window — the bars are gone but `scrollTop` still moves, so anything that scrolls an
+      element into view (a focus ring landing on a control at the foot of the bar, say) slides
+      the whole projector sideways under a room that is reading it. A fixed box contributes no
+      scrollable overflow at all, so there is nothing to slide.
+
+      Hence `translate(-50%, -50%)` before the scale rather than `place-items: center`: the
+      translate is by the artboard's own half-size, and the scale then runs about the point it
+      lands on, so the canvas is centred at any ratio.
+
+      The chrome inversion has to reach the letterbox. `data-phase` stays on `<body>` — every
+      descendant variant reads `[[data-phase=ended]_&]:` — so the window matches on it rather
+      than carrying a second source of truth for which phase the view is in.
+
+      The host menu is a modal `<dialog>` and therefore renders in the top layer, outside this
+      transform. That is wanted: it is the one surface the host reads from arm's length rather
+      than the room reads from the back, so it stays at its authored size and its `max-w-[90vw]`
+      keeps meaning the window.
+    -->
+    <style is:global>
+      html {
+        height: 100dvh;
+        overflow: hidden;
+      }
+
+      html:has(body[data-phase="ended"]) {
+        background-color: var(--color-quiz-chrome);
+      }
+
+      body {
+        --fit: 1;
+        --fit: min(tan(atan2(100dvw, 1920px)), tan(atan2(100dvh, 1080px)));
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(var(--fit));
+      }
+    </style>
   </head>
   <!--
     THE PROJECTOR SHELL (signage redesign, step 2).
@@ -253,9 +316,15 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
     `motion.ts` rather than blinking into their slot. The slot itself does not move while
     they do. See `motion-contract.md`.
 
-    `h-dvh` with `overflow-hidden`, deliberately. A projector has no scrollbar and nobody
-    is going to reach for one mid-session, so content that overflows must be *visibly*
+    A fixed 1080px tall with `overflow-hidden`, deliberately. A projector has no scrollbar and
+    nobody is going to reach for one mid-session, so content that overflows must be *visibly*
     wrong here rather than quietly parked below the fold.
+
+    **The height is the artboard's, not the window's, and that distinction is the whole of the
+    canvas rule in `<head>`.** It was `h-dvh`, and the two are only the same on a 1080p screen —
+    everywhere else this rule was reporting the host's window size as a defect in the content.
+    Now an overflow here is a fact about what was authored, which is what it was always meant
+    to be.
   -->
   <!--
     `data-phase` on the body is how the closing screen inverts (roadmap S-10, FR-006).
@@ -271,8 +340,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
   -->
   <body
     data-phase="none"
-    class="flex h-dvh flex-col overflow-hidden bg-quiz-ink font-archivo text-quiz-signwhite
-           antialiased data-[phase=ended]:bg-quiz-chrome data-[phase=ended]:text-quiz-ink"
+    class="flex h-[1080px] w-[1920px] flex-col overflow-hidden bg-quiz-ink font-archivo
+           text-quiz-signwhite antialiased data-[phase=ended]:bg-quiz-chrome
+           data-[phase=ended]:text-quiz-ink"
   >
     <!--
       THE TOP STRIP: where the room is, and how to get in.
@@ -318,8 +388,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
             Wejdź
           </p>
+          <!-- The **short** address, not the canonical one. This line is on screen for the
+               whole session and is the one somebody at the back actually retypes, and
+               `ai-community.szczecin.pl/quiz/unaited` at this weight is wider than the space
+               the strip can give it beside the QR. The full address is in the lobby, where
+               there is room to set it properly. -->
           <p class="text-[56px] font-extrabold leading-none tracking-[-0.02em]">
-            {joinDisplayUrl}
+            {shortJoinUrl}
           </p>
         </div>
         <!--
@@ -562,25 +637,44 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
             Wejdź na
           </p>
-          <p
-            class="text-[56px] font-extrabold leading-none tracking-[-0.02em] text-quiz-chrome"
-          >
-            {joinDisplayUrl}
-          </p>
-        </div>
+          <!--
+            THE TYPED ROUTE IS THE SHORT ONE, AND IT TAKES THE HERO LINE.
 
-        <!-- The typed route, beside the scanned one. Set below the address above rather
-             than beside it: a phone that could scan has already gone, so this line is
-             read only by someone who is looking for it, and the address is what the host
-             says out loud first. -->
-        <div class="flex flex-col gap-3">
-          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
-            Albo krócej
-          </p>
+            This used to be `joinDisplayUrl`, and that address did not fit — not on the host's
+            window and not on a real 1920 projector either. `ai-community.szczecin.pl/quiz/unaited`
+            at 56px Archivo 800 is ~1110px of text in a column that is ~916px wide (1920 less the
+            860px QR plate less 144px of padding), so it ran off the right edge on the artboard
+            this page is measured against. The canvas does not fix that one; it is the line that
+            is too long, not the screen that is too small.
+
+            Which of the two leads is the fix. Somebody reading a line off a projector rather
+            than scanning the QR beside it is typing on a phone, and `/q/1990` is four characters
+            after the hostname against a slug they have to hear correctly. It fits, it is faster,
+            and it lands in the same place.
+          -->
           <p
             class="text-[56px] font-extrabold leading-none tracking-[-0.02em] text-quiz-chrome"
           >
             {shortJoinUrl}
+          </p>
+        </div>
+
+        <!-- The canonical address, kept and demoted. It is what the QR encodes and what a
+             bookmark or a link in the chat will carry, so the room seeing it once is worth a
+             line; it is not what anyone should be typing, so it is not set at the size of one.
+
+             `[overflow-wrap:anywhere]` is load-bearing rather than defensive: the whole address
+             is a single token with no space in it, so without a rule that permits a break inside
+             a word it cannot wrap at all — it can only overflow, which is what it was doing. -->
+        <div class="flex flex-col gap-3">
+          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+            Pełny adres
+          </p>
+          <p
+            class="text-[34px] font-semibold leading-[40px] tracking-[-0.01em] text-quiz-zinc
+                   [overflow-wrap:anywhere]"
+          >
+            {joinDisplayUrl}
           </p>
         </div>
 

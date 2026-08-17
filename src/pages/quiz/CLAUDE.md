@@ -86,13 +86,34 @@ answer to show but still needs closing (`answer.ts` accepts only in `question-op
 `pollTargetFor`, the single kind predicate — never on a fresh `kind === "word-cloud"` test, and never
 "fixed" by dropping `reveal` from the row, which would leave the cloud with no way to close.
 
-**The verbs' geometry is stated once**, as `FLOW_PILL` in the host page's frontmatter, and its sizes are
-`clamp` rather than fixed. The row was measured for a 1920 projector (`text-[40px] px-8`), which is
-not the window the host drives it from: at 1440 the four verbs need more width than the bar has and
-`flex-wrap` stacks them mid-session. Each figure keeps its projector value as the maximum — `2.08vw`
-is exactly 40px at 1920 — and floors at 26px, the host's own copy size on the rest of that bar. Do
-not re-fix them, and do not let `data-[next=true]` set geometry: the filled and outlined states must
-stay the same size or the row reflows when a step becomes the next one.
+**The verbs' geometry is stated once**, as `FLOW_PILL` in the host page's frontmatter, in fixed px
+(`text-[40px] px-8 py-2`) measured for the 1920 artboard. It was briefly `clamp`ed against `vw`,
+because at 1440 the four verbs needed more width than the bar had and `flex-wrap` stacked them
+mid-session — **the canvas removed that premise and made the clamps actively wrong.** The bar is
+laid out on a 1920-wide artboard on every screen now, so there is no window in which the row is
+short of space; and a `vw` inside the canvas resolves against the real viewport and is then scaled
+a second time, so a clamp here shrinks the pills below the size the artboard asked for. Do not
+re-introduce viewport units on this page, and do not let `data-[next=true]` set geometry: the
+filled and outlined states must stay the same size or the row reflows when a step becomes the next
+one.
+
+**Everything on this page is fixed px against a 1920×1080 artboard, and `<body>` *is* that
+artboard** — a `position: fixed` box of exactly that size, which the `<style>` block in `<head>`
+centres and scales to the window with `min(tan(atan2(100dvw, 1920px)), tan(atan2(100dvh, 1080px)))`.
+The trig is how you divide two lengths in CSS: `scale()` takes a number and `calc(100dvw / 1920)`
+is a length. The bare `--fit: 1` declared above it is the fallback an engine without `atan2()`
+lands on, which is the pre-canvas behaviour rather than something worse.
+
+This is what makes `overflow-hidden` on the shell mean what it always claimed to. The rule is that
+overflow must be *visibly* wrong rather than parked below a fold nobody will scroll to — but while
+the shell was `h-dvh`, it was reporting **the host's window** as a defect in the content, and the
+host does not drive this page from a 1080p screen. So: add no relative units to make a region
+"fit", and do not answer an overflow by shrinking the shell. An overflow here is now a fact about
+what was authored at 1920×1080, and the fix belongs in the content — `promptClass`'s
+character-count step-down is the shape to copy. The one thing that legitimately escapes the canvas
+is the host menu, because a modal `<dialog>` renders in the top layer: it is read at arm's length
+rather than from the back of the room, so it keeps its authored size and its `max-w-[90vw]` keeps
+meaning the window.
 
 `syncControls` must be called from **all five sites** — `render`'s ordinary path, its sessionless
 early return, its wrong-quiz early return, `fire`'s `finally` (which re-enables every button
