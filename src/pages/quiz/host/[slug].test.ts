@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  *
  * ## Why this file scans source instead of running the loop
  *
- * `host.astro`'s `<script>` block is not importable — nothing in the project loads it, and
+ * `host/[slug].astro`'s `<script>` block is not importable — nothing in the project loads it, and
  * there is no harness for an Astro page's inline script. So the loop's *behaviour* is verified
  * manually, per the plan's Phase 4 manual rows, and what can be protected here is the
  * **structure that behaviour depends on**.
@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
  * green file imply more: nothing below proves the poll fires at the right moment, stops at
  * the right moment, or paints the right numbers. What it proves is that there is still
  * exactly one timer, one predicate and one fetch site — the properties whose loss produced
- * the bugs `host.astro`'s own docstrings record.
+ * the bugs `host/[slug].astro`'s own docstrings record.
  *
  * `participation.test.ts` and `boundary.test.ts` take the same approach for the same reason,
  * including stripping comments first so the file can explain its own rules without tripping
@@ -25,7 +25,7 @@ import { describe, expect, it } from "vitest";
  */
 
 const SOURCE = readFileSync(
-  fileURLToPath(new URL("./host.astro", import.meta.url)),
+  fileURLToPath(new URL("./[slug].astro", import.meta.url)),
   "utf8",
 );
 
@@ -335,7 +335,7 @@ describe("one predicate decides both the panels and the poll", () => {
    * altogether. The precedent is the toast extraction's own assertion further down this file.
    */
   it("reaches the predicate through the extracted module", () => {
-    expect(CODE).toContain('} from "../../lib/client/controls";');
+    expect(CODE).toContain('} from "../../../lib/client/controls";');
     expect(CODE).toContain("pollTargetFor,");
     // And it did not grow back here. A local copy would be free to disagree with the one the
     // tests execute, which is the whole failure this extraction removes.
@@ -1233,7 +1233,7 @@ describe("the message toast dismisses itself from one place", () => {
    * module, and this asserts the page reaches for it.
    */
   it("arms the hide through the tested module", () => {
-    expect(CODE).toContain('from "../../lib/client/toast"');
+    expect(CODE).toContain('from "../../../lib/client/toast"');
     expect(CODE).toContain("createAutoHide(");
     expect(CODE).toContain("messageHide.show(MESSAGE_HIDE_MS[register])");
   });

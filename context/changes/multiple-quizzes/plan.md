@@ -746,37 +746,37 @@ mid-session deploy cannot make an old document claim a current quiz — it fails
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `bun run test`
-- [x] 2.2 Type checking passes: `bun run type-check`
-- [x] 2.3 Linting passes: `bun run lint`
-- [x] 2.4 A document written without `quizId` parses, with the resulting value asserted
-- [x] 2.5 `start` returns 409 for a different quiz and 200 `already-started` for the same one
-- [x] 2.6 `start` refuses an absent and an unknown quiz id, outcome asserted
-- [x] 2.7 Break-the-guard: reverting the `quizId` `superRefine` fails the named test
+- [x] 2.1 Unit tests pass: `bun run test` — 5b6242d
+- [x] 2.2 Type checking passes: `bun run type-check` — 5b6242d
+- [x] 2.3 Linting passes: `bun run lint` — 5b6242d
+- [x] 2.4 A document written without `quizId` parses, with the resulting value asserted — 5b6242d
+- [x] 2.5 `start` returns 409 for a different quiz and 200 `already-started` for the same one — 5b6242d
+- [x] 2.6 `start` refuses an absent and an unknown quiz id, outcome asserted — 5b6242d
+- [x] 2.7 Break-the-guard: reverting the `quizId` `superRefine` fails the named test — 5b6242d
 
 #### Manual
 
-- [x] 2.8 A full session runs end to end on two devices with no visible change
-- [x] 2.9 The 409 copy appears on the host panel when a different quiz is requested
+- [x] 2.8 A full session runs end to end on two devices with no visible change — 5b6242d
+- [x] 2.9 The 409 copy appears on the host panel when a different quiz is requested — 5b6242d
 
 ### Phase 3: A URL per quiz
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `bun run test`
-- [ ] 3.2 Type checking passes: `bun run type-check`
-- [ ] 3.3 Linting passes: `bun run lint`
-- [ ] 3.4 Build succeeds: `bun run build`
-- [ ] 3.5 E2E passes: `bun run e2e`
-- [ ] 3.6 Editing each moved page runs its sibling suite via the per-edit hook
-- [ ] 3.7 An unknown slug returns 404 on both quiz routes
+- [x] 3.1 Unit tests pass: `bun run test`
+- [x] 3.2 Type checking passes: `bun run type-check`
+- [x] 3.3 Linting passes: `bun run lint`
+- [x] 3.4 Build succeeds: `bun run build`
+- [x] 3.5 E2E passes: `bun run e2e`
+- [x] 3.6 Editing each moved page runs its sibling suite via the per-edit hook
+- [x] 3.7 An unknown slug returns 404 on both quiz routes
 
 #### Manual
 
-- [ ] 3.8 `/quiz/host` lists the quizzes and each link opens the right panel
-- [ ] 3.9 The projector QR resolves to `/quiz/<slug>` and a phone joins through it
-- [ ] 3.10 `/quiz` redirects with a session and shows `brak sesji` without one
-- [ ] 3.11 A full session runs end to end on two devices through the new addresses
+- [x] 3.8 `/quiz/host` lists the quizzes and each link opens the right panel
+- [x] 3.9 The projector QR resolves to `/quiz/<slug>` and a phone joins through it
+- [x] 3.10 `/quiz` redirects with a session and shows `brak sesji` without one
+- [x] 3.11 A full session runs end to end on two devices through the new addresses
 
 ### Phase 4: The short join code
 

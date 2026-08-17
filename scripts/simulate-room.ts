@@ -10,7 +10,7 @@
  * and purges on the way out. You watch a report.
  *
  * This script holds only the *room*. It never calls a host verb and never holds
- * `LIVEQUIZ_HOST_SECRET` — you drive the session from `/quiz/host` exactly as you will
+ * `LIVEQUIZ_HOST_SECRET` — you drive the session from `/quiz/host` (pick the quiz there) exactly as you will
  * on stage, and N bots join, watch the phase and answer on their own. What it rehearses
  * is the half a probe cannot: the host's own hands, the projector's copy at a real
  * question count, and whether a leaderboard built from a plausible spread of answers
@@ -43,7 +43,7 @@
  *
  * Run:
  *   bun run dev                        # terminal 1
- *   bun run quiz:simulate              # terminal 2, then open /quiz/host and press start
+ *   bun run quiz:simulate              # terminal 2, then open /quiz/host, pick the quiz, press start
  *
  *   [--clients=25]        room size
  *   [--base=http://localhost:4321]
@@ -685,7 +685,7 @@ async function main(): Promise<void> {
     `\nSymulacja sali — ${config.clients} botów przeciwko ${config.baseUrl}\n` +
       `  ${Math.round(config.correctRate * 100)}% zna odpowiedź, ` +
       `${Math.round(config.silentRate * 100)}% milczy, seed ${config.seed}\n` +
-      "  Ty prowadzisz z /quiz/host — skrypt nie dotyka żadnego verbu hosta.\n",
+      "  Ty prowadzisz z /quiz/host (wybierz quiz) — skrypt nie dotyka żadnego verbu hosta.\n",
   );
 
   let closing = false;

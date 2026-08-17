@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  *
  * ## Why this file scans source instead of running the countdown
  *
- * `index.astro`'s `<script>` block is not importable — nothing in the project loads it, and
+ * `[slug].astro`'s `<script>` block is not importable — nothing in the project loads it, and
  * an Astro page's inline script has no harness. So the countdown's *behaviour* is verified
  * manually, per the plan's Phase 3 manual rows, and what can be protected here is the
  * **structure that behaviour depends on**. `host.test.ts` says the same thing about the same
@@ -27,7 +27,7 @@ import { describe, expect, it } from "vitest";
  */
 
 const SOURCE = readFileSync(
-  fileURLToPath(new URL("./index.astro", import.meta.url)),
+  fileURLToPath(new URL("./[slug].astro", import.meta.url)),
   "utf8",
 );
 

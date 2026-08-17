@@ -8,11 +8,23 @@ context/
 docs/
 *.md
 
-# Pinned by structural source scans (host.test.ts, index.test.ts): these files'
-# inline scripts are asserted as literal text, so re-wrapping a line does not
-# just fail a guard — it can silently disarm one. The timer guard in
-# host.test.ts went from "exactly one fetching timer" to matching nothing at
+# Pinned by structural source scans (host/[slug].test.ts, [slug].test.ts): these
+# files' inline scripts are asserted as literal text, so re-wrapping a line does
+# not just fail a guard — it can silently disarm one. The timer guard in the host
+# panel's suite went from "exactly one fetching timer" to matching nothing at
 # all when Prettier reflowed the script. Formatting is not worth a guard that
 # cannot fail (test-plan.md §2 Risk #2).
-src/pages/quiz/host.astro
-src/pages/quiz/index.astro
+#
+# **These paths moved with the pages** (multiple-quizzes): `host.astro` became
+# `host/[slug].astro` and `index.astro` became `[slug].astro`. A stale entry here
+# is silent in both directions — the suite goes red at best, and at worst a
+# reflow disarms a guard on the way past. The `[` and `]` are escaped because
+# `.prettierignore` reads gitignore glob syntax, where a bare `[slug]` is a
+# character class matching one of `s l u g` and would not match this file.
+src/pages/quiz/\[slug\].astro
+src/pages/quiz/host/\[slug\].astro
+
+# `/quiz` and `/quiz/host` are the two entry pages that replaced the addresses
+# those views vacated. They carry no inline script and no source scan, so they
+# are formatted normally — listed here only so a reader looking for them knows
+# their absence is deliberate.

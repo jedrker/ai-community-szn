@@ -243,9 +243,24 @@ lives only on `/quiz/spine-check`, which 404s in production by design (it render
 HTML) — so **the terminal is the only reset path at an event.** Do it before the room arrives, not
 after they start joining.
 
-**5. Open `/quiz/host` and paste the host secret.**
+**A stale session now blocks a second thing, visibly.** Since a session records which quiz it is
+running, `start` on a *different* quiz answers **409** with the running quiz's title rather than a
+200 that looks like success — so a leftover session does not merely get picked up, it stands between
+you and the quiz you meant to run. The fix is the same reset. This is the good failure: the old
+behaviour was to quietly resume the wrong quiz.
 
-The host view is at `<production-url>/quiz/host`. The page itself is unprotected — there is nothing
+**5. Open `/quiz/host`, pick the quiz, and paste the host secret.**
+
+`<production-url>/quiz/host` is now a **picker**, not the panel: it lists every committed quiz by
+title with its four-digit join code, and clicking one opens that quiz's panel at
+`/quiz/host/<slug>`. Read the code off this page rather than hunting for it — it is the number you
+say out loud to anyone whose phone will not scan.
+
+**Pick deliberately.** With a session already running, pressing `start` on a *different* quiz's panel
+is refused with a Polish 409 naming the quiz that is running (see step 4) — which is the safety net,
+not the plan. The plan is to open the right panel.
+
+The panel itself is unprotected — there is nothing
 on it worth guarding — but every action sends the secret as a header, so paste
 `LIVEQUIZ_HOST_SECRET` into the **Sekret hosta** field once. It is held in `sessionStorage` for that
 tab only: **close the tab and you re-paste it.** Do not open the host view in a tab you are going to
@@ -262,7 +277,10 @@ the log stream anyway, so this costs nothing extra. A wrong or missing secret sh
 Polish message, *Brak uprawnień hosta*. Finding that out at the front of a room is the failure this
 step exists to prevent.
 
-Then point the room at **`/quiz`** — you do not need a second screen for it. **In the lobby the
+Then point the room at **`/quiz`** — or at `/quiz/<slug>` directly, which is what the projector's QR
+encodes. `/quiz` reads the running session and redirects there, so the short address on the old QR
+codes and in people's history still lands in the right room; before you press `start` it says the
+quiz has not started rather than 404ing. You do not need a second screen for it. **In the lobby the
 projector is the join screen**: a white plate carrying a QR big enough to scan from the back row,
 and beside it the address in yellow and the number of people who have arrived. Once a question is
 open the same two move into the top strip, small but never gone, for whoever walks in at question
@@ -394,7 +412,7 @@ raise it before the event rather than after.
     couple of seconds of grace past the visible zero so a slow phone that tapped in time still
     lands; the room is not told about it, and you do not need to.
   - **You cannot extend it from the stage, and this is deliberate.** There is no override button.
-    Changing a budget is an edit to `src/quiz/definition.ts` and a deploy, like changing a question
+    Changing a budget is an edit to the quiz's file in `src/quiz/definitions/` and a deploy, like changing a question
     — so if the room clearly needs longer on a question, the lever you have is the same one you
     always had: talk over it, then `dalej`.
   - **The budgets are 25 seconds for a tap and 30 for anything typed.** If a question feels

@@ -9,15 +9,32 @@ import type { APIRequestContext, Page } from "@playwright/test";
  * depend on the arming flow. Both go through the API instead — the E2E equivalent of
  * `storageState` (see `e2e/E2E-RULES.md` §5).
  *
- * Mirrors, not copies: the two string constants below are the wire contract of
- * `src/lib/session/host.ts` and `src/pages/quiz/host.astro`. They are spelled here
- * because a browser-level spec may not value-import from `src/lib/session/`
- * (`src/lib/client/boundary.test.ts`'s rule, and the same reasoning: a spec is
- * client-side code). If either drifts from the app, the seed spec fails on the next
- * run — loudly, not silently.
+ * Mirrors, not copies: the string constants below are the wire contract of
+ * `src/lib/session/host.ts` and `src/pages/quiz/host/[slug].astro`. They are spelled
+ * here because a browser-level spec may not value-import from `src/lib/session/` or
+ * `src/quiz/` (`src/lib/client/boundary.test.ts`'s rule and `E2E-RULES.md` §5, same
+ * reasoning: a spec is client-side code). If either drifts from the app, the seed spec
+ * fails on the next run — loudly, not silently.
  */
 const HOST_SECRET_HEADER = "x-livequiz-host-secret";
 const SECRET_STORAGE_KEY = "quiz-host-secret";
+
+/**
+ * The quiz these specs drive (multiple-quizzes).
+ *
+ * A host panel now lives at `/quiz/host/<slug>`, so a spec has to name one — and it is
+ * spelled here, once, rather than in each spec: a registry rearrangement is then one
+ * edit, and no spec is quietly pointed at a different quiz than its sibling.
+ *
+ * A mirror of `src/quiz/definitions/`, like the two constants above, and it fails the
+ * same way — an unknown slug 404s and every locator below it misses, loudly. **Which**
+ * quiz is irrelevant to these specs: they assert which verb the panel offers in which
+ * phase, and that is a property of the session, not of the questions.
+ */
+export const QUIZ_SLUG = "summer-tour-szczecin";
+
+/** Where a host panel lives, assembled once from the slug above. */
+export const HOST_PANEL_PATH = `/quiz/host/${QUIZ_SLUG}`;
 
 /** `bun` loads `.env`; `npx` does not. See `playwright.config.ts`. */
 export const hostSecret = process.env.LIVEQUIZ_HOST_SECRET ?? "";

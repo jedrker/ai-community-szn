@@ -61,8 +61,10 @@ actually injects.
 | `/wydarzenia`, `/wydarzenia/[...slug]` | prerendered | Event archive |
 | `/prelegenci`, `/prelegenci/[...slug]` | prerendered | Speaker directory |
 | `/zglos-sie` | on-demand | Speaker application form |
-| `/quiz` | on-demand | LiveQuiz — the attendee's phone |
-| `/quiz/host` | on-demand | LiveQuiz — the host panel and projector rail |
+| `/quiz` | on-demand | LiveQuiz — redirects to the quiz being run; the "no session yet" screen when none is |
+| `/quiz/<slug>` | on-demand | LiveQuiz — the attendee's phone, one address per quiz |
+| `/quiz/host` | on-demand | LiveQuiz — the host's picker: every committed quiz, with its join code |
+| `/quiz/host/<slug>` | on-demand | LiveQuiz — the host panel and projector rail for one quiz |
 | `/api/*` | on-demand | POST handlers; read `formData()`, reply JSON, Polish error strings |
 
 `astro.config.ts` sets `output: "server"` and content routes opt back into static generation with
@@ -74,7 +76,7 @@ do not add or remove a `prerender` export for consistency's sake.
 ```
 src/content/         events + speakers as Markdown — this is the CMS, there is no admin UI
 src/content.config.ts Zod schemas for both collections
-src/quiz/            the quiz definition and its schema; validated at build time
+src/quiz/            the quiz registry and its schema; validated at build time
 src/lib/session/     Redis keys, session state, scoring, standings — the authoritative store
 src/lib/client/      browser modules (vanilla TypeScript, no UI framework)
 src/pages/           routes, including src/pages/api/ handlers

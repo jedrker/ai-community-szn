@@ -10,7 +10,7 @@ import { quizzes } from "../../quiz/index";
  * Throwaway by design. It exists to prove the spine moves state end to end before
  * S-02 depends on it, and to give F-04 something to point simulated devices at.
  *
- * **The production views are `/quiz` (attendee) and `/quiz/host` (host).** S-02
+ * **The production views are `/quiz/<slug>` (attendee) and `/quiz/host/<slug>` (host).** S-02
  * built them, and they — not this page — are the pattern to follow: shared modules
  * in `src/lib/client/`, imported by an Astro `<script>`, with the server handing
  * values down through `define:vars`. That is Open Roadmap Question 2's answer, and
@@ -22,7 +22,7 @@ import { quizzes } from "../../quiz/index";
  *
  * **Its browser-side secret is why it must stay behind `LIVEQUIZ_HARNESS`.** The
  * `hostSecret` below is rendered into the page, which is acceptable *only* because
- * this page cannot exist in production. Do not read it as precedent: `/quiz/host`
+ * this page cannot exist in production. Do not read it as precedent: the host panel
  * has the host type the secret instead, and it never appears in the HTML or the
  * bundle.
  *

@@ -1,0 +1,88 @@
+---
+import "../../../styles/global.css";
+
+import { quizzes } from "../../../quiz/index";
+
+/**
+ * The host's entry point (multiple-quizzes).
+ *
+ * `/quiz/host` used to *be* the panel. Now it is the one address a host has to remember,
+ * and the panel lives a slug deeper at `/quiz/host/<slug>`. Keeping `host` a **static
+ * path segment** is what makes that safe: no quiz slug can ever collide with it, so
+ * there are no reserved words to police and no dependence on Astro's route-priority
+ * rules.
+ *
+ * **On demand — no `prerender` export**, like both quiz views. It renders from the
+ * registry, which is committed source, so a prerender would be defensible — but this
+ * route sits under `/quiz/` with the rest of LiveQuiz and the root CLAUDE.md's route
+ * table is the place that decision is recorded. Consistency here costs nothing: the
+ * registry is parsed once at module scope either way.
+ *
+ * **Reads no session and no secret.** It only names committed quizzes and their join
+ * codes — the same things printed on the projector — so it exposes nothing an attendee
+ * could not already see by visiting a quiz. The write path stays guarded by the routes
+ * that already guard it; the panel behind these links is as unprotected as the PRD wants.
+ *
+ * The codes are here because the host reads them onto the projector, and having to open
+ * a panel to find one is how a host ends up reading the wrong number to the room.
+ *
+ * Order is the registry's order — rearranging the list means rearranging
+ * `src/quiz/definitions/index.ts`, not this page.
+ */
+---
+
+<html lang="pl" class="bg-quiz-ink">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>LiveQuiz — wybierz quiz</title>
+  </head>
+  <body
+    class="min-h-dvh bg-quiz-ink px-7 py-10 font-archivo text-quiz-signwhite antialiased"
+  >
+    <main class="mx-auto flex w-full max-w-2xl flex-col gap-8">
+      <header class="flex flex-col gap-2">
+        <h1
+          class="text-[20px] font-semibold uppercase tracking-[0.14em] text-quiz-zinc"
+        >
+          LiveQuiz — panel hosta
+        </h1>
+        <p class="text-[26px] font-semibold leading-tight">
+          Wybierz quiz, który prowadzisz
+        </p>
+      </header>
+
+      <ul class="flex flex-col gap-4">
+        {
+          quizzes.map((quiz) => (
+            <li>
+              <a
+                href={`/quiz/host/${quiz.id}`}
+                class="flex flex-col gap-2 rounded-2xl border border-quiz-divider px-6 py-5
+                       transition-colors hover:border-quiz-chrome focus-visible:border-quiz-chrome
+                       focus-visible:outline-none"
+              >
+                <span class="text-[28px] font-bold leading-tight">
+                  {quiz.title}
+                </span>
+                <span class="text-[20px] text-quiz-zinc">
+                  kod dołączenia:{" "}
+                  <span class="font-bold tabular-nums text-quiz-signwhite tracking-[0.08em]">
+                    {quiz.code}
+                  </span>
+                  {" · "}
+                  {quiz.questions.length} pytań
+                </span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+
+      <p class="text-[20px] leading-relaxed text-quiz-zinc">
+        Uczestnicy dołączają przez kod QR z ekranu projektora.
+      </p>
+    </main>
+  </body>
+</html>

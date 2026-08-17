@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   authenticateHostWithoutUI,
+  HOST_PANEL_PATH,
   hostSecret,
   purgeSession,
   readSessionState,
@@ -79,7 +80,7 @@ test("host panel offers 'dalej' and the closing verb while the first question is
 }) => {
   // Setup — authenticate out of band, never through `#host-menu`.
   await authenticateHostWithoutUI(page, hostSecret);
-  await page.goto("/quiz/host");
+  await page.goto(HOST_PANEL_PATH);
 
   const start = page.getByRole("button", { name: "start", exact: true });
   const advance = page.getByRole("button", { name: "dalej", exact: true });
