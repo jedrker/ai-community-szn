@@ -813,11 +813,11 @@ mid-session deploy cannot make an old document claim a current quiz — it fails
 
 #### Automated
 
-- [x] 6.1 Linting passes: `bun run lint`
-- [x] 6.2 Formatting passes: `bun run format`
-- [x] 6.3 The non-goal appears only as amended, quoted history
+- [x] 6.1 Linting passes: `bun run lint` — 309ddf0
+- [x] 6.2 Formatting passes: `bun run format` — 309ddf0
+- [x] 6.3 The non-goal appears only as amended, quoted history — 309ddf0
 
 #### Manual
 
-- [x] 6.4 A reader can author a second quiz and run a session from the documents alone
-- [x] 6.5 No `CLAUDE.md` still asserts an invariant the code stopped holding
+- [x] 6.4 A reader can author a second quiz and run a session from the documents alone — 309ddf0
+- [x] 6.5 No `CLAUDE.md` still asserts an invariant the code stopped holding — 309ddf0
