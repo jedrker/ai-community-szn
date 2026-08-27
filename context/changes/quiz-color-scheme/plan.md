@@ -536,15 +536,15 @@ stale-slug guard would catch the mismatch, but only at test time.
 
 #### Automated
 
-- [x] 3.1 Tests pass: `bun run test`
-- [x] 3.2 Each carrier's test fails when that carrier is removed
-- [x] 3.3 Type checking, linting, prettier clean
+- [x] 3.1 Tests pass: `bun run test` — e5cf20f
+- [x] 3.2 Each carrier's test fails when that carrier is removed — e5cf20f
+- [x] 3.3 Type checking, linting, prettier clean — e5cf20f
 
 #### Manual
 
-- [x] 3.4 Correct option identifiable in greyscale on projector and phone
-- [x] 3.5 "Mine" vs "correct" distinguishable without hue on the phone
-- [x] 3.6 Nothing shifted on the reveal beat
+- [x] 3.4 Correct option identifiable in greyscale on projector and phone — e5cf20f
+- [x] 3.5 "Mine" vs "correct" distinguishable without hue on the phone — e5cf20f
+- [x] 3.6 Nothing shifted on the reveal beat — e5cf20f
 
 ### Phase 4: Typography — a display face on non-measured text only
 
