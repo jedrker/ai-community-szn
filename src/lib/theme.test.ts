@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -166,6 +166,49 @@ describe("the registered themes", () => {
     expect(getThemeForQuiz(undefined)).toBeUndefined();
     // A slug shaped like a quiz id but registered nowhere.
     expect(getThemeForQuiz("a-quiz-with-no-theme")).toBeUndefined();
+  });
+});
+
+describe("the evening's mark", () => {
+  /**
+   * A missing logo is **silent** — a broken `<img>` on a projector, in a room, with no CI and no
+   * visual test to catch it. `theme.ts` cannot check this itself: it has to import inside a
+   * serverless function and under a bare `vitest run`, where `node:fs` is absent or wrong. A test
+   * may read the filesystem, and `src/quiz/definition.test.ts` establishes the pattern.
+   *
+   * Note what this does *not* buy: it gates `bun run test` and `pre-push`, not the Vercel deploy,
+   * and a failed deploy here is silent. So this catches a typo before a push, never after one.
+   */
+  it("points every declared logo at a file that exists", () => {
+    const publicDir = fileURLToPath(new URL("../../public/", import.meta.url));
+    let declared = 0;
+
+    for (const slug of themedQuizSlugs()) {
+      const theme = getThemeForQuiz(slug)!;
+      if (theme.logo === undefined) {
+        continue;
+      }
+      declared += 1;
+
+      // A path under `public/` is served from the root, so it must be rooted to resolve at all.
+      expect(
+        theme.logo.startsWith("/"),
+        `theme "${theme.name}" declares a logo that is not rooted: ${theme.logo}`,
+      ).toBe(true);
+
+      const onDisk = `${publicDir}${theme.logo.slice(1)}`;
+      expect(
+        existsSync(onDisk),
+        `theme "${theme.name}" declares a logo no file answers: ${theme.logo}`,
+      ).toBe(true);
+    }
+
+    // Non-vacuity: with no logo declared anywhere the loop above asserts nothing, and would keep
+    // passing after a rename that dropped every path.
+    expect(
+      declared,
+      "no theme declares a logo, so this guard proved nothing",
+    ).toBeGreaterThan(0);
   });
 });
 

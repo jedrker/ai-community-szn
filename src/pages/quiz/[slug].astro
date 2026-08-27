@@ -175,9 +175,25 @@ const quizTitles = Object.fromEntries(
            form sits in the thumb zone, because typing a name one-handed is the whole of what
            PRD FR-002 gives thirty seconds to. -->
       <section id="join" hidden class="flex flex-1 flex-col justify-between gap-8">
-        <p class="text-[44px] font-extrabold leading-[46px] tracking-[-0.035em]">
-          Wpisz swoją nazwę, żeby dołączyć do quizu.
-        </p>
+        <!--
+          THE EVENING'S MARK, ON THE JOIN SCREEN ONLY (change `quiz-color-scheme`).
+
+          Grouped with the headline rather than dropped in as a third child: this section is
+          `justify-between` over two groups, so a bare sibling would push the invitation into
+          the middle of the screen and take the form out of the thumb zone — the arrangement
+          the comment above exists to protect.
+
+          Inside `#join` rather than in `<main>`, which is the phone's version of the
+          projector's lobby-only rule: the mark is on screen while somebody is deciding to
+          join and gone once they are answering, so it costs no vertical space on any screen
+          where a question and its options have to fit.
+        -->
+        <div class="flex flex-col gap-4">
+          {theme?.logo !== undefined && <img src={theme.logo} alt="" class="h-9 w-auto" />}
+          <p class="text-[44px] font-extrabold leading-[46px] tracking-[-0.035em]">
+            Wpisz swoją nazwę, żeby dołączyć do quizu.
+          </p>
+        </div>
 
         <form id="join-form" class="flex flex-col gap-4" novalidate>
           <label

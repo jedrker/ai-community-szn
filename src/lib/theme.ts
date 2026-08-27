@@ -99,6 +99,21 @@ export type QuizTheme = {
   /** Names the look, for a failing test's message. Not rendered anywhere. */
   readonly name: string;
   readonly tokens: Readonly<Record<ThemeableToken, string>>;
+  /**
+   * The evening's mark, as a path under `public/`, or absent for a theme with no logo.
+   *
+   * **A plain string, never an import.** `astro:assets` is banned across `src/quiz/` and would be
+   * wrong here for the same reason: this module has to load under a bare `vitest run` and inside a
+   * serverless function, where an ESM asset import resolves through neither. It follows the
+   * convention the events collection already uses for a partner's logo (`logo: z.string()` in
+   * `src/content.config.ts`), which is also why nothing optimises it — no image in this project
+   * goes through Astro's pipeline.
+   *
+   * Nothing validates the path at the build gate, because a gate cannot read the filesystem from
+   * inside a serverless bundle. `theme.test.ts` reads `public/` instead, so a typo is a red test
+   * rather than a broken `<img>` on a projector.
+   */
+  readonly logo?: string;
 };
 
 /**
@@ -115,6 +130,14 @@ export type QuizTheme = {
  */
 const unaitedNineties: QuizTheme = {
   name: "UnAIted 1990s",
+  /**
+   * The community's own mark, not a period wordmark — there is no UnAIted logo committed, and
+   * inventing one here would put a brand nobody approved on a projector. Swapping it is one line
+   * plus a file, and `theme.test.ts` will refuse a path that does not resolve.
+   *
+   * White-on-indigo: the mark ships in white, which is what this palette's ground wants.
+   */
+  logo: "/images/logo/BRAVE-WHITE.svg",
   tokens: {
     ink: "#140627",
     asphalt: "#1f0d38",

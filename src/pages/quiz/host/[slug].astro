@@ -394,6 +394,34 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       class="flex shrink-0 items-center justify-between border-b-2 border-quiz-divider
              pt-[40px] pr-[72px] pb-[28px] pl-[72px]"
     >
+      <!--
+        THE EVENING'S MARK, IN THE LOBBY ONLY (change `quiz-color-scheme`).
+
+        The left slot belongs to `#question-counter` for the whole session, so the mark takes it
+        only while the counter is away — which is the lobby, the one beat where the room is
+        looking at this screen to find out how to get in, and therefore the moment a brand is
+        worth anything. During questions the counter is the one figure the room reads and does
+        not need a logo competing with it.
+
+        Two consequences of that choice, both deliberate. Its height is under the right-hand
+        block's (26px label over a 56px address), so the strip cannot grow — and even if it
+        could, the lobby has no prompt on screen, so `promptClass`'s measurements are not in
+        play in the only phase this is visible. And the QR keeps its `ml-auto`: a third flex
+        child would otherwise re-divide `justify-between` exactly when the room is reading the
+        address.
+
+        The container is always rendered so `el("event-mark")` resolves for every quiz; it holds
+        an `<img>` only for a theme that declares a logo, which is what `applyShell` reads to
+        decide whether there is anything to show.
+      -->
+      <div id="event-mark" hidden class="flex items-center">
+        {
+          theme?.logo !== undefined && (
+            <img src={theme.logo} alt="" class="h-[72px] w-auto" />
+          )
+        }
+      </div>
+
       <!-- Hidden when no question is current — the lobby, and the gap between a purge and
            the next `start`. A counter reading "— / 14" is not a fact about the session; it is
            a slot waiting to be filled, and it reads from the back of the room as debris. -->
@@ -1366,6 +1394,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * ugly rather than showing the lobby underneath a question.
        */
       const topStrip = el("top-strip");
+      const eventMark = el("event-mark");
       const questionCounter = el("question-counter");
       const lobbyBox = el("lobby");
       const lobbyCountBox = el("lobby-count");
@@ -2449,6 +2478,15 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const ended = phase === "ended";
 
         setHidden(lobbyBox, !lobby);
+        /**
+         * The mark rides the lobby's own boolean rather than a rule of its own, and rides it
+         * here rather than beside the counter's three `setHidden` calls: `applyShell` already
+         * runs on every path that writes the counter, so this needs no fourth call site to keep
+         * in step. `childElementCount` is what stands in for "this quiz has a mark" — derived
+         * from the markup that is already there, the way `syncRail` derives from its blocks,
+         * rather than a second boolean crossing `define:vars`.
+         */
+        setHidden(eventMark, !lobby || eventMark.childElementCount === 0);
         setHidden(bodySplit, lobby);
         setHidden(topStrip, ended);
         // Every verb is refused in `ended`, so the row would say only "nothing works".

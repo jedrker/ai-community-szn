@@ -502,35 +502,35 @@ stale-slug guard would catch the mismatch, but only at test time.
 
 #### Automated
 
-- [x] 1.1 Tests pass: `bun run test`
-- [x] 1.2 Type checking passes: `bun run type-check`
-- [x] 1.3 Linting passes: `bun run lint`
-- [x] 1.4 Formatting clean on the two pinned pages
-- [x] 1.5 Frozen-token guard fails when a theme names a frozen token
-- [x] 1.6 Contrast guard fails when a theme value drops below the floor
-- [x] 1.7 Stale-slug guard fails when the registry names a non-existent quiz
+- [x] 1.1 Tests pass: `bun run test` — b6e324d
+- [x] 1.2 Type checking passes: `bun run type-check` — b6e324d
+- [x] 1.3 Linting passes: `bun run lint` — b6e324d
+- [x] 1.4 Formatting clean on the two pinned pages — b6e324d
+- [x] 1.5 Frozen-token guard fails when a theme names a frozen token — b6e324d
+- [x] 1.6 Contrast guard fails when a theme value drops below the floor — b6e324d
+- [x] 1.7 Stale-slug guard fails when the registry names a non-existent quiz — b6e324d
 
 #### Manual
 
-- [x] 1.8 Themed quiz renders 90s; other two unchanged
-- [x] 1.9 Closing screen yellow with black type on all three quizzes, winner legible
-- [x] 1.10 Rail register, lamp, correct band and reveal unchanged on the themed quiz
-- [x] 1.11 Projector read from the back of the room
+- [x] 1.8 Themed quiz renders 90s; other two unchanged — b6e324d
+- [x] 1.9 Closing screen yellow with black type on all three quizzes, winner legible — b6e324d
+- [x] 1.10 Rail register, lamp, correct band and reveal unchanged on the themed quiz — b6e324d
+- [x] 1.11 Projector read from the back of the room — b6e324d
 
 ### Phase 2: The logo
 
 #### Automated
 
-- [ ] 2.1 Tests pass, including the logo path guard
-- [ ] 2.2 Path guard fails on a misspelled path
-- [ ] 2.3 Type checking, linting, prettier clean
+- [x] 2.1 Tests pass, including the logo path guard
+- [x] 2.2 Path guard fails on a misspelled path
+- [x] 2.3 Type checking, linting, prettier clean
 
 #### Manual
 
-- [ ] 2.4 Logo in the projector lobby, gone once a question opens
-- [ ] 2.5 Join QR and short address unmoved in the lobby
-- [ ] 2.6 Logo on the attendee join screen, nothing pushed below the fold
-- [ ] 2.7 No layout shift when the first question opens
+- [x] 2.4 Logo in the projector lobby, gone once a question opens
+- [x] 2.5 Join QR and short address unmoved in the lobby
+- [x] 2.6 Logo on the attendee join screen, nothing pushed below the fold
+- [x] 2.7 No layout shift when the first question opens
 
 ### Phase 3: A second carrier for the two colour-only messages
 
