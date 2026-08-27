@@ -37,6 +37,49 @@ the files here. **Add a static page under `src/pages/quiz/` and that test tells 
 view, once, where a phone arriving by an old QR meets it too — see `quizMismatch` in
 `src/lib/client/render.ts`. Two copies of one error is two places for it to drift.
 
+## A quiz may bring its own palette — nine tokens of it
+
+`src/lib/theme.ts` maps a quiz slug to a theme, and both `[slug]` pages render it as one
+`:root` rule in `<head>`, present only when that quiz registered one. This **overturns a written
+decision**, so the position it replaces is quoted rather than deleted —
+`context/archive/2026-08-15-livequiz-signage-redesign/plan.md:221`:
+
+> Do **not** introduce a second `@theme` block, a `:root` override on the quiz pages, or a
+> `data-theme` attribute. A prefix is boring and it makes every quiz class name self-evident in a
+> diff.
+
+That bought one property: reading `bg-quiz-chrome` in a diff told you the colour. What replaces it
+is a split rather than a free-for-all — **the nine tokens that decorate may move per quiz, the
+eleven that carry a message may not** — so a diff is still self-evident about every colour the room
+is told to read. `theme.ts` carries the two lists and the reasoning per token; `theme.test.ts`
+fails if a token in `global.css` is in neither, if a theme sets a frozen one, or if a theme's type
+pairs fall below **4.5:1**. That floor is the first one this repository has ever stated, and it
+applies to themes only: the shipped palette does not meet it (`pill-disabled` on asphalt is
+2.22:1, a recorded defect), and a test asserts that gap so nobody reads the floor as a claim about
+the default.
+
+Three things about the mechanism are load-bearing:
+
+- **`:root`, never `body`.** Both pages put the ground on `<html>` (`class="bg-quiz-ink"`), and so
+  does the host page's canvas rule. A `body`-scoped override themes the artboard and leaves the
+  letterbox around it at the global colour.
+- **It re-declares variable *values*, and adds no rules.** That is what keeps it clear of the
+  hazard the signage redesign hit (impl-review F10: same-utility rules resolved by token
+  declaration order, so reordering the block silently flipped the reveal's slabs). Do not answer a
+  theming need with a new utility class or a `data-theme` variant.
+- **The closing inversion is out of reach, on purpose.** `--color-quiz-chrome` is frozen, so
+  `html:has(body[data-phase="ended"])` and `data-[phase=ended]:bg-quiz-chrome` resolve to the same
+  yellow on every quiz — the signal the runbook tells the host they will see "without reading
+  anything". The one thing a theme *does* reach there is the type, via
+  `data-[phase=ended]:text-quiz-ink`, so `theme.test.ts` asserts that single pair against the
+  unthemed chrome explicitly. Freeze `ink` instead and the whole ground stops being themeable;
+  this is the cheaper half of that trade, not an oversight.
+
+Two surfaces stay unthemed by decision, and it is not laziness: `/quiz` and `/q/<code>` resolve a
+code and **redirect**, so every render that emits HTML has no quiz in scope, and `/quiz/host`
+shows all of them under one `<body>`. `QuizNotice` is shared by those two plus both 404 branches,
+which is why it takes no theme either.
+
 ## The panel offers only the action the phase accepts
 
 **Which verb is enabled in which phase is stated once, as `verbsFor` in

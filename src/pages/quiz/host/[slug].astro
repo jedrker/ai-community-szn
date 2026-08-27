@@ -7,6 +7,7 @@ import { HOST_SECRET_HEADER } from "../../../lib/session/host";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../../lib/session/realtime";
 import { getQuizById } from "../../../quiz/index";
 import { getPublicQuizById, publicQuizzes } from "../../../quiz/public";
+import { getThemeForQuiz, themeRootCss } from "../../../lib/theme";
 
 /**
  * The host view (roadmap S-02).
@@ -90,6 +91,20 @@ const quiz = slug === undefined ? undefined : getPublicQuizById(slug);
  * fallback standing in for the 404 below.
  */
 const joinCode = slug === undefined ? undefined : getQuizById(slug)?.code;
+
+/**
+ * The evening's palette, or `undefined` for a quiz that registered none (change
+ * `quiz-color-scheme`).
+ *
+ * A second frontmatter lookup beside `joinCode`'s, and for the same reason: the registry is
+ * parsed once at module scope, and the alternative is threading a presentation field through the
+ * public projection that exists to keep answers off the phones.
+ *
+ * It reaches **only the nine themeable tokens**. The closing inversion below, the rail's
+ * four-colour register, the connection lamp and the reveal all read frozen tokens, so they are
+ * identical on every quiz — which is what keeps the runbook's colour table true.
+ */
+const theme = getThemeForQuiz(slug);
 
 /**
  * An unknown slug is a 404 **with something on it** (impl-review F6). A host mistypes a panel
@@ -234,6 +249,25 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>LiveQuiz — prowadzący</title>
+
+    <!--
+      THE THEME (change `quiz-color-scheme`), present only for a quiz that registered one.
+
+      Re-declares the nine themeable tokens on `:root`, which is where they have to land: the
+      ground is on `<html>` (`class="bg-quiz-ink"` above) and so is the canvas rule below, so a
+      `body`-scoped override would theme the artboard and leave the letterbox around it at the
+      global colour.
+
+      **It deliberately does not reach the closing screen.** `--color-quiz-chrome` is frozen, so
+      `html:has(body[data-phase="ended"])` below and the body's `data-[phase=ended]:bg-quiz-chrome`
+      both still resolve to the global yellow on every quiz — the room's signal that the session
+      ended, which the runbook tells the host they will see "without reading anything". What the
+      theme *does* reach there is the type: `data-[phase=ended]:text-quiz-ink` paints the winner in
+      this palette's ink on that yellow, so `theme.test.ts` asserts that one pair explicitly.
+
+      `is:inline` keeps the rule in this response instead of a bundle shared by every quiz.
+    -->
+    {theme !== undefined && <style is:inline set:html={themeRootCss(theme)} />}
 
     <!--
       THE CANVAS: the artboard is 1920x1080, so the page is 1920x1080 and the window scales it.

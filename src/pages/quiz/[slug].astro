@@ -12,6 +12,7 @@ import { MAX_TEXT_ANSWER_LENGTH } from "../../lib/session/scoring";
 import { MAX_WORD_LENGTH } from "../../lib/session/words";
 import QuizNotice from "../../components/QuizNotice.astro";
 import { getPublicQuizById, publicQuizzes } from "../../quiz/public";
+import { getThemeForQuiz, themeRootCss } from "../../lib/theme";
 
 /**
  * The attendee view (roadmap S-02, PRD FR-002/FR-007/FR-008).
@@ -55,6 +56,16 @@ import { getPublicQuizById, publicQuizzes } from "../../quiz/public";
  */
 const slug = Astro.params.slug;
 const quiz = slug === undefined ? undefined : getPublicQuizById(slug);
+
+/**
+ * The evening's palette, or `undefined` for a quiz that registered none (change
+ * `quiz-color-scheme`).
+ *
+ * Resolved in frontmatter rather than handed to the client: a theme is CSS, so it belongs to the
+ * document the server renders, and `boundary.test.ts` scans only `<script>` blocks. `theme.ts` is
+ * the single reader of the custom-property names, so this page and the host view cannot drift.
+ */
+const theme = getThemeForQuiz(slug);
 
 /**
  * An unknown slug is a **404 with a page on it**, not a bare text body (impl-review F6).
@@ -109,6 +120,24 @@ const quizTitles = Object.fromEntries(
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>LiveQuiz — dołącz</title>
+
+    <!--
+      THE THEME (change `quiz-color-scheme`), present only for a quiz that registered one.
+
+      Re-declares the nine themeable tokens on `:root` — the element that carries the ground on
+      this page, per `class="bg-quiz-ink"` above; a `body`-scoped override would leave the
+      outermost surface at the global colour. It overrides variable *values* and never adds a
+      same-utility rule, which is what keeps it clear of the token-ordering hazard the signage
+      redesign hit (impl-review F10).
+
+      `is:inline` so the rule stays in this response rather than being bundled: the value is
+      per-request, and a bundled stylesheet is shared by every quiz.
+
+      The frozen eleven are absent by construction — `themeRootCss` emits only the themeable
+      names — so the reveal, the rail's register, the lamp and the closing inversion all keep
+      reading the global palette on every quiz.
+    -->
+    {theme !== undefined && <style is:inline set:html={themeRootCss(theme)} />}
   </head>
   <!--
     THE PHONE SHELL (signage redesign, step 7).

@@ -41,7 +41,16 @@
   /*
    * LiveQuiz signage palette. Scoped by the `quiz-` prefix on purpose: the
    * tokens above serve the whole community site and must not be repointed.
-   * Every `quiz-` class name is therefore self-evident in a diff.
+   *
+   * These are the palette's *defaults*, and eleven of them are also its
+   * guarantees. Since `quiz-color-scheme`, a quiz may re-declare nine of the
+   * twenty on `:root` for its own evening -- so the older claim here, that
+   * "every `quiz-` class name is self-evident in a diff", now holds only for
+   * the frozen eleven. `src/lib/theme.ts` owns the split and says which is
+   * which; `src/lib/theme.test.ts` fails if a token declared below is neither.
+   *
+   * Adding a token here therefore means classifying it there. Do not repoint
+   * a value below to restyle one quiz -- that restyles all of them.
    */
   --color-quiz-ink: #0b0b0c;
   --color-quiz-asphalt: #141416;

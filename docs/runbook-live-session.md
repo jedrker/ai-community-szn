@@ -414,6 +414,13 @@ raise it before the event rather than after.
   Yellow is the one that used to lie: before the redesign both of its cases came out green, so an
   action that had quietly done nothing looked exactly like one that had worked.
 
+  **These four colours are the same in every quiz, and that is enforced rather than remembered.**
+  Some quizzes now bring their own palette — BRAVE UnAIted runs in 1990s indigo — but a theme may
+  only touch the nine tokens that decorate: the ground, the surfaces, the hairlines and the type.
+  The four edge colours here, the connection lamp, the correct-answer green and the yellow closing
+  screen are all frozen, so nothing on this page becomes quiz-specific. If you ever see one of
+  them in the wrong colour, that is a defect worth reporting, not a theme.
+
   **The bubble now clears itself, and that includes the red one.** It used to stay until the next
   thing happened, which meant "start: OK" sat over the room for the rest of the segment. Green goes
   after about four seconds, red after six, grey and yellow after nine — so if you look away and look
