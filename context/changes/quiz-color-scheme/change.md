@@ -1,7 +1,7 @@
 ---
 change_id: quiz-color-scheme
 title: Per-quiz color scheme and logo (e.g. 90s theme for unAIted)
-status: implementing
+status: implemented
 created: 2026-08-17
 updated: 2026-08-27
 archived_at: null

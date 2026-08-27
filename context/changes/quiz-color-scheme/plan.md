@@ -550,12 +550,12 @@ stale-slug guard would catch the mismatch, but only at test time.
 
 #### Automated
 
-- [x] 4.1 Tests pass, including the scope guard
-- [x] 4.2 Scope guard fails when the display class reaches the prompt
-- [x] 4.3 Type checking, linting, prettier clean
+- [x] 4.1 Tests pass, including the scope guard — 0804dc7
+- [x] 4.2 Scope guard fails when the display class reaches the prompt — 0804dc7
+- [x] 4.3 Type checking, linting, prettier clean — 0804dc7
 
 #### Manual
 
-- [x] 4.4 Display face only where intended; prompt and counter unchanged
-- [x] 4.5 No layout shift on first paint on the projector
-- [x] 4.6 No new font request on the marketing site
+- [x] 4.4 Display face only where intended; prompt and counter unchanged — 0804dc7
+- [x] 4.5 No layout shift on first paint on the projector — 0804dc7
+- [x] 4.6 No new font request on the marketing site — 0804dc7
