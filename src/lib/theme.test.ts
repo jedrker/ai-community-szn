@@ -212,6 +212,94 @@ describe("the evening's mark", () => {
   });
 });
 
+describe("the display voice's scope", () => {
+  /**
+   * **This guards authorship, not fit, and the distinction matters.**
+   *
+   * What actually protects the projector is that the treatment was only applied where nothing
+   * was measured against a column — recorded, with figures, in
+   * `context/changes/quiz-color-scheme/`. No test in this project can measure a rendered line;
+   * what a test *can* do is refuse the class inside a type constant whose size was chosen
+   * against the artboard, which is how the mistake would be made.
+   *
+   * The constants below are the measured ones: the prompt and its character-count step-downs,
+   * the answer band, the control pill, and the class strings the timer, the counters and the
+   * standings are painted with.
+   */
+  const HOST_PAGE = fileURLToPath(
+    new URL("../pages/quiz/host/[slug].astro", import.meta.url),
+  );
+  const DISPLAY_CLASS = "quiz-display";
+
+  /** The constant declarations whose sizes were measured against the 1920x1080 artboard. */
+  const MEASURED_CONSTANTS = [
+    "PROMPT_BASE",
+    "BAND_BASE",
+    "SLAB_SINGLE",
+    "SLAB_MULTIPLE",
+    "FLOW_PILL",
+  ] as const;
+
+  function declarationOf(source: string, name: string): string {
+    // From `const NAME =` to the closing `;` of its initialiser.
+    const start = source.indexOf(`const ${name} =`);
+    if (start < 0) return "";
+    const end = source.indexOf(";", start);
+    return end < 0 ? source.slice(start) : source.slice(start, end);
+  }
+
+  it("finds every measured constant it claims to check", () => {
+    // Non-vacuity: a renamed constant would otherwise leave this suite asserting nothing about
+    // it while still reporting green — the exact failure `lessons.md` records for scans.
+    const source = readFileSync(HOST_PAGE, "utf8");
+    for (const name of MEASURED_CONSTANTS) {
+      expect(
+        declarationOf(source, name).length,
+        `${name} is no longer declared in the host page — this guard has stopped covering it`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps the display voice out of every measured type constant", () => {
+    const source = readFileSync(HOST_PAGE, "utf8");
+    for (const name of MEASURED_CONSTANTS) {
+      expect(
+        declarationOf(source, name),
+        `${name} carries ${DISPLAY_CLASS}, so a measured size would render in the theme's display metrics`,
+      ).not.toContain(DISPLAY_CLASS);
+    }
+  });
+
+  it("emits the display rule only for a theme that declares one", () => {
+    for (const slug of themedQuizSlugs()) {
+      const theme = getThemeForQuiz(slug)!;
+      const css = themeRootCss(theme);
+      if (theme.display === undefined) {
+        expect(
+          css,
+          `theme "${theme.name}" declares no display voice but emits a rule`,
+        ).not.toContain(`.${DISPLAY_CLASS}`);
+      } else {
+        expect(
+          css,
+          `theme "${theme.name}" declares a display voice but emits no rule`,
+        ).toContain(`.${DISPLAY_CLASS} {`);
+        // The width axis is the whole point; a rule without it is a weight change in disguise.
+        expect(css).toContain("font-stretch:");
+      }
+    }
+  });
+
+  it("keeps the display rule inside the same per-request block as the palette", () => {
+    // Not a separate stylesheet and not a global rule: the class must do nothing on an unthemed
+    // quiz, which holds only because the whole block is absent there.
+    for (const slug of themedQuizSlugs()) {
+      const css = themeRootCss(getThemeForQuiz(slug)!);
+      expect(css.startsWith(":root {")).toBe(true);
+    }
+  });
+});
+
 describe("the contrast floor", () => {
   /**
    * Sanity-check the ratio itself before trusting it on the palette: black on white is WCAG's

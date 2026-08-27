@@ -114,6 +114,28 @@ export type QuizTheme = {
    * rather than a broken `<img>` on a projector.
    */
   readonly logo?: string;
+  /**
+   * The evening's display voice, or absent for a theme that keeps the one type treatment.
+   *
+   * **Not a second font file.** Archivo ships as a variable face whose `@font-face` already
+   * declares `font-weight: 100 900` and `font-stretch: 62% 125%`, and both axes are live —
+   * measured in Chromium, the same string at weight 900 runs 314px at 62% and 583px at 125%.
+   * So a distinct voice costs no bytes, no second request against FR-002's join budget, and no
+   * licence, and it cannot reach the marketing site because the rule ships only in a themed
+   * quiz page's own `<head>`.
+   *
+   * **Where it may be applied is a fit question, not a taste one.** The projector is a fixed
+   * artboard with `overflow-hidden`, and its one line with slack is the join address the room
+   * retypes — measured at 885px against a 916px column, so 31px. At `110%` that line overflows
+   * by 47px and at `125%` by 163px. The treatment therefore goes on fluid text and on short
+   * labels, never on anything whose fit was computed. `theme.test.ts` guards the authorship
+   * half of that; `context/changes/quiz-color-scheme/` records the measurements.
+   */
+  readonly display?: {
+    readonly weight: number;
+    readonly stretch: string;
+    readonly tracking?: string;
+  };
 };
 
 /**
@@ -138,6 +160,12 @@ const unaitedNineties: QuizTheme = {
    * White-on-indigo: the mark ships in white, which is what this palette's ground wants.
    */
   logo: "/images/logo/BRAVE-WHITE.svg",
+  /**
+   * Wide and heavy — the poster voice of the decade, and the widest Archivo will go. Applied
+   * only where nothing was measured against a column, so the width buys character rather than
+   * an overflow.
+   */
+  display: { weight: 900, stretch: "125%", tracking: "-0.02em" },
   tokens: {
     ink: "#140627",
     asphalt: "#1f0d38",
@@ -194,7 +222,25 @@ export function themeRootCss(theme: QuizTheme): string {
   const declarations = THEMEABLE_TOKENS.map(
     (token) => `--color-quiz-${token}: ${theme.tokens[token]};`,
   ).join(" ");
-  return `:root { ${declarations} }`;
+  const root = `:root { ${declarations} }`;
+  if (theme.display === undefined) {
+    return root;
+  }
+  /**
+   * A semantic class rather than a token, because what varies is three properties at once and
+   * Tailwind has no utility that sets a variable font's width axis. `event-prose` in
+   * `global.css` is the precedent for a named class in this project. It ships only inside a
+   * themed page's own `<style>`, so `quiz-display` does nothing anywhere else — including on
+   * an unthemed quiz, where this function is never called.
+   */
+  const tracking =
+    theme.display.tracking === undefined
+      ? ""
+      : ` letter-spacing: ${theme.display.tracking};`;
+  const display =
+    `.quiz-display { font-weight: ${theme.display.weight};` +
+    ` font-stretch: ${theme.display.stretch};${tracking} }`;
+  return `${root} ${display}`;
 }
 
 /**

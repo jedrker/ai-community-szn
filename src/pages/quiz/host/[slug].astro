@@ -696,7 +696,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
       <div class="flex min-w-0 flex-1 flex-col justify-center gap-[48px] px-[72px]">
         <div class="flex flex-col gap-3">
-          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+          <!--
+            `quiz-display` (change `quiz-color-scheme`) reaches the lobby's *labels* and
+            nothing else on this page.
+
+            **Not the address below it.** At 56px the short address measures 885px against
+            this column's 916px — 31px of slack — so widening its face overflows the artboard:
+            47px over at `110%`, 163px at `125%`. It is also the one line the room retypes.
+            The full address was already replaced once for exactly this reason; see the note
+            further down. A label of eleven characters has the room to carry a voice, and the
+            line that matters keeps the metrics it was measured with.
+          -->
+          <p
+            class="quiz-display text-[26px] font-semibold uppercase tracking-[0.16em]
+                   text-quiz-zinc"
+          >
             Wejdź na
           </p>
           <!--
@@ -729,7 +743,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
              is a single token with no space in it, so without a rule that permits a break inside
              a word it cannot wrap at all — it can only overflow, which is what it was doing. -->
         <div class="flex flex-col gap-3">
-          <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+          <p
+            class="quiz-display text-[26px] font-semibold uppercase tracking-[0.16em]
+                   text-quiz-zinc"
+          >
             Pełny adres
           </p>
           <p
