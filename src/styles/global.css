@@ -36,7 +36,17 @@
   --color-surface-border: #222233;
   --color-text-primary: #f0f0f0;
   --color-text-secondary: #999999;
-  --font-family-archivo: "Archivo", sans-serif;
+  /*
+   * `--font-*`, not `--font-family-*`: Tailwind 4 derives the utility name from
+   * the namespace, so `--font-family-archivo` generated `.font-family-archivo`
+   * while every surface in the project asks for `font-archivo`. No rule matched,
+   * so both `.woff2` files were fetched and applied to nothing and the whole site
+   * rendered in the platform sans stack. Renaming the token is the whole fix.
+   *
+   * Not `--font-sans`: the pages name `font-archivo` explicitly, and repointing
+   * the default would also restyle anything that never asked for it.
+   */
+  --font-archivo: "Archivo", sans-serif;
 
   /*
    * LiveQuiz signage palette. Scoped by the `quiz-` prefix on purpose: the

@@ -147,6 +147,19 @@ importable and would have appeared to work while producing a second, conflicting
 future task seems to want it, the answer is `@tailwindcss/vite` in `vite.plugins`, not an entry in the
 Astro `integrations` array.
 
+**A theme token's namespace decides its utility's name, and getting it wrong fails silently.**
+`--font-archivo` generates `.font-archivo`; `--font-family-archivo` generates
+`.font-family-archivo`, which nothing asks for — so the site rendered in the platform sans stack
+for as long as that typo stood, with both `.woff2` files fetched and applied to nothing. No tool in
+this project can see it: `astro check` type-checks TypeScript, ESLint does not resolve utilities,
+and a class matching no rule renders fine in the wrong typeface. `src/styles/tokens.test.ts` is the
+guard — it refuses a `--font-family-*` token and refuses a `font-<name>` class with no token behind
+it. Colours have the same shape of rule in `src/lib/theme.test.ts`.
+
+**Per-quiz palettes exist.** Nine of the twenty `--color-quiz-*` tokens may be re-declared per
+quiz; the other eleven carry a message and may not. See `src/pages/quiz/CLAUDE.md` and
+`src/lib/theme.ts`.
+
 ## Client interactivity — vanilla modules, no framework
 
 Browser behaviour lives in `src/lib/client/` as plain TypeScript modules, imported by Astro
