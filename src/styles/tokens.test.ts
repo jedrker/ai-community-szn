@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -90,6 +91,66 @@ function declaredFontTokens(): string[] {
     (match) => match[1]!,
   );
 }
+
+/**
+ * The font files, pinned by content.
+ *
+ * **This is the cheap half of a two-part guard, and it is the half that runs.** What actually
+ * matters is glyph coverage — whether the shipped `.woff2` carries `ą ć ę ł ń ś ź ż` — and that
+ * is a fact about a binary a browser decodes, so it lives in `e2e/polish-glyphs.spec.ts`. But
+ * `bun run e2e` is wired to no gate in this repository, while `bun run test` runs on `pre-push`.
+ * So this asserts the weaker, cheaper property: the bytes shipping are the bytes whose coverage
+ * was verified.
+ *
+ * The failure this exists for: at project scaffold the file committed as the latin-ext subset was
+ * Archivo's **vietnamese** subset — the two Google Fonts URLs differ by one character. Every
+ * Polish diacritic fell back to a system face, and nothing failed, for months.
+ *
+ * Changing a font is legitimate; changing it without re-running the coverage spec is not. Update
+ * the digest **after** `bun run e2e` is green, never to make this test pass.
+ */
+describe("the font files", () => {
+  const FONTS = fileURLToPath(new URL("../../public/fonts/", import.meta.url));
+
+  /** sha256 of the files whose Polish coverage `e2e/polish-glyphs.spec.ts` has verified. */
+  const VERIFIED = {
+    "Archivo-Variable-latin-ext.woff2":
+      "a75c792f980dc1dbe0e85efb721808267e32d2e7ef6c4a99d525c842d8712a08",
+    "Archivo-Variable-latin.woff2":
+      "e3a28eade21a900c7155a247757f4b2834c07bb7ef07ad7efa55cebaac1e8f5e",
+  } as const;
+
+  it("ships the exact files whose glyph coverage was verified", () => {
+    for (const [name, digest] of Object.entries(VERIFIED)) {
+      const actual = createHash("sha256")
+        .update(readFileSync(`${FONTS}${name}`))
+        .digest("hex");
+      expect(
+        actual,
+        `${name} is not the file whose coverage was verified. If you changed it deliberately, run \`bun run e2e\` and update the digest only once the Polish-glyph spec is green.`,
+      ).toBe(digest);
+    }
+  });
+
+  it("declares a @font-face for each pinned file", () => {
+    const css = readFileSync(GLOBAL_CSS, "utf8");
+    for (const name of Object.keys(VERIFIED)) {
+      expect(css, `global.css references no ${name}`).toContain(name);
+    }
+    // Non-vacuity, and a cross-check: a third file appearing in the stylesheet without a pin
+    // would be shipped unverified.
+    const referenced = [
+      ...css.matchAll(/\/fonts\/([A-Za-z0-9._-]+\.woff2?)/g),
+    ].map((m) => m[1]!);
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const name of new Set(referenced)) {
+      expect(
+        Object.keys(VERIFIED),
+        `global.css loads ${name}, which no digest covers`,
+      ).toContain(name);
+    }
+  });
+});
 
 describe("the font tokens", () => {
   /**

@@ -76,3 +76,57 @@ That third report is the one that would have surfaced the original defect.
 - **Marketing pages.** They change typeface too, and no measurement here covers their layout. They
   are fluid rather than fixed-artboard, so clipping is not the risk; word-wrap and line-length are,
   and those want an eye rather than a number.
+
+---
+
+## Follow-up: the typeface had no Polish glyphs
+
+Found by the user immediately after the fix above landed, which is the honest sequence: making
+Archivo apply is what made this visible.
+
+**The file committed as the latin-ext subset was Archivo's *vietnamese* subset.** The two Google
+Fonts URLs differ by one character — `…k3kQo8UDI-1M0wlSfd**b**oLmvDIaK18A.woff2` is vietnamese,
+`…Sfd**f**oLmvDIaK18A.woff2` is latin-ext — and the wrong one was fetched at project scaffold
+(`7278d2a`). The `unicode-range` in `global.css` was copied correctly from the latin-ext block, so
+the declaration promised `U+0100-02BA` while the bytes delivered `U+1EA0-1EF9`.
+
+Measured, per character, on the real pages with the real declared ranges:
+
+| Characters | Before | Why |
+| --- | --- | --- |
+| `ó Ó` | rendered in Archivo | U+00F3/U+00D3 are in the *latin* subset, which was the correct file |
+| `ą ć ę ł ń ś ź ż` + capitals | **fell back to a system face** | U+0100–017F, promised by the broken file |
+
+So every Polish word mixed two typefaces. It was invisible for months for two reasons stacked:
+while `.font-archivo` matched no rule the whole site was uniformly the platform stack, and once
+that was fixed the page still *rendered* — just wrong.
+
+There was no cheap fix. Probed with deliberately wide ranges, `Archivo-Variable-latin.woff2`
+composes `ć ń ś ź` from a combining acute it does carry, but has no `ą ę ł ż Ł Ż` at all — the most
+common Polish letters after `ó`. Widening a range would have recovered four characters and left
+six.
+
+**Replaced** `public/fonts/Archivo-Variable-latin-ext.woff2` with the real latin-ext subset
+(85 856 B, Archivo v25; the wrong file was 34 464 B). Verified after: **zero** Polish characters
+fall back, on `/quiz/unaited`, `/quiz/host/unaited`, `/wydarzenia` and `/`.
+
+### Why self-hosted rather than a Google Fonts link
+
+Considered, because a link makes this class of mistake impossible — Google picks the subsets. Kept
+self-hosting for three project-specific reasons: it adds no third-party origin to the join path,
+where `src/lib/client/CLAUDE.md` records that "the venue network is the one link nobody controls"
+and FR-002 allows thirty seconds; hosted Google Fonts sends visitor IPs to Google, which is a poor
+default for an EU community site; and this was a wrong *file*, not a wrong *approach*.
+
+### The guard, in two layers
+
+| Layer | Asserts | Runs on |
+| --- | --- | --- |
+| `e2e/polish-glyphs.spec.ts` | the property — every Polish diacritic renders in the site's own family, measured per glyph by advance width | `bun run e2e` |
+| `src/styles/tokens.test.ts` | the pin — the shipped `.woff2` bytes are the ones whose coverage was verified, and no unpinned font is referenced | `bun run test`, so `pre-push` |
+
+The split is deliberate: coverage needs a browser, and `bun run e2e` is wired to no gate here, so
+the cheap digest is what actually blocks. Both verified in both directions — restoring the broken
+file fails the spec naming all sixteen characters and fails the digest; the spec also carries a
+control asserting the measurement can still tell a missing glyph (`字`) from a present one (`a`),
+so a measurement that quietly stopped working cannot read as full coverage.
