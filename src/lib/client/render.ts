@@ -175,6 +175,14 @@ export type QuestionClassNames = {
   readonly optionCorrect?: string;
   /** Appended to an option this device selected that turned out to be wrong. */
   readonly optionWrong?: string;
+  /**
+   * Applied to the element carrying `CORRECT_MARK` beside the correct option at a reveal.
+   * Optional: the mark's *text* is not, because the mark is an accessibility carrier rather
+   * than decoration — a caller that passes no class gets an unstyled mark, never no mark.
+   */
+  readonly correctMark?: string;
+  /** The same, for `OWN_PICK_MARK` beside this device's own pick. */
+  readonly ownMark?: string;
   /** The line between the prompt and the options; see `noteText`. */
   readonly note?: string;
 };
@@ -267,6 +275,43 @@ function nextSelection(
 }
 
 /** Joins the base option class with whatever state classes apply. */
+/**
+ * The reveal's second carriers (change `quiz-color-scheme`).
+ *
+ * **Which option was correct used to be hue and nothing else** — mint against every other
+ * band's step-back — on both the projector and the phone. `data-correct` was already set
+ * beside the class, but for a stylesheet that failed to load rather than for a reader, so
+ * anyone who cannot separate the two hues had no way to tell which answer the room had just
+ * been given. `▲`/`▼` on the leaderboard is the shape this copies, and the reason is the one
+ * stated there: the glyph says the same thing the colour does.
+ *
+ * The phone carries a second one. At a reveal it highlights two rows — the correct answer and
+ * whichever this device locked in — in two tints of the same idea, and `#result-verdict`
+ * already says in words *whether* you were right. What no word said is *which row was yours*,
+ * so the own-pick mark is the half that was missing.
+ *
+ * Polish, like every other user-facing string in this module (`MISSING_QUESTION_TEXT`,
+ * `NO_STANDINGS_TEXT`). The tick is a glyph rather than a word because it lands beside an
+ * option's text on a 1920 projector, where a second sentence per row is noise.
+ */
+const CORRECT_MARK = "\u2713";
+const OWN_PICK_MARK = "Twój wybór";
+
+/**
+ * One mark, as its own element.
+ *
+ * A child rather than appended text, because an option's text is written with `textContent`
+ * for a stated reason — S-08 feeds this attendee-supplied strings — and concatenating a mark
+ * onto that string would make the mark indistinguishable from an option that happens to end
+ * in a tick. Built after the `textContent` write, which wipes children.
+ */
+function optionMark(text: string, className: string | undefined): HTMLElement {
+  const node = document.createElement("span");
+  node.textContent = text;
+  if (className !== undefined) node.className = className;
+  return node;
+}
+
 function optionClassName(parts: readonly (string | undefined)[]): string {
   return parts.filter((part): part is string => Boolean(part)).join(" ");
 }
@@ -410,6 +455,21 @@ export function renderQuestion(
       // stylesheet that fails to load on a venue network.
       if (isSelected) item.dataset.selected = "true";
       if (mode === "revealed" && isCorrect) item.dataset.correct = "true";
+
+      /**
+       * The marks, and only at a reveal: before one there is nothing to be correct against,
+       * and a live pick is already saying so in chrome with `aria-pressed` behind it.
+       *
+       * Own pick first, tick last, so the tick sits at the same end of every row it appears
+       * on — a mark whose position moves depending on what else is in the row is one more
+       * thing to read. The projector gets no own-pick mark for free rather than by a flag:
+       * it passes no `selectedOptionIds`, so `isSelected` is false for every band there.
+       */
+      if (mode === "revealed") {
+        if (isSelected) item.append(optionMark(OWN_PICK_MARK, options.ownMark));
+        if (isCorrect)
+          item.append(optionMark(CORRECT_MARK, options.correctMark));
+      }
     }
 
     list.append(item);

@@ -521,30 +521,30 @@ stale-slug guard would catch the mismatch, but only at test time.
 
 #### Automated
 
-- [x] 2.1 Tests pass, including the logo path guard
-- [x] 2.2 Path guard fails on a misspelled path
-- [x] 2.3 Type checking, linting, prettier clean
+- [x] 2.1 Tests pass, including the logo path guard — 8a32e56
+- [x] 2.2 Path guard fails on a misspelled path — 8a32e56
+- [x] 2.3 Type checking, linting, prettier clean — 8a32e56
 
 #### Manual
 
-- [x] 2.4 Logo in the projector lobby, gone once a question opens
-- [x] 2.5 Join QR and short address unmoved in the lobby
-- [x] 2.6 Logo on the attendee join screen, nothing pushed below the fold
-- [x] 2.7 No layout shift when the first question opens
+- [x] 2.4 Logo in the projector lobby, gone once a question opens — 8a32e56
+- [x] 2.5 Join QR and short address unmoved in the lobby — 8a32e56
+- [x] 2.6 Logo on the attendee join screen, nothing pushed below the fold — 8a32e56
+- [x] 2.7 No layout shift when the first question opens — 8a32e56
 
 ### Phase 3: A second carrier for the two colour-only messages
 
 #### Automated
 
-- [ ] 3.1 Tests pass: `bun run test`
-- [ ] 3.2 Each carrier's test fails when that carrier is removed
-- [ ] 3.3 Type checking, linting, prettier clean
+- [x] 3.1 Tests pass: `bun run test`
+- [x] 3.2 Each carrier's test fails when that carrier is removed
+- [x] 3.3 Type checking, linting, prettier clean
 
 #### Manual
 
-- [ ] 3.4 Correct option identifiable in greyscale on projector and phone
-- [ ] 3.5 "Mine" vs "correct" distinguishable without hue on the phone
-- [ ] 3.6 Nothing shifted on the reveal beat
+- [x] 3.4 Correct option identifiable in greyscale on projector and phone
+- [x] 3.5 "Mine" vs "correct" distinguishable without hue on the phone
+- [x] 3.6 Nothing shifted on the reveal beat
 
 ### Phase 4: Typography — a display face on non-measured text only
 

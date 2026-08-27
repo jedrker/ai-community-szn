@@ -1964,6 +1964,19 @@ const quizTitles = Object.fromEntries(
           mode: "revealed",
           selectedOptionIds: pickedOptionIds(question?.id ?? ""),
           correctOptionIds: revealedOptionIds,
+          /**
+           * The reveal's two facts, in words and shapes rather than in two tints (change
+           * `quiz-color-scheme`).
+           *
+           * This screen highlights two rows — the answer, and whatever this device locked in
+           * — and `#result-verdict` already says in words *whether* the pick was right. What
+           * nothing said is *which row was mine*, which is the half these carry. Geometry
+           * only, so both inherit the colour of the row they sit on.
+           */
+          correctMark: "ml-auto shrink-0 pl-3 text-[28px] font-extrabold leading-none",
+          ownMark:
+            "ml-auto shrink-0 pl-3 text-[15px] font-semibold uppercase tracking-[0.1em] " +
+            "leading-none",
         });
 
         /**

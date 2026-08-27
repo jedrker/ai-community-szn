@@ -76,6 +76,21 @@ function buttons(): HTMLButtonElement[] {
   return [...container.querySelectorAll("button")];
 }
 
+/**
+ * The marks on one option row, as elements.
+ *
+ * Deliberately *not* a search for a particular glyph: what these tests defend is that the
+ * reveal states its two facts in a channel other than hue, so re-wording or re-drawing a mark
+ * must stay green while deleting one must not. Reading them as child elements also pins the
+ * other half of the rule — a mark concatenated onto the option's own text would be
+ * indistinguishable from an option that happens to end the same way.
+ */
+function markTexts(option: HTMLElement): string[] {
+  return [...option.querySelectorAll("span")].map(
+    (node) => node.textContent ?? "",
+  );
+}
+
 describe("static mode", () => {
   it("renders the prompt and every option as text", () => {
     renderQuestion(container, single);
@@ -1876,5 +1891,162 @@ describe("entrance motion", () => {
 
       expect(node.textContent).toBe("0");
     });
+  });
+});
+
+/**
+ * THE REVEAL SAYS WHAT HAPPENED IN MORE THAN ONE CHANNEL (change `quiz-color-scheme`).
+ *
+ * Two facts used to be hue and nothing else: which option was the answer (both screens), and
+ * which row this device had locked in (the phone, where the reveal highlights two rows in two
+ * tints of one idea). `data-correct` was already in the DOM, but for a stylesheet that failed
+ * to load rather than for a person.
+ *
+ * Every assertion below is about a *carrier*, never about a particular glyph or wording, so
+ * these stay green when somebody re-draws a mark and go red when somebody removes one.
+ */
+describe("the reveal's second carriers", () => {
+  it("marks the correct option with something other than a class", () => {
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+    });
+
+    const marks = markTexts(options()[0]!);
+    expect(marks.length, "the correct option carries no mark element").toBe(1);
+    expect(
+      marks[0]!.trim().length,
+      "the correct option's mark is empty",
+    ).toBeGreaterThan(0);
+  });
+
+  it("leaves every other option unmarked", () => {
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+    });
+
+    expect(markTexts(options()[1]!)).toEqual([]);
+    expect(markTexts(options()[2]!)).toEqual([]);
+  });
+
+  it("marks this device's own pick separately from the answer", () => {
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+      selectedOptionIds: ["c"],
+    });
+
+    const answer = markTexts(options()[0]!);
+    const mine = markTexts(options()[2]!);
+
+    expect(answer.length, "the answer carries no mark").toBe(1);
+    expect(mine.length, "this device's own pick carries no mark").toBe(1);
+    // The whole point: the two rows are distinguishable from each other by their marks, not
+    // only from the unmarked rows.
+    expect(mine[0]).not.toBe(answer[0]);
+  });
+
+  it("marks a row that is both the answer and this device's pick with both", () => {
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+      selectedOptionIds: ["a"],
+    });
+
+    expect(markTexts(options()[0]!).length).toBe(2);
+  });
+
+  it("keeps the marks out of the option's own text", () => {
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+      selectedOptionIds: ["a"],
+    });
+
+    // `firstChild` is the text node `textContent` wrote; the marks are siblings after it. If a
+    // mark were concatenated in, this would carry it and an option ending in the same
+    // characters would be indistinguishable from a marked one.
+    expect(options()[0]!.firstChild?.textContent).toBe(
+      single.options![0]!.text,
+    );
+  });
+
+  it("carries the marks' classes when the caller supplies them", () => {
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+      selectedOptionIds: ["a"],
+      correctMark: "tick",
+      ownMark: "mine",
+    });
+
+    const classes = [...options()[0]!.querySelectorAll("span")].map(
+      (node) => node.className,
+    );
+    expect(classes).toContain("tick");
+    expect(classes).toContain("mine");
+  });
+
+  it("marks the answer even when the caller styles nothing", () => {
+    // The mark is an accessibility carrier, not decoration: a caller that passes no class must
+    // still get the mark. The projector relies on this — it styles the tick and inherits the
+    // band's colour, and passes no own-pick class at all.
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+    });
+
+    expect(markTexts(options()[0]!).length).toBe(1);
+  });
+
+  it("marks nothing before a reveal", () => {
+    renderQuestion(container, single, {
+      mode: "static",
+      selectedOptionIds: ["a"],
+      correctOptionIds: ["a"],
+    });
+
+    for (const option of options()) {
+      expect(
+        markTexts(option),
+        "a mark appeared before the host revealed",
+      ).toEqual([]);
+    }
+  });
+
+  it("marks nothing in answerable mode, where a live pick speaks for itself", () => {
+    renderQuestion(container, single, {
+      mode: "answerable",
+      selectedOptionIds: ["a"],
+    });
+
+    for (const option of options()) {
+      expect(markTexts(option)).toEqual([]);
+    }
+  });
+
+  it("gives the projector no own-pick mark, because it passes no selection", () => {
+    // Not a flag and not a second parameter: the host view renders the same bands with no
+    // `selectedOptionIds`, so `isSelected` is false for every row there. This pins that, so a
+    // future default of "assume selected" cannot put "your pick" on a projector.
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: ["a"],
+    });
+
+    const everyMark = options().flatMap((option) => markTexts(option));
+    expect(everyMark.length, "the projector picked up a second mark").toBe(1);
+  });
+
+  it("marks nothing on a reveal with no correct ids", () => {
+    renderQuestion(container, single, {
+      mode: "revealed",
+      correctOptionIds: [],
+    });
+
+    for (const option of options()) {
+      expect(markTexts(option)).toEqual([]);
+    }
   });
 });

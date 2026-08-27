@@ -2896,6 +2896,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           noteText: multipleNote,
           mode: revealed ? "revealed" : "static",
           correctOptionIds: state.revealedOptionIds,
+          /**
+           * Which band is the answer, said in something other than hue (change
+           * `quiz-color-scheme`). Mint against every other band's step-back was the whole of
+           * it before, on the one screen the entire room reads at once.
+           *
+           * Geometry only: the correct band already turns its type mint through
+           * `data-[correct=true]:text-quiz-mint`, so the mark inherits it and cannot come
+           * apart from the band it belongs to. Sized just over the band's 50px so it reads
+           * from the back without competing with the option's own words.
+           */
+          correctMark: "ml-auto shrink-0 pl-8 text-[56px] font-extrabold leading-none",
         });
 
         /**
