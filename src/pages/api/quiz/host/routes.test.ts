@@ -99,6 +99,7 @@ const {
   questionsOfKind,
   someQuestionId,
 } = await import("../../../../quiz/test-support");
+const { getQuizByQuestionId, quizzes } = await import("../../../../quiz/index");
 // A quiz to run a session against; which one is not what anything here asserts. See
 // `fixtureQuiz` for why this is a named accessor rather than `quizzes[0]`.
 const quiz = fixtureQuiz();
@@ -120,6 +121,7 @@ const multiQuestion = questionOfKind("multiple-choice", { scored: true });
 const unscoredChoice = questionsOfKind("multiple-choice", { scored: false })[0];
 const textQuestion = questionOfKind("text", { scored: true });
 const wordCloudQuestion = questionOfKind("word-cloud");
+const voteQuestion = questionOfKind("vote");
 const numberQuestions = questionsOfKind("number", { scored: true });
 
 /**
@@ -693,7 +695,8 @@ describe("reveal", () => {
     const nonChoice = quiz.questions.find(
       (question) =>
         question.kind !== "single-choice" &&
-        question.kind !== "multiple-choice",
+        question.kind !== "multiple-choice" &&
+        question.kind !== "vote",
     )!;
     applyHostActionMock.mockResolvedValue({
       status: 200,
@@ -714,6 +717,96 @@ describe("reveal", () => {
     expect(next.revealedDistribution).toBeNull();
     expect(next.revealedOptionIds).toEqual([]);
     expect(readQuestionTalliesMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A vote's reveal names its winners in `revealedOptionIds` — computed from the tally
+   * the same transition reads, so every screen shows the same result the bars do.
+   */
+  describe("a vote", () => {
+    const ids = voteQuestion.options.map((option) => option.id);
+    const openVote = {
+      ...revealed,
+      phase: "question-open" as const,
+      quizId: getQuizByQuestionId(voteQuestion.id)!.id,
+      currentQuestionId: voteQuestion.id,
+      version: 3,
+    };
+
+    /** Every candidate on 0 votes, overridden by `counts`. */
+    function tallies(counts: Record<string, number>) {
+      const options = Object.fromEntries(
+        ids.map((id) => [id, counts[id] ?? 0]),
+      );
+      const answered = Object.values(options).reduce((sum, n) => sum + n, 0);
+      return { answered, options };
+    }
+
+    async function revealVote() {
+      applyHostActionMock.mockResolvedValue({
+        status: 200,
+        body: { state: revealed, applied: true },
+      });
+      await call(reveal);
+      const [transition] = applyHostActionMock.mock.calls[0]!;
+      return transition(openVote, NOW);
+    }
+
+    it("names the single top candidate as the winner and publishes the bars", async () => {
+      const [first, second] = ids;
+      const distribution = tallies({ [first!]: 5, [second!]: 3 });
+      readQuestionTalliesMock.mockResolvedValue(distribution);
+
+      const next = await revealVote();
+
+      expect(next.revealedOptionIds).toEqual([first]);
+      expect(next.revealedDistribution).toEqual(distribution);
+    });
+
+    it("names every candidate on the top count, in definition order, on a tie", async () => {
+      const [first, second, third] = ids;
+      // Written out of order, so a result that followed the counts' keys would show.
+      readQuestionTalliesMock.mockResolvedValue(
+        tallies({ [third!]: 4, [first!]: 4, [second!]: 1 }),
+      );
+
+      const next = await revealVote();
+
+      expect(next.revealedOptionIds).toEqual([first, third]);
+    });
+
+    it("names nobody when nobody voted", async () => {
+      readQuestionTalliesMock.mockResolvedValue(tallies({}));
+
+      const next = await revealVote();
+
+      expect(next.revealedOptionIds).toEqual([]);
+    });
+
+    /**
+     * The departure from a choice reveal: there the answer key is the beat and a failed
+     * read still reveals; here the count is the beat, so voting stays open.
+     */
+    it("refuses the reveal when the tally cannot be read", async () => {
+      readQuestionTalliesMock.mockResolvedValue(null);
+      let next: unknown = "not run";
+      applyHostActionMock.mockImplementation(async (transition: never) => {
+        next = await (
+          transition as unknown as (s: unknown, n: number) => Promise<unknown>
+        )(openVote, NOW);
+        return {
+          status: 200,
+          body: { state: openVote, applied: next !== null, note: "no-op" },
+        };
+      });
+
+      const response = await call(reveal);
+      const body = await response.json();
+
+      expect(response.status).toBe(503);
+      expect(body.error).toContain("Nie udało się policzyć głosów");
+      expect(next).toBeNull();
+    });
   });
 });
 
@@ -869,6 +962,38 @@ describe("end", () => {
       expect(next.standings).toEqual(board);
       expect(readStandingsMock).toHaveBeenCalled();
     });
+
+    /**
+     * A quiz with nothing scored — the audience vote — has everyone on 0, and the board
+     * would crown whoever joined first. It closes on the plain thank-you instead.
+     */
+    const unscoredQuiz = quizzes.find((q) =>
+      q.questions.every((question) => question.points === null),
+    );
+    it.skipIf(unscoredQuiz === undefined)(
+      "closes a quiz with nothing scored without reading or publishing a board",
+      async () => {
+        const revealedUnscored = {
+          ...revealed,
+          quizId: unscoredQuiz!.id,
+          currentQuestionId: unscoredQuiz!.questions[0]!.id,
+        };
+        sessionIs(revealedUnscored);
+        readStandingsMock.mockResolvedValue(board);
+        applyHostActionMock.mockResolvedValue({
+          status: 200,
+          body: { state: ended, applied: true },
+        });
+
+        await call(end, { version: revealedUnscored.version });
+
+        const [transition] = applyHostActionMock.mock.calls[0]!;
+        const next = await transition(revealedUnscored, NOW + 9_000);
+
+        expect(next.standings).toBeNull();
+        expect(readStandingsMock).not.toHaveBeenCalled();
+      },
+    );
 
     /**
      * **The board is read in the transition, not before it.** A read hoisted above

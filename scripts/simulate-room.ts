@@ -499,6 +499,11 @@ function answerFor(
     return [["word", pick(CLOUD_WORDS).slice(0, MAX_WORD_LENGTH)]];
   }
 
+  if (question.kind === "vote") {
+    // One candidate, at random — a vote has no answer to know.
+    return [["optionIds", pick(question.options.map((option) => option.id))]];
+  }
+
   return null;
 }
 

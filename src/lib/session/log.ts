@@ -152,6 +152,13 @@ export const SESSION_EVENTS = [
    * count here that would not be a fact about who was on the board.
    */
   "session.standings.degraded",
+  /**
+   * A vote's tally could not be read, so the reveal was refused and voting stays open.
+   *
+   * A choice reveal survives the same failure because its answer key is still the beat;
+   * for a vote the count *is* the beat, so the host is told to tap again instead.
+   */
+  "session.vote.failed",
 ] as const;
 
 export type SessionEvent = (typeof SESSION_EVENTS)[number];

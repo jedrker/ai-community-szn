@@ -7,6 +7,7 @@ import {
   toResponse,
   unauthorized,
 } from "../../../../lib/session/host";
+import { logSessionEvent } from "../../../../lib/session/log";
 import { readQuestionTallies } from "../../../../lib/session/store";
 import { getQuestionById, type Question } from "../../../../quiz/index";
 
@@ -35,6 +36,15 @@ function revealedAnswerTextFor(question: Question | undefined): string | null {
   return null;
 }
 
+/** The candidates holding the most votes, in definition order; none when nobody voted. */
+function voteWinnerIds(
+  optionIds: readonly string[],
+  counts: Readonly<Record<string, number>>,
+): string[] {
+  const top = Math.max(0, ...optionIds.map((id) => counts[id] ?? 0));
+  return top === 0 ? [] : optionIds.filter((id) => (counts[id] ?? 0) === top);
+}
+
 /**
  * Reveals the current question's result.
  *
@@ -52,6 +62,13 @@ function revealedAnswerTextFor(question: Question | undefined): string | null {
 export const POST: APIRoute = async ({ request }) => {
   const secret = await extractSecret(request);
   if (!authorizeHost(secret).ok) return toResponse(unauthorized());
+
+  /**
+   * Set by the transition when a vote's tally could not be read, and read after it to
+   * turn the resulting no-op into a 503 — the same carrier `standings.ts` uses, because
+   * `applyHostAction` speaks in states and nulls.
+   */
+  let tallyFailed = false;
 
   const outcome = await applyHostAction(async (current, now) => {
     if (current.phase === "lobby" || current.phase === "ended") {
@@ -86,6 +103,11 @@ export const POST: APIRoute = async ({ request }) => {
       question !== undefined &&
       (question.kind === "single-choice" ||
         question.kind === "multiple-choice");
+    const tallied =
+      question !== undefined &&
+      (question.kind === "single-choice" ||
+        question.kind === "multiple-choice" ||
+        question.kind === "vote");
 
     /**
      * The room's answers, read HERE and for the same reason `revealedOptionIds` is set
@@ -107,17 +129,37 @@ export const POST: APIRoute = async ({ request }) => {
      * question closes. The same asymmetry `playerCount` documents in `host.ts`: the
      * count needs no serialization, the version does.
      */
-    const revealedDistribution = isChoice
+    const revealedDistribution = tallied
       ? await readQuestionTallies(
           current.currentQuestionId!,
           question.options.map((option) => option.id),
         )
-      : // For a non-choice kind the read is skipped entirely — no submission for one can
+      : // For any other kind the read is skipped entirely — no submission for one can
         // exist today, and Phase 4 hides the panel for them. **This is the one place the
         // distribution and `revealedOptionIds` diverge**: that field yields `[]` here,
         // because "no options are correct" is a fact about the question, while "no
         // distribution" is an absence.
         null;
+
+    /**
+     * A vote departs from choice here. For a choice question the answer key is the
+     * beat, so a failed read still reveals; for a vote the count *is* the beat, and the
+     * winners are computed from it. Refusing keeps voting open and lets the host tap
+     * again.
+     */
+    let revealedOptionIds: string[];
+    if (question?.kind === "vote") {
+      if (revealedDistribution === null) {
+        tallyFailed = true;
+        return null;
+      }
+      revealedOptionIds = voteWinnerIds(
+        question.options.map((option) => option.id),
+        revealedDistribution.options,
+      );
+    } else {
+      revealedOptionIds = isChoice ? question.correctOptionIds : [];
+    }
 
     return {
       version: current.version + 1,
@@ -139,9 +181,10 @@ export const POST: APIRoute = async ({ request }) => {
        * An empty array for a non-choice question and for an unscored one with no
        * correct ids — the client renders that as "nothing to highlight" rather than as
        * an error, which is what an unscored warm-up should look like. Text and number
-       * questions get their own reveal in S-05/S-06.
+       * questions get their own reveal in S-05/S-06. For a vote, the field carries the
+       * **winners** — every candidate on the top count, none when nobody voted.
        */
-      revealedOptionIds: isChoice ? question.correctOptionIds : [],
+      revealedOptionIds,
       revealedDistribution,
       /**
        * The free-text half of the same job (roadmap S-05, FR-016), set here for the
@@ -171,6 +214,16 @@ export const POST: APIRoute = async ({ request }) => {
       standings: null,
     };
   }, Date.now());
+
+  if (tallyFailed) {
+    logSessionEvent("session.vote.failed", {
+      reason: "vote tally read failed — reveal refused",
+    });
+    return toResponse({
+      status: 503,
+      body: { error: "Nie udało się policzyć głosów. Spróbuj ponownie." },
+    });
+  }
 
   // Distinguish "nothing to reveal" from "already revealed": both are no-ops in
   // the store, but only the first is a mistake worth telling the host about.

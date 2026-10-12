@@ -98,6 +98,7 @@ describe("the registry as a whole", () => {
       "number",
       "single-choice",
       "text",
+      "vote",
       "word-cloud",
     ]);
   });

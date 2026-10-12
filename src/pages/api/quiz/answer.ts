@@ -360,6 +360,27 @@ export const POST: APIRoute = async ({ request }) => {
      */
     correct = false;
     awarded = 0;
+  } else if (question.kind === "vote") {
+    /**
+     * Exactly one known candidate, bounded against the definition for the reason the
+     * choice branch below gives. No scorer, as with the word cloud: the build gate
+     * refuses a scored vote, so there is nothing to weigh — the count is the result.
+     * The first vote is final because `SUBMIT_ANSWER` writes with `HSETNX`.
+     */
+    const knownOptionIds = new Set(question.options.map((option) => option.id));
+    const picked = [
+      ...new Set(optionIds.filter((id) => knownOptionIds.has(id))),
+    ];
+    if (picked.length !== 1) {
+      logSessionEvent("session.answer.rejected", {
+        rejection: "invalid",
+        questionId,
+      });
+      return json(400, { error: MESSAGES.missing });
+    }
+    selectedOptionIds = picked;
+    correct = false;
+    awarded = 0;
   } else {
     /**
      * **Only ids this question actually has.**

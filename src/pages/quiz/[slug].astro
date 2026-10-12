@@ -642,6 +642,7 @@ const quizTitles = Object.fromEntries(
         standingsPositionText,
         wordEchoText,
       } from "../../lib/client/render";
+      import { voteResultFor } from "../../lib/client/vote";
       import type { PublicQuestion } from "../../quiz/public";
 
       type Config = {
@@ -747,10 +748,16 @@ const quizTitles = Object.fromEntries(
        */
       let controlsQuestionId: string | null = null;
 
-      function dressControlsFor(questionId: string): void {
-        if (controlsQuestionId === questionId) return;
-        controlsQuestionId = questionId;
+      /** What the submit button says for a question — a vote is cast, not answered. */
+      function submitLabelFor(question: PublicQuestion): string {
+        return question.kind === "vote" ? "Oddaj głos" : "Wyślij odpowiedź";
+      }
+
+      function dressControlsFor(question: PublicQuestion): void {
+        if (controlsQuestionId === question.id) return;
+        controlsQuestionId = question.id;
         answerError("");
+        answerSubmit.textContent = submitLabelFor(question);
       }
 
       /**
@@ -1133,21 +1140,24 @@ const quizTitles = Object.fromEntries(
 
         const id = state.currentQuestionId;
         const position = id === null ? -1 : indexOfQuestion(id);
+        // An id absent from the projection means the definition changed under a live
+        // session. `renderQuestion` shows a neutral placeholder rather than an error.
+        const question = position === -1 ? undefined : config.questions[position];
         const label =
-          position === -1
-            ? "Pytanie"
-            : `Pytanie ${position + 1} z ${config.questions.length}`;
+          question?.kind === "vote"
+            ? "Głosowanie"
+            : position === -1
+              ? "Pytanie"
+              : `Pytanie ${position + 1} z ${config.questions.length}`;
 
         status(
-          state.phase === "question-revealed" ? `${label} — odpowiedź ujawniona` : label,
+          state.phase === "question-revealed"
+            ? `${label} — ${question?.kind === "vote" ? "wyniki" : "odpowiedź ujawniona"}`
+            : label,
           "label"
         );
 
         showQuestion(true);
-
-        // An id absent from the projection means the definition changed under a live
-        // session. `renderQuestion` shows a neutral placeholder rather than an error.
-        const question = position === -1 ? undefined : config.questions[position];
 
         if (state.phase === "question-revealed") {
           renderRevealed(
@@ -1523,7 +1533,8 @@ const quizTitles = Object.fromEntries(
             question.kind === "multiple-choice" ||
             question.kind === "text" ||
             question.kind === "number" ||
-            question.kind === "word-cloud");
+            question.kind === "word-cloud" ||
+            question.kind === "vote");
 
         if (!question || !answerable) {
           // Static text, and no control — something tappable that does nothing reads as a
@@ -1581,7 +1592,7 @@ const quizTitles = Object.fromEntries(
         setHidden(answerWord, true);
 
         markSeen(config.seenStorageKey, question.id);
-        dressControlsFor(question.id);
+        dressControlsFor(question);
 
         const selected = pickedOptionIds(question.id);
         // Read from storage, not from memory: a reload mid-question must not re-offer
@@ -1613,7 +1624,11 @@ const quizTitles = Object.fromEntries(
         setHidden(answerNote, false);
         if (locked) {
           // Confirmed, and nothing about correctness — that waits for the host.
-          noteSays("Odpowiedź zapisana. Czekamy na prowadzącego…");
+          noteSays(
+            question.kind === "vote"
+              ? "Głos oddany. Czekamy na wyniki…"
+              : "Odpowiedź zapisana. Czekamy na prowadzącego…",
+          );
           setHidden(answerSubmit, true);
           return;
         }
@@ -1621,11 +1636,13 @@ const quizTitles = Object.fromEntries(
         // FR-017: say up front that a warm-up is a warm-up. Driven by `scored` from the
         // projection, never inferred from a zero award — the payloads are identical.
         noteSays(
-          question.scored
-          ? question.kind === "multiple-choice"
-            ? "Możesz wybrać kilka odpowiedzi. Liczy się też czas."
-            : "Liczy się też czas — im szybciej, tym więcej punktów."
-          : "To pytanie na rozgrzewkę — bez punktów.",
+          question.kind === "vote"
+            ? "Głosowanie jest tajne. Wybierz jeden setup — głosu nie da się zmienić."
+            : question.scored
+              ? question.kind === "multiple-choice"
+                ? "Możesz wybrać kilka odpowiedzi. Liczy się też czas."
+                : "Liczy się też czas — im szybciej, tym więcej punktów."
+              : "To pytanie na rozgrzewkę — bez punktów.",
         );
 
         setHidden(answerSubmit, false);
@@ -1672,7 +1689,7 @@ const quizTitles = Object.fromEntries(
         });
 
         markSeen(config.seenStorageKey, question.id);
-        dressControlsFor(question.id);
+        dressControlsFor(question);
 
         const locked = hasSubmitted(config.seenStorageKey, question.id);
 
@@ -1739,7 +1756,7 @@ const quizTitles = Object.fromEntries(
         });
 
         markSeen(config.seenStorageKey, question.id);
-        dressControlsFor(question.id);
+        dressControlsFor(question);
 
         const locked = hasSubmitted(config.seenStorageKey, question.id);
 
@@ -1804,7 +1821,7 @@ const quizTitles = Object.fromEntries(
         });
 
         markSeen(config.seenStorageKey, question.id);
-        dressControlsFor(question.id);
+        dressControlsFor(question);
 
         const locked = hasSubmitted(config.seenStorageKey, question.id);
 
@@ -2008,6 +2025,26 @@ const quizTitles = Object.fromEntries(
 
         if (!question) {
           setHidden(resultPanel, true);
+          return;
+        }
+
+        /**
+         * A vote's result, **before** the silent-device return below: the winner is news for
+         * the whole room, not only for those who voted. No result fetch — there is no award,
+         * and the winners already ride the snapshot. The option list above already marks
+         * them, and this device's own pick, through `renderQuestion`.
+         */
+        const vote = voteResultFor(question, revealedOptionIds);
+        if (vote !== null) {
+          setHidden(resultPanel, false);
+          verdict(vote.headline ?? "Brak głosów", vote.winnerIds.length > 0 ? "landed" : "silent");
+          const own = hasSubmitted(config.seenStorageKey, question.id)
+            ? question.options?.find((option) => option.id === pickedOptionIds(question.id)[0])?.text
+            : undefined;
+          award(own ? `Twój głos: ${own}` : "Nie oddano głosu z tego urządzenia.", "sentence");
+          setText("result-answer", "");
+          setText("result-total", "");
+          if (vote.winnerIds.length > 0) celebration.fire(`vote|${question.id}|${vote.winnerIds.join(",")}`);
           return;
         }
 
@@ -2346,7 +2383,7 @@ const quizTitles = Object.fromEntries(
 
         const outcome = await submitAnswer(player.id, questionId, payload, elapsedMs);
 
-        answerSubmit.textContent = "Wyślij odpowiedź";
+        answerSubmit.textContent = submitLabelFor(question);
 
         // A typed answer — free text, a raw guess, or a word — is kept so a reload can put
         // it back in the locked field.

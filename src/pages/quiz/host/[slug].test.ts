@@ -729,26 +729,25 @@ describe("flow verbs are offered only where they apply", () => {
    * are both silent: renaming it from a fresh `kind === "word-cloud"` test (a second kind
    * predicate, free to drift from `pollTargetFor`), or "fixing" it by dropping `reveal` from
    * the `question-open` row, which leaves the cloud with no way to close.
+   *
+   * The name now comes from `revealVerbFor` in `controls.ts`, which asks `pollTargetFor` —
+   * still the only kind predicate — and names a vote's close as well. Its choice of name is
+   * executed in `controls.test.ts`; what this file can still see is that the page takes the
+   * name from there and nowhere else.
    */
   it("renames the reveal verb from the single predicate, and gates nothing on it", () => {
+    expect(sync).toContain("revealVerbFor(config.questions, state)");
+    // The name comes from that verb and from nothing else. What sits between it and
+    // `textContent` is the armed label, which is a state of the same button rather than a
+    // second opinion about what it is called — see the confirmation block below.
     expect(sync).toContain(
-      'pollTargetFor(config.questions, state)?.kind === "words"',
+      'const revealCloses = revealVerb === "close-question"',
     );
-    // The name still comes from that predicate and from nothing else. What sits between it
-    // and `textContent` now is the armed label, which is a state of the same button rather
-    // than a second opinion about what it is called — see the confirmation block below.
-    expect(sync).toContain(
-      "const name = revealCloses ? REVEAL_LABEL_CLOSES : REVEAL_LABEL",
-    );
+    expect(sync).toContain("const name = REVEAL_LABELS[revealVerb]");
     expect(sync).toContain(
       "button.textContent = revealArmed ? REVEAL_CONFIRM_LABEL : name",
     );
-
-    // The rename must not have become a phase rule. That `reveal` stays offered while the
-    // cloud is open — the only way on to the standings beat — is now asserted by running the
-    // decision in `controls.test.ts`. What this file can still see is that the label was
-    // computed here and never reached the decision: see the call assertion above.
-    expect(sync).toContain("const revealCloses =");
+    expect(CODE).not.toContain("REVEAL_LABEL_CLOSES");
   });
 
   /**

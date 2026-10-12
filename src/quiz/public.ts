@@ -67,7 +67,7 @@ export type PublicQuestion = {
    * in the generous direction. See `src/lib/session/deadline.ts`.
    */
   readonly timeLimitSeconds?: number;
-  /** Present for the two choice kinds; absent for text, number and word-cloud. */
+  /** Present for the two choice kinds and vote; absent for text, number and word-cloud. */
   readonly options?: readonly PublicOption[];
 };
 
@@ -187,6 +187,19 @@ function toPublicQuestion(question: Question): PublicQuestion {
       ? {}
       : { timeLimitSeconds: question.timeLimitSeconds }),
   } as const;
+
+  // The shuffle below exists to hide which answer is correct. A vote has no correct
+  // answer, so its candidates keep definition order — the order the demos ran in, so
+  // the list on every screen matches what the room just watched.
+  if (question.kind === "vote") {
+    return {
+      ...base,
+      options: question.options.map((option) => ({
+        id: option.id,
+        text: option.text,
+      })),
+    };
+  }
 
   // The only kinds with anything more to show. `text`, `number` and `word-cloud` are
   // answered into an empty field, so the prompt is the whole of what a device needs —

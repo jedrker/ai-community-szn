@@ -929,7 +929,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           -->
           <section id="participation" hidden class="flex flex-col gap-3">
             <div id="participation-count-box" class="flex flex-col gap-2">
-              <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+              <p
+                id="participation-heading"
+                class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc"
+              >
                 Odpowiedzi
               </p>
               <!-- The two halves are separate elements because they are set at different
@@ -1326,9 +1329,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         atLastQuestion,
         NO_SESSION,
         pollTargetFor,
+        revealVerbFor,
         verbsFor,
         type FlowAction,
         type PollTarget,
+        type RevealVerb,
       } from "../../../lib/client/controls";
       import {
         el,
@@ -1345,6 +1350,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         wordCloudCountText,
         type WordCount,
       } from "../../../lib/client/render";
+      import { voteResultFor } from "../../../lib/client/vote";
       import type { PublicQuestion } from "../../../quiz/public";
 
       type Config = {
@@ -1769,11 +1775,23 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
       /** The band itself: geometry and type, with no colour and no slab fill. */
       const BAND_BASE =
-        "flex min-h-[92px] items-center overflow-hidden rounded-[20px] pr-8 text-[50px] " +
-        "font-semibold leading-[58px] tracking-[-0.02em] [counter-increment:option] " +
+        "flex items-center overflow-hidden rounded-[20px] pr-8 " +
+        "font-semibold tracking-[-0.02em] [counter-increment:option] " +
         "before:mr-8 before:flex before:shrink-0 before:items-center before:justify-center " +
-        "before:text-[48px] before:font-extrabold before:tracking-[-0.02em] " +
+        "before:font-extrabold before:tracking-[-0.02em] " +
         "before:[--tw-content:counter(option,_upper-alpha)]";
+
+      /**
+       * The band's size, in two steps that never share a class list — two `min-h-*` on one
+       * element would be resolved by stylesheet order, the hazard the reveal's note below
+       * describes.
+       *
+       * **The compact step is the vote's alone.** A vote lists one band per demo, more than a
+       * quiz question's four, and at the full size the last ones fall off the bottom of a
+       * 1080p stage under the prompt. The prompt keeps its size: it is what the room reads.
+       */
+      const BAND_SIZE = "min-h-[92px] text-[50px] leading-[58px] before:text-[48px]";
+      const BAND_SIZE_COMPACT = "min-h-[68px] text-[40px] leading-[46px] before:text-[36px]";
 
       /**
        * The slab, and the one place the two choice kinds are told apart.
@@ -1784,6 +1802,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        */
       const SLAB_SINGLE =
         "before:w-[92px] before:self-stretch before:bg-quiz-chrome before:text-quiz-ink";
+      /** The single slab at the compact band's width. */
+      const SLAB_SINGLE_COMPACT =
+        "before:w-[68px] before:self-stretch before:bg-quiz-chrome before:text-quiz-ink";
       const SLAB_MULTIPLE =
         "ml-0 pl-3 before:h-[80px] before:w-[80px] before:rounded-[8px] before:border-4 " +
         "before:border-quiz-chrome before:text-quiz-chrome";
@@ -1825,10 +1846,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * longer a parameter here — the DOM carries it.
        */
       function bandClass(kind: string | undefined): string {
+        const compact = kind === "vote";
         return [
           BAND_BASE,
+          compact ? BAND_SIZE_COMPACT : BAND_SIZE,
           "bg-quiz-asphalt text-quiz-signwhite",
-          kind === "multiple-choice" ? SLAB_MULTIPLE : SLAB_SINGLE,
+          kind === "multiple-choice" ? SLAB_MULTIPLE : compact ? SLAB_SINGLE_COMPACT : SLAB_SINGLE,
           BAND_REVEALED,
         ].join(" ");
       }
@@ -1871,6 +1894,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         text: "pytanie otwarte",
         number: "pytanie liczbowe",
         "word-cloud": "chmura słów",
+        vote: "głosowanie",
       };
 
       type State = NonNullable<ReturnType<typeof client.current>>;
@@ -1945,6 +1969,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         setHidden(staleMark, !answeredStale);
 
         if (showCount) {
+          // A vote counts votes, not answers — "Głosy 37 z 52".
+          setText("participation-heading", questionFor(state)?.kind === "vote" ? "Głosy" : "Odpowiedzi");
           // The denominator is the join count the page already maintains, which the
           // poll's own `playerCount` keeps fresh — so the join figure stops needing a
           // manual refresh while a question is open.
@@ -1975,6 +2001,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * computed against people, not selections, so on a multiple-choice question the bars
          * sum past 100% — see `renderDistribution`.
          */
+        // The vote's bars follow its bands down to the compact size — see `BAND_SIZE_COMPACT`.
+        const compact = questionFor(state)?.kind === "vote";
         renderDistribution(
           distributionBox,
           state.currentQuestionId === null ? undefined : questionFor(state),
@@ -1991,19 +2019,24 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             animate: true,
             list: BAND_LIST,
             row:
-              "relative grid min-h-[92px] grid-cols-[92px_1fr_auto] items-center gap-x-8 " +
+              (compact
+                ? "relative grid min-h-[68px] grid-cols-[68px_1fr_auto] items-center gap-x-8 "
+                : "relative grid min-h-[92px] grid-cols-[92px_1fr_auto] items-center gap-x-8 ") +
               "overflow-hidden rounded-[20px] bg-quiz-asphalt pr-8 [counter-increment:option] " +
-              "before:flex before:h-[92px] before:items-center before:justify-center " +
-              "before:bg-quiz-slab-inactive before:text-[48px] before:font-extrabold " +
+              "before:flex before:items-center before:justify-center " +
+              (compact ? "before:h-[68px] before:text-[36px] " : "before:h-[92px] before:text-[48px] ") +
+              "before:bg-quiz-slab-inactive before:font-extrabold " +
               "before:tracking-[-0.02em] before:text-quiz-zinc " +
               "before:[--tw-content:counter(option,_upper-alpha)] " +
               "data-[correct=true]:bg-quiz-mint-tint data-[correct=true]:before:bg-quiz-mint " +
               "data-[correct=true]:before:text-quiz-ink",
             label:
-              "text-[50px] font-semibold leading-[58px] tracking-[-0.02em] text-quiz-echo " +
+              (compact ? "text-[40px] leading-[46px] " : "text-[50px] leading-[58px] ") +
+              "font-semibold tracking-[-0.02em] text-quiz-echo " +
               "[[data-correct=true]>&]:text-quiz-mint",
             count:
-              "text-[52px] font-extrabold tabular-nums text-quiz-zinc " +
+              (compact ? "text-[40px] " : "text-[52px] ") +
+              "font-extrabold tabular-nums text-quiz-zinc " +
               "[[data-correct=true]>&]:text-quiz-mint",
             /**
              * The share as a rule along the foot of the band, not as a row of its own.
@@ -2013,7 +2046,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
              * band or a smaller prompt — both spend something the room needs to read. It
              * starts where the text does, so the slab stays a solid block of colour.
              */
-            bar: "absolute inset-x-0 bottom-0 left-[92px] h-[8px] bg-quiz-divider",
+            bar: compact
+              ? "absolute inset-x-0 bottom-0 left-[68px] h-[8px] bg-quiz-divider"
+              : "absolute inset-x-0 bottom-0 left-[92px] h-[8px] bg-quiz-divider",
             barFill:
               "h-full bg-quiz-slab-inactive [[data-correct=true]_&]:bg-quiz-mint",
             // `echo`, not `zinc`: this is a sentence about the room, and zinc is for labels.
@@ -2128,15 +2163,19 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * **not** answer it by dropping `reveal` from the `question-open` row: that takes away
        * the only way to close the cloud, and with it the `standings` beat that follows.
        *
-       * **Keyed on `pollTargetFor`, not on a fresh `kind === "word-cloud"` test.** That is
-       * this file's single question-kind predicate — the same one `syncCloudPanel` asks —
-       * and it already answers exactly the two phases in which this button can be read: the
-       * cloud's own `question-open`, and the `question-revealed` it deliberately holds
-       * through. A second kind test here is the drift the panel guards against everywhere
-       * else.
+       * **Keyed on `revealVerbFor`, not on a fresh `kind === "word-cloud"` test.** It asks
+       * `pollTargetFor` — this file's single question-kind predicate, the same one
+       * `syncCloudPanel` asks — and that already answers exactly the two phases in which this
+       * button can be read: the cloud's own `question-open`, and the `question-revealed` it
+       * deliberately holds through. A second kind test here is the drift the panel guards
+       * against everywhere else. A vote gets its own name for the same reason: the tap closes
+       * voting and shows the winner, which is not "showing the answer".
        */
-      const REVEAL_LABEL = "pokaż odpowiedź";
-      const REVEAL_LABEL_CLOSES = "zamknij pytanie";
+      const REVEAL_LABELS: Record<RevealVerb, string> = {
+        "reveal-answer": "pokaż odpowiedź",
+        "close-question": "zamknij pytanie",
+        "close-vote": "zamknij głosowanie",
+      };
       const CLOUD_ALREADY_CLOSED = "Pytanie jest już zamknięte — przejdź do następnego pytania.";
 
       /**
@@ -2207,7 +2246,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * dark button, and leaves `dalej` — which abandons the beat — as the only way on. That
        * is the failure impl review F5 fixed; do not re-introduce it by tidying the phase rule.
        *
-       * **So the fix is the name, not the gate** — `REVEAL_LABEL`'s reasoning exactly. Called
+       * **So the fix is the name, not the gate** — `REVEAL_LABELS`' reasoning exactly. Called
        * "pokaż ranking" in a phase where the ranking is visibly already shown, the button
        * reads as a step the host forgot to take, and a tap on it reported itself as doing
        * nothing (the route now says otherwise — see its `republished` note). Named for what
@@ -2277,8 +2316,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          */
         const wrong = wrongQuiz(state) !== null;
 
+        const revealVerb = revealVerbFor(config.questions, state);
         // The current question has no answer to reveal — only submissions to close.
-        const revealCloses = pollTargetFor(config.questions, state)?.kind === "words";
+        const revealCloses = revealVerb === "close-question";
 
         // The board is already on the projector, so the standings verb is a re-broadcast
         // rather than a step the host has yet to take. Naming only — see the constants.
@@ -2319,12 +2359,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           if (title !== undefined) button.title = title;
           else button.removeAttribute("title");
 
-          // Naming only — the phase rule above is untouched by it. See `REVEAL_LABEL`.
+          // Naming only — the phase rule above is untouched by it. See `REVEAL_LABELS`.
           if (action === "reveal") {
             // Disarmed by the disable too: a button that went out of reach must not come
             // back still holding a tap the host made before the room moved.
             if (!allowed && revealArmed) disarmReveal();
-            const name = revealCloses ? REVEAL_LABEL_CLOSES : REVEAL_LABEL;
+            const name = REVEAL_LABELS[revealVerb];
             // The armed label wins over the name, never the other way round — the host has
             // to be able to read what the second tap is going to do.
             button.textContent = revealArmed ? REVEAL_CONFIRM_LABEL : name;
@@ -2770,7 +2810,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         // The board replaces the question rather than sitting under it. The phase keeps a
         // `currentQuestionId` — that is what stops `advance` reopening question 1 — so
         // without this the finished question stays on the projector above the standings.
-        setHidden(questionBox, standings !== null);
+        // `closing` too: on a boardless close (a quiz with nothing scored, or a board that
+        // could not be read) the stage would otherwise paint `renderQuestion`'s "Za chwilę
+        // pojawi się kolejne pytanie." placeholder on the closing screen.
+        setHidden(questionBox, standings !== null || closing);
         /**
          * THE BOARD, IN ITS TWO REGISTERS (signage redesign, step 4).
          *
@@ -2869,11 +2912,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * `revealedOptionIds` still marks the correct answer and FR-016 holds either way.
          */
         const revealed = state.phase === "question-revealed";
+        const voteResult = revealed ? voteResultFor(question, state.revealedOptionIds) : null;
+        /**
+         * A vote's winner **takes the prompt's place**, sized by the same `promptClass`, so
+         * the reveal adds no height to a stage already carrying a bar per candidate. Nobody
+         * voted: the prompt stays and the bars panel says so.
+         */
         const shownQuestion =
           state.currentQuestionId === null
             ? undefined
             : distribution !== null && question
-              ? { ...question, options: undefined }
+              ? { ...question, prompt: voteResult?.headline ?? question.prompt, options: undefined }
               : question;
 
         // The flag the band variants key on. Set on the container rather than passed into the

@@ -7,6 +7,7 @@ import {
   atLastQuestion,
   NO_SESSION,
   pollTargetFor,
+  revealVerbFor,
   verbsFor,
   type ControlPhase,
   type FlowAction,
@@ -475,7 +476,12 @@ describe("the decision is internally consistent", () => {
  * today only because `boundary.test.ts` excludes them, which its own note calls provisional.
  */
 function question(id: string, kind: PublicQuestion["kind"]): PublicQuestion {
-  return { id, kind, prompt: `fixture ${id}`, scored: kind !== "word-cloud" };
+  return {
+    id,
+    kind,
+    prompt: `fixture ${id}`,
+    scored: kind !== "word-cloud" && kind !== "vote",
+  };
 }
 
 describe("atLastQuestion", () => {
@@ -538,6 +544,8 @@ describe("pollTargetFor", () => {
     text: "participation",
     number: "participation",
     "word-cloud": "words",
+    // Counted live — "Głosy N z M" — and, like every count, gone at the reveal.
+    vote: "participation",
   };
 
   const questions = (Object.keys(KIND_TARGETS) as PublicQuestion["kind"][]).map(
@@ -632,6 +640,38 @@ describe("pollTargetFor", () => {
     expect(target?.questionId).toBe("word-cloud");
     expect(target?.url).toContain("/api/quiz/host/words");
     expect(target?.url).toContain(encodeURIComponent("word-cloud"));
+  });
+});
+
+describe("revealVerbFor", () => {
+  const questions = [
+    question("fixture-cloud", "word-cloud"),
+    question("fixture-vote", "vote"),
+    question("fixture-single", "single-choice"),
+  ];
+  const open = (id: string): PollState => ({
+    phase: "question-open",
+    currentQuestionId: id,
+  });
+
+  it("closes the question on an open word cloud", () => {
+    expect(revealVerbFor(questions, open("fixture-cloud"))).toBe(
+      "close-question",
+    );
+  });
+
+  it("closes the vote on an open vote", () => {
+    expect(revealVerbFor(questions, open("fixture-vote"))).toBe("close-vote");
+  });
+
+  it("reveals the answer on a choice question", () => {
+    expect(revealVerbFor(questions, open("fixture-single"))).toBe(
+      "reveal-answer",
+    );
+  });
+
+  it("reveals the answer with no session", () => {
+    expect(revealVerbFor(questions, null)).toBe("reveal-answer");
   });
 });
 

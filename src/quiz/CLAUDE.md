@@ -3,7 +3,7 @@
 The quiz definitions, their schema and the Polish text folds. Server-and-test only: no client module
 may *value*-import from here (see `src/lib/client/CLAUDE.md`).
 
-Layout: `schema.ts` (discriminated union over five question kinds plus the domain invariants),
+Layout: `schema.ts` (discriminated union over six question kinds plus the domain invariants),
 `normalize.ts` (FR-011 answer folding), `definitions/` (**one file per quiz**, collected by
 `definitions/index.ts`), `index.ts` (the accessors downstream slices import — never import a
 definition file directly), `public.ts` (the projection that strips answers before anything reaches a
@@ -167,6 +167,10 @@ quizzes and the colliding value in Polish:
 - A **word-cloud question must be unscored** (`points: null`). FR-015 lets its aggregate display
   live precisely because it has no correct answer to leak. It also takes no scoring function at all:
   the route writes `correct: false, awarded: 0` directly, because there is nothing to weigh.
+- A **vote must be unscored** too, for the same reason: there is no correct answer, only a count.
+  It shares the choice kinds' ≥2-options and unique-option-id rules but carries no
+  `correctOptionIds`; `reveal.ts` publishes its **winners** in `revealedOptionIds` instead. Its
+  options are **not shuffled** (`public.ts`) — they keep the order the demos ran in.
 - A scored question must carry **`timeLimitSeconds`**, and an unscored one may not (FR-020).
   Required where `points !== null`, refused where `points === null`, bounded to
   `[MIN_TIME_LIMIT_SECONDS, MAX_TIME_LIMIT_SECONDS]` (5–180) — all three keyed on `points` rather

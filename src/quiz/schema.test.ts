@@ -71,6 +71,17 @@ const wordCloud = {
   points: null,
 };
 
+const vote = {
+  kind: "vote",
+  id: "fixture-vote",
+  prompt: "Który setup był najlepszy?",
+  points: null,
+  options: [
+    { id: "fixture-ania", text: "Ania" },
+    { id: "fixture-bartek", text: "Bartek" },
+  ],
+};
+
 /**
  * The identity a quiz carries beside its questions (multiple-quizzes).
  *
@@ -101,6 +112,7 @@ describe("accepts a valid question of every kind", () => {
     ["text", text],
     ["number", number],
     ["word-cloud", wordCloud],
+    ["vote", vote],
   ])("accepts %s", (_kind, question) => {
     expect(quizSchema.safeParse(quizOf(question)).success).toBe(true);
   });
@@ -239,6 +251,22 @@ describe("rejects a violation of every domain invariant", () => {
     const message = rejectionMessage(quizOf({ ...wordCloud, points: 1000 }));
     expect(message).toContain("fixture-word-cloud");
     expect(message).toContain("niepunktowane");
+  });
+
+  it("rejects a scored vote", () => {
+    const message = rejectionMessage(
+      quizOf({ ...vote, points: 1000, timeLimitSeconds: 30 }),
+    );
+    expect(message).toContain("fixture-vote");
+    expect(message).toContain("głosowanie musi być niepunktowane");
+  });
+
+  it("rejects a vote with fewer than two candidates", () => {
+    const message = rejectionMessage(
+      quizOf({ ...vote, options: [{ id: "fixture-ania", text: "Ania" }] }),
+    );
+    expect(message).toContain("fixture-vote");
+    expect(message).toContain("co najmniej 2 odpowiedzi");
   });
 
   it("rejects a scored question with no time limit, naming the question", () => {

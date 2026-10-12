@@ -52,6 +52,8 @@ const unscored = questionsOfKind("multiple-choice", { scored: false })[0];
 const number = questionOfKind("number", { scored: true });
 /** The last kind to take the seam (roadmap S-08). */
 const wordCloud = questionOfKind("word-cloud");
+/** An audience vote — unscored, one pick, no verdict. */
+const vote = questionOfKind("vote");
 
 /**
  * What to submit against each of them, derived from the question rather than typed.
@@ -774,6 +776,44 @@ describe("word-cloud answers", () => {
 
     expect(response.status).toBe(400);
     expect(response.status).not.toBe(409);
+  });
+});
+
+/**
+ * The vote branch: exactly one known candidate, recorded unscored. Finality is the
+ * store's `HSETNX`, not this route's, so it is not asserted here.
+ */
+describe("vote answers", () => {
+  const [first, second] = vote.options.map((option) => option.id);
+
+  beforeEach(() => {
+    readSessionMock.mockResolvedValue(openOn(vote.id));
+  });
+
+  it("accepts one known candidate, recorded as unscored", async () => {
+    const response = await submit(vote.id, [first!]);
+
+    expect(response.status).toBe(200);
+    expect(await body(response)).toEqual({ accepted: true });
+    expect(submitted()).toMatchObject({
+      optionIds: [first],
+      correct: false,
+      awarded: 0,
+    });
+  });
+
+  it("refuses two candidates without touching the store", async () => {
+    const response = await submit(vote.id, [first!, second!]);
+
+    expect(response.status).toBe(400);
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a candidate the vote does not have", async () => {
+    const response = await submit(vote.id, ["nie-ma-takiego-kandydata"]);
+
+    expect(response.status).toBe(400);
+    expect(submitAnswerMock).not.toHaveBeenCalled();
   });
 });
 

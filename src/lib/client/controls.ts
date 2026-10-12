@@ -369,7 +369,7 @@ export function pollTargetFor(
    * typed answer takes longer than a tap and there is nothing else to judge the moment by.
    *
    * The bars stay away on their own: `reveal.ts` builds `revealedDistribution` only for the
-   * choice kinds, and `host.astro` hides that panel on `distribution === null` rather than on a
+   * choice kinds and the vote, and `host.astro` hides that panel on `distribution === null` rather than on a
    * kind of its own. **Do not answer a future "text questions must not show bars" with a kind
    * test here** — that would be the second condition this predicate exists to prevent.
    *
@@ -389,4 +389,26 @@ export function pollTargetFor(
     questionId,
     url: `/api/quiz/host/participation${query}`,
   };
+}
+
+/** The three names the panel gives its reveal verb, by what it does to the question. */
+export type RevealVerb = "reveal-answer" | "close-question" | "close-vote";
+
+/**
+ * What the reveal verb does to the current question — the name the panel gives it.
+ *
+ * A word cloud has no answer to reveal, only submissions to close, and that follows from
+ * `pollTargetFor` rather than from a second kind test: the cloud is the question whose
+ * panel survives the reveal. A vote closes voting and shows the result.
+ */
+export function revealVerbFor(
+  questions: readonly PublicQuestion[],
+  state: PollState | null,
+): RevealVerb {
+  if (pollTargetFor(questions, state)?.kind === "words")
+    return "close-question";
+  const id = state?.currentQuestionId ?? null;
+  const kind =
+    id === null ? undefined : questions.find((q) => q.id === id)?.kind;
+  return kind === "vote" ? "close-vote" : "reveal-answer";
 }

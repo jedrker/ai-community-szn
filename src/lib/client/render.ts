@@ -328,10 +328,14 @@ function optionClassName(parts: readonly (string | undefined)[]): string {
  * gotowy!" that nobody was. Expanding it here says the true thing on both surfaces at
  * once: the attendee's option list and the projector's bars.
  *
- * **Keyed on `scored`, never on the id or the kind.** `scored` is exactly `points !== null`
+ * **Keyed on `scored`, never on the id or a choice kind.** `scored` is exactly `points !== null`
  * (see `public.ts`), so authoring a second unscored choice question needs no change here,
  * and a scored question whose ids failed to resolve still greys out rather than quietly
  * awarding everyone the right answer.
+ *
+ * The expansion is for warm-ups. **A vote is the exception:** it is unscored too, but its
+ * list is its winners, so an empty list means nobody won — expanding it would paint every
+ * candidate as a winner when nobody voted.
  *
  * Everything else passes through untouched: `null` (outside a reveal) stays `null`, a
  * non-empty list is already the answer, and a non-choice kind has no options to expand
@@ -343,7 +347,7 @@ function revealedCorrectIds(
 ): readonly string[] | null {
   if (correctOptionIds === null || correctOptionIds.length > 0)
     return correctOptionIds;
-  if (question.scored) return correctOptionIds;
+  if (question.scored || question.kind === "vote") return correctOptionIds;
   return question.options?.map((option) => option.id) ?? correctOptionIds;
 }
 

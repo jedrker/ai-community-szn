@@ -125,6 +125,11 @@ const wordCloudSchema = z.object({
   kind: z.literal("word-cloud"),
   ...baseFields,
 });
+const voteSchema = z.object({
+  kind: z.literal("vote"),
+  ...baseFields,
+  options: z.array(optionSchema),
+});
 
 const questionShapeSchema = z.discriminatedUnion("kind", [
   singleChoiceSchema,
@@ -132,6 +137,7 @@ const questionShapeSchema = z.discriminatedUnion("kind", [
   textSchema,
   numberSchema,
   wordCloudSchema,
+  voteSchema,
 ]);
 
 type QuestionShape = z.infer<typeof questionShapeSchema>;
@@ -147,7 +153,8 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
 
   if (
     question.kind === "single-choice" ||
-    question.kind === "multiple-choice"
+    question.kind === "multiple-choice" ||
+    question.kind === "vote"
   ) {
     if (question.options.length < 2) {
       ctx.addIssue({
@@ -156,15 +163,22 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
       });
     }
 
-    const optionIds = question.options.map((option) => option.id);
-    const duplicateOptionIds = findDuplicates(optionIds);
+    const duplicateOptionIds = findDuplicates(
+      question.options.map((option) => option.id),
+    );
     if (duplicateOptionIds.length > 0) {
       ctx.addIssue({
         code: "custom",
         message: `${where}: zduplikowane id odpowiedzi: ${duplicateOptionIds.join(", ")}.`,
       });
     }
+  }
 
+  if (
+    question.kind === "single-choice" ||
+    question.kind === "multiple-choice"
+  ) {
+    const optionIds = question.options.map((option) => option.id);
     const unknown = question.correctOptionIds.filter(
       (id) => !optionIds.includes(id),
     );
@@ -250,6 +264,15 @@ function checkQuestion(question: QuestionShape, ctx: z.RefinementCtx): void {
     ctx.addIssue({
       code: "custom",
       message: `${where}: pytanie typu word-cloud musi być niepunktowane (points: null).`,
+    });
+  }
+
+  // A vote has no correct answer, so there is nothing to score — the count is the
+  // whole of the result, and points would only crown the earliest voters.
+  if (question.kind === "vote" && scored) {
+    ctx.addIssue({
+      code: "custom",
+      message: `${where}: głosowanie musi być niepunktowane (points: null).`,
     });
   }
 
@@ -378,3 +401,4 @@ export type MultipleChoiceQuestion = Extract<
 export type TextQuestion = Extract<Question, { kind: "text" }>;
 export type NumberQuestion = Extract<Question, { kind: "number" }>;
 export type WordCloudQuestion = Extract<Question, { kind: "word-cloud" }>;
+export type VoteQuestion = Extract<Question, { kind: "vote" }>;

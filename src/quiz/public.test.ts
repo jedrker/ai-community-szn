@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { quizzes } from "./index";
-import { fixtureQuiz } from "./test-support";
+import { fixtureQuiz, questionOfKind } from "./test-support";
 import type { Quiz } from "./schema";
 import {
   FORBIDDEN_KEYS,
@@ -165,6 +165,15 @@ describe("the public projection is complete enough to render", () => {
         ?.options?.map((o) => o.text)
         .sort(),
     ).toEqual(choice.options.map((o) => o.text).sort());
+  });
+
+  it("projects a vote's candidates in definition order", () => {
+    // The shuffle hides a correct answer; a vote has none, and its list has to match
+    // the order the demos ran in.
+    const vote = questionOfKind("vote");
+    expect(getPublicQuestionById(vote.id)?.options?.map((o) => o.id)).toEqual(
+      vote.options.map((o) => o.id),
+    );
   });
 
   it("keeps each option's id paired with its own text", () => {

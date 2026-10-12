@@ -60,6 +60,14 @@ const unscored: PublicQuestion = {
   scored: false,
 };
 
+/** An audience vote: unscored like the gather beat, but its reveal names winners. */
+const vote: PublicQuestion = {
+  ...single,
+  id: "fixture-vote",
+  kind: "vote",
+  scored: false,
+};
+
 let container: HTMLElement;
 
 beforeEach(() => {
@@ -347,6 +355,37 @@ describe("revealed mode", () => {
     );
     // Nobody can be wrong on a question where everyone is right.
     expect(container.innerHTML).not.toContain("wrong");
+  });
+
+  /**
+   * A vote is unscored too, but `[]` there means nobody won. Expanding it as the gather
+   * beat does would crown every candidate in a room where nobody voted.
+   */
+  it("marks no candidate on a vote revealed with no winners", () => {
+    renderQuestion(container, vote, {
+      mode: "revealed",
+      correctOptionIds: [],
+      optionCorrect: "right",
+    });
+
+    expect(options().some((item) => item.dataset.correct === "true")).toBe(
+      false,
+    );
+    expect(container.innerHTML).not.toContain("right");
+  });
+
+  it("marks only the winner on a vote", () => {
+    renderQuestion(container, vote, {
+      mode: "revealed",
+      correctOptionIds: ["b"],
+      optionCorrect: "right",
+    });
+
+    expect(options().map((item) => item.dataset.correct === "true")).toEqual([
+      false,
+      true,
+      false,
+    ]);
   });
 
   it("renders no controls — the answer is already locked", () => {

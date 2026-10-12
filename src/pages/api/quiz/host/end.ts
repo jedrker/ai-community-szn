@@ -14,6 +14,7 @@ import {
   readSession,
   readStandings,
 } from "../../../../lib/session/store";
+import { getQuizById } from "../../../../quiz/index";
 
 /**
  * Ends the session (roadmap F-03).
@@ -143,9 +144,15 @@ export const POST: APIRoute = async ({ request }) => {
   // moved the session in between would be ended unconfirmed.
   const outcome = await applyHostAction(
     async (state, now) => {
-      const standings = await readStandings();
+      const quiz = getQuizById(state.quizId);
+      // Nothing scored means everyone sits on 0, and the board would crown the earliest
+      // joiner. An unknown quiz (the pre-identity sentinel) keeps the board, as before.
+      const hasBoard =
+        quiz === undefined ||
+        quiz.questions.some((question) => question.points !== null);
+      const standings = hasBoard ? await readStandings() : null;
 
-      if (standings === null) {
+      if (hasBoard && standings === null) {
         // Logged, not surfaced: the host is closing the session and there is nothing for
         // them to do about it. The reason names the close so this line cannot be mistaken
         // for a failed `pokaż ranking` in a stream a host is grepping mid-event.

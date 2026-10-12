@@ -15,6 +15,7 @@ export type {
   Quiz,
   SingleChoiceQuestion,
   TextQuestion,
+  VoteQuestion,
   WordCloudQuestion,
 } from "./schema";
 export { normalizeAnswer, normalizePolish } from "./normalize";

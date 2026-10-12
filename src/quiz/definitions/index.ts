@@ -1,3 +1,4 @@
+import { glosowanieAiSetup } from "./glosowanie-ai-setup";
 import { jesiennyMeetupAi } from "./jesienny-meetup-ai";
 import { summerTourSzczecin } from "./summer-tour-szczecin";
 import { unaited } from "./unaited";
@@ -28,4 +29,9 @@ import { unaited } from "./unaited";
  * `satisfies Quiz`, so an authoring mistake is a red squiggle in the editor rather than
  * a runtime surprise (see `../CLAUDE.md`).
  */
-export const quizDefinitions = [unaited, summerTourSzczecin, jesiennyMeetupAi];
+export const quizDefinitions = [
+  unaited,
+  glosowanieAiSetup,
+  summerTourSzczecin,
+  jesiennyMeetupAi,
+];
