@@ -45,6 +45,7 @@ const {
   SESSION_KEY,
   SESSION_TTL_SECONDS,
 } = await import("./store");
+const { KV_CREDENTIAL_PAIRS } = await import("./credentials");
 const {
   registeredKeys,
   ANSWERS_KEY,
@@ -115,6 +116,14 @@ function configure(): void {
   vi.stubEnv("KV_REST_API_TOKEN", "test-token");
 }
 
+/** Every accepted name blanked, so no pair from a developer's own env can configure it. */
+function unconfigure(): void {
+  for (const pair of KV_CREDENTIAL_PAIRS) {
+    vi.stubEnv(pair.url, "");
+    vi.stubEnv(pair.token, "");
+  }
+}
+
 beforeEach(() => {
   redisMock.get.mockReset();
   redisMock.eval.mockReset();
@@ -132,8 +141,7 @@ afterEach(() => {
 
 describe("configuration", () => {
   it("reports missing configuration rather than throwing", async () => {
-    vi.stubEnv("KV_REST_API_URL", "");
-    vi.stubEnv("KV_REST_API_TOKEN", "");
+    unconfigure();
 
     await expect(readSession()).resolves.toMatchObject({
       outcome: "unconfigured",
@@ -147,8 +155,7 @@ describe("configuration", () => {
   });
 
   it("accepts the UPSTASH_REDIS_REST_* pair as a fallback", async () => {
-    vi.stubEnv("KV_REST_API_URL", "");
-    vi.stubEnv("KV_REST_API_TOKEN", "");
+    unconfigure();
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://probe.upstash.io");
     vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "test-token");
     redisMock.get.mockResolvedValue(null);
@@ -898,8 +905,7 @@ describe("readPlayerById", () => {
   });
 
   it("reports an unconfigured store as failed rather than as an unknown player", async () => {
-    vi.stubEnv("KV_REST_API_URL", "");
-    vi.stubEnv("KV_REST_API_TOKEN", "");
+    unconfigure();
 
     await expect(readPlayerById("player-abc")).resolves.toEqual({
       outcome: "failed",
@@ -1262,8 +1268,7 @@ describe("submitAnswer", () => {
   });
 
   it("reports an unconfigured store rather than throwing into the request path", async () => {
-    vi.stubEnv("KV_REST_API_URL", "");
-    vi.stubEnv("KV_REST_API_TOKEN", "");
+    unconfigure();
 
     await expect(submitAnswer(answer)).resolves.toMatchObject({
       outcome: "unconfigured",
@@ -1709,8 +1714,7 @@ describe("readOwnResult", () => {
   });
 
   it("reports an unconfigured store as unconfigured, not as an unanswered question", async () => {
-    vi.stubEnv("KV_REST_API_URL", "");
-    vi.stubEnv("KV_REST_API_TOKEN", "");
+    unconfigure();
 
     await expect(
       readOwnResult("player-abc", stored.questionId),

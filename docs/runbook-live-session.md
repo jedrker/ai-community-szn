@@ -24,7 +24,7 @@ starts and advances a real session on production.
 bun scripts/rehearse-room.ts --base=https://<production-url> --clients=150
 ```
 
-It needs `LIVEQUIZ_HOST_SECRET` and the `KV_REST_API_*` pair in the environment — `vercel env pull`, or
+It needs `LIVEQUIZ_HOST_SECRET` and an Upstash credential pair — `aicommunity_KV_REST_API_*`, or the unprefixed `KV_REST_API_*` — in the environment — `vercel env pull`, or
 export them by hand. It refuses to start if it cannot see them, and names which one is missing.
 
 What to expect, and how to read it:

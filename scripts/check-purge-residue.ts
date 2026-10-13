@@ -29,6 +29,7 @@
 
 import { Redis } from "@upstash/redis";
 
+import { pickKvCredentials } from "../src/lib/session/credentials";
 import {
   registeredKeys,
   SESSION_KEY,
@@ -91,13 +92,6 @@ function env(name: string): string | undefined {
   return value && value.length > 0 ? value : undefined;
 }
 
-function credentials(): { url: string; token: string } | null {
-  const url = env("KV_REST_API_URL") ?? env("UPSTASH_REDIS_REST_URL");
-  const token = env("KV_REST_API_TOKEN") ?? env("UPSTASH_REDIS_REST_TOKEN");
-  if (!url || !token) return null;
-  return { url, token };
-}
-
 async function scanNamespace(redis: Redis): Promise<string[]> {
   const found: string[] = [];
   let cursor = "0";
@@ -119,7 +113,7 @@ async function main(): Promise<void> {
     "\nChecking that a purge leaves nothing behind (F-03 Phase 4).\n",
   );
 
-  const config = credentials();
+  const config = pickKvCredentials(env);
   record(Boolean(config), "Upstash credentials", config ? "present" : "absent");
 
   if (!config) {

@@ -54,6 +54,7 @@ import { Realtime } from "ably";
 import { Redis } from "@upstash/redis";
 
 import { answerField, parseAnswerRecord } from "../src/lib/session/answers";
+import { pickKvCredentials } from "../src/lib/session/credentials";
 import {
   ANSWERS_KEY,
   PLAYER_IDS_KEY,
@@ -176,9 +177,9 @@ function arg(name: string): string | undefined {
 function resolveConfig(): Config | null {
   const rawBase = arg("base") ?? env("LIVEQUIZ_BASE_URL");
   const hostSecret = env("LIVEQUIZ_HOST_SECRET");
-  const redisUrl = env("KV_REST_API_URL") ?? env("UPSTASH_REDIS_REST_URL");
-  const redisToken =
-    env("KV_REST_API_TOKEN") ?? env("UPSTASH_REDIS_REST_TOKEN");
+  const kv = pickKvCredentials(env);
+  const redisUrl = kv?.url;
+  const redisToken = kv?.token;
 
   let baseUrl: string | undefined;
   if (rawBase) {

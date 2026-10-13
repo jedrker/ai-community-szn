@@ -47,7 +47,7 @@ actually injects.
 | --- | --- |
 | `RESEND_API_KEY`, `RESEND_AUDIENCE_ID`, `ADMIN_EMAIL` | Newsletter signup and speaker applications |
 | `SLACK_WEBHOOK_URL` | Slack notification on a new speaker application |
-| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Upstash Redis — the authoritative LiveQuiz session state |
+| `aicommunity_KV_REST_API_URL`, `aicommunity_KV_REST_API_TOKEN` | Upstash Redis — the authoritative LiveQuiz session state. The prefix is what the Vercel store connection injects; the unprefixed `KV_REST_API_*` pair is still read as a fallback (`src/lib/session/credentials.ts`) |
 | `ABLY_API_KEY` | Ably — the realtime fan-out. Server-side only; browsers fetch a short-lived, subscribe-only token from `/api/quiz/token` |
 | `LIVEQUIZ_HOST_SECRET` | Guards every host action endpoint |
 | `LIVEQUIZ_HARNESS` | Enables the dev-only spine harness at `/quiz/spine-check`. Local and Preview only — Production must 404 |

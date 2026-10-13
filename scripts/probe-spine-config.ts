@@ -21,11 +21,7 @@
 import { Redis } from "@upstash/redis";
 import Ably from "ably";
 
-/** Both name pairs @upstash/redis accepts, in the order it prefers them. */
-const UPSTASH_NAME_PAIRS = [
-  { url: "UPSTASH_REDIS_REST_URL", token: "UPSTASH_REDIS_REST_TOKEN" },
-  { url: "KV_REST_API_URL", token: "KV_REST_API_TOKEN" },
-] as const;
+import { KV_CREDENTIAL_PAIRS } from "../src/lib/session/credentials";
 
 /** A throwaway key. Short TTL so a failed run leaves nothing behind for long. */
 const PROBE_KEY = "livequiz:probe:spine-config";
@@ -52,7 +48,7 @@ function env(name: string): string | undefined {
 }
 
 function resolveUpstashCredentials(): { url: string; token: string } | null {
-  const present = UPSTASH_NAME_PAIRS.filter(
+  const present = KV_CREDENTIAL_PAIRS.filter(
     (pair) => env(pair.url) && env(pair.token),
   );
 

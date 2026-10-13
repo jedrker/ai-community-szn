@@ -6,6 +6,7 @@ import {
   parseAnswerRecord,
   type AnswerRecord,
 } from "./answers";
+import { pickKvCredentials } from "./credentials";
 import {
   ANSWERS_KEY,
   DEVICES_KEY,
@@ -483,26 +484,16 @@ return { session, answer, total }
  * which reads `process.env` and would work under bare `bun` while returning
  * nothing inside the Astro build.
  *
- * The names are `KV_REST_API_*` because that is what the Vercel Marketplace
- * integration actually injects — verified by `scripts/probe-spine-config.ts`,
- * *not* the `UPSTASH_REDIS_REST_*` pair the documentation predicts. Both are
- * accepted here so a differently-provisioned environment still works, but the
- * observed pair is checked first.
+ * Which names, and in which order, is `KV_CREDENTIAL_PAIRS` in `./credentials` — the
+ * production store injects them with an `aicommunity_` prefix.
  */
 function credentials(): { url: string; token: string } | null {
   // An env var set to the empty string is "absent", not "present but blank" —
-  // both Vercel's store and a pulled `.env` can produce one. `??` alone would
-  // treat "" as a value and never reach the fallback pair.
-  const read = (name: string): string | undefined => {
+  // both Vercel's store and a pulled `.env` can produce one.
+  return pickKvCredentials((name) => {
     const value = import.meta.env[name];
     return typeof value === "string" && value.length > 0 ? value : undefined;
-  };
-
-  const url = read("KV_REST_API_URL") ?? read("UPSTASH_REDIS_REST_URL");
-  const token = read("KV_REST_API_TOKEN") ?? read("UPSTASH_REDIS_REST_TOKEN");
-
-  if (!url || !token) return null;
-  return { url, token };
+  });
 }
 
 /**
@@ -518,7 +509,7 @@ function client(): Redis | null {
 }
 
 const UNCONFIGURED_REASON =
-  "KV_REST_API_URL and KV_REST_API_TOKEN must both be set to run a session";
+  "aicommunity_KV_REST_API_URL and aicommunity_KV_REST_API_TOKEN must both be set to run a session";
 
 function unconfigured(): { outcome: "unconfigured"; reason: string } {
   // Warn rather than throw — the `src/lib/slack.ts` posture. The caller decides
