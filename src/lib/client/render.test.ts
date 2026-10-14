@@ -8,6 +8,7 @@ import {
   renderCountdown,
   renderDistribution,
   renderFigureCountUp,
+  renderPodium,
   renderQuestion,
   renderStandings,
   renderWordCloud,
@@ -742,6 +743,72 @@ describe("renderDistribution count-up", () => {
     // Only the figures move. Which bar is correct is decided at render, not per frame.
     expect(rows()).toHaveLength(3);
     expect(rows()[0]!.dataset.correct).toBe("true");
+  });
+});
+
+/**
+ * The vote's podium. What is under test is that the renderer makes no decisions: the
+ * order is the server's, the place is text, and only the first row is the winner.
+ */
+describe("renderPodium", () => {
+  const rows = (): HTMLElement[] =>
+    Array.from(container.querySelectorAll("li"));
+  const podium = [
+    { id: "demo-5", text: "Demo 5" },
+    { id: "demo-2", text: "Demo 2" },
+    { id: "demo-4", text: "Demo 4" },
+  ];
+
+  it("lists the places in the given order, numbered as text", () => {
+    renderPodium(container, podium);
+
+    expect(rows().map((row) => row.dataset.optionId)).toEqual([
+      "demo-5",
+      "demo-2",
+      "demo-4",
+    ]);
+    expect(rows().map((row) => row.dataset.place)).toEqual(["1", "2", "3"]);
+    expect(rows().map((row) => row.textContent)).toEqual([
+      "1.Demo 5",
+      "2.Demo 2",
+      "3.Demo 4",
+    ]);
+  });
+
+  it("marks only the first row as the winner", () => {
+    renderPodium(container, podium, { row: "row", rowWinner: "winner" });
+
+    expect(rows().map((row) => row.dataset.winner)).toEqual([
+      "true",
+      undefined,
+      undefined,
+    ]);
+    expect(rows().map((row) => row.className)).toEqual([
+      "row winner",
+      "row",
+      "row",
+    ]);
+  });
+
+  it("says nobody voted for an empty podium", () => {
+    renderPodium(container, []);
+
+    expect(rows()).toHaveLength(0);
+    expect(container.textContent).toBe("Nikt nie zagłosował.");
+  });
+
+  it("renders nothing outside a reveal", () => {
+    renderPodium(container, podium);
+    renderPodium(container, null);
+
+    expect(container.childElementCount).toBe(0);
+  });
+
+  it("writes a candidate's name as text, never markup", () => {
+    renderPodium(container, [{ id: "x", text: "<b>Demo</b>" }]);
+
+    expect(container.querySelector("b")).toBeNull();
+    expect(rows()[0]!.textContent).toBe("1.<b>Demo</b>");
   });
 });
 

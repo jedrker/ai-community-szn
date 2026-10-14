@@ -830,6 +830,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           </section>
 
           <!--
+            The vote's podium, at a reveal. Takes the bands' place the way the bars do for
+            a choice question; `renderPodium` says `Nikt nie zagłosował.` when it is empty.
+          -->
+          <section id="podium-panel" hidden>
+            <div id="podium"></div>
+          </section>
+
+          <!-- The tie picker: shown only while this panel's own reveal was refused with a tie for the session version on screen. -->
+          <section id="vote-tie" hidden class="flex flex-col gap-[24px]">
+            <p class="text-[50px] leading-[58px] font-extrabold tracking-[-0.02em] text-quiz-signal">Remis — wskaż zwycięzcę</p>
+            <div id="vote-tie-options" class="flex flex-wrap gap-4"></div>
+          </section>
+          <!-- The script clones this so the picker's pills share `FLOW_PILL` without a second copy of the geometry. -->
+          <template id="vote-tie-pill"><button type="button" class={FLOW_PILL}></button></template>
+
+          <!--
             The word cloud's chips (roadmap S-08, FR-012/FR-015).
 
             The one panel that fills continuously rather than on a host action, and the
@@ -1342,6 +1358,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         renderDistribution,
         renderEntrance,
         renderFigureCountUp,
+        renderPodium,
         renderQuestion,
         renderStandings,
         renderWordCloud,
@@ -1374,6 +1391,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         applied?: boolean;
         note?: string;
         error?: string;
+        /** The reveal's 409 on a tied vote: the ids on the top count, for the picker. */
+        tie?: string[];
       };
 
       /**
@@ -1404,6 +1423,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * predicate below, so the halves cannot come apart.
        */
       const distributionPanel = el("distribution-panel");
+      const podiumPanel = el("podium-panel");
+      const podiumBox = el("podium");
+      const voteTieBox = el("vote-tie");
+      const voteTieOptions = el("vote-tie-options");
+      const voteTiePill = el("vote-tie-pill") as HTMLTemplateElement;
       const acceptedAnswerBox = el("accepted-answer");
       const standingsBox = el("standings");
       const standingsBoard = el("standings-board");
@@ -1904,6 +1928,68 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
+       * The tie picker's state: the reveal this panel sent came back 409 with the ids on
+       * the top count. Pinned to the session version it was refused for, so a snapshot
+       * that moves the session — another host's reveal, an `advance`, a purge — clears it
+       * through `tieShown` rather than leaving a picker about a vote that is over.
+       */
+      let voteTie: { questionId: string; version: number; ids: readonly string[] } | null = null;
+
+      function tieShown(state: State | null): boolean {
+        return (
+          voteTie !== null &&
+          state?.phase === "question-open" &&
+          state.version === voteTie.version &&
+          state.currentQuestionId === voteTie.questionId
+        );
+      }
+
+      /**
+       * One pill per tied candidate, in definition order. A pill carries no `data-action`
+       * and is not in `allButtons()`, so the blanket handler and the request-time disable
+       * ignore it; its click re-sends the reveal with the pick, which `reveal.ts` validates
+       * against the tally it reads then.
+       *
+       * **Rebuilt only when the tie it shows changes.** `render()` runs on every poll tick,
+       * and pills replaced every 2.5 s are detached under the host's finger — a tap whose
+       * `mousedown` and `mouseup` land on two different nodes is no click at all.
+       */
+      let voteTieShown: string | null = null;
+
+      function renderVoteTie(): void {
+        const state = client.current();
+        if (!tieShown(state)) {
+          voteTie = null;
+          voteTieShown = null;
+          setHidden(voteTieBox, true);
+          voteTieOptions.replaceChildren();
+          return;
+        }
+        const tie = voteTie!;
+        const signature = `${tie.questionId}|${tie.version}|${tie.ids.join(",")}`;
+        if (signature === voteTieShown) return;
+        voteTieShown = signature;
+        const question = config.questions.find((candidate) => candidate.id === tie.questionId);
+        const pills = (question?.options ?? [])
+          .filter((option) => tie.ids.includes(option.id))
+          .map((option) => {
+            const pill = voteTiePill.content.firstElementChild!.cloneNode(true) as HTMLButtonElement;
+            pill.textContent = option.text;
+            pill.dataset.optionId = option.id;
+            pill.addEventListener("click", () => {
+              voteTie = null;
+              renderVoteTie();
+              const body = new FormData();
+              body.set("winner", option.id);
+              void fire("reveal", body);
+            });
+            return pill;
+          });
+        voteTieOptions.replaceChildren(...pills);
+        setHidden(voteTieBox, false);
+      }
+
+      /**
        * Both predicates below now live in `src/lib/client/controls.ts`, which is where they
        * can be executed by a test rather than read as text. They take the published question
        * order explicitly, which is the only thing they ever closed over here.
@@ -2001,8 +2087,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * computed against people, not selections, so on a multiple-choice question the bars
          * sum past 100% — see `renderDistribution`.
          */
-        // The vote's bars follow its bands down to the compact size — see `BAND_SIZE_COMPACT`.
-        const compact = questionFor(state)?.kind === "vote";
+        // A vote never has a distribution now — its podium is `renderPodium`'s — so these
+        // bars only ever carry the full-size bands of a choice question.
         renderDistribution(
           distributionBox,
           state.currentQuestionId === null ? undefined : questionFor(state),
@@ -2019,23 +2105,21 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             animate: true,
             list: BAND_LIST,
             row:
-              (compact
-                ? "relative grid min-h-[68px] grid-cols-[68px_1fr_auto] items-center gap-x-8 "
-                : "relative grid min-h-[92px] grid-cols-[92px_1fr_auto] items-center gap-x-8 ") +
+              "relative grid min-h-[92px] grid-cols-[92px_1fr_auto] items-center gap-x-8 " +
               "overflow-hidden rounded-[20px] bg-quiz-asphalt pr-8 [counter-increment:option] " +
               "before:flex before:items-center before:justify-center " +
-              (compact ? "before:h-[68px] before:text-[36px] " : "before:h-[92px] before:text-[48px] ") +
+              "before:h-[92px] before:text-[48px] " +
               "before:bg-quiz-slab-inactive before:font-extrabold " +
               "before:tracking-[-0.02em] before:text-quiz-zinc " +
               "before:[--tw-content:counter(option,_upper-alpha)] " +
               "data-[correct=true]:bg-quiz-mint-tint data-[correct=true]:before:bg-quiz-mint " +
               "data-[correct=true]:before:text-quiz-ink",
             label:
-              (compact ? "text-[40px] leading-[46px] " : "text-[50px] leading-[58px] ") +
+              "text-[50px] leading-[58px] " +
               "font-semibold tracking-[-0.02em] text-quiz-echo " +
               "[[data-correct=true]>&]:text-quiz-mint",
             count:
-              (compact ? "text-[40px] " : "text-[52px] ") +
+              "text-[52px] " +
               "font-extrabold tabular-nums text-quiz-zinc " +
               "[[data-correct=true]>&]:text-quiz-mint",
             /**
@@ -2046,9 +2130,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
              * band or a smaller prompt — both spend something the room needs to read. It
              * starts where the text does, so the slab stays a solid block of colour.
              */
-            bar: compact
-              ? "absolute inset-x-0 bottom-0 left-[68px] h-[8px] bg-quiz-divider"
-              : "absolute inset-x-0 bottom-0 left-[92px] h-[8px] bg-quiz-divider",
+            bar: "absolute inset-x-0 bottom-0 left-[92px] h-[8px] bg-quiz-divider",
             barFill:
               "h-full bg-quiz-slab-inactive [[data-correct=true]_&]:bg-quiz-mint",
             // `echo`, not `zinc`: this is a sentence about the room, and zinc is for labels.
@@ -2606,6 +2688,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         stopCountdown();
 
         const state = client.current();
+        // Every branch passes through it: a moved session clears the picker by its version.
+        renderVoteTie();
 
         if (state === null) {
           setText("phase", "brak sesji");
@@ -2619,6 +2703,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           liveCount = null;
           setHidden(participationBox, true);
           setHidden(distributionPanel, true);
+          setHidden(podiumPanel, true);
           setHidden(acceptedAnswerBox, true);
           setHidden(standingsBox, true);
           setHidden(wordCloudBox, true);
@@ -2689,6 +2774,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           liveCount = null;
           setHidden(participationBox, true);
           setHidden(distributionPanel, true);
+          setHidden(podiumPanel, true);
           setHidden(acceptedAnswerBox, true);
           setHidden(standingsBox, true);
           setHidden(wordCloudBox, true);
@@ -2915,15 +3001,18 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const voteResult = revealed ? voteResultFor(question, state.revealedOptionIds) : null;
         /**
          * A vote's winner **takes the prompt's place**, sized by the same `promptClass`, so
-         * the reveal adds no height to a stage already carrying a bar per candidate. Nobody
-         * voted: the prompt stays and the bars panel says so.
+         * the reveal adds no height to the stage. Nobody voted: the prompt stays and the
+         * podium panel says so. While the tie picker is up its pills take the bands' place,
+         * as the bars do at a choice reveal — six bands plus the picker overflow a 1080p stage.
          */
         const shownQuestion =
           state.currentQuestionId === null
             ? undefined
-            : distribution !== null && question
+            : question && (distribution !== null || voteResult !== null)
               ? { ...question, prompt: voteResult?.headline ?? question.prompt, options: undefined }
-              : question;
+              : question && tieShown(state)
+                ? { ...question, options: undefined }
+                : question;
 
         // The flag the band variants key on. Set on the container rather than passed into the
         // class string, so the reveal cannot be half-applied: one attribute, every band.
@@ -2973,6 +3062,29 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            * from the back without competing with the option's own words.
            */
           correctMark: "ml-auto shrink-0 pl-8 text-[56px] font-extrabold leading-none",
+        });
+
+        /**
+         * The podium **is** the bands at a vote's reveal, as the bars are at a choice's: the
+         * winner's row carries the correct band's mint, the places carry the letters' slab.
+         * No counts — `reveal.ts` publishes none for a vote.
+         */
+        setHidden(podiumPanel, voteResult === null);
+        renderPodium(podiumBox, voteResult?.podium ?? null, {
+          animate: true,
+          motionKey: `${question?.id ?? ""}|podium`,
+          list: "flex flex-col gap-2",
+          row:
+            "relative grid min-h-[92px] grid-cols-[92px_1fr] items-center gap-x-8 " +
+            "overflow-hidden rounded-[20px] bg-quiz-asphalt pr-8 data-[winner=true]:bg-quiz-mint-tint",
+          place:
+            "flex h-[92px] items-center justify-center bg-quiz-slab-inactive text-[48px] " +
+            "font-extrabold tracking-[-0.02em] text-quiz-zinc " +
+            "[[data-winner=true]>&]:bg-quiz-mint [[data-winner=true]>&]:text-quiz-ink",
+          name:
+            "text-[50px] leading-[58px] font-semibold tracking-[-0.02em] text-quiz-echo " +
+            "[[data-winner=true]>&]:text-quiz-mint",
+          empty: "text-[40px] leading-[52px] text-quiz-echo",
         });
 
         /**
@@ -3585,6 +3697,22 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
                 "Zapisano, ale nie dotarło do urządzeń. Powtórz tę samą akcję.",
               "refused"
             );
+            return;
+          }
+
+          // A tied vote: nothing was written, so the session stays open while the host
+          // picks. The picker is pinned to the version on screen, which is what makes it
+          // safe to leave up — see `voteTie`.
+          if (response.status === 409 && Array.isArray(payload.tie)) {
+            const state = client.current();
+            voteTie =
+              state !== null && state.currentQuestionId !== null
+                ? { questionId: state.currentQuestionId, version: state.version, ids: payload.tie }
+                : null;
+            renderVoteTie();
+            // The pills took the bands' place, so the stage has to repaint for the picker.
+            render();
+            say(payload.error ?? "Remis — wskaż zwycięzcę.", "attention");
             return;
           }
 

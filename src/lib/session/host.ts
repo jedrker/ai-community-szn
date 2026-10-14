@@ -59,6 +59,8 @@ export type HostActionOutcome =
       status: 409;
       body: { state: SessionState; applied: false; error: string };
     }
+  /** Refused because the vote is tied and the host has not said who wins: `tie` is the ids on the top count. */
+  | { status: 409; body: { error: string; tie: readonly string[] } }
   /**
    * `400` is the request's fault rather than the session's, and it is the one status
    * here that says so: `start` uses it when nothing named which quiz to run. The 409s
@@ -180,6 +182,36 @@ export async function extractStartFields(
     typeof rawQuizId === "string" && rawQuizId.length > 0 ? rawQuizId : null;
 
   return { secret, quizId };
+}
+
+/**
+ * Reads the secret **and** the host's tie-break pick, in a single body read.
+ *
+ * Same shape and same reason as `extractStartFields`: `extractSecret` consumes
+ * `request.formData()` when no header is present, so `reveal.ts` cannot call it and
+ * then read the form. **There is no fallback.** An absent field is `null`, which the
+ * route treats as "the host has not picked" — never as "the first candidate".
+ */
+export async function extractRevealFields(
+  request: Request,
+): Promise<{ secret: string | null; winner: string | null }> {
+  const header = request.headers.get(HOST_SECRET_HEADER);
+
+  let form: FormData | null = null;
+  try {
+    form = await request.formData();
+  } catch {
+    form = null;
+  }
+
+  const field = form?.get("secret");
+  const secret = header ?? (typeof field === "string" ? field : null);
+
+  const rawWinner = form?.get("winner");
+  const winner =
+    typeof rawWinner === "string" && rawWinner.length > 0 ? rawWinner : null;
+
+  return { secret, winner };
 }
 
 export function authorizeHost(secret: string | null): { ok: boolean } {

@@ -1,21 +1,19 @@
-import type { PublicQuestion } from "../../quiz/public";
+import type { PublicOption, PublicQuestion } from "../../quiz/public";
 
 /**
  * What a revealed audience vote announces, shared by the projector and the phone so the
  * two say the same words at the same moment.
  *
- * `reveal.ts` publishes a vote's **winners** in `revealedOptionIds` — every candidate on
- * the top count, `[]` when nobody voted. This turns that list into names and a headline.
+ * `reveal.ts` publishes a vote's **podium** in `revealedOptionIds` — rank order, winner
+ * first, `[]` when nobody voted. This turns that list into options and a headline.
  * Pure, with no DOM: the pages do the painting.
  */
 export type VoteResult = {
-  /** The winners' option ids, in the question's projection order. Empty when nobody voted. */
-  readonly winnerIds: readonly string[];
-  /** The announcement, or null when nobody voted. */
+  /** The podium as published: rank order, winner first. Empty when nobody voted. */
+  readonly podium: readonly PublicOption[];
+  /** `Wygrywa <winner>!`, or null when nobody voted. */
   readonly headline: string | null;
 };
-
-const LIST = new Intl.ListFormat("pl", { style: "long", type: "conjunction" });
 
 /**
  * The result of a revealed vote, or `null` when there is none to announce: the question
@@ -30,18 +28,13 @@ export function voteResultFor(
 ): VoteResult | null {
   if (question?.kind !== "vote" || revealedOptionIds === null) return null;
 
-  const winners = (question.options ?? []).filter((option) =>
-    revealedOptionIds.includes(option.id),
-  );
-  const names = LIST.format(winners.map((option) => option.text));
+  const options = question.options ?? [];
+  // Published order, not projection order: the server ranked them.
+  const podium = revealedOptionIds.flatMap((id) => {
+    const option = options.find((candidate) => candidate.id === id);
+    return option ? [option] : [];
+  });
+  const winner = podium[0];
 
-  return {
-    winnerIds: winners.map((option) => option.id),
-    headline:
-      winners.length === 0
-        ? null
-        : winners.length === 1
-          ? `Wygrywa ${names}!`
-          : `Remis! Wygrywają ${names}`,
-  };
+  return { podium, headline: winner ? `Wygrywa ${winner.text}!` : null };
 }

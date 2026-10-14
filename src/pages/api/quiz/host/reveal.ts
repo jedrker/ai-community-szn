@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import {
   applyHostAction,
   authorizeHost,
-  extractSecret,
+  extractRevealFields,
   toResponse,
   unauthorized,
 } from "../../../../lib/session/host";
@@ -36,13 +36,28 @@ function revealedAnswerTextFor(question: Question | undefined): string | null {
   return null;
 }
 
-/** The candidates holding the most votes, in definition order; none when nobody voted. */
-function voteWinnerIds(
+/** How many places the room is shown. */
+const PODIUM_SIZE = 3;
+
+/** Candidates with at least one vote, most votes first; equal counts keep definition order (`sort` is stable). */
+function voteRanking(
   optionIds: readonly string[],
   counts: Readonly<Record<string, number>>,
 ): string[] {
-  const top = Math.max(0, ...optionIds.map((id) => counts[id] ?? 0));
-  return top === 0 ? [] : optionIds.filter((id) => (counts[id] ?? 0) === top);
+  return optionIds
+    .filter((id) => (counts[id] ?? 0) > 0)
+    .sort((a, b) => (counts[b] ?? 0) - (counts[a] ?? 0));
+}
+
+/** The ids sharing the top count — two or more is a tie the host has to break. `[]` when nobody voted. */
+function topTied(
+  ranking: readonly string[],
+  counts: Readonly<Record<string, number>>,
+): string[] {
+  const top = ranking[0];
+  return top === undefined
+    ? []
+    : ranking.filter((id) => counts[id] === counts[top]);
 }
 
 /**
@@ -60,7 +75,7 @@ function voteWinnerIds(
  * same reason `advance` is past the last question.
  */
 export const POST: APIRoute = async ({ request }) => {
-  const secret = await extractSecret(request);
+  const { secret, winner } = await extractRevealFields(request);
   if (!authorizeHost(secret).ok) return toResponse(unauthorized());
 
   /**
@@ -69,6 +84,11 @@ export const POST: APIRoute = async ({ request }) => {
    * `applyHostAction` speaks in states and nulls.
    */
   let tallyFailed = false;
+  /**
+   * Set by the transition when the vote's top count is shared and `winner` did not
+   * break it; read after it to turn the no-op into a 409 carrying the tied ids.
+   */
+  let voteTie: string[] | null = null;
 
   const outcome = await applyHostAction(async (current, now) => {
     if (current.phase === "lobby" || current.phase === "ended") {
@@ -129,7 +149,7 @@ export const POST: APIRoute = async ({ request }) => {
      * question closes. The same asymmetry `playerCount` documents in `host.ts`: the
      * count needs no serialization, the version does.
      */
-    const revealedDistribution = tallied
+    const tallies = tallied
       ? await readQuestionTallies(
           current.currentQuestionId!,
           question.options.map((option) => option.id),
@@ -144,19 +164,36 @@ export const POST: APIRoute = async ({ request }) => {
     /**
      * A vote departs from choice here. For a choice question the answer key is the
      * beat, so a failed read still reveals; for a vote the count *is* the beat, and the
-     * winners are computed from it. Refusing keeps voting open and lets the host tap
+     * podium is computed from it. Refusing keeps voting open and lets the host tap
      * again.
      */
     let revealedOptionIds: string[];
     if (question?.kind === "vote") {
-      if (revealedDistribution === null) {
+      if (tallies === null) {
         tallyFailed = true;
         return null;
       }
-      revealedOptionIds = voteWinnerIds(
-        question.options.map((option) => option.id),
-        revealedDistribution.options,
+      const counts = tallies.options;
+      const ranking = voteRanking(
+        question.options.map((o) => o.id),
+        counts,
       );
+      const tied = topTied(ranking, counts);
+      if (tied.length > 1) {
+        // A pick that names a candidate no longer on the top count is a pick about a tally
+        // that has moved (a late vote landed); refused again with the current tie.
+        if (winner === null || !tied.includes(winner)) {
+          voteTie = tied;
+          return null;
+        }
+        revealedOptionIds = [
+          winner,
+          ...ranking.filter((id) => id !== winner),
+        ].slice(0, PODIUM_SIZE);
+      } else {
+        // `winner` is ignored when there is nothing to break: the count decides.
+        revealedOptionIds = ranking.slice(0, PODIUM_SIZE);
+      }
     } else {
       revealedOptionIds = isChoice ? question.correctOptionIds : [];
     }
@@ -182,10 +219,13 @@ export const POST: APIRoute = async ({ request }) => {
        * correct ids — the client renders that as "nothing to highlight" rather than as
        * an error, which is what an unscored warm-up should look like. Text and number
        * questions get their own reveal in S-05/S-06. For a vote, the field carries the
-       * **winners** — every candidate on the top count, none when nobody voted.
+       * **podium** in rank order, winner first: at most `PODIUM_SIZE` ids, only
+       * candidates with at least one vote, none when nobody voted.
        */
       revealedOptionIds,
-      revealedDistribution,
+      // A vote's counts are deliberately kept off the wire: the room is shown places,
+      // never figures.
+      revealedDistribution: question?.kind === "vote" ? null : tallies,
       /**
        * The free-text half of the same job (roadmap S-05, FR-016), set here for the
        * same reason and under the same rule as the two fields above.
@@ -214,6 +254,16 @@ export const POST: APIRoute = async ({ request }) => {
       standings: null,
     };
   }, Date.now());
+
+  // The session stays `question-open` while the host picks — nothing was written, so
+  // phones can still vote; the pick request re-reads the tally and is validated
+  // against it, so a late vote only yields a fresh 409 or a tally that needs no host.
+  if (voteTie !== null) {
+    return toResponse({
+      status: 409,
+      body: { error: "Remis — wskaż zwycięzcę.", tie: voteTie },
+    });
+  }
 
   if (tallyFailed) {
     logSessionEvent("session.vote.failed", {

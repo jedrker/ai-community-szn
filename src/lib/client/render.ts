@@ -5,7 +5,7 @@ import {
   staggeredProgress,
 } from "./motion";
 import type { StandingsRow } from "../session/standings";
-import type { PublicQuestion } from "../../quiz/public";
+import type { PublicOption, PublicQuestion } from "../../quiz/public";
 
 /**
  * The DOM helpers both views share (roadmap S-02).
@@ -334,8 +334,8 @@ function optionClassName(parts: readonly (string | undefined)[]): string {
  * awarding everyone the right answer.
  *
  * The expansion is for warm-ups. **A vote is the exception:** it is unscored too, but its
- * list is its winners, so an empty list means nobody won — expanding it would paint every
- * candidate as a winner when nobody voted.
+ * list is the podium, winner first; both pages drop a revealed vote's option list, so this
+ * branch only guards the empty-podium case.
  *
  * Everything else passes through untouched: `null` (outside a reveal) stays `null`, a
  * non-empty list is already the answer, and a non-choice kind has no options to expand
@@ -735,6 +735,106 @@ export function renderDistribution(
     enabled: options.animate === true,
     paint: (progress) => paintBars(targets, progress),
   });
+
+  container.append(list);
+}
+
+export type PodiumClassNames = {
+  readonly list?: string;
+  readonly row?: string;
+  /** Appended to the first row. */
+  readonly rowWinner?: string;
+  readonly place?: string;
+  readonly name?: string;
+  readonly empty?: string;
+};
+
+export type RenderPodiumOptions = PodiumClassNames & {
+  /** Land the rows when the podium arrives; see `RenderQuestionOptions.animate`. */
+  readonly animate?: boolean;
+  /** What the rows' arrival is keyed on. Defaults to the podium's ids. */
+  readonly motionKey?: string;
+};
+
+/** Polish, because it renders directly; the vote's counterpart of `NO_ANSWERS_TEXT`. */
+const NO_VOTES_TEXT = "Nikt nie zagłosował.";
+
+/**
+ * Renders a revealed vote's podium: one row per place, in the **given order** — never
+ * sorted here, because `reveal.ts` ranked them and the page has no counts to rank by.
+ *
+ * `null` draws nothing (outside a reveal); `[]` says in a sentence that nobody voted,
+ * for the reason `renderDistribution` gives for an `answered` of zero. The place is
+ * written as text rather than a CSS counter so it survives a stylesheet that fails to
+ * load — `renderQuestion`'s rule for its marks.
+ */
+export function renderPodium(
+  container: HTMLElement,
+  podium: readonly PublicOption[] | null,
+  options: RenderPodiumOptions = {},
+): void {
+  container.replaceChildren();
+  cancelMotion(container);
+
+  if (podium === null) {
+    forgetMotion(container);
+    return;
+  }
+
+  if (podium.length === 0) {
+    forgetMotion(container);
+    const empty = document.createElement("p");
+    if (options.empty) empty.className = options.empty;
+    empty.textContent = NO_VOTES_TEXT;
+    container.append(empty);
+    return;
+  }
+
+  const list = document.createElement("ul");
+  if (options.list) list.className = options.list;
+
+  const rows: HTMLElement[] = [];
+
+  podium.forEach((option, index) => {
+    const row = document.createElement("li");
+    rows.push(row);
+    row.className = optionClassName([
+      options.row,
+      index === 0 ? options.rowWinner : undefined,
+    ]);
+    row.dataset.optionId = option.id;
+    row.dataset.place = String(index + 1);
+    if (index === 0) row.dataset.winner = "true";
+
+    const place = document.createElement("span");
+    if (options.place) place.className = options.place;
+    place.textContent = `${index + 1}.`;
+
+    const name = document.createElement("span");
+    if (options.name) name.className = options.name;
+    name.textContent = option.text;
+
+    row.append(place, name);
+    list.append(row);
+  });
+
+  // Only when the caller asked, for the reason `renderQuestion` gives: a second writer on
+  // the container would re-arm it on every snapshot.
+  if (options.animate === true) {
+    runMotion(container, {
+      signature:
+        options.motionKey ?? podium.map((option) => option.id).join(","),
+      durationMs: ENTER_MS,
+      paint: (progress) => {
+        rows.forEach((row, index) =>
+          paintEntrance(
+            row,
+            staggeredProgress(progress, index, rows.length, OPTION_SPREAD),
+          ),
+        );
+      },
+    });
+  }
 
   container.append(list);
 }

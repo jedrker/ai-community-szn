@@ -404,6 +404,9 @@ const quizTitles = Object.fromEntries(
         </div>
 
         <div id="question" class="flex flex-col gap-4"></div>
+        <!-- A revealed vote's podium, in the candidate list's place. Hidden by `showQuestion`,
+             shown only by `renderRevealed`. -->
+        <div id="podium" hidden class="flex flex-col gap-2"></div>
 
         <!-- The answering controls. Hidden for every phase and kind that cannot be
              answered, so nothing tappable is ever on screen without a purpose. -->
@@ -635,6 +638,7 @@ const quizTitles = Object.fromEntries(
         renderCountdown,
         renderEntrance,
         renderFigureCountUp,
+        renderPodium,
         renderQuestion,
         renderStandings,
         setHidden,
@@ -677,6 +681,7 @@ const quizTitles = Object.fromEntries(
       const joinSection = el("join");
       const followSection = el("follow");
       const questionBox = el("question");
+      const podiumBox = el("podium");
       const nameInput = el("display-name") as HTMLInputElement;
       const submit = el("join-submit") as HTMLButtonElement;
       const form = el("join-form") as HTMLFormElement;
@@ -732,6 +737,9 @@ const quizTitles = Object.fromEntries(
        * writers is exactly what this function exists to prevent.
        */
       function showQuestion(visible: boolean, waiting = !visible): void {
+        // The podium's single clearing point: no phase can leave one behind, and only
+        // `renderRevealed` un-hides it.
+        setHidden(podiumBox, true);
         setHidden(questionBox, !visible);
         followSection.dataset.waiting = String(waiting);
       }
@@ -1985,7 +1993,13 @@ const quizTitles = Object.fromEntries(
         setHidden(answerNote, true);
         answerError("");
 
-        renderQuestion(questionBox, question, {
+        /**
+         * A revealed vote drops its candidate list: the podium below replaces it, so the
+         * prompt stays and the list does not appear twice. Computed before `renderQuestion`
+         * for that reason, and read again in the vote block below.
+         */
+        const vote = voteResultFor(question, revealedOptionIds);
+        renderQuestion(questionBox, vote !== null && question ? { ...question, options: undefined } : question, {
           prompt: PROMPT_CLASS,
           list: OPTION_LIST,
           option: OPTION_CLASS,
@@ -2031,20 +2045,35 @@ const quizTitles = Object.fromEntries(
         /**
          * A vote's result, **before** the silent-device return below: the winner is news for
          * the whole room, not only for those who voted. No result fetch — there is no award,
-         * and the winners already ride the snapshot. The option list above already marks
-         * them, and this device's own pick, through `renderQuestion`.
+         * and the podium already rides the snapshot. The candidate list is replaced by it;
+         * this device's own pick is said in the award line.
          */
-        const vote = voteResultFor(question, revealedOptionIds);
         if (vote !== null) {
           setHidden(resultPanel, false);
-          verdict(vote.headline ?? "Brak głosów", vote.winnerIds.length > 0 ? "landed" : "silent");
+          setHidden(podiumBox, false);
+          renderPodium(podiumBox, vote.podium, {
+            animate: true,
+            motionKey: `${question.id}|podium`,
+            list: "flex flex-col gap-2",
+            // `OPTION_CLASS`'s geometry with the place span where the letter was.
+            row:
+              "flex min-h-[64px] items-center overflow-hidden rounded-[18px] bg-quiz-asphalt pr-4 " +
+              "text-[26px] font-semibold leading-[32px] text-quiz-signwhite " +
+              "data-[winner=true]:bg-quiz-mint-tint data-[winner=true]:text-quiz-mint",
+            place:
+              "mr-4 flex h-[64px] w-[56px] shrink-0 items-center justify-center " +
+              "bg-quiz-slab-inactive font-extrabold text-quiz-zinc " +
+              "[[data-winner=true]>&]:bg-quiz-mint [[data-winner=true]>&]:text-quiz-ink",
+            empty: "text-[22px] font-semibold text-quiz-zinc",
+          });
+          verdict(vote.headline ?? "Brak głosów", vote.podium.length > 0 ? "landed" : "silent");
           const own = hasSubmitted(config.seenStorageKey, question.id)
             ? question.options?.find((option) => option.id === pickedOptionIds(question.id)[0])?.text
             : undefined;
           award(own ? `Twój głos: ${own}` : "Nie oddano głosu z tego urządzenia.", "sentence");
           setText("result-answer", "");
           setText("result-total", "");
-          if (vote.winnerIds.length > 0) celebration.fire(`vote|${question.id}|${vote.winnerIds.join(",")}`);
+          if (vote.podium.length > 0) celebration.fire(`vote|${question.id}|${vote.podium[0]!.id}`);
           return;
         }
 

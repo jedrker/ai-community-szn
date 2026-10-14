@@ -267,7 +267,8 @@ text and number included — because `SUBMIT_ANSWER` bumps `answered:<questionId
 option field, so the figure was being withheld rather than being unavailable. The clause that
 excluded them came from the free-text slice and was written about the *distribution*, which a typed
 answer really has no shape for; the bars stay away on their own (`reveal.ts` builds
-`revealedDistribution` only for the choice kinds, and the panel hides on `distribution === null`).
+`revealedDistribution` only for the two choice kinds — a vote publishes its podium in
+`revealedOptionIds` and no distribution — and the panel hides on `distribution === null`).
 Do not re-introduce a kind test here to keep bars off a text question. What the predicate still
 refuses is a question with **no kind at all** — one this build does not have — and that guard is now
 explicit rather than implied by the kind list: without it a host tab that outlived a deploy polls a
