@@ -40,7 +40,7 @@ function revealedAnswerTextFor(question: Question | undefined): string | null {
 /** How many places the room is shown. */
 const PODIUM_SIZE = 3;
 
-/** Candidates with at least one vote, most votes first; equal counts keep definition order (`sort` is stable). */
+/** Candidates with at least one vote, most votes first; equal counts keep the list's order (`sort` is stable). */
 function voteRanking(
   optionIds: readonly string[],
   counts: Readonly<Record<string, number>>,
@@ -120,17 +120,13 @@ export const POST: APIRoute = async ({ request }) => {
     if (current.phase === "standings") return null;
 
     const question = getQuestionById(current.currentQuestionId ?? "");
+    // The question's kind is read once, into the three facts the transition branches on.
+    const isVote = question !== undefined && question.kind === "vote";
     const isChoice =
       question !== undefined &&
       (question.kind === "single-choice" ||
         question.kind === "multiple-choice");
-    const tallied =
-      question !== undefined &&
-      (question.kind === "single-choice" ||
-        question.kind === "multiple-choice" ||
-        question.kind === "vote");
-    // The session's list when the host set one in the lobby, else the definition's;
-    // for a choice kind `candidatesFor` is the definition's options unchanged.
+    const tallied = isChoice || isVote;
     const optionIds = tallied
       ? candidatesFor(current, question).map((option) => option.id)
       : [];
@@ -171,7 +167,7 @@ export const POST: APIRoute = async ({ request }) => {
      * again.
      */
     let revealedOptionIds: string[];
-    if (question?.kind === "vote") {
+    if (isVote) {
       if (tallies === null) {
         tallyFailed = true;
         return null;
@@ -226,7 +222,7 @@ export const POST: APIRoute = async ({ request }) => {
       revealedOptionIds,
       // A vote's counts are deliberately kept off the wire: the room is shown places,
       // never figures.
-      revealedDistribution: question?.kind === "vote" ? null : tallies,
+      revealedDistribution: isVote ? null : tallies,
       /**
        * The free-text half of the same job (roadmap S-05, FR-016), set here for the
        * same reason and under the same rule as the two fields above.

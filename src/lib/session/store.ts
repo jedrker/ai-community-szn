@@ -6,7 +6,7 @@ import {
   parseAnswerRecord,
   type AnswerRecord,
 } from "./answers";
-import { pickKvCredentials } from "./credentials";
+import { KV_CREDENTIAL_PAIRS, pickKvCredentials } from "./credentials";
 import {
   ANSWERS_KEY,
   DEVICES_KEY,
@@ -508,8 +508,7 @@ function client(): Redis | null {
   return new Redis({ url: config.url, token: config.token });
 }
 
-const UNCONFIGURED_REASON =
-  "aicommunity_KV_REST_API_URL and aicommunity_KV_REST_API_TOKEN must both be set to run a session";
+const UNCONFIGURED_REASON = `one of ${KV_CREDENTIAL_PAIRS.map((pair) => `${pair.url}/${pair.token}`).join(", ")} must be set as a pair to run a session`;
 
 function unconfigured(): { outcome: "unconfigured"; reason: string } {
   // Warn rather than throw — the `src/lib/slack.ts` posture. The caller decides

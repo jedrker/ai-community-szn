@@ -12,11 +12,9 @@ import type { Quiz } from "../schema";
  * decides when voting is over — the panel's reveal verb, named "zamknij głosowanie" for
  * this kind, closes it and shows the result.
  *
- * **These four are the defaults.** The host renames, adds and removes candidates in the
- * lobby from the panel menu, and the session's `candidates` field
- * (`src/lib/session/state.ts`) overrides this list for that session — nothing here
- * changes between evenings. A vote's options are never shuffled (`public.ts`), so
- * whatever list is in force appears in the order it was written.
+ * **These four are the defaults.** The host may replace them for one session from the
+ * panel menu — see `candidates` in `src/lib/session/state.ts`. A vote's options are
+ * never shuffled (`public.ts`), so whatever list is in force appears as written.
  */
 export const glosowanieAiSetup = {
   id: "glosowanie-ai-setup",

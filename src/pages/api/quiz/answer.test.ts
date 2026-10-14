@@ -817,6 +817,16 @@ describe("vote answers", () => {
     expect(submitAnswerMock).not.toHaveBeenCalled();
   });
 
+  it("refuses a known candidate sent beside an unknown one, rather than counting the known", async () => {
+    const response = await submit(vote.id, [
+      first!,
+      "nie-ma-takiego-kandydata",
+    ]);
+
+    expect(response.status).toBe(400);
+    expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
   /**
    * The list the room votes on is the session's when the host set one in the lobby
    * (host-editable vote candidates) — so a committed id stops being a candidate the

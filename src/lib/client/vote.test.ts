@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { voteResultFor } from "./vote";
+import { answerCopyFor, questionLabelFor, voteResultFor } from "./vote";
 import type { PublicQuestion } from "../../quiz/public";
 
 const vote: PublicQuestion = {
@@ -55,5 +55,55 @@ describe("voteResultFor", () => {
 
   it("has no result outside a reveal", () => {
     expect(voteResultFor(vote, null)).toBeNull();
+  });
+});
+
+const scoredSingle: PublicQuestion = {
+  id: "fixture-single",
+  kind: "single-choice",
+  prompt: "Ile?",
+  scored: true,
+  timeLimitSeconds: 30,
+  options: [{ id: "fixture-a", text: "A" }],
+};
+
+describe("questionLabelFor", () => {
+  it("numbers a quiz question, and says what changed at the reveal", () => {
+    expect(questionLabelFor(scoredSingle, 2, 14, false)).toBe("Pytanie 3 z 14");
+    expect(questionLabelFor(scoredSingle, 2, 14, true)).toBe(
+      "Pytanie 3 z 14 — odpowiedź ujawniona",
+    );
+  });
+
+  it("falls back to a bare label for a question the projection lacks", () => {
+    expect(questionLabelFor(undefined, -1, 14, false)).toBe("Pytanie");
+  });
+
+  it("carries no label on an open vote and only the change at its reveal", () => {
+    expect(questionLabelFor(vote, 0, 1, false)).toBe("");
+    expect(questionLabelFor(vote, 0, 1, true)).toBe("Wyniki");
+  });
+});
+
+describe("answerCopyFor", () => {
+  it("casts a vote rather than answering", () => {
+    expect(answerCopyFor(vote)).toEqual({
+      submit: "Oddaj głos",
+      lockedNote: "Głos oddany. Czekamy na wyniki…",
+      openNote:
+        "Głosowanie jest tajne. Wybierz jeden setup — głosu nie da się zmienić.",
+    });
+  });
+
+  it("keys the warm-up sentence on scored, never on the award", () => {
+    expect(answerCopyFor({ ...scoredSingle, scored: false }).openNote).toBe(
+      "To pytanie na rozgrzewkę — bez punktów.",
+    );
+    expect(answerCopyFor(scoredSingle).openNote).toBe(
+      "Liczy się też czas — im szybciej, tym więcej punktów.",
+    );
+    expect(
+      answerCopyFor({ ...scoredSingle, kind: "multiple-choice" }).openNote,
+    ).toBe("Możesz wybrać kilka odpowiedzi. Liczy się też czas.");
   });
 });

@@ -86,32 +86,56 @@ function secretMatches(provided: string | null): boolean {
 }
 
 /**
- * Reads the secret from a header or a form field. The header is what the harness
- * and any real host view should use; the form field exists because the project's
- * API convention is `request.formData()` and a plain HTML form cannot set
- * headers.
+ * The one body read every host route goes through.
+ *
+ * The secret comes from the header when present, else from the form field — the header
+ * is what the harness and the host view use; the field exists because the project's API
+ * convention is `request.formData()` and a plain HTML form cannot set headers. A request
+ * body can only be read once, so a route that needs other fields takes them from the
+ * `form` returned here rather than reading again. No body at all (a header-only caller)
+ * is not an error here: whatever field is then missing is reported by the route.
  */
-export async function extractSecret(request: Request): Promise<string | null> {
+async function readHostForm(
+  request: Request,
+): Promise<{ secret: string | null; form: FormData | null }> {
   const header = request.headers.get(HOST_SECRET_HEADER);
-  if (header) return header;
 
+  let form: FormData | null = null;
   try {
-    const form = await request.formData();
-    const field = form.get("secret");
-    return typeof field === "string" ? field : null;
+    form = await request.formData();
   } catch {
-    return null;
+    form = null;
   }
+
+  const field = form?.get("secret");
+  return { secret: header ?? (typeof field === "string" ? field : null), form };
 }
 
 /**
- * Reads the secret **and** the confirmation version in a single body read
- * (roadmap F-03).
- *
- * `extractSecret` consumes `request.formData()` when no header is present, and a
- * request body can only be read once — so a destructive route that called it and
- * then tried to read the version would find an empty body. The three flow verbs
- * keep using `extractSecret`; `end` and `purge` use this.
+ * A non-empty text field, else `null`. Explicitly `typeof === "string"` and non-empty
+ * rather than a bare coercion: `null`, `""` and a `File` all have to mean "said nothing",
+ * and `String(null)` does not. **No fallback anywhere**: an absent field is `null` and
+ * the route decides what "said nothing" means (`lessons.md`).
+ */
+function formText(form: FormData | null, name: string): string | null {
+  const raw = form?.get(name);
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+/** A positive integer version field, else `null`. */
+function formVersion(form: FormData | null): number | null {
+  const raw = form?.get("version");
+  const parsed = typeof raw === "string" ? Number(raw) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export async function extractSecret(request: Request): Promise<string | null> {
+  return (await readHostForm(request)).secret;
+}
+
+/**
+ * The secret **and** the confirmation version (roadmap F-03). `end` and `purge` use
+ * this; the three flow verbs keep `extractSecret`.
  *
  * `confirmVersion` is the caller's statement of which session it believes it is
  * ending. It is the whole safety mechanism: `start`, `advance` and `reveal` are
@@ -123,102 +147,36 @@ export async function extractSecret(request: Request): Promise<string | null> {
 export async function extractHostFields(
   request: Request,
 ): Promise<{ secret: string | null; confirmVersion: number | null }> {
-  const header = request.headers.get(HOST_SECRET_HEADER);
-
-  let form: FormData | null = null;
-  try {
-    form = await request.formData();
-  } catch {
-    // No form body — a header-only caller. Not an error by itself; a missing
-    // confirmation is reported by the route as a 409, not swallowed here.
-    form = null;
-  }
-
-  const field = form?.get("secret");
-  const secret = header ?? (typeof field === "string" ? field : null);
-
-  const rawVersion = form?.get("version");
-  const parsed = typeof rawVersion === "string" ? Number(rawVersion) : NaN;
-  const confirmVersion = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-
-  return { secret, confirmVersion };
+  const { secret, form } = await readHostForm(request);
+  return { secret, confirmVersion: formVersion(form) };
 }
 
 /**
- * Reads the secret **and** the quiz being started, in a single body read
- * (multiple-quizzes).
- *
- * Shaped like `extractHostFields` above and for exactly the same reason:
- * `extractSecret` consumes `request.formData()` when no header is present, and a
- * request body can only be read once — so calling it and then reading the form would
- * find an empty body and start whatever the fallback happened to be.
- *
- * **There is no fallback.** An absent field returns `null` and `start.ts` refuses,
- * rather than defaulting to "the first quiz" or "the one we usually run": deciding what
- * "said nothing" means before deciding what "lied" means is the rule
- * (`lessons.md`), and here the conservative end is refusing to start anything.
+ * The secret **and** the quiz being started (multiple-quizzes). An absent quiz is `null`
+ * and `start.ts` refuses, rather than defaulting to "the first quiz" or "the one we
+ * usually run" — the conservative end is refusing to start anything.
  */
 export async function extractStartFields(
   request: Request,
 ): Promise<{ secret: string | null; quizId: string | null }> {
-  const header = request.headers.get(HOST_SECRET_HEADER);
-
-  let form: FormData | null = null;
-  try {
-    form = await request.formData();
-  } catch {
-    // No form body — a header-only caller. Not an error by itself; the missing quiz is
-    // reported by the route, not swallowed here.
-    form = null;
-  }
-
-  const field = form?.get("secret");
-  const secret = header ?? (typeof field === "string" ? field : null);
-
-  const rawQuizId = form?.get("quizId");
-  // Explicitly `typeof === "string"` and non-empty rather than a bare coercion: `null`,
-  // `""` and a `File` all have to mean "said nothing", and `String(null)` does not.
-  const quizId =
-    typeof rawQuizId === "string" && rawQuizId.length > 0 ? rawQuizId : null;
-
-  return { secret, quizId };
+  const { secret, form } = await readHostForm(request);
+  return { secret, quizId: formText(form, "quizId") };
 }
 
 /**
- * Reads the secret **and** the host's tie-break pick, in a single body read.
- *
- * Same shape and same reason as `extractStartFields`: `extractSecret` consumes
- * `request.formData()` when no header is present, so `reveal.ts` cannot call it and
- * then read the form. **There is no fallback.** An absent field is `null`, which the
- * route treats as "the host has not picked" — never as "the first candidate".
+ * The secret **and** the host's tie-break pick. An absent pick is `null`, which the route
+ * treats as "the host has not picked" — never as "the first candidate".
  */
 export async function extractRevealFields(
   request: Request,
 ): Promise<{ secret: string | null; winner: string | null }> {
-  const header = request.headers.get(HOST_SECRET_HEADER);
-
-  let form: FormData | null = null;
-  try {
-    form = await request.formData();
-  } catch {
-    form = null;
-  }
-
-  const field = form?.get("secret");
-  const secret = header ?? (typeof field === "string" ? field : null);
-
-  const rawWinner = form?.get("winner");
-  const winner =
-    typeof rawWinner === "string" && rawWinner.length > 0 ? rawWinner : null;
-
-  return { secret, winner };
+  const { secret, form } = await readHostForm(request);
+  return { secret, winner: formText(form, "winner") };
 }
 
 /**
- * Reads the secret, the version the host edited against, the vote's question id and
- * the candidate list as the raw form string, in a single body read — the same shape and
- * reason as `extractRevealFields`. `version` parses like `extractHostFields`'
- * `confirmVersion`; the other two are `null` when absent or empty, never defaulted.
+ * The secret, the version the host edited against, the vote's question id and the
+ * candidate list as the raw form string (host-editable vote candidates).
  */
 export async function extractCandidatesFields(request: Request): Promise<{
   secret: string | null;
@@ -226,35 +184,13 @@ export async function extractCandidatesFields(request: Request): Promise<{
   questionId: string | null;
   candidates: string | null;
 }> {
-  const header = request.headers.get(HOST_SECRET_HEADER);
-
-  let form: FormData | null = null;
-  try {
-    form = await request.formData();
-  } catch {
-    form = null;
-  }
-
-  const field = form?.get("secret");
-  const secret = header ?? (typeof field === "string" ? field : null);
-
-  const rawVersion = form?.get("version");
-  const parsed = typeof rawVersion === "string" ? Number(rawVersion) : NaN;
-  const version = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-
-  const rawQuestionId = form?.get("questionId");
-  const questionId =
-    typeof rawQuestionId === "string" && rawQuestionId.length > 0
-      ? rawQuestionId
-      : null;
-
-  const rawCandidates = form?.get("candidates");
-  const candidates =
-    typeof rawCandidates === "string" && rawCandidates.length > 0
-      ? rawCandidates
-      : null;
-
-  return { secret, version, questionId, candidates };
+  const { secret, form } = await readHostForm(request);
+  return {
+    secret,
+    version: formVersion(form),
+    questionId: formText(form, "questionId"),
+    candidates: formText(form, "candidates"),
+  };
 }
 
 export function authorizeHost(secret: string | null): { ok: boolean } {

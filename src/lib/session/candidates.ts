@@ -4,11 +4,9 @@ import { QUESTION_ID, findDuplicates } from "../../quiz/schema";
 import type { SessionState } from "./state";
 
 /**
- * A vote's candidate list, as the host sets it in the lobby (`POST
- * /api/quiz/host/candidates`). It overrides the committed options for that session
- * only — the definition keeps the defaults, the session document carries the room's
- * list in `candidates` (`state.ts`), and `candidatesFor` is how every reader picks
- * between the two.
+ * A vote's candidate list as the host sets it in the lobby — the `candidates` field in
+ * `state.ts` carries the rule; `candidatesFor` is how every reader picks between that
+ * list and the committed options.
  *
  * The bounds are about the projector: twelve bands still fit the 1080 artboard, and a
  * name longer than forty characters does not read from the back of the room. Messages

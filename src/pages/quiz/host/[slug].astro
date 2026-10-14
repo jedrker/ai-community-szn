@@ -557,19 +557,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         </p>
 
         <!--
-          THE CANDIDATE EDITOR (host-editable vote candidates).
+          THE CANDIDATE EDITOR — the rule is `candidates` in `src/lib/session/state.ts`.
 
-          Lives in the menu rather than on the bar because it is used once, in the lobby,
-          before the room is looking at anything — and it is the one place on this page
-          where the host types quiz content. Nothing here reaches the room until
-          `zapisz listę`; the rows are a draft against the session version on screen, and
-          the script refuses to send a draft the session has moved past.
-
-          Neither button carries `data-action` and neither joins `allButtons()`: the
-          editor's enablement is its own rule (lobby only, this quiz only), read in
-          `syncCandidatesEditor` from the end of `syncControls` so it reaches every site
-          that function does. `maxlength` on the row input reaches the markup through the
-          row template below the dialog, from the same constant the route enforces.
+          In the menu rather than on the bar: used once, in the lobby, and it is the one place
+          on this page where the host types quiz content. The rows are a draft; nothing reaches
+          the room until `zapisz listę`. Neither button carries `data-action` and neither joins
+          `allButtons()` — the editor's enablement is read in `syncCandidatesEditor`, from the
+          end of `syncControls` so it reaches every site that function does. `maxlength` on the
+          row input comes through the row template below the dialog, from the route's constant.
         -->
         {
           voteQuestion && (
@@ -1426,9 +1421,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           max: MAX_CANDIDATES,
           textLength: MAX_CANDIDATE_TEXT_LENGTH,
         },
+        voteQuestionId: voteQuestion?.id ?? null,
       }}
     >
-      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, quizTitles, questions, candidateLimits };
+      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, quizTitles, questions, candidateLimits, voteQuestionId };
     </script>
 
     <script>
@@ -1484,6 +1480,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         channelName: string;
         snapshotEvent: string;
         secretHeader: string;
+        /** The vote the candidate editor targets — decided in the frontmatter, once; `null` when the quiz has none. */
+        voteQuestionId: string | null;
         /**
          * The quiz this panel rendered (multiple-quizzes), handed down through
          * `define:vars` — the sanctioned server-to-client hand-off. A `<script>` block
@@ -2060,7 +2058,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
-       * One pill per tied candidate, in definition order. A pill carries no `data-action`
+       * One pill per tied candidate, in the list's order. A pill carries no `data-action`
        * and is not in `allButtons()`, so the blanket handler and the request-time disable
        * ignore it; its click re-sends the reveal with the pick, which `reveal.ts` validates
        * against the tally it reads then.
@@ -2205,8 +2203,6 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          * computed against people, not selections, so on a multiple-choice question the bars
          * sum past 100% — see `renderDistribution`.
          */
-        // A vote never has a distribution now — its podium is `renderPodium`'s — so these
-        // bars only ever carry the full-size bands of a choice question.
         renderDistribution(
           distributionBox,
           state.currentQuestionId === null ? undefined : questionFor(state),
@@ -2493,7 +2489,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
        * Every rule is in `src/lib/client/candidates.ts`; this block does the DOM writes.
        * Absent entirely when the quiz has no vote, which is also when the markup is absent.
        */
-      const editorQuestion = config.questions.find((candidate) => candidate.kind === "vote");
+      const editorQuestion = config.questions.find((candidate) => candidate.id === config.voteQuestionId);
       const editorNodes =
         editorQuestion === undefined
           ? null
@@ -2611,9 +2607,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         editorNodes.save.addEventListener("click", () => {
           const state = client.current();
           if (state === null || editor.version !== state.version) {
-            // The draft is about a session that has moved on: refill from what is on screen
-            // rather than sending names the host authored against a state nobody holds.
-            editor.version = null;
+            // The draft is about a session that has moved on: empty it so the sync below
+            // refills from what is on screen (or the defaults, with no session), rather than
+            // sending names the host authored against a state nobody holds.
+            editor = { version: null, list: [] };
             syncCandidatesEditor();
             say("Lista zmieniła się w międzyczasie — sprawdź i zapisz ponownie.", "attention");
             return;

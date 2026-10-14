@@ -398,9 +398,12 @@ export type RevealVerb = "reveal-answer" | "close-question" | "close-vote";
 /**
  * What the reveal verb does to the current question — the name the panel gives it.
  *
- * A word cloud has no answer to reveal, only submissions to close, and that follows from
- * `pollTargetFor` rather than from a second kind test: the cloud is the question whose
- * panel survives the reveal. A vote closes voting and shows the result.
+ * **The one place the verb is named**, and the page reads it from nowhere else. A word
+ * cloud has no answer to reveal, only submissions to close, and that follows from
+ * `pollTargetFor`: the cloud is the question whose panel survives the reveal. A vote
+ * closes voting and shows the result, and the poll target cannot tell a vote from a
+ * choice question (both poll participation), so a vote is named by its kind — here, once,
+ * never on the page. Naming only: the phase rule stays in `verbsFor`.
  */
 export function revealVerbFor(
   questions: readonly PublicQuestion[],

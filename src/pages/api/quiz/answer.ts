@@ -363,19 +363,18 @@ export const POST: APIRoute = async ({ request }) => {
     awarded = 0;
   } else if (question.kind === "vote") {
     /**
-     * Exactly one known candidate, bounded against the list the room is voting on —
-     * the session's, when the host set one in the lobby, else the definition's. No
-     * scorer, as with the word cloud: the build gate refuses a scored vote, so there is
-     * nothing to weigh — the count is the result. The first vote is final because
+     * Exactly one id, and it must be on the list the room is voting on — the session's,
+     * when the host set one in the lobby, else the definition's. Checked before any
+     * filtering, so `[known, bogus]` is refused rather than quietly counted as `known`.
+     * No scorer, as with the word cloud: the build gate refuses a scored vote, so there
+     * is nothing to weigh — the count is the result. The first vote is final because
      * `SUBMIT_ANSWER` writes with `HSETNX`.
      */
-    const knownOptionIds = new Set(
-      candidatesFor(session.state, question).map((option) => option.id),
+    const picked = [...new Set(optionIds)];
+    const known = candidatesFor(session.state, question).some(
+      (option) => option.id === picked[0],
     );
-    const picked = [
-      ...new Set(optionIds.filter((id) => knownOptionIds.has(id))),
-    ];
-    if (picked.length !== 1) {
+    if (picked.length !== 1 || !known) {
       logSessionEvent("session.answer.rejected", {
         rejection: "invalid",
         questionId,

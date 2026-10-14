@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { PublicQuestion } from "../../quiz/public";
 import { SESSION_PHASES, type SessionState } from "../session/state";
 import {
+  candidateListSchema,
+  MAX_CANDIDATE_TEXT_LENGTH,
+  MAX_CANDIDATES,
+  MIN_CANDIDATES,
+} from "../session/candidates";
+import {
   addCandidate,
   candidateListProblem,
   candidatesEditable,
@@ -183,5 +189,36 @@ describe("candidateListProblem", () => {
     expect(candidateListProblem(demos(1), limits)).toBe(
       `Lista musi mieć od ${limits.min} do ${limits.max} uczestników.`,
     );
+  });
+
+  /**
+   * The client's pre-check says what the route would say, word for word — the host reads
+   * one on the disabled save button and the other in the toast, and they must not drift.
+   * A test file may value-import the server module; the client module itself may not
+   * (`boundary.test.ts`), which is why the sentences exist twice.
+   */
+  it("says exactly what the server schema says, for every problem it checks", () => {
+    const serverLimits: CandidateLimits = {
+      min: MIN_CANDIDATES,
+      max: MAX_CANDIDATES,
+      textLength: MAX_CANDIDATE_TEXT_LENGTH,
+    };
+    const cases: Candidate[][] = [
+      [
+        { id: "fixture-a", text: "   " },
+        { id: "fixture-b", text: "B" },
+      ],
+      [
+        { id: "fixture-a", text: "x".repeat(MAX_CANDIDATE_TEXT_LENGTH + 1) },
+        { id: "fixture-b", text: "B" },
+      ],
+      [{ id: "fixture-a", text: "A" }],
+    ];
+    for (const list of cases) {
+      const server =
+        candidateListSchema.safeParse(list).error?.issues[0]?.message;
+      expect(server).toBeDefined();
+      expect(candidateListProblem(list, serverLimits)).toBe(server);
+    }
   });
 });

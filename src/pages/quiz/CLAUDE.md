@@ -125,9 +125,11 @@ the host needs on question 14. `controls.test.ts` asserts `end`'s allowed state 
 `atLast` true and false in every phase.
 
 The reveal verb is also **named** by question kind: `zamknij pytanie` on a word cloud, which has no
-answer to show but still needs closing (`answer.ts` accepts only in `question-open`). Keyed on
-`pollTargetFor`, the single kind predicate — never on a fresh `kind === "word-cloud"` test, and never
-"fixed" by dropping `reveal` from the row, which would leave the cloud with no way to close.
+answer to show but still needs closing (`answer.ts` accepts only in `question-open`), and `zamknij
+głosowanie` on a vote. Both names come from `revealVerbFor` in `controls.ts` — the cloud through
+`pollTargetFor`, the vote by its kind, inside that one function — never from a kind test on the
+page, and never "fixed" by dropping `reveal` from the row, which would leave the cloud with no way
+to close.
 
 **The verbs' geometry is stated once**, as `FLOW_PILL` in the host page's frontmatter, in fixed px
 (`text-[40px] px-8 py-2`) measured for the 1920 artboard. It was briefly `clamp`ed against `vw`,

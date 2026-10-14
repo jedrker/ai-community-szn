@@ -16,17 +16,13 @@ import { writeSession } from "../../../../lib/session/store";
 import { getQuizById } from "../../../../quiz/index";
 
 /**
- * Sets a vote question's candidate list for this session (host-editable vote
- * candidates). The list replaces the definition's options for that question until the
- * session ends; a new `start` begins from the committed defaults again.
+ * Sets a vote question's candidate list for this session — the `candidates` field in
+ * `src/lib/session/state.ts`, which carries the rule.
  *
- * **Lobby only.** Once the vote opens the list is frozen: every tally is keyed by a
- * candidate id, so a removal after the first vote would orphan a count and a re-added
- * id would inherit one. The panel disables the editor outside the lobby; this refusal
- * is the backstop.
- *
- * The host's `version` is passed through as the write's expected version, so a list
- * edited against a snapshot the session has since moved past comes back as
+ * **Lobby only, and this route is the backstop.** Every tally is keyed by a candidate
+ * id, so a removal after the first vote would orphan a count and a re-added id would
+ * inherit one. The host's `version` is passed through as the write's expected version,
+ * so a list edited against a snapshot the session has since moved past comes back as
  * `applied: false` rather than being committed over a state the host never saw.
  */
 export const POST: APIRoute = async ({ request }) => {

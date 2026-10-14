@@ -739,16 +739,16 @@ describe("flow verbs are offered only where they apply", () => {
    * A word-cloud question is unscored and has no correct answer, so `pokaż odpowiedź` names a
    * beat that cannot happen — while the button still does the necessary work of closing
    * submissions and freezing the cloud. The fix is the label, and the two ways to get it wrong
-   * are both silent: renaming it from a fresh `kind === "word-cloud"` test (a second kind
-   * predicate, free to drift from `pollTargetFor`), or "fixing" it by dropping `reveal` from
-   * the `question-open` row, which leaves the cloud with no way to close.
+   * are both silent: renaming it from a kind test *on the page* (a second kind predicate,
+   * free to drift from `controls.ts`), or "fixing" it by dropping `reveal` from the
+   * `question-open` row, which leaves the cloud with no way to close.
    *
-   * The name now comes from `revealVerbFor` in `controls.ts`, which asks `pollTargetFor` —
-   * still the only kind predicate — and names a vote's close as well. Its choice of name is
-   * executed in `controls.test.ts`; what this file can still see is that the page takes the
-   * name from there and nowhere else.
+   * The name comes from `revealVerbFor` in `controls.ts` — the cloud via `pollTargetFor`, a
+   * vote by its kind, both inside that one function. Its choice of name is executed in
+   * `controls.test.ts`; what this file can still see is that the page takes the name from
+   * there and nowhere else.
    */
-  it("renames the reveal verb from the single predicate, and gates nothing on it", () => {
+  it("renames the reveal verb from controls.ts, and gates nothing on it", () => {
     expect(sync).toContain("revealVerbFor(config.questions, state)");
     // The name comes from that verb and from nothing else. What sits between it and
     // `textContent` is the armed label, which is a state of the same button rather than a

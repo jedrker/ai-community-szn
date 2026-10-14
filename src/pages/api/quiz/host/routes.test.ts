@@ -237,6 +237,25 @@ function call(
   } as never);
 }
 
+/**
+ * Runs the transition the route hands `applyHostAction` against `current`, for real, so
+ * a refusal (a `null` return) reaches the route's own branching. Returns a reader for
+ * what the transition produced.
+ */
+function runTransitionAgainst(current: unknown): () => unknown {
+  let next: unknown = "not run";
+  applyHostActionMock.mockImplementation(async (transition: never) => {
+    next = await (
+      transition as unknown as (s: unknown, n: number) => Promise<unknown>
+    )(current, NOW);
+    return {
+      status: 200,
+      body: { state: current, applied: next !== null, note: "no-op" },
+    };
+  });
+  return () => next;
+}
+
 beforeEach(() => {
   applyHostActionMock.mockReset();
   createSessionMock.mockReset();
@@ -788,23 +807,13 @@ describe("reveal", () => {
       return transition(openVote, NOW);
     }
 
-    /** Runs the transition for real so a refusal (a `null` return) reaches the route. */
     async function revealVoteThrough(winner?: string) {
-      let next: unknown = "not run";
-      applyHostActionMock.mockImplementation(async (transition: never) => {
-        next = await (
-          transition as unknown as (s: unknown, n: number) => Promise<unknown>
-        )(openVote, NOW);
-        return {
-          status: 200,
-          body: { state: openVote, applied: next !== null, note: "no-op" },
-        };
-      });
+      const next = runTransitionAgainst(openVote);
       const response = await call(
         reveal,
         winner === undefined ? {} : { winner },
       );
-      return { response, body: await response.json(), next: () => next };
+      return { response, body: await response.json(), next };
     }
 
     it("publishes the ranking with no counts when the top is unshared", async () => {
@@ -1088,10 +1097,15 @@ describe("end", () => {
     it.skipIf(unscoredQuiz === undefined)(
       "closes a quiz with nothing scored without reading or publishing a board",
       async () => {
+        // Any unscored question of that quiz — by the property the test is about, not
+        // by position.
+        const unscoredQuestion = unscoredQuiz!.questions.find(
+          (question) => question.points === null,
+        )!;
         const revealedUnscored = {
           ...revealed,
           quizId: unscoredQuiz!.id,
-          currentQuestionId: unscoredQuiz!.questions[0]!.id,
+          currentQuestionId: unscoredQuestion.id,
         };
         sessionIs(revealedUnscored);
         readStandingsMock.mockResolvedValue(board);
@@ -1952,15 +1966,7 @@ describe("standings", () => {
    */
   it("refuses the transition when the board cannot be read", async () => {
     readStandingsMock.mockResolvedValue(null);
-    applyHostActionMock.mockImplementation(async (transition: never) => {
-      const next = await (
-        transition as unknown as (s: unknown, n: number) => Promise<unknown>
-      )(revealed, NOW);
-      return {
-        status: 200,
-        body: { state: revealed, applied: next !== null, note: "no-op" },
-      };
-    });
+    runTransitionAgainst(revealed);
 
     const response = await call(showStandings);
     const body = await response.json();
@@ -2062,21 +2068,6 @@ describe("candidates", () => {
       candidates: JSON.stringify(list),
       ...options,
     });
-
-  /** Runs the captured transition against `current` so a refusal reaches the route. */
-  function runTransitionAgainst(current: unknown) {
-    let next: unknown = "not run";
-    applyHostActionMock.mockImplementation(async (transition: never) => {
-      next = await (
-        transition as unknown as (s: unknown, n: number) => unknown
-      )(current, NOW);
-      return {
-        status: 200,
-        body: { state: current, applied: next !== null, note: "no-op" },
-      };
-    });
-    return () => next;
-  }
 
   it("rejects a missing secret with 401 before reading anything", async () => {
     const response = await send({ secret: null });

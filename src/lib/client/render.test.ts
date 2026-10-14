@@ -754,24 +754,24 @@ describe("renderPodium", () => {
   const rows = (): HTMLElement[] =>
     Array.from(container.querySelectorAll("li"));
   const podium = [
-    { id: "demo-5", text: "Demo 5" },
-    { id: "demo-2", text: "Demo 2" },
-    { id: "demo-4", text: "Demo 4" },
+    { id: "fixture-k-5", text: "Kandydat 5" },
+    { id: "fixture-k-2", text: "Kandydat 2" },
+    { id: "fixture-k-4", text: "Kandydat 4" },
   ];
 
   it("lists the places in the given order, numbered as text", () => {
     renderPodium(container, podium);
 
     expect(rows().map((row) => row.dataset.optionId)).toEqual([
-      "demo-5",
-      "demo-2",
-      "demo-4",
+      "fixture-k-5",
+      "fixture-k-2",
+      "fixture-k-4",
     ]);
     expect(rows().map((row) => row.dataset.place)).toEqual(["1", "2", "3"]);
     expect(rows().map((row) => row.textContent)).toEqual([
-      "1.Demo 5",
-      "2.Demo 2",
-      "3.Demo 4",
+      "1.Kandydat 5",
+      "2.Kandydat 2",
+      "3.Kandydat 4",
     ]);
   });
 
