@@ -169,7 +169,9 @@ quizzes and the colliding value in Polish:
   the route writes `correct: false, awarded: 0` directly, because there is nothing to weigh.
 - A **vote must be unscored** too, for the same reason: there is no correct answer, only a count.
   It shares the choice kinds' ≥2-options and unique-option-id rules but carries no
-  `correctOptionIds`; `reveal.ts` publishes its **winners** in `revealedOptionIds` instead. Its
+  `correctOptionIds`; `reveal.ts` publishes its **podium** in `revealedOptionIds` instead — at most
+  three ids in rank order, winner first, only candidates with votes, and no distribution (a shared
+  top count is refused with a 409 until the host names the winner). Its
   options are **not shuffled** (`public.ts`) — they keep the order the demos ran in.
 - A scored question must carry **`timeLimitSeconds`**, and an unscored one may not (FR-020).
   Required where `points !== null`, refused where `points === null`, bounded to

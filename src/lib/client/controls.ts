@@ -369,7 +369,8 @@ export function pollTargetFor(
    * typed answer takes longer than a tap and there is nothing else to judge the moment by.
    *
    * The bars stay away on their own: `reveal.ts` builds `revealedDistribution` only for the
-   * choice kinds and the vote, and `host.astro` hides that panel on `distribution === null` rather than on a
+   * two choice kinds — a vote publishes its podium in `revealedOptionIds` and no distribution —
+   * and `host.astro` hides that panel on `distribution === null` rather than on a
    * kind of its own. **Do not answer a future "text questions must not show bars" with a kind
    * test here** — that would be the second condition this predicate exists to prevent.
    *

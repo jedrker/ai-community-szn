@@ -179,6 +179,7 @@ function call(
     secret = SECRET,
     version,
     quizId,
+    winner,
   }: {
     secret?: string | null;
     version?: number | string;
@@ -189,6 +190,8 @@ function call(
      * request shape they always did.
      */
     quizId?: string;
+    /** The host's tie-break pick; only `reveal` reads it, and only on a tie. */
+    winner?: string;
   } = {},
 ): Promise<Response> | Response {
   const headers: Record<string, string> = { Origin: "https://example.test" };
@@ -198,10 +201,11 @@ function call(
   // missing-confirmation case is expressed, and it also keeps the three flow verbs
   // exercising exactly the request shape they see today.
   let body: FormData | undefined;
-  if (version !== undefined || quizId !== undefined) {
+  if (version !== undefined || quizId !== undefined || winner !== undefined) {
     body = new FormData();
     if (version !== undefined) body.set("version", String(version));
     if (quizId !== undefined) body.set("quizId", quizId);
+    if (winner !== undefined) body.set("winner", winner);
   }
 
   return handler({
@@ -720,8 +724,10 @@ describe("reveal", () => {
   });
 
   /**
-   * A vote's reveal names its winners in `revealedOptionIds` — computed from the tally
-   * the same transition reads, so every screen shows the same result the bars do.
+   * A vote's reveal publishes its podium in `revealedOptionIds` — rank order, winner
+   * first, at most three, only candidates with votes — and no distribution: the room
+   * is shown places, never counts. A shared top count is refused with the tied ids
+   * until the host names the winner.
    */
   describe("a vote", () => {
     const ids = voteQuestion.options.map((option) => option.id);
@@ -742,37 +748,115 @@ describe("reveal", () => {
       return { answered, options };
     }
 
-    async function revealVote() {
+    async function revealVote(winner?: string) {
       applyHostActionMock.mockResolvedValue({
         status: 200,
         body: { state: revealed, applied: true },
       });
-      await call(reveal);
+      await call(reveal, winner === undefined ? {} : { winner });
       const [transition] = applyHostActionMock.mock.calls[0]!;
       return transition(openVote, NOW);
     }
 
-    it("names the single top candidate as the winner and publishes the bars", async () => {
-      const [first, second] = ids;
-      const distribution = tallies({ [first!]: 5, [second!]: 3 });
-      readQuestionTalliesMock.mockResolvedValue(distribution);
+    /** Runs the transition for real so a refusal (a `null` return) reaches the route. */
+    async function revealVoteThrough(winner?: string) {
+      let next: unknown = "not run";
+      applyHostActionMock.mockImplementation(async (transition: never) => {
+        next = await (
+          transition as unknown as (s: unknown, n: number) => Promise<unknown>
+        )(openVote, NOW);
+        return {
+          status: 200,
+          body: { state: openVote, applied: next !== null, note: "no-op" },
+        };
+      });
+      const response = await call(
+        reveal,
+        winner === undefined ? {} : { winner },
+      );
+      return { response, body: await response.json(), next: () => next };
+    }
+
+    it("publishes the ranking with no counts when the top is unshared", async () => {
+      const [first, second, third] = ids;
+      readQuestionTalliesMock.mockResolvedValue(
+        tallies({ [first!]: 5, [second!]: 3, [third!]: 0 }),
+      );
 
       const next = await revealVote();
 
-      expect(next.revealedOptionIds).toEqual([first]);
-      expect(next.revealedDistribution).toEqual(distribution);
+      expect(next.revealedOptionIds).toEqual([first, second]);
+      expect(next.revealedDistribution).toBeNull();
     });
 
-    it("names every candidate on the top count, in definition order, on a tie", async () => {
+    it("refuses a tie with the tied ids, leaving voting open", async () => {
       const [first, second, third] = ids;
       // Written out of order, so a result that followed the counts' keys would show.
       readQuestionTalliesMock.mockResolvedValue(
         tallies({ [third!]: 4, [first!]: 4, [second!]: 1 }),
       );
 
+      const { response, body, next } = await revealVoteThrough();
+
+      expect(response.status).toBe(409);
+      expect(body).toEqual({
+        error: "Remis — wskaż zwycięzcę.",
+        tie: [first, third],
+      });
+      expect(next()).toBeNull();
+    });
+
+    it("publishes the host's pick first on a tie", async () => {
+      const [first, second, third] = ids;
+      readQuestionTalliesMock.mockResolvedValue(
+        tallies({ [third!]: 4, [first!]: 4, [second!]: 1 }),
+      );
+
+      const next = await revealVote(third);
+
+      expect(next.revealedOptionIds).toEqual([third, first, second]);
+    });
+
+    it("refuses a pick that is not on the top count", async () => {
+      const [first, second, third] = ids;
+      readQuestionTalliesMock.mockResolvedValue(
+        tallies({ [third!]: 4, [first!]: 4, [second!]: 1 }),
+      );
+
+      const { response, body, next } = await revealVoteThrough(second);
+
+      expect(response.status).toBe(409);
+      expect(body.tie).toEqual([first, third]);
+      expect(next()).toBeNull();
+    });
+
+    it("shows at most three places and only candidates with votes", async () => {
+      const [first, second, third, fourth, fifth, sixth] = ids;
+      readQuestionTalliesMock.mockResolvedValue(
+        tallies({
+          [first!]: 1,
+          [second!]: 0,
+          [third!]: 3,
+          [fourth!]: 2,
+          [fifth!]: 0,
+          [sixth!]: 5,
+        }),
+      );
+
       const next = await revealVote();
 
-      expect(next.revealedOptionIds).toEqual([first, third]);
+      expect(next.revealedOptionIds).toEqual([sixth, third, fourth]);
+    });
+
+    it("ignores the pick when the count already decided", async () => {
+      const [first, second] = ids;
+      readQuestionTalliesMock.mockResolvedValue(
+        tallies({ [first!]: 5, [second!]: 3 }),
+      );
+
+      const next = await revealVote(second);
+
+      expect(next.revealedOptionIds).toEqual([first, second]);
     });
 
     it("names nobody when nobody voted", async () => {
@@ -789,23 +873,12 @@ describe("reveal", () => {
      */
     it("refuses the reveal when the tally cannot be read", async () => {
       readQuestionTalliesMock.mockResolvedValue(null);
-      let next: unknown = "not run";
-      applyHostActionMock.mockImplementation(async (transition: never) => {
-        next = await (
-          transition as unknown as (s: unknown, n: number) => Promise<unknown>
-        )(openVote, NOW);
-        return {
-          status: 200,
-          body: { state: openVote, applied: next !== null, note: "no-op" },
-        };
-      });
 
-      const response = await call(reveal);
-      const body = await response.json();
+      const { response, body, next } = await revealVoteThrough();
 
       expect(response.status).toBe(503);
       expect(body.error).toContain("Nie udało się policzyć głosów");
-      expect(next).toBeNull();
+      expect(next()).toBeNull();
     });
   });
 });
