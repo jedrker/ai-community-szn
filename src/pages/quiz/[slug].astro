@@ -103,6 +103,14 @@ if (quiz === undefined) {
 const quizTitles = Object.fromEntries(
   publicQuizzes.map((entry) => [entry.id, entry.title]),
 );
+
+/**
+ * What the phone calls this session. A quiz made only of votes is a vote to the room — the
+ * projector says "głosowanie" — so the wordmark, the tab title and the join sentence say so
+ * too, instead of "LiveQuiz" sitting above a ballot all evening.
+ */
+const isVoteOnly = quiz?.questions.every((question) => question.kind === "vote") ?? false;
+const wordmark = isVoteOnly ? "Głosowanie" : "LiveQuiz";
 ---
 
 {
@@ -119,7 +127,7 @@ const quizTitles = Object.fromEntries(
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
-    <title>LiveQuiz — dołącz</title>
+    <title>{wordmark} — dołącz</title>
 
     <!--
       THE THEME (change `quiz-color-scheme`), present only for a quiz that registered one.
@@ -168,7 +176,7 @@ const quizTitles = Object.fromEntries(
         class="quiz-display text-[20px] font-semibold uppercase tracking-[0.14em]
                text-quiz-zinc"
       >
-        LiveQuiz
+        {wordmark}
       </h1>
 
       <!-- Shown until the stored-player check resolves, so a returning device never
@@ -206,7 +214,7 @@ const quizTitles = Object.fromEntries(
             class="quiz-display text-[44px] font-extrabold leading-[46px]
                    tracking-[-0.035em]"
           >
-            Wpisz swoją nazwę, żeby dołączyć do quizu.
+            Wpisz swoją nazwę, żeby dołączyć do {isVoteOnly ? "głosowania" : "quizu"}.
           </p>
         </div>
 
@@ -642,6 +650,7 @@ const quizTitles = Object.fromEntries(
         standingsPositionText,
         wordEchoText,
       } from "../../lib/client/render";
+      import { prefersReducedMotion } from "../../lib/client/motion";
       import { voteResultFor } from "../../lib/client/vote";
       import type { PublicQuestion } from "../../quiz/public";
 
@@ -1143,16 +1152,23 @@ const quizTitles = Object.fromEntries(
         // An id absent from the projection means the definition changed under a live
         // session. `renderQuestion` shows a neutral placeholder rather than an error.
         const question = position === -1 ? undefined : config.questions[position];
+        /**
+         * A vote carries no label while open: the wordmark above already says
+         * "Głosowanie", and a second copy right under it reads as a stutter. At the
+         * reveal it says only what changed.
+         */
         const label =
           question?.kind === "vote"
-            ? "Głosowanie"
+            ? ""
             : position === -1
               ? "Pytanie"
               : `Pytanie ${position + 1} z ${config.questions.length}`;
 
         status(
           state.phase === "question-revealed"
-            ? `${label} — ${question?.kind === "vote" ? "wyniki" : "odpowiedź ujawniona"}`
+            ? question?.kind === "vote"
+              ? "Wyniki"
+              : `${label} — odpowiedź ujawniona`
             : label,
           "label"
         );
@@ -1618,6 +1634,18 @@ const quizTitles = Object.fromEntries(
           onSelect: (next) => {
             selections.set(question.id, next);
             render();
+            /**
+             * One tap completes a single pick, so bring the submit into view: on a short
+             * screen it sits below the last option and an attendee who never scrolls never
+             * sees it. `nearest` moves nothing when it is already visible. Not on a
+             * multiple choice, where the next tap is another option, not the button.
+             */
+            if (question.kind !== "multiple-choice" && next.length > 0) {
+              answerSubmit.scrollIntoView({
+                block: "nearest",
+                behavior: prefersReducedMotion() ? "auto" : "smooth",
+              });
+            }
           },
         });
 
