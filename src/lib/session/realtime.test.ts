@@ -24,6 +24,7 @@ const state = {
   version: 3,
   phase: "question-open" as const,
   quizId: quiz.id,
+  candidates: {},
   currentQuestionId: someQuestionId(),
   startedAt: 1_785_000_000_000,
   updatedAt: 1_785_000_001_000,

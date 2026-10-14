@@ -70,6 +70,7 @@ const lobby = {
   version: 1,
   phase: "lobby" as const,
   quizId: quiz.id,
+  candidates: {},
   currentQuestionId: null,
   startedAt: NOW,
   updatedAt: NOW,
@@ -84,6 +85,7 @@ const firstQuestionOpen = {
   version: 2,
   phase: "question-open" as const,
   quizId: quiz.id,
+  candidates: {},
   /**
    * **The one id here that has to be real**, and taken by position rather than named:
    * `parseSessionState` refuses a `currentQuestionId` that resolves to no question, so a
@@ -386,6 +388,7 @@ describe("endSession", () => {
     version: 2,
     phase: "ended" as const,
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: null,
     startedAt: NOW,
     updatedAt: NOW + 5_000,

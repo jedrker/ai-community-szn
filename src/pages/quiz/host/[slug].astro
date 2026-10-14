@@ -3,6 +3,11 @@ import "../../../styles/global.css";
 
 import QRCode from "qrcode";
 
+import {
+  MAX_CANDIDATE_TEXT_LENGTH,
+  MAX_CANDIDATES,
+  MIN_CANDIDATES,
+} from "../../../lib/session/candidates";
 import { HOST_SECRET_HEADER } from "../../../lib/session/host";
 import { SESSION_CHANNEL, SNAPSHOT_EVENT } from "../../../lib/session/realtime";
 import { getQuizById } from "../../../quiz/index";
@@ -190,6 +195,13 @@ const shortJoinUrl = `${attendeeUrl.host.replace(/^www\./, "")}/q/${joinCode}`;
  * before any snapshot has arrived to say which question is current.
  */
 const questionTotal = quiz.questions.length;
+
+/**
+ * The vote the menu's candidate editor targets — the quiz's first, and the registry has
+ * exactly one per quiz. The section renders only when there is one; a second vote in one
+ * quiz would need a selector, which is not built.
+ */
+const voteQuestion = quiz.questions.find((question) => question.kind === "vote");
 
 /**
  * THE FLOW VERBS' PILL, WRITTEN ONCE AND SIZED TO THE ARTBOARD.
@@ -545,6 +557,68 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         </p>
 
         <!--
+          THE CANDIDATE EDITOR (host-editable vote candidates).
+
+          Lives in the menu rather than on the bar because it is used once, in the lobby,
+          before the room is looking at anything — and it is the one place on this page
+          where the host types quiz content. Nothing here reaches the room until
+          `zapisz listę`; the rows are a draft against the session version on screen, and
+          the script refuses to send a draft the session has moved past.
+
+          Neither button carries `data-action` and neither joins `allButtons()`: the
+          editor's enablement is its own rule (lobby only, this quiz only), read in
+          `syncCandidatesEditor` from the end of `syncControls` so it reaches every site
+          that function does. `maxlength` on the row input reaches the markup through the
+          row template below the dialog, from the same constant the route enforces.
+        -->
+        {
+          voteQuestion && (
+            <section id="candidates-editor" class="flex flex-col gap-3">
+              <p class="text-[26px] font-semibold uppercase tracking-[0.16em] text-quiz-zinc">
+                Uczestnicy głosowania
+              </p>
+              <label for="candidate-count" class="text-[26px] text-quiz-zinc">
+                liczba uczestników
+              </label>
+              <input
+                id="candidate-count"
+                type="number"
+                min={MIN_CANDIDATES}
+                max={MAX_CANDIDATES}
+                class="w-[120px] rounded-[18px] border-2 border-quiz-field-border bg-quiz-ink px-4 py-2
+                       text-[26px] text-quiz-signwhite focus:border-quiz-chrome focus:outline-none
+                       disabled:text-quiz-pill-disabled"
+              />
+              <ul id="candidate-rows" class="flex flex-col gap-2"></ul>
+              <div class="flex flex-col items-start gap-2">
+                <button
+                  id="candidate-add"
+                  type="button"
+                  class="rounded-full border-2 border-quiz-divider px-5 py-1 text-[26px]
+                         font-semibold text-quiz-zinc disabled:text-quiz-pill-disabled"
+                >
+                  dodaj uczestnika
+                </button>
+                <p class="text-[22px] leading-[28px] text-quiz-zinc">
+                  Dodaje wiersz „Demo N”. Sala niczego nie widzi, dopóki nie zapiszesz.
+                </p>
+              </div>
+              <div class="flex flex-col items-start gap-2">
+                <button
+                  id="candidate-save"
+                  type="button"
+                  class="rounded-full border-2 border-quiz-divider px-5 py-1 text-[26px]
+                         font-semibold text-quiz-zinc disabled:text-quiz-pill-disabled"
+                >
+                  zapisz listę
+                </button>
+                <p id="candidate-note" class="text-[22px] leading-[28px] text-quiz-zinc"></p>
+              </div>
+            </section>
+          )
+        }
+
+        <!--
           THE MENU'S BUTTONS: one column, each under its own sentence.
 
           **Stacked rather than in a row, and every one of them explained.** The control bar
@@ -844,6 +918,26 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           </section>
           <!-- The script clones this so the picker's pills share `FLOW_PILL` without a second copy of the geometry. -->
           <template id="vote-tie-pill"><button type="button" class={FLOW_PILL}></button></template>
+          <!-- The candidate editor's row, outside the dialog so the menu's button census stays about the menu. -->
+          <template id="candidate-row"
+            ><li class="flex items-center gap-3">
+              <input
+                type="text"
+                maxlength={MAX_CANDIDATE_TEXT_LENGTH}
+                class="flex-1 rounded-[18px] border-2 border-quiz-field-border bg-quiz-ink px-4 py-2
+                       text-[26px] text-quiz-signwhite focus:border-quiz-chrome focus:outline-none
+                       disabled:text-quiz-pill-disabled"
+              />
+              <button
+                type="button"
+                aria-label="usuń uczestnika"
+                class="rounded-full border-2 border-quiz-divider px-5 py-1 text-[26px]
+                       font-semibold text-quiz-zinc disabled:text-quiz-pill-disabled"
+              >
+                usuń
+              </button>
+            </li></template
+          >
 
           <!--
             The word cloud's chips (roadmap S-08, FR-012/FR-015).
@@ -1327,9 +1421,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         quizId: quiz.id,
         quizTitles,
         questions: quiz.questions,
+        candidateLimits: {
+          min: MIN_CANDIDATES,
+          max: MAX_CANDIDATES,
+          textLength: MAX_CANDIDATE_TEXT_LENGTH,
+        },
       }}
     >
-      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, quizTitles, questions };
+      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, quizTitles, questions, candidateLimits };
     </script>
 
     <script>
@@ -1368,6 +1467,17 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         type WordCount,
       } from "../../../lib/client/render";
       import { voteResultFor } from "../../../lib/client/vote";
+      import {
+        addCandidate,
+        candidateListProblem,
+        candidatesEditable,
+        removeCandidate,
+        renameCandidate,
+        resizeCandidates,
+        withCandidates,
+        type Candidate,
+        type CandidateLimits,
+      } from "../../../lib/client/candidates";
       import type { PublicQuestion } from "../../../quiz/public";
 
       type Config = {
@@ -1384,6 +1494,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         /** Slug to title, for naming the session that IS running. See the frontmatter. */
         quizTitles: Record<string, string>;
         questions: PublicQuestion[];
+        /** The candidate editor's bounds, the route's own constants handed down. */
+        candidateLimits: CandidateLimits;
       };
 
       type ActionResponse = {
@@ -1924,7 +2036,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       type State = NonNullable<ReturnType<typeof client.current>>;
 
       function questionFor(state: State): PublicQuestion | undefined {
-        return config.questions.find((candidate) => candidate.id === state.currentQuestionId);
+        return withCandidates(
+          config.questions.find((candidate) => candidate.id === state.currentQuestionId),
+          state
+        );
       }
 
       /**
@@ -1969,7 +2084,10 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         const signature = `${tie.questionId}|${tie.version}|${tie.ids.join(",")}`;
         if (signature === voteTieShown) return;
         voteTieShown = signature;
-        const question = config.questions.find((candidate) => candidate.id === tie.questionId);
+        const question = withCandidates(
+          config.questions.find((candidate) => candidate.id === tie.questionId),
+          state
+        );
         const pills = (question?.options ?? [])
           .filter((option) => tie.ids.includes(option.id))
           .map((option) => {
@@ -2363,6 +2481,155 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       }
 
       /**
+       * THE CANDIDATE EDITOR (host-editable vote candidates).
+       *
+       * A draft of the vote's list, pinned to the session version it was filled from. The
+       * draft refills only when the version moves — so typing between snapshots survives a
+       * poll that changed nothing — and `zapisz listę` refuses to send a draft whose version
+       * is no longer the one on screen. The route sends the same version as the write's
+       * expected version, so a race that slips past this check comes back `applied: false`
+       * rather than overwriting a state the host never saw.
+       *
+       * Every rule is in `src/lib/client/candidates.ts`; this block does the DOM writes.
+       * Absent entirely when the quiz has no vote, which is also when the markup is absent.
+       */
+      const editorQuestion = config.questions.find((candidate) => candidate.kind === "vote");
+      const editorNodes =
+        editorQuestion === undefined
+          ? null
+          : {
+              count: el("candidate-count") as HTMLInputElement,
+              rows: el("candidate-rows"),
+              add: el("candidate-add") as HTMLButtonElement,
+              save: el("candidate-save") as HTMLButtonElement,
+              note: el("candidate-note"),
+              row: el("candidate-row") as HTMLTemplateElement,
+            };
+      let editor: { version: number | null; list: Candidate[] } = { version: null, list: [] };
+      let editorEnabled = false;
+
+      const EDITOR_NOTES = {
+        noSession: "Najpierw uruchom sesję przyciskiem start.",
+        wrongQuiz: "Sesja należy do innego quizu.",
+        frozen: "Listę można zmienić tylko w lobby, przed otwarciem głosowania.",
+        lobby:
+          "Wysyła nazwy na telefony i projektor. Możliwe tylko w lobby, przed otwarciem głosowania.",
+      } as const;
+
+      /** Enablement only — never a repaint, so a keystroke's cursor survives it. */
+      function syncCandidateControls(): void {
+        if (editorNodes === null) return;
+        const problem = candidateListProblem(editor.list, config.candidateLimits);
+        editorNodes.count.disabled = !editorEnabled;
+        editorNodes.add.disabled =
+          !editorEnabled || editor.list.length >= config.candidateLimits.max;
+        editorNodes.save.disabled = !editorEnabled || problem !== null;
+        for (const node of editorNodes.rows.querySelectorAll<HTMLInputElement | HTMLButtonElement>(
+          "input, button"
+        )) {
+          node.disabled = !editorEnabled;
+        }
+        editorNodes.save.title = problem ?? "";
+      }
+
+      function paintCandidateRows(): void {
+        if (editorNodes === null) return;
+        editorNodes.count.value = String(editor.list.length);
+        editorNodes.rows.replaceChildren(
+          ...editor.list.map(({ id, text }) => {
+            const row = editorNodes.row.content.firstElementChild!.cloneNode(true) as HTMLLIElement;
+            const input = row.querySelector("input")!;
+            const remove = row.querySelector("button")!;
+            input.value = text;
+            input.addEventListener("input", () => {
+              editor.list = renameCandidate(editor.list, id, input.value);
+              syncCandidateControls();
+            });
+            remove.addEventListener("click", () => {
+              editor.list = removeCandidate(editor.list, id, config.candidateLimits);
+              paintCandidateRows();
+              syncCandidateControls();
+            });
+            return row;
+          })
+        );
+      }
+
+      /**
+       * Called once, at the end of `syncControls`, so it reaches all five of that function's
+       * sites — including `fire`'s `finally`, which is how a save's returned state refills the
+       * draft from the list the server kept.
+       */
+      function syncCandidatesEditor(): void {
+        if (editorNodes === null || editorQuestion === undefined) return;
+        const state = client.current();
+
+        if (state === null) {
+          if (editor.version !== null || editor.list.length === 0) {
+            editor = { version: null, list: [...editorQuestion.options!] };
+            paintCandidateRows();
+          }
+        } else if (editor.version !== state.version) {
+          editor = {
+            version: state.version,
+            list: [...withCandidates(editorQuestion, state).options!],
+          };
+          paintCandidateRows();
+        }
+
+        const wrong = state !== null && wrongQuiz(state) !== null;
+        editorEnabled = state !== null && candidatesEditable(state) && !wrong;
+        syncCandidateControls();
+
+        setText(
+          "candidate-note",
+          state === null
+            ? EDITOR_NOTES.noSession
+            : wrong
+              ? EDITOR_NOTES.wrongQuiz
+              : editorEnabled
+                ? EDITOR_NOTES.lobby
+                : EDITOR_NOTES.frozen
+        );
+      }
+
+      if (editorNodes !== null && editorQuestion !== undefined) {
+        editorNodes.count.addEventListener("change", () => {
+          editor.list = resizeCandidates(
+            editor.list,
+            Number(editorNodes.count.value),
+            config.candidateLimits
+          );
+          paintCandidateRows();
+          syncCandidateControls();
+        });
+        editorNodes.add.addEventListener("click", () => {
+          editor.list = addCandidate(editor.list, config.candidateLimits);
+          paintCandidateRows();
+          syncCandidateControls();
+        });
+        editorNodes.save.addEventListener("click", () => {
+          const state = client.current();
+          if (state === null || editor.version !== state.version) {
+            // The draft is about a session that has moved on: refill from what is on screen
+            // rather than sending names the host authored against a state nobody holds.
+            editor.version = null;
+            syncCandidatesEditor();
+            say("Lista zmieniła się w międzyczasie — sprawdź i zapisz ponownie.", "attention");
+            return;
+          }
+          const body = new FormData();
+          body.set("questionId", editorQuestion.id);
+          body.set("version", String(state.version));
+          body.set(
+            "candidates",
+            JSON.stringify(editor.list.map(({ id, text }) => ({ id, text: text.trim() })))
+          );
+          void fire("candidates", body);
+        });
+      }
+
+      /**
        * The phase rules, applied to the buttons.
        *
        * The decision comes from `verbsFor` and this function does the DOM writes — the split
@@ -2474,6 +2741,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
            */
           button.dataset.next = String(allowed && action === rule.next);
         }
+        syncCandidatesEditor();
       }
 
       /**

@@ -84,6 +84,7 @@ function openSession() {
       startedAt: NOW - 120_000,
       updatedAt: NOW - 20_000,
       playerCount: 12,
+      candidates: {},
     } as unknown as SessionState,
   };
 }

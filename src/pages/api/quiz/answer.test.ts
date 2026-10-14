@@ -83,6 +83,7 @@ function openOn(questionId: string, openedAt = NOW - 4_000) {
     state: {
       version: 5,
       phase: "question-open" as const,
+      candidates: {},
       currentQuestionId: questionId,
       startedAt: NOW - 60_000,
       updatedAt: openedAt,
@@ -814,6 +815,43 @@ describe("vote answers", () => {
 
     expect(response.status).toBe(400);
     expect(submitAnswerMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The list the room votes on is the session's when the host set one in the lobby
+   * (host-editable vote candidates) — so a committed id stops being a candidate the
+   * moment the host's list does not carry it.
+   */
+  describe("with a list the host set", () => {
+    const session = openOn(vote.id);
+    const hostList = [
+      { id: "fixture-a", text: "A" },
+      { id: "fixture-b", text: "B" },
+    ];
+
+    beforeEach(() => {
+      readSessionMock.mockResolvedValue({
+        ...session,
+        state: {
+          ...session.state,
+          candidates: { [vote.id]: hostList },
+        },
+      });
+    });
+
+    it("accepts a candidate from the host's list", async () => {
+      const response = await submit(vote.id, ["fixture-a"]);
+
+      expect(response.status).toBe(200);
+      expect(submitted()).toMatchObject({ optionIds: ["fixture-a"] });
+    });
+
+    it("refuses the committed id the host's list no longer carries", async () => {
+      const response = await submit(vote.id, [first!]);
+
+      expect(response.status).toBe(400);
+      expect(submitAnswerMock).not.toHaveBeenCalled();
+    });
   });
 });
 

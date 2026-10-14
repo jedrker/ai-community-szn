@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { candidatesFor } from "../../../lib/session/candidates";
 import { isSubmissionExpired } from "../../../lib/session/deadline";
 import { MAX_GUESS_MAGNITUDE, parseGuess } from "../../../lib/session/guess";
 import { logSessionEvent } from "../../../lib/session/log";
@@ -362,12 +363,15 @@ export const POST: APIRoute = async ({ request }) => {
     awarded = 0;
   } else if (question.kind === "vote") {
     /**
-     * Exactly one known candidate, bounded against the definition for the reason the
-     * choice branch below gives. No scorer, as with the word cloud: the build gate
-     * refuses a scored vote, so there is nothing to weigh — the count is the result.
-     * The first vote is final because `SUBMIT_ANSWER` writes with `HSETNX`.
+     * Exactly one known candidate, bounded against the list the room is voting on —
+     * the session's, when the host set one in the lobby, else the definition's. No
+     * scorer, as with the word cloud: the build gate refuses a scored vote, so there is
+     * nothing to weigh — the count is the result. The first vote is final because
+     * `SUBMIT_ANSWER` writes with `HSETNX`.
      */
-    const knownOptionIds = new Set(question.options.map((option) => option.id));
+    const knownOptionIds = new Set(
+      candidatesFor(session.state, question).map((option) => option.id),
+    );
     const picked = [
       ...new Set(optionIds.filter((id) => knownOptionIds.has(id))),
     ];

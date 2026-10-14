@@ -690,9 +690,10 @@ describe("flow verbs are offered only where they apply", () => {
     expect(CODE).toContain('"/quiz/host"');
     expect(CODE).not.toContain("state.quizId !== config.quizId");
 
-    // One reader, so the bar, the closing button and the stage cannot disagree.
+    // One reader, so the bar, the closing button, the stage and the candidate editor
+    // cannot disagree.
     expect(occurrences("function wrongQuiz(")).toBe(1);
-    expect(occurrences("wrongQuiz(state)")).toBe(3);
+    expect(occurrences("wrongQuiz(state)")).toBe(4);
 
     // Every verb dark, including `start` — the panel pre-empts the route's 409 rather than
     // provoking it. `allowed` is the single gate the enablement and the ring both read.
@@ -710,6 +711,18 @@ describe("flow verbs are offered only where they apply", () => {
       /async function fire\([\s\S]*?\n {6}}/.exec(CODE)?.[0] ?? "";
     expect(fireBody.length).toBeGreaterThan(0);
     expect(fireBody).toContain("syncControls()");
+  });
+
+  /**
+   * The candidate editor (host-editable vote candidates) is enabled by its own rule —
+   * lobby only, this quiz only — and it has to be re-read everywhere the bar is, including
+   * `fire`'s `finally`, which is how a save's returned state refills the draft. One call,
+   * at the end of `syncControls`, so the five sites above reach it without five new ones.
+   */
+  it("syncs the candidate editor from the end of syncControls, and saves through fire", () => {
+    expect(sync.split("syncCandidatesEditor();").length - 1).toBe(1);
+    expect(occurrences("syncCandidatesEditor();")).toBe(2);
+    expect(occurrences('fire("candidates"')).toBe(1);
   });
 
   /**
@@ -1385,7 +1398,9 @@ describe("the host secret is typed behind the menu", () => {
     const buttons = menu.match(/<button\b/g) ?? [];
     const notes = menu.match(/text-\[22px\]/g) ?? [];
 
-    expect(buttons).toHaveLength(3);
+    // Three of the menu's own plus the candidate editor's two (`dodaj uczestnika`, `zapisz
+    // listę`); the editor's per-row `usuń` lives in a template outside the dialog.
+    expect(buttons).toHaveLength(5);
     expect(notes).toHaveLength(buttons.length);
   });
 

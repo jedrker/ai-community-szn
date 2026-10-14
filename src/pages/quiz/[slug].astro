@@ -656,6 +656,7 @@ const wordmark = isVoteOnly ? "Głosowanie" : "LiveQuiz";
       } from "../../lib/client/render";
       import { prefersReducedMotion } from "../../lib/client/motion";
       import { voteResultFor } from "../../lib/client/vote";
+      import { withCandidates } from "../../lib/client/candidates";
       import type { PublicQuestion } from "../../quiz/public";
 
       type Config = {
@@ -1159,7 +1160,8 @@ const wordmark = isVoteOnly ? "Głosowanie" : "LiveQuiz";
         const position = id === null ? -1 : indexOfQuestion(id);
         // An id absent from the projection means the definition changed under a live
         // session. `renderQuestion` shows a neutral placeholder rather than an error.
-        const question = position === -1 ? undefined : config.questions[position];
+        const question =
+          position === -1 ? undefined : withCandidates(config.questions[position], state);
         /**
          * A vote carries no label while open: the wordmark above already says
          * "Głosowanie", and a second copy right under it reads as a stutter. At the
@@ -2395,7 +2397,8 @@ const wordmark = isVoteOnly ? "Głosowanie" : "LiveQuiz";
         if (!player || !questionId || state?.phase !== "question-open") return;
 
         const position = indexOfQuestion(questionId);
-        const question = position === -1 ? undefined : config.questions[position];
+        const question =
+          position === -1 ? undefined : withCandidates(config.questions[position], state);
         if (!question) return;
 
         /**

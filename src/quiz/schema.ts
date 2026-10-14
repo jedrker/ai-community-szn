@@ -19,7 +19,7 @@ import { normalizeAnswer } from "./normalize";
  * `scoring.ts` is not in this directory.
  */
 
-const QUESTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const QUESTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
  * A quiz's short join code — exactly four digits, typed into `/q/<code>` by an

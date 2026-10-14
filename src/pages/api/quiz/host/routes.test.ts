@@ -19,6 +19,7 @@ const endSessionMock = vi.fn();
 const purgeSessionMock = vi.fn();
 const readQuestionTalliesMock = vi.fn();
 const readStandingsMock = vi.fn();
+const writeSessionMock = vi.fn();
 
 const SECRET = "a-very-long-test-secret-value";
 
@@ -36,6 +37,7 @@ vi.mock("../../../../lib/session/store", () => ({
   purgeSession: purgeSessionMock,
   readQuestionTallies: readQuestionTalliesMock,
   readStandings: readStandingsMock,
+  writeSession: writeSessionMock,
 }));
 vi.mock("../../../../lib/session/realtime", () => ({
   publishSnapshot: publishSnapshotMock,
@@ -89,6 +91,7 @@ const { POST: reveal, formatCorrectValue } = await import("./reveal");
 const { POST: showStandings } = await import("./standings");
 const { POST: end } = await import("./end");
 const { POST: purge } = await import("./purge");
+const { POST: setCandidates } = await import("./candidates");
 const { HOST_SECRET_HEADER } = await import("../../../../lib/session/host");
 const { initialSessionState, PRE_IDENTITY_QUIZ_ID } =
   await import("../../../../lib/session/state");
@@ -136,6 +139,7 @@ const lobby = {
   version: 1,
   phase: "lobby" as const,
   quizId: quiz.id,
+  candidates: {},
   currentQuestionId: null,
   startedAt: NOW,
   updatedAt: NOW,
@@ -145,6 +149,7 @@ const revealed = {
   version: 4,
   phase: "question-revealed" as const,
   quizId: quiz.id,
+  candidates: {},
   currentQuestionId: someQuestionId(),
   startedAt: NOW,
   updatedAt: NOW + 900,
@@ -159,6 +164,7 @@ const standings = {
   version: 5,
   phase: "standings" as const,
   quizId: quiz.id,
+  candidates: {},
   currentQuestionId: someQuestionId(),
   startedAt: NOW,
   updatedAt: NOW + 1_200,
@@ -180,6 +186,8 @@ function call(
     version,
     quizId,
     winner,
+    questionId,
+    candidates,
   }: {
     secret?: string | null;
     version?: number | string;
@@ -192,6 +200,10 @@ function call(
     quizId?: string;
     /** The host's tie-break pick; only `reveal` reads it, and only on a tie. */
     winner?: string;
+    /** The vote the candidate list is for; only `candidates` reads it. */
+    questionId?: string;
+    /** The candidate list as the raw form string; only `candidates` reads it. */
+    candidates?: string;
   } = {},
 ): Promise<Response> | Response {
   const headers: Record<string, string> = { Origin: "https://example.test" };
@@ -201,11 +213,19 @@ function call(
   // missing-confirmation case is expressed, and it also keeps the three flow verbs
   // exercising exactly the request shape they see today.
   let body: FormData | undefined;
-  if (version !== undefined || quizId !== undefined || winner !== undefined) {
+  if (
+    version !== undefined ||
+    quizId !== undefined ||
+    winner !== undefined ||
+    questionId !== undefined ||
+    candidates !== undefined
+  ) {
     body = new FormData();
     if (version !== undefined) body.set("version", String(version));
     if (quizId !== undefined) body.set("quizId", quizId);
     if (winner !== undefined) body.set("winner", winner);
+    if (questionId !== undefined) body.set("questionId", questionId);
+    if (candidates !== undefined) body.set("candidates", candidates);
   }
 
   return handler({
@@ -730,12 +750,22 @@ describe("reveal", () => {
    * until the host names the winner.
    */
   describe("a vote", () => {
-    const ids = voteQuestion.options.map((option) => option.id);
+    /**
+     * Six candidates on the *session*, not the definition's four: the reveal ranks the
+     * list the host set in the lobby, and the podium test below needs more than four
+     * places to prove the cut at three. Fixture ids — no committed option id is named.
+     */
+    const sessionCandidates = [1, 2, 3, 4, 5, 6].map((n) => ({
+      id: `fixture-k-${n}`,
+      text: `Kandydat ${n}`,
+    }));
+    const ids = sessionCandidates.map((candidate) => candidate.id);
     const openVote = {
       ...revealed,
       phase: "question-open" as const,
       quizId: getQuizByQuestionId(voteQuestion.id)!.id,
       currentQuestionId: voteQuestion.id,
+      candidates: { [voteQuestion.id]: sessionCandidates },
       version: 3,
     };
 
@@ -787,6 +817,18 @@ describe("reveal", () => {
 
       expect(next.revealedOptionIds).toEqual([first, second]);
       expect(next.revealedDistribution).toBeNull();
+    });
+
+    it("tallies the session's candidate list, not the definition's", async () => {
+      readQuestionTalliesMock.mockResolvedValue(tallies({}));
+
+      await revealVote();
+
+      expect(readQuestionTalliesMock).toHaveBeenCalledWith(
+        voteQuestion.id,
+        ids,
+      );
+      expect(ids).not.toEqual(voteQuestion.options.map((option) => option.id));
     });
 
     it("refuses a tie with the tied ids, leaving voting open", async () => {
@@ -1425,6 +1467,7 @@ describe("the reveal payload (roadmap S-03)", () => {
     // `advance` walks *this* quiz's running order, so a fixture without it resolves to
     // no quiz and the transition correctly declines to move.
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: questionId,
     startedAt: NOW,
     updatedAt: NOW + 500,
@@ -1924,5 +1967,212 @@ describe("standings", () => {
 
     expect(response.status).toBe(503);
     expect(body.error).toContain("Nie udało się odczytać rankingu");
+  });
+});
+
+/**
+ * `candidates` is a configuration field (host-editable vote candidates): written in the
+ * lobby, copied unchanged by every transition after it. A constructor that dropped it
+ * would silently put the committed four back on the phones the moment the host pressed
+ * `dalej`, with nothing on the panel to say so.
+ */
+describe("every transition carries the session's candidate list", () => {
+  const list = [
+    { id: "fixture-k-1", text: "Kandydat 1" },
+    { id: "fixture-k-2", text: "Kandydat 2" },
+  ];
+  const withList = { [voteQuestion.id]: list };
+
+  it("advance", async () => {
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: revealed, applied: true },
+    });
+
+    await call(advance);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    const next = transition({ ...lobby, candidates: withList }, NOW);
+    expect(next.candidates).toEqual(withList);
+  });
+
+  it("reveal", async () => {
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: revealed, applied: true },
+    });
+
+    await call(reveal);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    const next = await transition(
+      {
+        ...revealed,
+        phase: "question-open",
+        currentQuestionId: singleQuestion.id,
+        candidates: withList,
+      },
+      NOW,
+    );
+    expect(next.candidates).toEqual(withList);
+  });
+
+  it("standings", async () => {
+    readStandingsMock.mockResolvedValue({
+      rows: [{ rank: 1, displayName: "Ala", points: 30 }],
+      playerCount: 4,
+    });
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: standings, applied: true },
+    });
+
+    await call(showStandings);
+
+    const [transition] = applyHostActionMock.mock.calls[0]!;
+    const next = await transition({ ...revealed, candidates: withList }, NOW);
+    expect(next.candidates).toEqual(withList);
+  });
+});
+
+/**
+ * The host verb that writes the list. Validation is the route's own; the lobby rule and
+ * the "is this a vote in *this* quiz" rule live in the transition and are run here by
+ * capturing it, the way the reveal tests do.
+ */
+describe("candidates", () => {
+  const list = [
+    { id: "fixture-k-1", text: "Kandydat 1" },
+    { id: "fixture-k-2", text: "Kandydat 2" },
+  ];
+  const voteQuiz = getQuizByQuestionId(voteQuestion.id)!;
+  const voteLobby = { ...lobby, quizId: voteQuiz.id };
+
+  const send = (
+    options: {
+      secret?: string | null;
+      version?: number | string;
+      questionId?: string;
+      candidates?: string;
+    } = {},
+  ) =>
+    call(setCandidates, {
+      version: 1,
+      questionId: voteQuestion.id,
+      candidates: JSON.stringify(list),
+      ...options,
+    });
+
+  /** Runs the captured transition against `current` so a refusal reaches the route. */
+  function runTransitionAgainst(current: unknown) {
+    let next: unknown = "not run";
+    applyHostActionMock.mockImplementation(async (transition: never) => {
+      next = await (
+        transition as unknown as (s: unknown, n: number) => unknown
+      )(current, NOW);
+      return {
+        status: 200,
+        body: { state: current, applied: next !== null, note: "no-op" },
+      };
+    });
+    return () => next;
+  }
+
+  it("rejects a missing secret with 401 before reading anything", async () => {
+    const response = await send({ secret: null });
+
+    expect(response.status).toBe(401);
+    expect(applyHostActionMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses malformed JSON with 400", async () => {
+    const response = await send({ candidates: "[not json" });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Nieprawidłowa lista uczestników.",
+    });
+    expect(applyHostActionMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a one-entry list with the schema's own message", async () => {
+    const response = await send({ candidates: JSON.stringify([list[0]]) });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Lista musi mieć od 2 do 12 uczestników.",
+    });
+    expect(applyHostActionMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request that names no version", async () => {
+    const response = await call(setCandidates, {
+      questionId: voteQuestion.id,
+      candidates: JSON.stringify(list),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Brak wersji sesji.",
+    });
+  });
+
+  it("writes the list on the lobby state, one version up", async () => {
+    const next = runTransitionAgainst(voteLobby);
+
+    const response = await send();
+
+    expect(response.status).toBe(200);
+    expect(next()).toMatchObject({
+      phase: "lobby",
+      version: voteLobby.version + 1,
+      candidates: { [voteQuestion.id]: list },
+    });
+    // The host's version is the write's expected version — the route confirms against
+    // the state the host saw, never against its own later read.
+    expect(applyHostActionMock.mock.calls[0]![3]).toBe(1);
+  });
+
+  it("refuses once the vote is open, and writes nothing", async () => {
+    const next = runTransitionAgainst({
+      ...voteLobby,
+      phase: "question-open",
+      currentQuestionId: voteQuestion.id,
+    });
+
+    const response = await send();
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        "Listę uczestników można zmienić tylko w lobby, przed otwarciem głosowania.",
+    });
+    expect(next()).toBeNull();
+  });
+
+  it("refuses a question that is not a vote in the running quiz", async () => {
+    const next = runTransitionAgainst(voteLobby);
+
+    const response = await send({ questionId: singleQuestion.id });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "To pytanie nie jest głosowaniem w tej sesji.",
+    });
+    expect(next()).toBeNull();
+  });
+
+  it("reports a version the store has moved past as not applied", async () => {
+    applyHostActionMock.mockResolvedValue({
+      status: 200,
+      body: { state: voteLobby, applied: false, note: "already-applied" },
+    });
+
+    const response = await send({ version: 7 });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.applied).toBe(false);
+    expect(applyHostActionMock.mock.calls[0]![3]).toBe(7);
   });
 });

@@ -12,9 +12,11 @@ import type { Quiz } from "../schema";
  * decides when voting is over — the panel's reveal verb, named "zamknij głosowanie" for
  * this kind, closes it and shows the result.
  *
- * **Options keep definition order.** The projection shuffles choice options only to hide
- * the correct one; a vote has none, so the candidates appear in the order written here.
- * List them in the order the demos run, so the screen matches what the room just saw.
+ * **These four are the defaults.** The host renames, adds and removes candidates in the
+ * lobby from the panel menu, and the session's `candidates` field
+ * (`src/lib/session/state.ts`) overrides this list for that session — nothing here
+ * changes between evenings. A vote's options are never shuffled (`public.ts`), so
+ * whatever list is in force appears in the order it was written.
  */
 export const glosowanieAiSetup = {
   id: "glosowanie-ai-setup",
@@ -31,8 +33,6 @@ export const glosowanieAiSetup = {
         { id: "demo-2", text: "Demo 2" },
         { id: "demo-3", text: "Demo 3" },
         { id: "demo-4", text: "Demo 4" },
-        { id: "demo-5", text: "Demo 5" },
-        { id: "demo-6", text: "Demo 6" },
       ],
     },
   ],

@@ -65,6 +65,7 @@ export const POST: APIRoute = async ({ request }) => {
        * See the field's note in `state.ts`.
        */
       quizId: next.quizId,
+      candidates: current.candidates,
       currentQuestionId: next.questionId,
       startedAt: current.startedAt,
       updatedAt: now,

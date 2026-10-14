@@ -6,6 +6,7 @@ import {
   getQuizByQuestionId,
 } from "../../quiz/index";
 import { standingsSchema, type Standings } from "./standings";
+import { candidateListSchema } from "./candidates";
 
 /**
  * What one live session *is* (roadmap F-02).
@@ -169,6 +170,18 @@ export const sessionStateSchema = z
      * says nothing about who played.
      */
     quizId: z.string().default(PRE_IDENTITY_QUIZ_ID),
+    /**
+     * A vote's candidate list, per vote question id (host-editable vote candidates).
+     *
+     * **A configuration field — a fourth category beside identity, decoration and
+     * transition.** Written by `start` (empty) and by the `candidates` verb, copied
+     * unchanged by every other constructor; an entry overrides that question's committed
+     * options for this session only (`candidatesFor` in `./candidates`). Host-authored
+     * quiz content, so it is public through `GET /api/quiz/state` and the Ably snapshot
+     * for the same reason `quizId` is: it names no attendee. `.default({})` so a document
+     * written before it shipped still parses.
+     */
+    candidates: z.record(z.string(), candidateListSchema).default({}),
     /** A question id from the quiz definition, or null in the lobby. */
     currentQuestionId: z.string().nullable(),
     /** Epoch milliseconds. */
@@ -428,6 +441,16 @@ export const sessionStateSchema = z
       });
     }
 
+    for (const questionId of Object.keys(state.candidates)) {
+      if (getQuestionById(questionId)?.kind !== "vote") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["candidates"],
+          message: `Lista uczestników dotyczy pytania, które nie jest głosowaniem: ${questionId}`,
+        });
+      }
+    }
+
     // Stated as two explicit sets rather than "lobby vs everything else". The
     // inverted form worked while `lobby` was the only questionless phase, and would
     // have silently demanded an open question from `ended` — a fourth phase must not
@@ -541,6 +564,7 @@ export function initialSessionState(now: number, quizId: string): SessionState {
     version: 1,
     phase: "lobby",
     quizId,
+    candidates: {},
     currentQuestionId: null,
     startedAt: now,
     updatedAt: now,
@@ -673,6 +697,7 @@ export function endedSessionState(
     // survives the close because the terminal document is still *this* session's, and
     // the reload window F-03 chose has to be able to say which quiz it was.
     quizId: current.quizId,
+    candidates: current.candidates,
     currentQuestionId: null,
     startedAt: current.startedAt,
     updatedAt: now,

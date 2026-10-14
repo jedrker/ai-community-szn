@@ -214,6 +214,49 @@ export async function extractRevealFields(
   return { secret, winner };
 }
 
+/**
+ * Reads the secret, the version the host edited against, the vote's question id and
+ * the candidate list as the raw form string, in a single body read — the same shape and
+ * reason as `extractRevealFields`. `version` parses like `extractHostFields`'
+ * `confirmVersion`; the other two are `null` when absent or empty, never defaulted.
+ */
+export async function extractCandidatesFields(request: Request): Promise<{
+  secret: string | null;
+  version: number | null;
+  questionId: string | null;
+  candidates: string | null;
+}> {
+  const header = request.headers.get(HOST_SECRET_HEADER);
+
+  let form: FormData | null = null;
+  try {
+    form = await request.formData();
+  } catch {
+    form = null;
+  }
+
+  const field = form?.get("secret");
+  const secret = header ?? (typeof field === "string" ? field : null);
+
+  const rawVersion = form?.get("version");
+  const parsed = typeof rawVersion === "string" ? Number(rawVersion) : NaN;
+  const version = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+
+  const rawQuestionId = form?.get("questionId");
+  const questionId =
+    typeof rawQuestionId === "string" && rawQuestionId.length > 0
+      ? rawQuestionId
+      : null;
+
+  const rawCandidates = form?.get("candidates");
+  const candidates =
+    typeof rawCandidates === "string" && rawCandidates.length > 0
+      ? rawCandidates
+      : null;
+
+  return { secret, version, questionId, candidates };
+}
+
 export function authorizeHost(secret: string | null): { ok: boolean } {
   if (secretMatches(secret)) return { ok: true };
 

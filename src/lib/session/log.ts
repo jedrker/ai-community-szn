@@ -159,6 +159,8 @@ export const SESSION_EVENTS = [
    * for a vote the count *is* the beat, so the host is told to tap again instead.
    */
   "session.vote.failed",
+  /** The host replaced a vote's candidate list. Carries the count only, never the names. */
+  "session.candidates.set",
 ] as const;
 
 export type SessionEvent = (typeof SESSION_EVENTS)[number];
@@ -222,6 +224,8 @@ type LogFields = {
    * worth having: it means the room was smaller than the board, or records were dropped.
    */
   rowCount?: number;
+  /** How many candidates a vote's list carries after the host set it. A count, never a name. */
+  candidateCount?: number;
   /**
    * Why a join was refused — **a closed set, not a string** (roadmap S-02).
    *

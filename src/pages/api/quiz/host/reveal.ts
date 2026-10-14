@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { candidatesFor } from "../../../../lib/session/candidates";
 import {
   applyHostAction,
   authorizeHost,
@@ -128,6 +129,11 @@ export const POST: APIRoute = async ({ request }) => {
       (question.kind === "single-choice" ||
         question.kind === "multiple-choice" ||
         question.kind === "vote");
+    // The session's list when the host set one in the lobby, else the definition's;
+    // for a choice kind `candidatesFor` is the definition's options unchanged.
+    const optionIds = tallied
+      ? candidatesFor(current, question).map((option) => option.id)
+      : [];
 
     /**
      * The room's answers, read HERE and for the same reason `revealedOptionIds` is set
@@ -150,10 +156,7 @@ export const POST: APIRoute = async ({ request }) => {
      * count needs no serialization, the version does.
      */
     const tallies = tallied
-      ? await readQuestionTallies(
-          current.currentQuestionId!,
-          question.options.map((option) => option.id),
-        )
+      ? await readQuestionTallies(current.currentQuestionId!, optionIds)
       : // For any other kind the read is skipped entirely — no submission for one can
         // exist today, and Phase 4 hides the panel for them. **This is the one place the
         // distribution and `revealedOptionIds` diverge**: that field yields `[]` here,
@@ -174,10 +177,7 @@ export const POST: APIRoute = async ({ request }) => {
         return null;
       }
       const counts = tallies.options;
-      const ranking = voteRanking(
-        question.options.map((o) => o.id),
-        counts,
-      );
+      const ranking = voteRanking(optionIds, counts);
       const tied = topTied(ranking, counts);
       if (tied.length > 1) {
         // A pick that names a candidate no longer on the top count is a pick about a tally
@@ -204,6 +204,7 @@ export const POST: APIRoute = async ({ request }) => {
       // Copied unchanged — session identity, not a transition payload. See the field's
       // note in `state.ts`.
       quizId: current.quizId,
+      candidates: current.candidates,
       currentQuestionId: current.currentQuestionId,
       startedAt: current.startedAt,
       updatedAt: now,

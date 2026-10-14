@@ -4,6 +4,7 @@ import { getQuizById, quizzes } from "../../quiz/index";
 import {
   anotherQuestionId,
   fixtureQuiz,
+  questionOfKind,
   someQuestionId,
 } from "../../quiz/test-support";
 import {
@@ -36,6 +37,7 @@ describe("initialSessionState", () => {
       version: 1,
       phase: "lobby",
       quizId: quiz.id,
+      candidates: {},
       currentQuestionId: null,
       startedAt: NOW,
       updatedAt: NOW,
@@ -183,6 +185,55 @@ describe("quizId", () => {
   });
 });
 
+/**
+ * A configuration field (host-editable vote candidates): per vote question id, the list
+ * the room votes on in place of the committed options. Its own clause, in the house
+ * pattern — a list keyed by anything but a vote is refused under `candidates`.
+ */
+describe("candidates", () => {
+  const lobby = {
+    version: 2,
+    phase: "lobby" as const,
+    quizId: quiz.id,
+    currentQuestionId: null,
+    startedAt: NOW,
+    updatedAt: NOW,
+  };
+  const list = [
+    { id: "fixture-k-1", text: "Kandydat 1" },
+    { id: "fixture-k-2", text: "Kandydat 2" },
+  ];
+
+  it("parses a document written before the field existed, defaulting it to no lists", () => {
+    const result = sessionStateSchema.safeParse(lobby);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.candidates).toEqual({});
+  });
+
+  it("accepts a list keyed by a vote question", () => {
+    const result = sessionStateSchema.safeParse({
+      ...lobby,
+      candidates: { [questionOfKind("vote").id]: list },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.candidates[questionOfKind("vote").id]).toEqual(list);
+  });
+
+  it("refuses a list keyed by a question that is not a vote, under its own path", () => {
+    const result = sessionStateSchema.safeParse({
+      ...lobby,
+      candidates: { [questionOfKind("single-choice").id]: list },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path)).toContainEqual([
+      "candidates",
+    ]);
+  });
+});
+
 describe("nextQuestionId", () => {
   it("opens the first question of the session's own quiz from the lobby", () => {
     expect(nextQuestionId(quiz.id, null)).toEqual({
@@ -273,6 +324,7 @@ describe("parseSessionState", () => {
     version: 2,
     phase: "question-open" as const,
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: someQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1000,
@@ -339,6 +391,7 @@ describe("endedSessionState", () => {
     version: 7,
     phase: "question-revealed" as const,
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: someQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 5_000,
@@ -382,6 +435,21 @@ describe("endedSessionState", () => {
    */
   it("carries the join count into the terminal document", () => {
     expect(endedSessionState(revealed, NOW + 9_000).playerCount).toBe(9);
+  });
+
+  it("carries the candidate lists into the terminal document", () => {
+    const list = [
+      { id: "fixture-k-1", text: "Kandydat 1" },
+      { id: "fixture-k-2", text: "Kandydat 2" },
+    ];
+    const withList = {
+      ...revealed,
+      candidates: { [questionOfKind("vote").id]: list },
+    };
+
+    expect(endedSessionState(withList, NOW + 9_000).candidates).toEqual(
+      withList.candidates,
+    );
   });
 
   it("can end a session that never left the lobby", () => {
@@ -451,6 +519,7 @@ describe("the standings phase invariant", () => {
     version: 6,
     phase: "standings" as const,
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: someQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 7_000,
@@ -484,6 +553,7 @@ describe("revealedOptionIds", () => {
     version: 3,
     phase: "question-open" as const,
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: anotherQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1_000,
@@ -585,6 +655,7 @@ describe("revealedDistribution", () => {
     version: 3,
     phase: "question-open" as const,
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: anotherQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1_000,
@@ -699,6 +770,7 @@ describe("revealedAnswerText", () => {
     version: 3,
     phase: "question-open" as const,
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: anotherQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1_000,
@@ -790,6 +862,7 @@ describe("standings", () => {
     version: 3,
     phase: "question-open" as const,
     quizId: quiz.id,
+    candidates: {},
     currentQuestionId: anotherQuestionId(),
     startedAt: NOW,
     updatedAt: NOW + 1_000,

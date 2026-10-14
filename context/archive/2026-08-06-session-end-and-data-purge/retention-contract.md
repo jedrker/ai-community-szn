@@ -28,6 +28,8 @@ by, written while they were still cheap to bind.
    platform's connection-recovery buffer is retained regardless and **cannot be reduced to
    zero**. Since `publishSnapshot` sends the whole `SessionState`, every field S-02 adds to
    that document inherits this window.
+   - `candidates` (host-editable vote candidates) rides the snapshot as host-authored quiz
+     content, with the same standing as `quizId`: no key of its own, no attendee data.
 
 4. **`end` shortens, `purge` deletes.** They are not interchangeable, and the ten-minute
    window between them is deliberate, not an oversight.

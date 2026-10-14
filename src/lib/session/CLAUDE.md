@@ -102,7 +102,7 @@ not a climb of forty places.
 arrow-free — no conditional, no phase test. Passing it an id "for consistency" is how that decision gets
 undone.
 
-## SessionState: one identity field, one decoration field, four transition fields
+## SessionState: one identity field, one configuration field, one decoration field, four transition fields
 
 **`quizId` is the identity field, and it is a third category rather than a variant of the other two**
 (multiple-quizzes). Decoration is overwritten on every action; a transition field is set by one
@@ -137,6 +137,16 @@ field. Both were absent when the claim was written, which is how it survived.
 `quizId` is publicly readable, through the deliberately open `GET /api/quiz/state` and both join
 success paths. That is within the retention contract and it is said here rather than inherited: a slug
 is authored quiz content, printed on the projector, and says nothing about who played.
+
+**`candidates` is the configuration field, and it is a fourth category** (host-editable vote
+candidates): per vote question id, the list the room votes on in place of the committed options.
+Written by `start` (empty) and by `POST /api/quiz/host/candidates` — lobby only, because every
+tally is keyed by a candidate id — and copied unchanged by every other constructor, like `quizId`.
+`candidatesFor` in `candidates.ts` is the one reader that picks between the session's list and the
+definition's; `answer.ts` and `reveal.ts` go through it, so a vote route reading
+`question.options` directly is the regression to look for. Public on the snapshot for the reason
+`quizId` is: host-authored quiz content, naming no attendee. Its own `superRefine` clause refuses a
+list keyed by a question that is not a vote.
 
 `playerCount` is decoration: `applyHostAction` overwrites it on every action and a stale value costs
 nothing. `revealedOptionIds`, `revealedDistribution`, `revealedAnswerText` and `standings` are *part
