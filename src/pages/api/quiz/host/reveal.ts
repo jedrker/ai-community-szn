@@ -40,7 +40,13 @@ function revealedAnswerTextFor(question: Question | undefined): string | null {
 /** How many places the room is shown. */
 const PODIUM_SIZE = 3;
 
-/** Candidates with at least one vote, most votes first; equal counts keep the list's order (`sort` is stable). */
+/**
+ * Candidates with at least one vote, most votes first. Equal counts keep the list's
+ * order (`sort` is stable) — **and that is the whole tie rule below first place**: only a
+ * shared *top* count is refused to the host, because only first place carries a prize.
+ * Second and third drawn with a fourth are placed by list order and the fourth is not on
+ * the podium; the room is shown places, never figures, so nothing says they drew.
+ */
 function voteRanking(
   optionIds: readonly string[],
   counts: Readonly<Record<string, number>>,

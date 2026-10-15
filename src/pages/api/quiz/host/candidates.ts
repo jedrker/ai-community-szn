@@ -54,12 +54,15 @@ export const POST: APIRoute = async ({ request }) => {
   }
   const parsed = candidateListSchema.safeParse(raw);
   if (!parsed.success) {
+    // Only the schema's own checks carry Polish messages; a structurally wrong payload
+    // (`null`, `{}`, a numeric id) reports Zod's English `invalid_type` and gets the
+    // generic sentence instead, since the client renders `error` verbatim.
+    const own = parsed.error.issues.find(
+      (issue) => issue.code !== "invalid_type",
+    );
     return toResponse({
       status: 400,
-      body: {
-        error:
-          parsed.error.issues[0]?.message ?? "Nieprawidłowa lista uczestników.",
-      },
+      body: { error: own?.message ?? "Nieprawidłowa lista uczestników." },
     });
   }
   const list: CandidateList = parsed.data;

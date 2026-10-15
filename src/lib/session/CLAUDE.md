@@ -26,6 +26,15 @@ Before adding any key or any field to a published snapshot, read
 one constraint that is not enforceable in code: Ably retains published snapshots for ~2 minutes and
 that floor cannot be configured away.
 
+**Read a private env var only as a static `import.meta.env.NAME`, never `import.meta.env[name]`.**
+Astro's env plugin rewrites a server module's `import.meta.env` into an object carrying the private
+variables whose *names appear in that module's source*; a dynamic lookup sees none of them in a
+production build and reads fine under the dev server, which serves `.env` whole. `store.ts`'s
+`kvEnvironment()` is the shape: one static read per name in `KV_CREDENTIAL_PAIRS`, locked with
+`satisfies`. The dynamic form shipped once, worked in production only because the names happened to
+sit in a nearby error string, and took the store down (`Sesja nie jest skonfigurowana.`) the day a
+review fix removed that string.
+
 ## The keys
 
 **`livequiz:tallies` has three field families** — `answered:<questionId>`,

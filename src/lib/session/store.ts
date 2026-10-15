@@ -479,19 +479,40 @@ return { session, answer, total }
 `;
 
 /**
- * Read credentials from `import.meta.env`, per the project's convention
- * (`src/lib/newsletter.ts`, CLAUDE.md) — deliberately not `Redis.fromEnv()`,
- * which reads `process.env` and would work under bare `bun` while returning
- * nothing inside the Astro build.
+ * The credential names, read **statically** — and that word is the whole of this block.
  *
- * Which names, and in which order, is `KV_CREDENTIAL_PAIRS` in `./credentials` — the
- * production store injects them with an `aicommunity_` prefix.
+ * Astro's env plugin gives a server module access to a private variable only when the
+ * variable's name appears in that module's source: it scans the text, and rewrites
+ * `import.meta.env` here into an object carrying getters for exactly the names it found.
+ * A dynamic `import.meta.env[name]` sees none of them in a production build, while the
+ * dev server (which serves `.env` whole) makes it look fine. The previous reader *was*
+ * dynamic and worked in production by accident: the names happened to sit in a nearby
+ * error string, so the scan found them. Removing that string took the store down.
+ *
+ * `satisfies` locks this map to `KV_CREDENTIAL_PAIRS`: a pair added there without a line
+ * here is a type error, not a silent `unconfigured` on stage. Deliberately not
+ * `Redis.fromEnv()`, which reads `process.env` and returns nothing inside the Astro build.
  */
+type KvCredentialName = (typeof KV_CREDENTIAL_PAIRS)[number]["url" | "token"];
+
+function kvEnvironment(): Record<KvCredentialName, unknown> {
+  return {
+    aicommunity_KV_REST_API_URL: import.meta.env.aicommunity_KV_REST_API_URL,
+    aicommunity_KV_REST_API_TOKEN: import.meta.env
+      .aicommunity_KV_REST_API_TOKEN,
+    KV_REST_API_URL: import.meta.env.KV_REST_API_URL,
+    KV_REST_API_TOKEN: import.meta.env.KV_REST_API_TOKEN,
+    UPSTASH_REDIS_REST_URL: import.meta.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: import.meta.env.UPSTASH_REDIS_REST_TOKEN,
+  } satisfies Record<KvCredentialName, unknown>;
+}
+
 function credentials(): { url: string; token: string } | null {
+  const environment = kvEnvironment();
   // An env var set to the empty string is "absent", not "present but blank" —
   // both Vercel's store and a pulled `.env` can produce one.
   return pickKvCredentials((name) => {
-    const value = import.meta.env[name];
+    const value = environment[name as KvCredentialName];
     return typeof value === "string" && value.length > 0 ? value : undefined;
   });
 }

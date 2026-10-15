@@ -899,6 +899,22 @@ describe("reveal", () => {
       expect(next.revealedOptionIds).toEqual([sixth, third, fourth]);
     });
 
+    /**
+     * Only the top tie is the host's to break. Below first place a draw is placed by list
+     * order and the podium still cuts at three — stated in `src/quiz/CLAUDE.md`; pinned
+     * here so a future "fairer" podium is a decision rather than a drift.
+     */
+    it("places a tie below first by list order and still cuts at three", async () => {
+      const [first, second, third, fourth] = ids;
+      readQuestionTalliesMock.mockResolvedValue(
+        tallies({ [first!]: 5, [second!]: 3, [third!]: 3, [fourth!]: 3 }),
+      );
+
+      const next = await revealVote();
+
+      expect(next.revealedOptionIds).toEqual([first, second, third]);
+    });
+
     it("ignores the pick when the count already decided", async () => {
       const [first, second] = ids;
       readQuestionTalliesMock.mockResolvedValue(
@@ -2093,6 +2109,25 @@ describe("candidates", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Lista musi mieć od 2 do 12 uczestników.",
     });
+    expect(applyHostActionMock).not.toHaveBeenCalled();
+  });
+
+  it("answers a structurally wrong payload in Polish, never with Zod's default", async () => {
+    for (const candidates of [
+      "{}",
+      "null",
+      JSON.stringify([
+        { id: 1, text: "A" },
+        { id: "fixture-b", text: "B" },
+      ]),
+    ]) {
+      const response = await send({ candidates });
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body.error).not.toMatch(/expected|received|invalid input/i);
+      expect(body.error).toMatch(/uczestnik/);
+    }
     expect(applyHostActionMock).not.toHaveBeenCalled();
   });
 

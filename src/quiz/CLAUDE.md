@@ -170,9 +170,12 @@ quizzes and the colliding value in Polish:
 - A **vote must be unscored** too, for the same reason: there is no correct answer, only a count.
   It shares the choice kinds' ≥2-options and unique-option-id rules but carries no
   `correctOptionIds`; `reveal.ts` publishes its **podium** in `revealedOptionIds` instead — at most
-  three ids in rank order, winner first, only candidates with votes, and no distribution (a shared
-  top count is refused with a 409 until the host names the winner). Its
-  options are **not shuffled** (`public.ts`) — they keep the order the demos ran in.
+  three ids in rank order, winner first, only candidates with votes, and no distribution. A shared
+  **top** count is refused with a 409 until the host names the winner; a tie **below** first place
+  is placed by list order (stable sort) and a fourth candidate drawn with third stays off the
+  podium — only first place carries a prize, and the room is shown places, never figures. Its
+  options are **not shuffled** (`public.ts`) — they keep the order the demos ran in, or the order
+  the host set in the lobby (`candidates` in `src/lib/session/state.ts`).
 - A scored question must carry **`timeLimitSeconds`**, and an unscored one may not (FR-020).
   Required where `points !== null`, refused where `points === null`, bounded to
   `[MIN_TIME_LIMIT_SECONDS, MAX_TIME_LIMIT_SECONDS]` (5–180) — all three keyed on `points` rather

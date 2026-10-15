@@ -383,6 +383,35 @@ raise it before the event rather than after.
   `purge` stayed off this screen deliberately — it deletes with no undo and no ten-minute window.
   It lives on `/quiz/spine-check`, or use `bun run quiz:reset` from the terminal.
 
+- **The vote (`Głosowanie: najlepszy AI setup`, code `4242`) runs differently from a quiz, in
+  four places.**
+
+  1. **Set the candidates in the lobby, before `dalej`.** Open **Menu prowadzącego** (click the
+     join QR) — the section *Uczestnicy głosowania* holds the names the room will vote on, defaulting
+     to `Demo 1`…`Demo 4`. Rename the rows, change *liczba uczestników* or use *dodaj uczestnika* /
+     *usuń*, then press **zapisz listę**; the toast says `candidates: OK` and the rows refill with what
+     was saved. **Nothing reaches the phones until you save**, and the list is frozen once the vote
+     opens — the editor goes dark outside the lobby. If you need to change it after `dalej`, there is
+     no way back: `bun run quiz:reset` and start over.
+  2. **`zamknij głosowanie` takes two taps while votes are still coming in.** The vote has no clock,
+     so the panel arms the close instead: the first tap says `głosowanie trwa (głosy: N z M)` and the
+     second closes it. There is no reopening a closed vote.
+  3. **A tie on the top count stops at you.** The projector shows one pill per tied candidate and the
+     toast says `Remis — wskaż zwycięzcę.` Voting is **still open** until you tap a pill; a late vote
+     that breaks the tie on its own is accepted, and your tap is checked against the count at that
+     moment, so a pill that no longer applies is refused and the pills redraw.
+  4. **`zakończ sesję` removes the winner from every screen.** On a quiz with nothing scored the
+     close shows no board and carries no question, so the podium leaves the projector and the phones.
+     Hand over the prize *before* the second tap — the verb reads `zakończ sesję` (no "pokaż wyniki")
+     on this quiz, and the arming toast says the winner will disappear.
+
+  Two log lines are the vote's own: `session.vote.failed` means the tally could not be read and the
+  close was **refused** — voting stays open, tap `zamknij głosowanie` again; `session.candidates.set`
+  is a saved list, with `candidateCount` only. **A prize changes what a cheat is worth**: a phone that
+  clears site data and joins under a new name gets a new vote — the per-device cap is the only guard,
+  and it is a count on the device's own id, not an identity check. Watch `GŁOSY N z M` against the
+  room; a count well past the heads you can see is the tell.
+
 - **The panel leads the sequence — every flow button goes dark in a phase that would refuse it, and
   one is ringed as the next step.** So `start` is live only before a session exists, `pokaż odpowiedź`
   only while a question is open, and in the lobby the only ringed button is `dalej`. **Hold on a dark

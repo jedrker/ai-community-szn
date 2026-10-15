@@ -204,6 +204,16 @@ const questionTotal = quiz.questions.length;
 const voteQuestion = quiz.questions.find((question) => question.kind === "vote");
 
 /**
+ * What the close puts on the screens. A quiz with something scored closes on the final
+ * board, so the verb is the winner reveal; a quiz with nothing scored (the vote) closes
+ * boardless (`end.ts`), and the terminal document carries no question — so the podium
+ * *leaves* every screen. The verb says which, and the menu sentence and the arming
+ * toast tell the host to hand over the prize before the second tap.
+ */
+const quizScored = quiz.questions.some((question) => question.scored);
+const endLabel = quizScored ? "zakończ sesję i pokaż wyniki" : "zakończ sesję";
+
+/**
  * THE FLOW VERBS' PILL, WRITTEN ONCE AND SIZED TO THE ARTBOARD.
  *
  * Stated here rather than four times in the markup for the reason `verbsFor` states it
@@ -700,7 +710,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
                      data-[next=true]:text-quiz-ink
                      disabled:border-quiz-divider disabled:text-quiz-pill-disabled"
             >
-              zakończ sesję i pokaż wyniki
+              {endLabel}
             </button>
             <!--
               **The one sentence here that has to name a consequence rather than an effect.**
@@ -714,8 +724,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
               on the bar the button is the ringed next step and needs no sentence at all.
             -->
             <p id="end-note" class="text-[22px] leading-[28px] text-quiz-zinc">
-              Kończy sesję i pokazuje zwycięzców na ekranie. Pierwsze kliknięcie tylko pyta o
-              potwierdzenie, drugie kończy naprawdę. Tego nie da się cofnąć.
+              {
+                quizScored
+                  ? "Kończy sesję i pokazuje zwycięzców na ekranie. "
+                  : "Kończy sesję. Zwycięzca głosowania znika z projektora i z telefonów — zakończ dopiero po wręczeniu nagrody. "
+              }
+              Pierwsze kliknięcie tylko pyta o potwierdzenie, drugie kończy naprawdę. Tego nie da
+              się cofnąć.
             </p>
           </div>
 
@@ -1422,9 +1437,11 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           textLength: MAX_CANDIDATE_TEXT_LENGTH,
         },
         voteQuestionId: voteQuestion?.id ?? null,
+        endLabel,
+        quizScored,
       }}
     >
-      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, quizTitles, questions, candidateLimits, voteQuestionId };
+      window.__liveQuizHost = { channelName, snapshotEvent, secretHeader, quizId, quizTitles, questions, candidateLimits, voteQuestionId, endLabel, quizScored };
     </script>
 
     <script>
@@ -1482,6 +1499,9 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         secretHeader: string;
         /** The vote the candidate editor targets — decided in the frontmatter, once; `null` when the quiz has none. */
         voteQuestionId: string | null;
+        /** The closing verb's resting label, and whether the close shows a board — see `endLabel` in the frontmatter. */
+        endLabel: string;
+        quizScored: boolean;
         /**
          * The quiz this panel rendered (multiple-quizzes), handed down through
          * `define:vars` — the sanctioned server-to-client hand-off. A `<script>` block
@@ -2591,11 +2611,15 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
       if (editorNodes !== null && editorQuestion !== undefined) {
         editorNodes.count.addEventListener("change", () => {
-          editor.list = resizeCandidates(
-            editor.list,
-            Number(editorNodes.count.value),
-            config.candidateLimits
-          );
+          // An emptied or non-numeric field is not a request for zero rows: `change` fires
+          // on blur, so clearing `4` to type `6` and clicking a row must not collapse the
+          // draft to the minimum and drop the names above it.
+          const count = editorNodes.count.valueAsNumber;
+          if (!Number.isFinite(count)) {
+            editorNodes.count.value = String(editor.list.length);
+            return;
+          }
+          editor.list = resizeCandidates(editor.list, count, config.candidateLimits);
           paintCandidateRows();
           syncCandidateControls();
         });
@@ -2852,11 +2876,8 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
          */
         endButton.dataset.next = String(!wrong && rule.next === "end");
 
-        // "…i pokaż wyniki" because that is what the tap does (S-10): the closing document
-        // carries the final board, so this verb is the winner reveal, not just a shutdown.
-        endButton.textContent = endArmed
-          ? "na pewno? kliknij ponownie"
-          : "zakończ sesję i pokaż wyniki";
+        // The label says what the tap shows — see `endLabel` in the frontmatter.
+        endButton.textContent = endArmed ? "na pewno? kliknij ponownie" : config.endLabel;
       }
 
       /**
@@ -4002,6 +4023,14 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
               return;
             }
 
+            // A stale candidates save is not "already applied": someone else's list won, and
+            // the editor is about to refill with it (`finally` → `syncCandidatesEditor`). Say
+            // what the page's own pre-check says, so the two paths read the same.
+            if (action === "candidates") {
+              say("Lista zmieniła się w międzyczasie — sprawdź i zapisz ponownie.", "attention");
+              return;
+            }
+
             say(
               payload.note === "no-op"
                 ? `${action}: nic do zrobienia (koniec pytań?). Stan bez zmian.`
@@ -4049,26 +4078,32 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       /**
        * WHEN THE REVEAL HAS TO BE MEANT TWICE.
        *
-       * Two conditions, and each of them alone is the whole of a case where the tap costs
-       * nothing:
+       * Two cases, and each is the whole of a situation where a single tap costs the room
+       * something it cannot get back:
        *
-       * - **The clock has to still be running.** `countdown.isRunning()` is asked rather than
-       *   the deadline recomputed here, because that arithmetic already exists once — a second
-       *   copy is the drift `renderCountdownPanel`'s own note warns about. It answers all three
-       *   no-clock cases at once: the two unscored questions carry no limit and never arm it,
-       *   and an expired window stops it, so revealing after time is up is a single tap. That
-       *   is the common path and it stays as fast as it was.
-       * - **The room must not have finished answering.** A confirmation asks the host to defend
-       *   a decision the room has already made for them, which is the shape a warning stops
-       *   being read at. The clock running past the last answer is the case the host is *meant*
-       *   to cut short.
+       * - **The clock is still running.** `countdown.isRunning()` is asked rather than the
+       *   deadline recomputed here, because that arithmetic already exists once — a second
+       *   copy is the drift `renderCountdownPanel`'s own note warns about. An unscored
+       *   question carries no clock, and an expired window stops it, so revealing after time
+       *   is up is a single tap. That is the common path and it stays as fast as it was.
+       * - **The vote is open.** A vote has no clock to run out, and its close is the one
+       *   reveal with nothing to reveal *later*: `answer.ts` refuses every vote after it, and
+       *   there is no way back to `question-open`. Keyed on `revealVerbFor` — the single
+       *   namer — never on a kind test here.
+       *
+       * In both, **the room must not have finished answering.** A confirmation asks the host
+       * to defend a decision the room has already made for them, which is the shape a
+       * warning stops being read at.
        *
        * The phase is deliberately not tested: `verbsFor` offers `reveal` in exactly one
        * phase, and a condition here would be the second phase rule beside a button that the
-       * table exists to prevent. The clock is armed in that phase and no other anyway.
+       * table exists to prevent.
        */
       function revealNeedsConfirm(state: State): boolean {
-        if (!countdown.isRunning()) return false;
+        const stillCollecting =
+          countdown.isRunning() ||
+          revealVerbFor(config.questions, state) === "close-vote";
+        if (!stillCollecting) return false;
         return !everyoneAnswered(state);
       }
 
@@ -4088,10 +4123,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
             syncControls();
             const total = liveCount ?? state.playerCount;
             say(
-              // Names both halves of what the tap does. "Pokaż odpowiedź" is the visible
-              // one; closing submissions is the one with no undo, and it is the reason the
-              // host is being asked twice.
-              `czas jeszcze trwa (odpowiedzi: ${answered ?? "—"} z ${total}) — ` +
+              // Names both halves of what the tap does. The visible half is the result;
+              // closing submissions is the one with no undo, and it is the reason the host
+              // is being asked twice.
+              (revealVerbFor(config.questions, state) === "close-vote"
+                ? `głosowanie trwa (głosy: ${answered ?? "—"} z ${total}) — `
+                : `czas jeszcze trwa (odpowiedzi: ${answered ?? "—"} z ${total}) — `) +
                 "kliknij ponownie, aby zamknąć odpowiedzi i pokazać wynik",
               "attention"
             );
@@ -4139,7 +4176,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           endArmed = true;
           endArmedVersion = state.version;
           syncEndButton();
-          say(`kliknij ponownie, aby zakończyć sesję (wersja ${state.version})`, "attention");
+          say(
+            config.quizScored
+              ? `kliknij ponownie, aby zakończyć sesję (wersja ${state.version})`
+              : `kliknij ponownie, aby zakończyć sesję — zwycięzca zniknie z ekranów (wersja ${state.version})`,
+            "attention"
+          );
           return;
         }
 
