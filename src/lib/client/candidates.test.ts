@@ -16,6 +16,7 @@ import {
   removeCandidate,
   renameCandidate,
   resizeCandidates,
+  sameCandidates,
   withCandidates,
   type Candidate,
   type CandidateLimits,
@@ -220,5 +221,27 @@ describe("candidateListProblem", () => {
       expect(server).toBeDefined();
       expect(candidateListProblem(list, serverLimits)).toBe(server);
     }
+  });
+});
+
+describe("sameCandidates", () => {
+  it("ignores surrounding whitespace, which the save trims anyway", () => {
+    expect(
+      sameCandidates(demos(1, 2), [
+        { id: "demo-1", text: " Demo 1 " },
+        { id: "demo-2", text: "Demo 2" },
+      ]),
+    ).toBe(true);
+  });
+
+  it("sees a rename, a removal and a reorder as changes", () => {
+    expect(
+      sameCandidates(
+        demos(1, 2),
+        renameCandidate(demos(1, 2), "demo-1", "Cursor"),
+      ),
+    ).toBe(false);
+    expect(sameCandidates(demos(1, 2, 3), demos(1, 2))).toBe(false);
+    expect(sameCandidates(demos(1, 2), demos(2, 1))).toBe(false);
   });
 });

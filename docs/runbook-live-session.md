@@ -390,9 +390,11 @@ raise it before the event rather than after.
      join QR) — the section *Uczestnicy głosowania* holds the names the room will vote on, defaulting
      to `Demo 1`…`Demo 4`. Rename the rows, change *liczba uczestników* or use *dodaj uczestnika* /
      *usuń*, then press **zapisz listę**; the toast says `candidates: OK` and the rows refill with what
-     was saved. **Nothing reaches the phones until you save**, and the list is frozen once the vote
-     opens — the editor goes dark outside the lobby. If you need to change it after `dalej`, there is
-     no way back: `bun run quiz:reset` and start over.
+     was saved. **Nothing reaches the phones until you save**, so the menu will not close while the
+     draft differs from what the session holds — `zamknij` and Escape both answer `Masz niezapisane
+     zmiany…`; press **zapisz listę** or **odrzuć zmiany**. The list is frozen once the vote opens —
+     the editor goes dark outside the lobby. If you need to change it after `dalej`, there is no way
+     back: `bun run quiz:reset` and start over.
   2. **`zamknij głosowanie` takes two taps while votes are still coming in.** The vote has no clock,
      so the panel arms the close instead: the first tap says `głosowanie trwa (głosy: N z M)` and the
      second closes it. There is no reopening a closed vote.

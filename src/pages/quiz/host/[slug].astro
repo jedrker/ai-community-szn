@@ -619,6 +619,20 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
                 </button>
                 <p id="candidate-note" class="text-[22px] leading-[28px] text-quiz-zinc"></p>
               </div>
+              <div class="flex flex-col items-start gap-2">
+                <button
+                  id="candidate-discard"
+                  type="button"
+                  class="rounded-full border-2 border-quiz-divider px-5 py-1 text-[26px]
+                         font-semibold text-quiz-zinc disabled:text-quiz-pill-disabled"
+                >
+                  odrzuć zmiany
+                </button>
+                <p class="text-[22px] leading-[28px] text-quiz-zinc">
+                  Przywraca listę zapisaną w sesji. Niczego nie wysyła. Dopóki masz niezapisane
+                  zmiany, tego menu nie da się zamknąć — zapisz je albo odrzuć.
+                </p>
+              </div>
             </section>
           )
         }
@@ -1487,6 +1501,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         removeCandidate,
         renameCandidate,
         resizeCandidates,
+        sameCandidates,
         withCandidates,
         type Candidate,
         type CandidateLimits,
@@ -2518,11 +2533,26 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
               rows: el("candidate-rows"),
               add: el("candidate-add") as HTMLButtonElement,
               save: el("candidate-save") as HTMLButtonElement,
+              discard: el("candidate-discard") as HTMLButtonElement,
               note: el("candidate-note"),
               row: el("candidate-row") as HTMLTemplateElement,
             };
-      let editor: { version: number | null; list: Candidate[] } = { version: null, list: [] };
+      /**
+       * `saved` is the list the draft was filled from — the session's, or the defaults with
+       * no session. The draft is *dirty* when it would save as something else, and a dirty
+       * draft holds the menu open: the list reaches the room only through `zapisz listę`,
+       * and a host who typed three names and pressed `dalej` ran a vote on `Demo 1–4`.
+       */
+      let editor: { version: number | null; list: Candidate[]; saved: Candidate[] } = {
+        version: null,
+        list: [],
+        saved: [],
+      };
       let editorEnabled = false;
+
+      function editorDirty(): boolean {
+        return editorEnabled && !sameCandidates(editor.list, editor.saved);
+      }
 
       const EDITOR_NOTES = {
         noSession: "Najpierw uruchom sesję przyciskiem start.",
@@ -2530,6 +2560,7 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         frozen: "Listę można zmienić tylko w lobby, przed otwarciem głosowania.",
         lobby:
           "Wysyła nazwy na telefony i projektor. Możliwe tylko w lobby, przed otwarciem głosowania.",
+        dirty: "Masz niezapisane zmiany — zapisz listę albo odrzuć zmiany. Bez tego menu się nie zamknie.",
       } as const;
 
       /** Enablement only — never a repaint, so a keystroke's cursor survives it. */
@@ -2546,6 +2577,12 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           node.disabled = !editorEnabled;
         }
         editorNodes.save.title = problem ?? "";
+        editorNodes.discard.disabled = !editorDirty();
+        // The enabled note is the one that moves with every keystroke; the disabled ones
+        // are written once per sync by `syncCandidatesEditor`.
+        if (editorEnabled) {
+          setText("candidate-note", editorDirty() ? EDITOR_NOTES.dirty : EDITOR_NOTES.lobby);
+        }
       }
 
       function paintCandidateRows(): void {
@@ -2582,14 +2619,13 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
 
         if (state === null) {
           if (editor.version !== null || editor.list.length === 0) {
-            editor = { version: null, list: [...editorQuestion.options!] };
+            const defaults = [...editorQuestion.options!];
+            editor = { version: null, list: defaults, saved: defaults };
             paintCandidateRows();
           }
         } else if (editor.version !== state.version) {
-          editor = {
-            version: state.version,
-            list: [...withCandidates(editorQuestion, state).options!],
-          };
+          const saved = [...withCandidates(editorQuestion, state).options!];
+          editor = { version: state.version, list: saved, saved };
           paintCandidateRows();
         }
 
@@ -2597,16 +2633,16 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
         editorEnabled = state !== null && candidatesEditable(state) && !wrong;
         syncCandidateControls();
 
-        setText(
-          "candidate-note",
-          state === null
-            ? EDITOR_NOTES.noSession
-            : wrong
-              ? EDITOR_NOTES.wrongQuiz
-              : editorEnabled
-                ? EDITOR_NOTES.lobby
+        if (!editorEnabled) {
+          setText(
+            "candidate-note",
+            state === null
+              ? EDITOR_NOTES.noSession
+              : wrong
+                ? EDITOR_NOTES.wrongQuiz
                 : EDITOR_NOTES.frozen
-        );
+          );
+        }
       }
 
       if (editorNodes !== null && editorQuestion !== undefined) {
@@ -2628,13 +2664,30 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
           paintCandidateRows();
           syncCandidateControls();
         });
+        editorNodes.discard.addEventListener("click", () => {
+          editor.list = [...editor.saved];
+          paintCandidateRows();
+          syncCandidateControls();
+        });
+        /**
+         * A dirty draft holds the menu open. Both ways out of a modal `<dialog>` — the
+         * `zamknij` button and Escape, which arrives as `cancel` — are refused with the same
+         * sentence; the host either saves or discards. Only while the editor is live: a draft
+         * on a frozen editor was already refilled from the session.
+         */
+        hostMenu.addEventListener("cancel", (event) => {
+          if (!editorDirty()) return;
+          event.preventDefault();
+          say(EDITOR_NOTES.dirty, "attention");
+          editorNodes.save.focus();
+        });
         editorNodes.save.addEventListener("click", () => {
           const state = client.current();
           if (state === null || editor.version !== state.version) {
             // The draft is about a session that has moved on: empty it so the sync below
             // refills from what is on screen (or the defaults, with no session), rather than
             // sending names the host authored against a state nobody holds.
-            editor = { version: null, list: [] };
+            editor = { version: null, list: [], saved: [] };
             syncCandidatesEditor();
             say("Lista zmieniła się w międzyczasie — sprawdź i zapisz ponownie.", "attention");
             return;
@@ -4258,7 +4311,15 @@ const joinQrSvg = await QRCode.toString(attendeeUrl.href, {
       setText("secret-note", secretField.value.length > 0 ? "zapamiętany w tej karcie" : "");
 
       el("host-menu-open").addEventListener("click", () => openHostMenu());
-      el("host-menu-close").addEventListener("click", () => hostMenu.close());
+      el("host-menu-close").addEventListener("click", () => {
+        // A dirty candidate draft holds the menu open — see the `cancel` guard beside it.
+        if (editorDirty()) {
+          say(EDITOR_NOTES.dirty, "attention");
+          editorNodes?.save.focus();
+          return;
+        }
+        hostMenu.close();
+      });
       // A tab that has nothing stored cannot do anything until the secret is typed, and the
       // only hint the room's screen carries is a QR that says nothing about being a button.
       // So the first paint of an unauthorised tab opens the menu itself; a reload mid-segment

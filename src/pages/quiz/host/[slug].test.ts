@@ -1398,10 +1398,29 @@ describe("the host secret is typed behind the menu", () => {
     const buttons = menu.match(/<button\b/g) ?? [];
     const notes = menu.match(/text-\[22px\]/g) ?? [];
 
-    // Three of the menu's own plus the candidate editor's two (`dodaj uczestnika`, `zapisz
-    // listę`); the editor's per-row `usuń` lives in a template outside the dialog.
-    expect(buttons).toHaveLength(5);
+    // Three of the menu's own plus the candidate editor's three (`dodaj uczestnika`, `zapisz
+    // listę`, `odrzuć zmiany`); the editor's per-row `usuń` lives in a template outside the dialog.
+    expect(buttons).toHaveLength(6);
     expect(notes).toHaveLength(buttons.length);
+  });
+
+  /**
+   * A typed-but-unsaved candidate list is the one state this menu must not be left in: the
+   * list reaches the room only through `zapisz listę`, and a host once ran a vote on
+   * `Demo 1–4` after typing three names and pressing `dalej`. Both ways out of a modal
+   * dialog — the button and Escape (`cancel`) — are refused while the draft is dirty.
+   */
+  it("holds the menu open while the candidate draft is unsaved, on both exits", () => {
+    expect(occurrences("hostMenu.close()")).toBe(1);
+    const close =
+      /el\("host-menu-close"\)\.addEventListener\([\s\S]*?\n {6}\}\);/.exec(
+        CODE,
+      )?.[0] ?? "";
+    expect(close).toContain("if (editorDirty())");
+    expect(close).toContain("hostMenu.close()");
+    expect(CODE).toContain('hostMenu.addEventListener("cancel"');
+    expect(occurrences("event.preventDefault()")).toBeGreaterThanOrEqual(1);
+    expect(CODE).toContain('id="candidate-discard"');
   });
 
   /**

@@ -118,3 +118,18 @@ export function candidateListProblem(
   }
   return null;
 }
+
+/** Whether two drafts would save as the same list — ids and trimmed names, in order. */
+export function sameCandidates(
+  a: readonly Candidate[],
+  b: readonly Candidate[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (candidate, index) =>
+        candidate.id === b[index]!.id &&
+        candidate.text.trim() === b[index]!.text.trim(),
+    )
+  );
+}
